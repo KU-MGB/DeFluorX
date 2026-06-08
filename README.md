@@ -23,7 +23,7 @@
 
 **Science & Structure**
 1. [FAcD Scientific Mandate](#-facd-scientific-mandate)
-2. [PFAS Ligand Panel](#-pfas-ligand-panel-27-compounds)
+2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
 3. [Pipeline Architecture](#-pipeline-architecture)
 4. [Repository Structure](#-repository-structure)
 
@@ -62,10 +62,8 @@ Enzymatic defluorination represents the most thermodynamically elegant route to 
 
 > *Among thousands of phylogenetically diverse fluoroacetate dehalogenase (FAcD) candidate proteins, which ones possess the precise three-dimensional active-site geometry capable of catalysing defluorination of long-chain perfluorinated PFAS?*
 
-### 🧪 PFAS ligand panel (27 compounds)
-
-<details>
-<summary><b>Click to expand — full 27-compound screening panel</b></summary>
+<details id="pfas-ligand-panel-27-compounds">
+<summary><b>🧪 27 PFAS Ligand (Click to expand)</b></summary>
 
 The screening panel spans the full regulatory PFAS priority list, from short-chain to ultra-long-chain perfluorinated acids and sulfonates, plus next-generation PFAS replacements. Compounds are grouped by chemical function; index numbers match `D_PFAS27_Tue.smi` entries and are fixed throughout the pipeline.
 
