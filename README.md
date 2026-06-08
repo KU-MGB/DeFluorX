@@ -1579,8 +1579,8 @@ University of Copenhagen, Denmark
 *Microbial Biochemistry · Enzyme Characterisation · PFAS Biodegradation · Fluoroacetate Dehalogenases*
 
 <p>
-  <a href="mailto:tkn@plen.ku.dk"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
   <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://img.shields.io/badge/🌐 Website-002e5f?style=flat-square"></a>
+  <a href="mailto:tkn@plen.ku.dk"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
   <a href="https://orcid.org/0000-0001-6610-8450"><img src="https://img.shields.io/badge/ORCID-A6CE39?style=flat-square&logo=orcid&logoColor=white"></a>
 </p>
 
