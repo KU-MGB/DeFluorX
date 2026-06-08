@@ -10,10 +10,10 @@
 # Date   : 10 June 2026
 # =============================================================================
 # Usage:
-#   bash run_sid_analysis.sh [Boltz-2_Run_Directory]
+#   bash run_sid_analysis_FAcDs.sh [Boltz-2_Run_Directory]
 #
 # ── Dependency Map ───────────────────────────────────────────────────────────
-#   Script        : run_sid_analysis.sh
+#   Script        : run_sid_analysis_FAcDs.sh
 #   Role          : Post-processing — Desmond post-simulation post-processing.
 #   Imports from  : None.
 #   Reads         : Boltz-2_Run_X/7_Physics_Validation/MolecularDynamics/desmond_md_job_Rank_N/*-out.cms

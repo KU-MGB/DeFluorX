@@ -211,7 +211,7 @@ FAcDs_PFAS-27_Defluorination/
 ├── 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py  ← MD + NAC analysis + QM/MM engine
 │
 ├── 00_00_run_pipeline_FAcDs.sh                  ← One-command full pipeline runner
-├── run_sid_analysis.sh                 ← Sequential Desmond SID post-simulation orchestrator
+├── run_sid_analysis_FAcDs.sh           ← Sequential Desmond SID post-simulation orchestrator
 ├── PFAS.yml                         ← Conda environment (full reproducible spec)
 ├── requirements.txt                 ← pip requirements (auto-exported)
 │
@@ -277,7 +277,7 @@ FAcDs_PFAS-27_Defluorination/
 | [`05_CIF-PDB_Preparation_FAcDs.py`](./05_CIF-PDB_Preparation_FAcDs.py) | Gemmi CIF→PDB + PrepWizard | ranked CSV + CIF files | prepared `.pdb` files |
 | [`06_Top-N_Extraction_FAcDs.py`](./06_Top-N_Extraction_FAcDs.py) | Filter and export top candidates; PyMOL/PLIP figure generation | ranked CSV + prepared PDBs | tier CSV, PDB copies, interaction figures |
 | [`07_MD_Thermodynamics_QMMM_Engine_FAcDs.py`](./07_MD_Thermodynamics_QMMM_Engine_FAcDs.py) | MD + NAC analysis + QM/MM extraction | Desmond trajectories + WaterMaps + ranked CSV | final conformation frame, QSite inputs |
-| [`run_sid_analysis.sh`](./run_sid_analysis.sh) | Sequential Desmond SID post-simulation orchestrator | Desmond trajectories | `*_SID-in.eaf`, `*_SID-out.eaf`, logs |
+| [`run_sid_analysis_FAcDs.sh`](./run_sid_analysis_FAcDs.sh) | Sequential Desmond SID post-simulation orchestrator | Desmond trajectories | `*_SID-in.eaf`, `*_SID-out.eaf`, logs |
 | [`D_PFAS27_Tue.smi`](./D_PFAS27_Tue.smi) | 27 PFAS ligand SMILES panel | — | — |
 | [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
 
@@ -792,9 +792,9 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 *   **External Simulation Steps (Performed by User):**
     1.  **System Solvation & Setup:** prepared structures from Step 06 are built, solvated, and neutralised under the OPLS4 force field.
     2.  **Desmond MD Production Run:** solvated complexes undergo explicit-solvent molecular dynamics simulations (trajectories are saved under `7_Physics_Validation/MolecularDynamics/`).
-    3.  **Desmond SID Post-Processing:** run the helper script [run_sid_analysis.sh](./run_sid_analysis.sh) from the repository root to sequentially generate the Simulation Interaction Diagram (SID) `.eaf` files for all computed ranks:
+    3.  **Desmond SID Post-Processing:** run the helper script [run_sid_analysis_FAcDs.sh](./run_sid_analysis_FAcDs.sh) from the repository root to sequentially generate the Simulation Interaction Diagram (SID) `.eaf` files for all computed ranks:
         ```bash
-        ./run_sid_analysis.sh [optional_run_directory_name]
+        ./run_sid_analysis_FAcDs.sh [optional_run_directory_name]
         ```
         This script automatically masks `systemd-oomd` at startup, checks for existing complete EAF files (minimum 99,990 frames), and skips running/completed jobs.
     4.  **WaterMap Hydration Mapping:** Desmond trajectories are analysed via Schrödinger WaterMap to generate hydration thermodynamics (exported CSVs are placed under `7_Physics_Validation/WaterMaps/`).
