@@ -117,7 +117,7 @@ The screening panel spans the full regulatory PFAS priority list, from short-cha
 | 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
 | 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | — |
 
-> **Positive controls (25–27):** Fluoroacetate (FA) is the canonical natural substrate of FAcD. TFA and DFA are short-chain analogues used alongside FA to calibrate NAC geometry thresholds against the 3R3U crystal structure and the experimentally validated DEHA4 enzyme. All mechanistic scoring criteria are anchored to the geometry observed with these three ligands before evaluating the 24 long-chain PFAS targets.
+> **Positive controls (25–27):** Fluoroacetate (FA) is the canonical natural substrate of FAcD. DFA and TFA are short-chain analogues used alongside FA to calibrate NAC geometry thresholds against the 3R3U crystal structure and the experimentally validated DEHA4 enzyme. All mechanistic scoring criteria are anchored to the geometry observed with these three ligands before evaluating the 24 long-chain PFAS targets. Every pipeline run automatically benchmarks these controls—if the control tier drops below `Best_A`, the thresholds or structure-prediction quality must be investigated before trusting the wider screen results.
 
 </details>
 
@@ -147,10 +147,6 @@ All mechanistic geometry is benchmarked against the **3R3U crystal structure** (
 | Fluoride cradle | Stab_W | Trp | 156 | Aromatic + electrostatic stabilisation of F⁻ |
 | Fluoride cradle | Stab_Y | Tyr | 217 | Aromatic + electrostatic stabilisation of F⁻ |
 | Base catalyst | Base | His | 277 | Proton shuttle; activates Asp110 nucleophile |
-
-### Positive controls
-
-Compounds 25–27 (Fluoroacetate, Difluoroacetate, and Trifluoroacetate) serve as **positive controls** throughout the pipeline. Fluoroacetate (FA) is the natural substrate of FAcD; all mechanistic geometry thresholds are calibrated against the 3R3U co-crystal and the DEHA4 validated structure using these short-chain ligands before screening the 24 longer-chain PFAS targets. Every run automatically benchmarks FA/DFA/TFA results against these crystal structures — if the control tier drops below Best_A, the thresholds or structure-prediction quality should be investigated before trusting the wider screen results.
 
 ---
 
