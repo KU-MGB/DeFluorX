@@ -22,6 +22,7 @@
 <td valign="top">
 
 **Science & Structure**
+
 1. [FAcD Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
 3. [Pipeline Architecture](#-pipeline-architecture)
@@ -31,6 +32,7 @@
 <td valign="top">
 
 **Setup & Operations**
+
 5. [Installation](#-installation)
 6. [Quick Start](#-quick-start)
 7. [Script Catalog](#-script-catalog)
@@ -40,6 +42,7 @@
 <td valign="top">
 
 **Technical Reference**
+
 9. [Hardware & Deployment](#-hardware--deployment)
 10. [Troubleshooting](#-troubleshooting)
 11. [References & Citations](#-references--citations)
