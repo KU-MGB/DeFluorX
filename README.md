@@ -21,32 +21,27 @@
 <tr>
 <td valign="top">
 
-**Science & Overview**
+**Science & Structure**
 1. [FAcD Scientific Mandate](#-facd-scientific-mandate)
-2. [Pipeline Architecture](#-pipeline-architecture)
-3. [PFAS Ligand Panel](#-pfas-ligand-panel-27-compounds)
+2. [PFAS Ligand Panel](#-pfas-ligand-panel-27-compounds)
+3. [Pipeline Architecture](#-pipeline-architecture)
+4. [Repository Structure](#-repository-structure)
 
 </td>
 <td valign="top">
 
-**Setup & Usage**
+**Setup & Operations**
+5. [Installation](#-installation)
+6. [Quick Start](#-quick-start)
+7. [Script Catalog](#-script-catalog)
+8. [Reproducibility](#-reproducibility)
 
-4. [Installation](#-installation)
-5. [Quick Start](#-quick-start)
+</td>
+<td valign="top">
 
 **Technical Reference**
-
-6. [Script Reference](#-script-reference)
-7. [Reproducibility](#-reproducibility)
-8. [Hardware & Deployment](#-hardware--deployment)
-9. [Troubleshooting](#-troubleshooting)
-
-</td>
-<td valign="top">
-
-**Reference**
-
-10. [Repository Structure](#-repository-structure)
+9. [Hardware & Deployment](#-hardware--deployment)
+10. [Troubleshooting](#-troubleshooting)
 11. [References & Citations](#-references--citations)
 12. [License](#-license)
 13. [Authors](#-authors)
@@ -66,6 +61,64 @@ Per- and polyfluoroalkyl substances (PFAS) — the so-called 'forever chemicals'
 Enzymatic defluorination represents the most thermodynamically elegant route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. The question this pipeline addresses:
 
 > *Among thousands of phylogenetically diverse fluoroacetate dehalogenase (FAcD) candidate proteins, which ones possess the precise three-dimensional active-site geometry capable of catalysing defluorination of long-chain perfluorinated PFAS?*
+
+### 🧪 PFAS ligand panel (27 compounds)
+
+<details>
+<summary><b>Click to expand — full 27-compound screening panel</b></summary>
+
+The screening panel spans the full regulatory PFAS priority list, from short-chain to ultra-long-chain perfluorinated acids and sulfonates, plus next-generation PFAS replacements. Compounds are grouped by chemical function; index numbers match `D_PFAS27_Tue.smi` entries and are fixed throughout the pipeline.
+
+**Positive controls — known FAcD substrates**
+
+| # | Compound | Abbreviation | C–F count | Notes |
+|---|----------|--------------|-----------|-------|
+| 26 | Fluoroacetate | **FA** | 1 | Natural FAcD substrate; geometry benchmark |
+| 27 | Difluoroacetate | **DFA** | 2 | Short-chain analogue |
+| 25 | Trifluoroacetate | **TFA** | 3 | Short-chain; alpha-CF3 substrate |
+
+**Regulatory priority — perfluorocarboxylic acids (PFCA)**
+
+| # | Compound | Abbreviation | C–F count |
+|---|----------|--------------|-----------|
+| 7 | Perfluorobutanoic acid | **PFBA** | 7 |
+| 8 | Perfluoropentanoic acid | **PFPeA** | 9 |
+| 6 | Perfluorohexanoic acid | **PFHxA** | 11 |
+| 13 | Perfluoroheptanoic acid | **PFHpA** | 13 |
+| 1 | Perfluorooctanoic acid | **PFOA** | 15 |
+| 4 | Perfluorononanoic acid | **PFNA** | 17 |
+| 10 | Perfluorodecanoic acid | **PFDA** | 19 |
+| 12 | Perfluoroundecanoic acid | **PFUnDA** | 21 |
+| 11 | Perfluorododecanoic acid | **PFDoDA** | 23 |
+| 14 | Perfluorotridecanoic acid | **PFTrDA** | 25 |
+| 17 | Perfluorotetradecanoic acid | **PFTeDA** | 27 |
+| 18 | Perfluorohexadecanoic acid | **PFHxDA** | 31 |
+| 19 | Perfluorooctadecanoic acid | **PFODA** | 35 |
+
+**Regulatory priority — perfluorosulfonic acids (PFSA)**
+
+| # | Compound | Abbreviation | C–F count |
+|---|----------|--------------|-----------|
+| 5 | Perfluorobutanesulfonic acid | **PFBS** | 9 |
+| 9 | Perfluoropentanesulfonic acid | **PFPeS** | 11 |
+| 3 | Perfluorohexanesulfonic acid | **PFHxS** | 13 |
+| 15 | Perfluoroheptanesulfonic acid | **PFHpS** | 15 |
+| 2 | Perfluorooctanesulfonic acid | **PFOS** | 17 |
+| 16 | Perfluorodecanesulfonic acid | **PFDS** | 21 |
+
+**Novel and emerging PFAS replacements**
+
+| # | Compound | Abbreviation | Class | C–F count |
+|---|----------|--------------|-------|-----------|
+| 20 | Hexafluoropropylene oxide dimer acid | **GenX** | Ether-PFCA | — |
+| 21 | ADONA | **ADONA** | Ether-PFCA | — |
+| 22 | 6:2 Fluorotelomer alcohol | **6:2-FTOH** | FTOH | 13 |
+| 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
+| 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | — |
+
+> **Positive controls (25–27):** Fluoroacetate (FA) is the canonical natural substrate of FAcD. TFA and DFA are short-chain analogues used alongside FA to calibrate NAC geometry thresholds against the 3R3U crystal structure and the experimentally validated DEHA4 enzyme. All mechanistic scoring criteria are anchored to the geometry observed with these three ligands before evaluating the 24 long-chain PFAS targets.
+
+</details>
 
 ### Scientific approach
 
@@ -281,67 +334,6 @@ FAcDs_PFAS-27_Defluorination/
 | [`D_PFAS27_Tue.smi`](./D_PFAS27_Tue.smi) | 27 PFAS ligand SMILES panel | — | — |
 | [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
 
----
-
-## 🧪 PFAS ligand panel (27 compounds)
-
-<details>
-<summary><b>Click to expand — full 27-compound screening panel</b></summary>
-
-The screening panel spans the full regulatory PFAS priority list, from short-chain to ultra-long-chain perfluorinated acids and sulfonates, plus next-generation PFAS replacements. Compounds are grouped by chemical function; index numbers match `D_PFAS27_Tue.smi` entries and are fixed throughout the pipeline.
-
-**Positive controls — known FAcD substrates**
-
-| # | Compound | Abbreviation | C–F count | Notes |
-|---|----------|--------------|-----------|-------|
-| 26 | Fluoroacetate | **FA** | 1 | Natural FAcD substrate; geometry benchmark |
-| 27 | Difluoroacetate | **DFA** | 2 | Short-chain analogue |
-| 25 | Trifluoroacetate | **TFA** | 3 | Short-chain; alpha-CF3 substrate |
-
-**Regulatory priority — perfluorocarboxylic acids (PFCA)**
-
-| # | Compound | Abbreviation | C–F count |
-|---|----------|--------------|-----------|
-| 7 | Perfluorobutanoic acid | **PFBA** | 7 |
-| 8 | Perfluoropentanoic acid | **PFPeA** | 9 |
-| 6 | Perfluorohexanoic acid | **PFHxA** | 11 |
-| 13 | Perfluoroheptanoic acid | **PFHpA** | 13 |
-| 1 | Perfluorooctanoic acid | **PFOA** | 15 |
-| 4 | Perfluorononanoic acid | **PFNA** | 17 |
-| 10 | Perfluorodecanoic acid | **PFDA** | 19 |
-| 12 | Perfluoroundecanoic acid | **PFUnDA** | 21 |
-| 11 | Perfluorododecanoic acid | **PFDoDA** | 23 |
-| 14 | Perfluorotridecanoic acid | **PFTrDA** | 25 |
-| 17 | Perfluorotetradecanoic acid | **PFTeDA** | 27 |
-| 18 | Perfluorohexadecanoic acid | **PFHxDA** | 31 |
-| 19 | Perfluorooctadecanoic acid | **PFODA** | 35 |
-
-**Regulatory priority — perfluorosulfonic acids (PFSA)**
-
-| # | Compound | Abbreviation | C–F count |
-|---|----------|--------------|-----------|
-| 5 | Perfluorobutanesulfonic acid | **PFBS** | 9 |
-| 9 | Perfluoropentanesulfonic acid | **PFPeS** | 11 |
-| 3 | Perfluorohexanesulfonic acid | **PFHxS** | 13 |
-| 15 | Perfluoroheptanesulfonic acid | **PFHpS** | 15 |
-| 2 | Perfluorooctanesulfonic acid | **PFOS** | 17 |
-| 16 | Perfluorodecanesulfonic acid | **PFDS** | 21 |
-
-**Novel and emerging PFAS replacements**
-
-| # | Compound | Abbreviation | Class | C–F count |
-|---|----------|--------------|-------|-----------|
-| 20 | Hexafluoropropylene oxide dimer acid | **GenX** | Ether-PFCA | — |
-| 21 | ADONA | **ADONA** | Ether-PFCA | — |
-| 22 | 6:2 Fluorotelomer alcohol | **6:2-FTOH** | FTOH | 13 |
-| 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
-| 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | — |
-
-> **Positive controls (25–27):** Fluoroacetate (FA) is the canonical natural substrate of FAcD. TFA and DFA are short-chain analogues used alongside FA to calibrate NAC geometry thresholds against the 3R3U crystal structure and the experimentally validated DEHA4 enzyme. All mechanistic scoring criteria are anchored to the geometry observed with these three ligands before evaluating the 24 long-chain PFAS targets.
-
-</details>
-
----
 
 ## 🛠 Installation
 
@@ -501,7 +493,7 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 
 ## 💻 Technical reference
 
-### 📖 Script reference
+### 📖 Script catalog
 
 <details>
 <summary><b>00_02_Project_Config_FAcDs.py — Central Configuration</b></summary>
@@ -565,6 +557,31 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SCHRODINGER` | `/opt/schrodinger` | Schrödinger Suite installation path |
+
+**Scientific references:**
+| Parameter / Cutoff | Scientific Reference |
+|---|---|
+| Boltz-2 structure prediction | Passaro et al. (2025) *bioRxiv* 2025.06.14.659707. [DOI](https://doi.org/10.1101/2025.06.14.659707) |
+| ColabFold MSA server | Mirdita et al. (2022) *Nature Methods* 19:679–682. [DOI](https://doi.org/10.1038/s41592-022-01488-1) |
+| FAcD reference structure (PDB 3R3U) | Chan et al. (2011) *JACS* 133:7461–7468. [DOI](https://doi.org/10.1021/ja200277d) |
+| DEHA4 control sequence source | Farajollahi et al. (2024) *ACS Omega* 9(26):28546–28555. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
+| H-bond geometry (D···A ≤ 3.5 Å) | Jeffrey, G.A. (1997) *An Introduction to Hydrogen Bonding*. Oxford UP |
+| H-bond geometry (H···A) | Baker & Hubbard (1984) *Prog Biophys Mol Biol* 44:97–179. [DOI](https://doi.org/10.1016/0079-6107(84)90007-5) |
+| Salt bridge | Barlow & Thornton (1983) *J Mol Biol* 168:867–885 |
+| Hydrophobic contact | Salentin et al. (2015) *Nucleic Acids Res* 43:W443–W447. [DOI](https://doi.org/10.1093/nar/gkv315) |
+| π–π stacking | McGaughey et al. (1998) *J Biol Chem* 273:15458–15463. [DOI](https://doi.org/10.1074/jbc.273.25.15458) |
+| π–cation | Gallivan & Dougherty (1999) *PNAS* 96:9459–9464. [DOI](https://doi.org/10.1073/pnas.96.17.9459) |
+| Halogen bond | Wilcken et al. (2013) *J Med Chem* 56:1363–1388. [DOI](https://doi.org/10.1021/jm3012068) |
+| NAC dist/angle criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665) |
+| Catalytic triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
+| SN2 / Bürgi–Dunitz angle | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
+| WaterMap thermodynamics | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
+| QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
+| QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j) |
+| QSite implementation | Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
+| FAcD Burkholderia reference | Jitsumori et al. (2009) *J Bacteriol* 191:2630–2637. [DOI](https://doi.org/10.1128/JB.01654-08) |
+| Metal coordination | Harding (2006) *Acta Crystallogr* D62:678–682. [DOI](https://doi.org/10.1107/S0907444906014594) |
+| Sequence alignment | Henikoff & Henikoff (1992) *PNAS* 89:10915–10919. [DOI](https://doi.org/10.1073/pnas.89.22.10915) |
 
 </details>
 
@@ -750,6 +767,14 @@ python 05_CIF-PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
 3. Parallel processing: `os.cpu_count() - CFG.PREP_CPU_RESERVE` workers
 
 **Configuration (CFG §16):** pH values, RMSD threshold, CPU reservation, chain names.
+
+**Scientific references:**
+| Method | Reference |
+|---|---|
+| PrepWizard protein preparation | Sastry et al. (2013) *J Comput Aided Mol Des* 27:221–234. [DOI](https://doi.org/10.1007/s10822-013-9644-8) |
+| Gemmi CIF→PDB conversion | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
+| PropKa protonation at pH 8.0 | Olsson et al. (2011) *J Chem Theory Comput* 7:525–537. [DOI](https://doi.org/10.1021/ct100578z) |
+
 </details>
 
 <details>
@@ -775,6 +800,16 @@ Interactive mode prompts tier selection if multiple tiers contain viable candida
 | InteractionMap | Pure-Python 2D interaction diagram (matplotlib) | No external tool required; always available as fallback |
 
 **Configuration (CFG §14):** image resolution, ray tracing, contact radii, timeouts.
+
+**Scientific references:**
+| Method | Reference |
+|---|---|
+| PLIP protein–ligand interaction profiler | Salentin et al. (2015) *Nucleic Acids Res* 43:W443–W447. [DOI](https://doi.org/10.1093/nar/gkv315) |
+| π–π stacking interactions | McGaughey et al. (1998) *J Biol Chem* 273:15458–15463. [DOI](https://doi.org/10.1074/jbc.273.25.15458) |
+| Cation–π interactions | Gallivan & Dougherty (1999) *PNAS* 96:9459–9464. [DOI](https://doi.org/10.1073/pnas.96.17.9459) |
+| Halogen bonding | Wilcken et al. (2013) *J Med Chem* 56:1363–1388. [DOI](https://doi.org/10.1021/jm3012068) |
+| FAcD structure reference | Chan et al. (2011) *JACS* 133:7461. [DOI](https://doi.org/10.1021/ja200277d) |
+
 </details>
 
 <details>
@@ -829,6 +864,26 @@ As the most memory-intensive step in the pipeline, the following behaviours are 
     *Note: A 1000 ns Desmond trajectory for a ~300-residue FAcD + PFAS ligand in explicit solvent (~40,000 atoms) generates 100,000 frames and approximately 50–100 GB of trajectory data. Ensure at least 128 GB RAM is available before using `--stride 1`. On workstations with ≤ 64 GB RAM, stride 10 (the default) is strongly recommended.*
 
 **Configuration (CFG §8, §10, §11):** Smart-Lock biases, WaterMap radii, frame scoring weights, QSite region definitions, Desmond MD parameters.
+
+**Scientific references:**
+| Method | Reference |
+|---|---|
+| Boltz-2 structure prediction | Passaro et al. (2025) *bioRxiv* 2025.06.14.659707. [DOI](https://doi.org/10.1101/2025.06.14.659707) |
+| ColabFold MSA server | Mirdita et al. (2022) *Nature Methods* 19:679–682. [DOI](https://doi.org/10.1038/s41592-022-01488-1) |
+| FAcD mechanism & PDB 3R3U | Chan et al. (2011) *JACS* 133:7461. [DOI](https://doi.org/10.1021/ja200277d) |
+| DEHA4 defluorination validation (D4B) | Farajollahi et al. (2024) *ACS Omega* 9(26):28546. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
+| Dream Team triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
+| Haloalkane dehalogenase mechanism | Verschueren et al. (1993) *Nature* 363:693. [DOI](https://doi.org/10.1038/363693a0) |
+| NAC criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665); Hur & Bruice (2003) *PNAS* 100:12015. [DOI](https://doi.org/10.1073/pnas.1534873100) |
+| Bürgi–Dunitz SN2 geometry | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
+| WaterMap hydration scoring | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
+| Desmond MD engine | Bowers et al. (2006) *SC06*. [DOI](https://doi.org/10.1109/SC.2006.54) |
+| QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
+| QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j); Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
+| FAcD SN2 defluorination QM/MM energetics | Yue et al. (2021) *Environ Sci Technol* 55(14):9817–9825. [DOI](https://doi.org/10.1021/acs.est.0c08811) |
+| MD triad threshold calibration | Holmquist (2000); ±2 Å buffer for 300 K thermal fluctuations in solution MD |
+| MDAnalysis trajectory parsing | Michaud-Agrawal et al. (2011) *J Comput Chem* 32:2319–2327. [DOI](https://doi.org/10.1002/jcc.21787); Gowers et al. (2016) *Proc 15th Python Sci Conf*. [DOI](https://doi.org/10.25080/Majora-629e541a-00e) |
+
 </details>
 
 ---
@@ -1042,109 +1097,6 @@ If this pipeline is used in your research, please cite:
   howpublished = {\url{https://github.com/KU-MGB/FAcDs_PFAS-27_Defluorination}}
 }
 ```
-
-### Scientific references by script
-
-References grouped by pipeline step — the step that directly implements the underlying method or threshold.
-
-<details>
-<summary><b>00_02_Project_Config_FAcDs.py — Threshold & Geometry References</b></summary>
-
-| Threshold / Parameter | Reference |
-|---|---|
-| Boltz-2 structure prediction | Passaro et al. (2025) *bioRxiv* 2025.06.14.659707. [DOI](https://doi.org/10.1101/2025.06.14.659707) |
-| ColabFold MSA server | Mirdita et al. (2022) *Nature Methods* 19:679–682. [DOI](https://doi.org/10.1038/s41592-022-01488-1) |
-| FAcD reference structure (PDB 3R3U) | Chan et al. (2011) *JACS* 133:7461–7468. [DOI](https://doi.org/10.1021/ja200277d) |
-| DEHA4 control sequence source | Farajollahi et al. (2024) *ACS Omega* 9(26):28546–28555. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
-| H-bond geometry (D···A ≤ 3.5 Å) | Jeffrey, G.A. (1997) *An Introduction to Hydrogen Bonding*. Oxford UP |
-| H-bond geometry (H···A) | Baker & Hubbard (1984) *Prog Biophys Mol Biol* 44:97–179. [DOI](https://doi.org/10.1016/0079-6107(84)90007-5) |
-| Salt bridge | Barlow & Thornton (1983) *J Mol Biol* 168:867–885 |
-| Hydrophobic contact | Salentin et al. (2015) *Nucleic Acids Res* 43:W443–W447. [DOI](https://doi.org/10.1093/nar/gkv315) |
-| π–π stacking | McGaughey et al. (1998) *J Biol Chem* 273:15458–15463. [DOI](https://doi.org/10.1074/jbc.273.25.15458) |
-| π–cation | Gallivan & Dougherty (1999) *PNAS* 96:9459–9464. [DOI](https://doi.org/10.1073/pnas.96.17.9459) |
-| Halogen bond | Wilcken et al. (2013) *J Med Chem* 56:1363–1388. [DOI](https://doi.org/10.1021/jm3012068) |
-| NAC dist/angle criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665) |
-| Catalytic triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
-| SN2 / Bürgi–Dunitz angle | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
-| WaterMap thermodynamics | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
-| QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
-| QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j) |
-| QSite implementation | Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
-| FAcD Burkholderia reference | Jitsumori et al. (2009) *J Bacteriol* 191:2630–2637. [DOI](https://doi.org/10.1128/JB.01654-08) |
-| Metal coordination | Harding (2006) *Acta Crystallogr* D62:678–682. [DOI](https://doi.org/10.1107/S0907444906014594) |
-| Sequence alignment | Henikoff & Henikoff (1992) *PNAS* 89:10915–10919. [DOI](https://doi.org/10.1073/pnas.89.22.10915) |
-
-</details>
-
-<details>
-<summary><b>02_Production_FAcDs.py — Boltz-2 Prediction & Mechanistic Scoring</b></summary>
-
-| Method | Reference |
-|---|---|
-| FAcD catalytic mechanism & PDB 3R3U | Chan et al. (2011) *JACS* 133:7461–7468. [DOI](https://doi.org/10.1021/ja200277d) |
-| DEHA4 defluorination validation (D4B) | Farajollahi et al. (2024) *ACS Omega* 9(26):28546–28555. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
-| SN2 geometry (Bürgi–Dunitz) | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
-| Halogen bond stabilisation | Auffinger et al. (2004) *PNAS* 101:16789. [DOI](https://doi.org/10.1073/pnas.0407607101) |
-| Near attack conformation (NAC) | Hur & Bruice (2003) *PNAS* 100:12015. [DOI](https://doi.org/10.1073/pnas.1534873100) |
-| Fluorine in medicinal chemistry | Hagmann (2008) *J Med Chem* 51:4359. [DOI](https://doi.org/10.1021/jm800219f) |
-| CF₃ selectivity against SN2 | Jesani et al. (2024) *Angew Chem Int Ed* 63:e202403477. [DOI](https://doi.org/10.1002/anie.202403477) |
-| FAcD directed evolution | Jansen et al. (2026) *Angew Chem Int Ed* 65:e202524234. [DOI](https://doi.org/10.1002/anie.202524234) |
-| ColabFold MSA server | Mirdita et al. (2022) *Nature Methods* 19:679–682. [DOI](https://doi.org/10.1038/s41592-022-01488-1) |
-| Boltz-1 (foundation model) | Wohlwend et al. (2024) *bioRxiv*. [DOI](https://doi.org/10.1101/2024.11.19.624167) |
-| Boltz-2 (binding affinity) | Passaro et al. (2025) *bioRxiv*. [DOI](https://doi.org/10.1101/2025.06.14.659707) |
-| Gemmi CIF parsing | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
-| SciPy / cKDTree spatial queries | Virtanen et al. (2020) *Nature Methods* 17:261. [DOI](https://doi.org/10.1038/s41592-019-0686-2) |
-| RDKit cheminformatics | Landrum et al. (2006). [rdkit.org](https://www.rdkit.org) |
-| FAcD SN2 defluorination QM/MM | Yue et al. (2021) *Environ Sci Technol* 55(14):9817–9825. [DOI](https://doi.org/10.1021/acs.est.0c08811) |
-
-</details>
-
-<details>
-<summary><b>05_CIF-PDB_Preparation_FAcDs.py — Structure Preparation</b></summary>
-
-| Method | Reference |
-|---|---|
-| PrepWizard protein preparation | Sastry et al. (2013) *J Comput Aided Mol Des* 27:221–234. [DOI](https://doi.org/10.1007/s10822-013-9644-8) |
-| Gemmi CIF→PDB conversion | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
-| PropKa protonation at pH 8.0 | Olsson et al. (2011) *J Chem Theory Comput* 7:525–537. [DOI](https://doi.org/10.1021/ct100578z) |
-
-</details>
-
-<details>
-<summary><b>06_Top-N_Extraction_FAcDs.py — Candidate Filtering & Interaction Figures</b></summary>
-
-| Method | Reference |
-|---|---|
-| PLIP protein–ligand interaction profiler | Salentin et al. (2015) *Nucleic Acids Res* 43:W443–W447. [DOI](https://doi.org/10.1093/nar/gkv315) |
-| π–π stacking interactions | McGaughey et al. (1998) *J Biol Chem* 273:15458–15463. [DOI](https://doi.org/10.1074/jbc.273.25.15458) |
-| Cation–π interactions | Gallivan & Dougherty (1999) *PNAS* 96:9459–9464. [DOI](https://doi.org/10.1073/pnas.96.17.9459) |
-| Halogen bonding | Wilcken et al. (2013) *J Med Chem* 56:1363–1388. [DOI](https://doi.org/10.1021/jm3012068) |
-| FAcD structure reference | Chan et al. (2011) *JACS* 133:7461. [DOI](https://doi.org/10.1021/ja200277d) |
-
-</details>
-
-<details>
-<summary><b>07_MD_Thermodynamics_QMMM_Engine_FAcDs.py — MD Analysis & QM/MM</b></summary>
-
-| Method | Reference |
-|---|---|
-| Boltz-2 structure prediction | Passaro et al. (2025) *bioRxiv* 2025.06.14.659707. [DOI](https://doi.org/10.1101/2025.06.14.659707) |
-| ColabFold MSA server | Mirdita et al. (2022) *Nature Methods* 19:679–682. [DOI](https://doi.org/10.1038/s41592-022-01488-1) |
-| FAcD mechanism & PDB 3R3U | Chan et al. (2011) *JACS* 133:7461. [DOI](https://doi.org/10.1021/ja200277d) |
-| DEHA4 defluorination validation (D4B) | Farajollahi et al. (2024) *ACS Omega* 9(26):28546. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
-| Dream Team triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
-| Haloalkane dehalogenase mechanism | Verschueren et al. (1993) *Nature* 363:693. [DOI](https://doi.org/10.1038/363693a0) |
-| NAC criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665); Hur & Bruice (2003) *PNAS* 100:12015. [DOI](https://doi.org/10.1073/pnas.1534873100) |
-| Bürgi–Dunitz SN2 geometry | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
-| WaterMap hydration scoring | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
-| Desmond MD engine | Bowers et al. (2006) *SC06*. [DOI](https://doi.org/10.1109/SC.2006.54) |
-| QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
-| QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j); Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
-| FAcD SN2 defluorination QM/MM energetics | Yue et al. (2021) *Environ Sci Technol* 55(14):9817–9825. [DOI](https://doi.org/10.1021/acs.est.0c08811) |
-| MD triad threshold calibration | Holmquist (2000); ±2 Å buffer for 300 K thermal fluctuations in solution MD |
-| MDAnalysis trajectory parsing | Michaud-Agrawal et al. (2011) *J Comput Chem* 32:2319–2327. [DOI](https://doi.org/10.1002/jcc.21787); Gowers et al. (2016) *Proc 15th Python Sci Conf*. [DOI](https://doi.org/10.25080/Majora-629e541a-00e) |
-
-</details>
 
 <details>
 <summary><b>Key Publications & Software Tools (BibTeX)</b></summary>
