@@ -1167,6 +1167,360 @@ For external databases, crystallographic references, and software dependencies, 
   year = {2011},
   doi = {10.1002/jcc.21787}
 }
+
+@article{burgi1974tetrahedron,
+  title = {Stereochemistry of reaction paths at carbonyl centres},
+  volume = {30},
+  ISSN = {0040-4020},
+  url = {http://dx.doi.org/10.1016/S0040-4020(01)90678-7},
+  DOI = {10.1016/s0040-4020(01)90678-7},
+  number = {12},
+  journal = {Tetrahedron},
+  publisher = {Elsevier BV},
+  author = {B:urgi, H.B. and Dunitz, J.D. and Lehn, J.M. and Wipff, G.},
+  year = {1974},
+  month = {Jan},
+  pages = {1563–1572}
+}
+
+@article{auffinger2004pnas,
+  title = {Halogen bonds in biological molecules},
+  volume = {101},
+  ISSN = {1091-6490},
+  url = {http://dx.doi.org/10.1073/pnas.0407607101},
+  DOI = {10.1073/pnas.0407607101},
+  number = {48},
+  journal = {Proceedings of the National Academy of Sciences},
+  publisher = {Proceedings of the National Academy of Sciences},
+  author = {Auffinger, Pascal and Hays, Franklin A. and Westhof, Eric and Ho, P. Shing},
+  year = {2004},
+  month = {Nov},
+  pages = {16789–16794}
+}
+
+@article{hur2003pnas,
+  title = {The near attack conformation approach to the study of the chorismate to prephenate reaction},
+  volume = {100},
+  ISSN = {1091-6490},
+  url = {http://dx.doi.org/10.1073/pnas.1534873100},
+  DOI = {10.1073/pnas.1534873100},
+  number = {21},
+  journal = {Proceedings of the National Academy of Sciences},
+  publisher = {Proceedings of the National Academy of Sciences},
+  author = {Hur, Sun and Bruice, Thomas C.},
+  year = {2003},
+  month = {Oct},
+  pages = {12015–12020}
+}
+
+@article{hagmann2008jmedchem,
+  title = {The Many Roles for Fluorine in Medicinal Chemistry},
+  volume = {51},
+  ISSN = {1520-4804},
+  url = {http://dx.doi.org/10.1021/jm800219f},
+  DOI = {10.1021/jm800219f},
+  number = {15},
+  journal = {Journal of Medicinal Chemistry},
+  publisher = {American Chemical Society (ACS)},
+  author = {Hagmann, William K.},
+  year = {2008},
+  month = {June},
+  pages = {4359–4369}
+}
+
+@article{yue2021est,
+  title = {Comprehensive Understanding of Fluoroacetate Dehalogenase-Catalyzed Degradation of Fluorocarboxylic Acids: A QM/MM Approach},
+  volume = {55},
+  ISSN = {1520-5851},
+  url = {http://dx.doi.org/10.1021/acs.est.0c08811},
+  DOI = {10.1021/acs.est.0c08811},
+  number = {14},
+  journal = {Environmental Science &amp; Technology},
+  publisher = {American Chemical Society (ACS)},
+  author = {Yue, Yue and Fan, Jiaqian and Xin, Guoqing and Huang, Qun and Wang, Jian-bo and Li, Yanwei and Zhang, Qingzhu and Wang, Wenxing},
+  year = {2021},
+  month = {June},
+  pages = {9817–9825}
+}
+
+@article{jesani2024angew,
+  title = {Selective Defluorination of Trifluoromethyl Substituents by Conformationally Induced Remote Substitution},
+  volume = {63},
+  ISSN = {1521-3773},
+  url = {http://dx.doi.org/10.1002/anie.202403477},
+  DOI = {10.1002/anie.202403477},
+  number = {24},
+  journal = {Angewandte Chemie International Edition},
+  publisher = {Wiley},
+  author = {Jesani, Mehul H. and Schwarz, Maria and Kim, Shiwhu and Evans, Finlay L. and White, Alexander and Browning, Alex and Abrams, Roman and Clayden, Jonathan},
+  year = {2024},
+  month = {May}
+}
+
+@article{jansen2026angew,
+  title = {Engineering Fluoroacetate Dehalogenase by Growth‐Based Selections on Non‐Natural Organofluorides},
+  volume = {65},
+  ISSN = {1521-3773},
+  url = {http://dx.doi.org/10.1002/anie.202524234},
+  DOI = {10.1002/anie.202524234},
+  number = {10},
+  journal = {Angewandte Chemie International Edition},
+  publisher = {Wiley},
+  author = {Jansen, Suzanne C. and van Beers, Pauline and Mayer, Clemens},
+  year = {2026},
+  month = {Jan}
+}
+
+@article{wojdyr2022joss,
+  title = {GEMMI: A library for structural biology},
+  volume = {7},
+  ISSN = {2475-9066},
+  url = {http://dx.doi.org/10.21105/joss.04200},
+  DOI = {10.21105/joss.04200},
+  number = {73},
+  journal = {Journal of Open Source Software},
+  publisher = {The Open Journal},
+  author = {Wojdyr, Marcin},
+  year = {2022},
+  month = {May},
+  pages = {4200}
+}
+
+@article{virtanen2020scipy,
+  title = {SciPy 1.0: fundamental algorithms for scientific computing in Python},
+  volume = {17},
+  ISSN = {1548-7105},
+  url = {http://dx.doi.org/10.1038/s41592-019-0686-2},
+  DOI = {10.1038/s41592-019-0686-2},
+  number = {3},
+  journal = {Nature Methods},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and Haberland, Matt and Reddy, Tyler and Cournapeau, David and Burovski, Evgeni and Peterson, Pearu and Weckesser, Warren and Bright, Jonathan and van der Walt, Stéfan J. and Brett, Matthew and Wilson, Joshua and Millman, K. Jarrod and Mayorov, Nikolay and Nelson, Andrew R. J. and Jones, Eric and Kern, Robert and Larson, Eric and Carey, C J and Polat, İlhan and Feng, Yu and Moore, Eric W. and VanderPlas, Jake and Laxalde, Denis and Perktold, Josef and Cimrman, Robert and Henriksen, Ian and Quintero, E. A. and Harris, Charles R. and Archibald, Anne M. and Ribeiro, Antônio H. and Pedregosa, Fabian and van Mulbregt, Paul and Vijaykumar, Aditya and Bardelli, Alessandro Pietro and Rothberg, Alex and Hilboll, Andreas and Kloeckner, Andreas and Scopatz, Anthony and Lee, Antony and Rokem, Ariel and Woods, C. Nathan and Fulton, Chad and Masson, Charles and Häggström, Christian and Fitzgerald, Clark and Nicholson, David A. and Hagen, David R. and Pasechnik, Dmitrii V. and Olivetti, Emanuele and Martin, Eric and Wieser, Eric and Silva, Fabrice and Lenders, Felix and Wilhelm, Florian and Young, G. and Price, Gavin A. and Ingold, Gert-Ludwig and Allen, Gregory E. and Lee, Gregory R. and Audren, Hervé and Probst, Irvin and Dietrich, Jörg P. and Silterra, Jacob and Webber, James T and Slavič, Janko and Nothman, Joel and Buchner, Johannes and Kulick, Johannes and Schönberger, Johannes L. and de Miranda Cardoso, José Vinícius and Reimer, Joscha and Harrington, Joseph and Rodríguez, Juan Luis Cano and Nunez-Iglesias, Juan and Kuczynski, Justin and Tritz, Kevin and Thoma, Martin and Newville, Matthew and Kümmerer, Matthias and Bolingbroke, Maximilian and Tartre, Michael and Pak, Mikhail and Smith, Nathaniel J. and Nowaczyk, Nikolai and Shebanov, Nikolay and Pavlyk, Oleksandr and Brodtkorb, Per A. and Lee, Perry and McGibbon, Robert T. and Feldbauer, Roman and Lewis, Sam and Tygier, Sam and Sievert, Scott and Vigna, Sebastiano and Peterson, Stefan and More, Surhud and Pudlik, Tadeusz and Oshima, Takuya and Pingel, Thomas J. and Robitaille, Thomas P. and Spura, Thomas and Jones, Thouis R. and Cera, Tim and Leslie, Tim and Zito, Tiziano and Krauss, Tom and Upadhyay, Utkarsh and Halchenko, Yaroslav O. and Vázquez-Baeza, Yoshiki},
+  year = {2020},
+  month = {Feb},
+  pages = {261–272}
+}
+
+@article{holmquist2000cpps,
+  title = {Alpha Beta-Hydrolase Fold Enzymes Structures, Functions and Mechanisms},
+  volume = {1},
+  ISSN = {0000-0000},
+  url = {http://dx.doi.org/10.2174/1389203003381405},
+  DOI = {10.2174/1389203003381405},
+  number = {2},
+  journal = {Current Protein and Peptide Science},
+  publisher = {Bentham Science Publishers Ltd.},
+  author = {Holmquist, M.},
+  year = {2000},
+  month = {Sept},
+  pages = {209–235}
+}
+
+@article{verschueren1993nature,
+  title = {Crystallographic analysis of the catalytic mechanism of haloalkane dehalogenase},
+  volume = {363},
+  ISSN = {1476-4687},
+  url = {http://dx.doi.org/10.1038/363693a0},
+  DOI = {10.1038/363693a0},
+  number = {6431},
+  journal = {Nature},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Verschueren, Koen H. G. and Seljée, Frank and Rozeboom, Henriëtte J. and Kalk, Kor H. and Dijkstra, Bauke W.},
+  year = {1993},
+  month = {June},
+  pages = {693–698}
+}
+
+@article{lightstone1996jacs,
+  title = {Ground State Conformations and Entropic and Enthalpic Factors in the Efficiency of Intramolecular and Enzymatic Reactions. 1. Cyclic Anhydride Formation by Substituted Glutarates, Succinate, and 3,6-Endoxo-Δ<sup>4</sup>-tetrahydrophthalate Monophenyl Esters},
+  volume = {118},
+  ISSN = {1520-5126},
+  url = {http://dx.doi.org/10.1021/ja952589l},
+  DOI = {10.1021/ja952589l},
+  number = {11},
+  journal = {Journal of the American Chemical Society},
+  publisher = {American Chemical Society (ACS)},
+  author = {Lightstone, Felice C. and Bruice, Thomas C.},
+  year = {1996},
+  month = {Jan},
+  pages = {2595–2605}
+}
+
+@article{bruice2002acr,
+  title = {A View at the Millennium:  the Efficiency of Enzymatic Catalysis},
+  volume = {35},
+  ISSN = {1520-4898},
+  url = {http://dx.doi.org/10.1021/ar0001665},
+  DOI = {10.1021/ar0001665},
+  number = {3},
+  journal = {Accounts of Chemical Research},
+  publisher = {American Chemical Society (ACS)},
+  author = {Bruice, Thomas C.},
+  year = {2002},
+  month = {Jan},
+  pages = {139–148}
+}
+
+@article{burgi1973jacs,
+  title = {Geometrical reaction coordinates.  II.  Nucleophilic addition to a carbonyl group},
+  volume = {95},
+  ISSN = {1520-5126},
+  url = {http://dx.doi.org/10.1021/ja00796a058},
+  DOI = {10.1021/ja00796a058},
+  number = {15},
+  journal = {Journal of the American Chemical Society},
+  publisher = {American Chemical Society (ACS)},
+  author = {Burgi, H. B. and Dunitz, J. D. and Shefter, Eli.},
+  year = {1973},
+  month = {July},
+  pages = {5065–5067}
+}
+
+@article{abel2008jacs,
+  title = {Role of the Active-Site Solvent in the Thermodynamics of Factor Xa Ligand Binding},
+  volume = {130},
+  ISSN = {1520-5126},
+  url = {http://dx.doi.org/10.1021/ja0771033},
+  DOI = {10.1021/ja0771033},
+  number = {9},
+  journal = {Journal of the American Chemical Society},
+  publisher = {American Chemical Society (ACS)},
+  author = {Abel, Robert and Young, Tom and Farid, Ramy and Berne, Bruce J. and Friesner, Richard A.},
+  year = {2008},
+  month = {Feb},
+  pages = {2817–2831}
+}
+
+@inproceedings{bowers2006sc,
+  title = {Scalable Algorithms for Molecular Dynamics Simulations on Commodity Clusters},
+  url = {http://dx.doi.org/10.1109/SC.2006.54},
+  DOI = {10.1109/sc.2006.54},
+  booktitle = {ACM/IEEE SC 2006 Conference (SC′06)},
+  publisher = {IEEE},
+  author = {Bowers, Kevin J. and Chow, David E. and Xu, Huafeng and Dror, Ron O. and Eastwood, Michael P. and Gregersen, Brent A. and Klepeis, John L. and Kolossvary, Istvan and Moraes, Mark A. and Sacerdoti, Federico D. and Salmon, John K. and Shan, Yibing and Shaw, David E.},
+  year = {2006},
+  month = {Nov},
+  pages = {43–43}
+}
+
+@article{zhao2008tca,
+  title = {The M06 suite of density functionals for main group thermochemistry, thermochemical kinetics, noncovalent interactions, excited states, and transition elements: two new functionals and systematic testing of four M06-class functionals and 12 other functionals},
+  volume = {120},
+  ISSN = {1432-2234},
+  url = {http://dx.doi.org/10.1007/s00214-007-0310-x},
+  DOI = {10.1007/s00214-007-0310-x},
+  number = {1-3},
+  journal = {Theoretical Chemistry Accounts},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Zhao, Yan and Truhlar, Donald G.},
+  year = {2007},
+  month = {July},
+  pages = {215–241}
+}
+
+@article{rosta2006jpcb,
+  title = {Towards Accurate Ab Initio QM/MM Calculations of Free-Energy Profiles of Enzymatic Reactions},
+  volume = {110},
+  ISSN = {1520-5207},
+  url = {http://dx.doi.org/10.1021/jp057109j},
+  DOI = {10.1021/jp057109j},
+  number = {6},
+  journal = {The Journal of Physical Chemistry B},
+  publisher = {American Chemical Society (ACS)},
+  author = {Rosta, Edina and Klähn, Marco and Warshel, Arieh},
+  year = {2006},
+  month = {Jan},
+  pages = {2934–2941}
+}
+
+@article{murphy2000jcc,
+  title = {A mixed quantum mechanics/molecular mechanics (QM/MM) method for large-scale modeling of chemistry in protein environments},
+  volume = {21},
+  ISSN = {1096-987X},
+  url = {http://dx.doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O},
+  DOI = {10.1002/1096-987x(200012)21:16<1442::aid-jcc3>3.0.co;2-o},
+  number = {16},
+  journal = {Journal of Computational Chemistry},
+  publisher = {Wiley},
+  author = {Murphy, R. B. and Philipp, D. M. and Friesner, R. A.},
+  year = {2000},
+  pages = {1442–1457}
+}
+
+@article{henikoff1992pnas,
+  title = {Amino acid substitution matrices from protein blocks.},
+  volume = {89},
+  ISSN = {1091-6490},
+  url = {http://dx.doi.org/10.1073/pnas.89.22.10915},
+  DOI = {10.1073/pnas.89.22.10915},
+  number = {22},
+  journal = {Proceedings of the National Academy of Sciences},
+  publisher = {Proceedings of the National Academy of Sciences},
+  author = {Henikoff, S and Henikoff, J G},
+  year = {1992},
+  month = {Nov},
+  pages = {10915–10919}
+}
+
+@article{sastry2013jcamd,
+  title = {Protein and ligand preparation: parameters, protocols, and influence on virtual screening enrichments},
+  volume = {27},
+  ISSN = {1573-4951},
+  url = {http://dx.doi.org/10.1007/s10822-013-9644-8},
+  DOI = {10.1007/s10822-013-9644-8},
+  number = {3},
+  journal = {Journal of Computer-Aided Molecular Design},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Madhavi Sastry, G. and Adzhigirey, Matvey and Day, Tyler and Annabhimoju, Ramakrishna and Sherman, Woody},
+  year = {2013},
+  month = {Mar},
+  pages = {221–234}
+}
+
+@article{harding2006acta,
+  title = {Small revisions to predicted distances around metal sites in proteins},
+  volume = {62},
+  ISSN = {0907-4449},
+  url = {http://dx.doi.org/10.1107/S0907444906014594},
+  DOI = {10.1107/s0907444906014594},
+  number = {6},
+  journal = {Acta Crystallographica Section D Biological Crystallography},
+  publisher = {International Union of Crystallography (IUCr)},
+  author = {Harding, Marjorie M.},
+  year = {2006},
+  month = {May},
+  pages = {678–682}
+}
+
+@article{olsson2011jctc,
+  title = {PROPKA3: Consistent Treatment of Internal and Surface Residues in Empirical p<i>K</i><sub>a</sub>Predictions},
+  volume = {7},
+  ISSN = {1549-9626},
+  url = {http://dx.doi.org/10.1021/ct100578z},
+  DOI = {10.1021/ct100578z},
+  number = {2},
+  journal = {Journal of Chemical Theory and Computation},
+  publisher = {American Chemical Society (ACS)},
+  author = {Olsson, Mats H. M. and Søndergaard, Chresten R. and Rostkowski, Michal and Jensen, Jan H.},
+  year = {2011},
+  month = {Jan},
+  pages = {525–537}
+}
+
+@article{salentin2015nar,
+  title = {PLIP: fully automated protein–ligand interaction profiler},
+  volume = {43},
+  ISSN = {1362-4962},
+  url = {http://dx.doi.org/10.1093/nar/gkv315},
+  DOI = {10.1093/nar/gkv315},
+  number = {W1},
+  journal = {Nucleic Acids Research},
+  publisher = {Oxford University Press (OUP)},
+  author = {Salentin, Sebastian and Schreiber, Sven and Haupt, V. Joachim and Adasme, Melissa F. and Schroeder, Michael},
+  year = {2015},
+  month = {Apr},
+  pages = {W443–W447}
+}
 ```
 </details>
 
