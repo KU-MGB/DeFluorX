@@ -117,7 +117,7 @@ The screening panel spans the full regulatory PFAS priority list, from short-cha
 | 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
 | 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | — |
 
-> **Positive controls (25–27):** Fluoroacetate (FA) is the canonical natural substrate of FAcD. DFA and TFA are short-chain analogues used alongside FA to calibrate NAC geometry thresholds against the 3R3U crystal structure and the experimentally validated DEHA4 enzyme. All mechanistic scoring criteria are anchored to the geometry observed with these three ligands before evaluating the 24 long-chain PFAS targets. Every pipeline run automatically benchmarks these controls—if the control tier drops below `Best_A`, the thresholds or structure-prediction quality must be investigated before trusting the wider screen results.
+> **Positive controls (25–27):** All 27 compounds are genuine screen targets, each modelled against the full ~2,150-protein panel. Entries 25–27 (TFA, FA, DFA) *additionally* serve as positive controls: alongside the 3R3U crystal structure and the experimentally validated DEHA4 enzyme they constitute **6 control cases** that anchor the NAC geometry thresholds. Every run benchmarks them—if a control tier drops below `Best_A`, investigate the thresholds or structure-prediction quality before trusting the wider screen.
 
 </details>
 

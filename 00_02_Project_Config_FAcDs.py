@@ -299,6 +299,21 @@ class CFG:
     THRESHOLD_TRIAD_NB_MD: float = 6.5   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
     THRESHOLD_TRIAD_BA_MD: float = 9.0   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
 
+    # ── § 6.1  Mechanistic-fingerprint & soft-score contact gates  (Step 02) ──
+    # Used by 02_Production analyse_candidate_structure() mech_score / soft_score.
+    # These are distinct from the §9 tier-cascade gates: they score the physical
+    # anchor set (halide stabiliser, carboxylate clamp, triad proximity), whereas
+    # §9 assigns the discrete tier. The Nuc–C gate reuses NAC_DIST_STRICT (§5.1)
+    # and the angle sigmoid reuses NAC_ANGLE_STRICT so all three stay in lock-step.
+    MECH_STAB_RADIUS: float  = 5.5   # Å  TRP/TYR (or dynamic polar) → F⁻ halide-stabilisation contact
+    MECH_CLAMP_RADIUS: float = 5.0   # Å  ARG carboxylate clamp → ligand contact
+    MECH_NB_GATE: float      = 5.0   # Å  Nuc–Base distance gate (+0.1 mech point)
+    MECH_BA_GATE: float      = 5.5   # Å  Base–Acid distance gate (+0.1 mech point)
+    # Soft-score (sigmoid) triad midpoints; nucleophile/angle sigmoids reuse the
+    # strict NAC cutoffs directly (NAC_DIST_STRICT / NAC_ANGLE_STRICT).
+    SOFT_NB_MIDPOINT: float  = 4.5   # Å  soft s_int Nuc–Base sigmoid midpoint (= THRESHOLD_TRIAD_NB)
+    SOFT_BA_MIDPOINT: float  = 5.0   # Å  soft s_int Base–Acid sigmoid midpoint
+
     # ═════════════════════════════════════════════════════════════════════════════
     # SECTION 7 ── SN2 / WALDEN INVERSION GEOMETRY  (Step 07)
     # Bürgi–Dunitz (1973): ideal SN2 at sp3 C is 180° backside attack.

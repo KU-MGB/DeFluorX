@@ -455,7 +455,7 @@ COLUMN_RENAMING_MAP = {
     "dist_Base": "Dist_Base_HIS277",
     "dist_Acid": "Dist_Acid_ASP134",
     "dist_Stab_W": "Dist_Stabiliser_TRP156",
-    "dist_Stab_Y": "Dist_Stabiliser_TYR219",
+    "dist_Stab_Y": "Dist_Stabiliser_TYR217",
     "dist_Carb1": "Dist_Clamp_ARG111",
     "dist_Carb2": "Dist_Clamp_ARG114",
     "binding_likelihood_computed": "Binding_Probability_Score",
@@ -2496,29 +2496,29 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                      valid_atoms = POLAR_SIDECHAIN_ATOMS[p_at['resname']]
                      if p_at['atom_name'] in valid_atoms:
                         d_stab = p_at['pos'].dist(target_stabilise_centre)
-                        if d_stab <= 5.5: dynamic_stabilised = True; break
+                        if d_stab <= CFG.MECH_STAB_RADIUS: dynamic_stabilised = True; break
 
-        stabilised = (d_trp <= 5.5 or d_tyr <= 5.5 or dynamic_stabilised)
+        stabilised = (d_trp <= CFG.MECH_STAB_RADIUS or d_tyr <= CFG.MECH_STAB_RADIUS or dynamic_stabilised)
         results["halide_stabilisation_score"] = 1.0 if stabilised else 0.0
-        
-        clamp_ok = (results["dist_Carb1"] <= 5.0 or results["dist_Carb2"] <= 5.0)
+
+        clamp_ok = (results["dist_Carb1"] <= CFG.MECH_CLAMP_RADIUS or results["dist_Carb2"] <= CFG.MECH_CLAMP_RADIUS)
         results["carboxylate_clamp_integrity"] = 1.0 if clamp_ok else 0.0
         results["sn2_alignment_score"] = angle
         
         # --- SOFT SCORING ENGINE ---
         # Uses sigmoid functions to avoid binary threshold "cliffs"
-        s_nuc = sigmoid(d_nuc, k=-4.0, x0=3.2)  # High score for < 3.2A
-        s_ang = sigmoid(angle, k=0.15, x0=155.0) # High score for > 155deg
-        s_int = sigmoid(dist_nuc_base, k=-2.0, x0=4.5) * sigmoid(dist_base_acid, k=-2.0, x0=5.0)
+        s_nuc = sigmoid(d_nuc, k=-4.0, x0=CFG.NAC_DIST_STRICT)   # High score for < NAC_DIST_STRICT (3.2 Å)
+        s_ang = sigmoid(angle, k=0.15, x0=CFG.NAC_ANGLE_STRICT)  # High score for > NAC_ANGLE_STRICT (155°)
+        s_int = sigmoid(dist_nuc_base, k=-2.0, x0=CFG.SOFT_NB_MIDPOINT) * sigmoid(dist_base_acid, k=-2.0, x0=CFG.SOFT_BA_MIDPOINT)
         soft_score = (s_nuc * 0.4) + (s_ang * 0.3) + (s_int * 0.3)
         results["soft_catalytic_score"] = round(soft_score, 3)
 
         # MECHANISTIC FINGERPRINT DATA SCORING
         # Scores specific physical requirements including Halide Stabilisation and Carboxylate Clamps.
         mech_score = 0.0
-        if d_nuc <= 3.2: mech_score += 0.2
-        if dist_nuc_base <= 5.0: mech_score += 0.1
-        if dist_base_acid <= 5.5: mech_score += 0.1
+        if d_nuc <= CFG.NAC_DIST_STRICT: mech_score += 0.2
+        if dist_nuc_base <= CFG.MECH_NB_GATE: mech_score += 0.1
+        if dist_base_acid <= CFG.MECH_BA_GATE: mech_score += 0.1
         if clamp_ok: mech_score += 0.2 
         if stabilised: mech_score += 0.4
         if steric_clashes > 0: mech_score -= (1.0 * steric_clashes)

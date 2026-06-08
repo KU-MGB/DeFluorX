@@ -361,7 +361,7 @@ def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.Data
         "sn2_attack_angle": "SN2_Attack_Angle",
         "dist_Nuc": "Dist_Nucleophile_ASP110",
         "dist_Stab_W": "Dist_Stabiliser_TRP156",
-        "dist_Stab_Y": "Dist_Stabiliser_TYR219",
+        "dist_Stab_Y": "Dist_Stabiliser_TYR217",
     }
     df.rename(columns=col_map, inplace=True)
 

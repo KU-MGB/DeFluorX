@@ -78,6 +78,49 @@ if [ -z "$JOB_DIRS" ]; then
     exit 0
 fi
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+# Count frames actually written into a SID-out.eaf (the analysed result vector).
+out_eaf_frames() {
+    python3 -c "
+import sys, re
+try:
+    with open(sys.argv[1]) as f:
+        content = f.read()
+    m = re.search(r'Result\s*=\s*\[([\d\.\-\s+eE]+)\]', content)
+    print(len(m.group(1).split()) if m else 0)
+except Exception:
+    print(0)
+" "$1" 2>/dev/null || echo 0
+}
+
+# Ground-truth frame count of a Desmond trajectory, read via the Schrodinger
+# traj API. This is the denominator for completion — it adapts automatically
+# whether the trajectory holds 1,000 or 100,000 frames. Returns 0 if unreadable.
+traj_frame_count() {
+    local _trj="$1"
+    [ -d "$_trj" ] || { echo 0; return; }
+    "$SCHRODINGER/run" python3 -c "
+import sys
+try:
+    from schrodinger.application.desmond.packages import traj
+    print(len(traj.read_traj(sys.argv[1])))
+except Exception:
+    print(0)
+" "$_trj" 2>/dev/null || echo 0
+}
+
+# A SID-out.eaf is complete when it holds at least as many frames as the
+# trajectory. If the trajectory count cannot be read (tf=0), an existing
+# non-empty EAF is treated as complete — never destructively re-run on doubt.
+is_eaf_complete() {
+    local _of="$1" _tf="$2"
+    if [ "$_tf" -gt 0 ]; then
+        [ "$_of" -ge "$_tf" ]
+    else
+        [ "$_of" -gt 0 ]
+    fi
+}
+
 # ── Scanning Phase ───────────────────────────────────────────────────────────
 echo "Scanning job directories..."
 TOTAL_JOBS=0
@@ -90,48 +133,40 @@ for dir in $JOB_DIRS; do
     JOBNAME=$(basename "$dir")
     RANK="${JOBNAME##*_md_job_Rank_}"
     TOTAL_JOBS=$((TOTAL_JOBS + 1))
-    
+
     JOBDIR="${MD_DIR}/${JOBNAME}"
     OUT_EAF="${JOBDIR}/${JOBNAME}_SID-out.eaf"
     CMS_FILE="${JOBDIR}/${JOBNAME}-out.cms"
-    
-    # 1. Check if process is active in system
-    if pgrep -f "$JOBNAME" >/dev/null; then
-        RUNNING_JOBS=$((RUNNING_JOBS + 1))
-        echo "  - Rank $RANK: RUNNING (simulation active)"
-        continue
-    fi
-    
-    # 2. Check if output EAF exists and is complete
-    if [ -f "$OUT_EAF" ]; then
-        _frames=$(python3 -c "
-import sys, re
-try:
-    with open(sys.argv[1]) as f:
-        content = f.read()
-    m = re.search(r'Result\s*=\s*\[([\d\.\-\s+eE]+)\]', content)
-    print(len(m.group(1).split()) if m else 0)
-except Exception:
-    print(0)
-" "$OUT_EAF" 2>/dev/null || echo 0)
-        
-        if [ "$_frames" -ge 99990 ]; then
-            COMPLETED_JOBS=$((COMPLETED_JOBS + 1))
-            echo "  - Rank $RANK: COMPLETED (EAF exists with $_frames frames)"
+    TRJ_DIR="${JOBDIR}/${JOBNAME}_trj"
+
+    # 1. No -out.cms => MD simulation not finished. Only here does a live
+    #    process mean the SIMULATION is running (avoids matching SID processes).
+    if [ ! -f "$CMS_FILE" ]; then
+        if pgrep -f "$JOBNAME" >/dev/null; then
+            RUNNING_JOBS=$((RUNNING_JOBS + 1))
+            echo "  - Rank $RANK: RUNNING (simulation active)"
         else
-            TO_RUN_JOBS=$((TO_RUN_JOBS + 1))
-            echo "  - Rank $RANK: INCOMPLETE (EAF exists but has $_frames/100000 frames; will re-run)"
+            PENDING_JOBS=$((PENDING_JOBS + 1))
+            echo "  - Rank $RANK: PENDING (simulation not finished yet)"
         fi
         continue
     fi
-    
-    # 3. Check if CMS exists (simulation finished but SID not run)
-    if [ -f "$CMS_FILE" ]; then
+
+    # 2. -out.cms present => MD done. Classify by SID-out.eaf completeness,
+    #    measured against the actual trajectory length.
+    if [ -f "$OUT_EAF" ]; then
+        _of=$(out_eaf_frames "$OUT_EAF")
+        _tf=$(traj_frame_count "$TRJ_DIR")
+        if is_eaf_complete "$_of" "$_tf"; then
+            COMPLETED_JOBS=$((COMPLETED_JOBS + 1))
+            echo "  - Rank $RANK: COMPLETED (SID-out.eaf has $_of/$_tf frames)"
+        else
+            TO_RUN_JOBS=$((TO_RUN_JOBS + 1))
+            echo "  - Rank $RANK: INCOMPLETE (SID-out.eaf has $_of/$_tf frames; will re-run)"
+        fi
+    else
         TO_RUN_JOBS=$((TO_RUN_JOBS + 1))
         echo "  - Rank $RANK: READY (simulation finished, SID pending)"
-    else
-        PENDING_JOBS=$((PENDING_JOBS + 1))
-        echo "  - Rank $RANK: PENDING (simulation not finished yet)"
     fi
 done
 
@@ -171,7 +206,24 @@ echo "Masking systemd-oomd..."
 sudo systemctl stop systemd-oomd 2>/dev/null || true
 sudo systemctl mask systemd-oomd.socket 2>/dev/null || true
 
+# ── Heartbeat: print progress of a long-running step every interval ──────────
+# Usage: heartbeat <log_file> <label> & HB_PID=$!  ... then: kill "$HB_PID"
+heartbeat() {
+    local _log="$1" _label="$2" _total="${3:-100000}" _start _elapsed _frame _pct
+    _start=$(date +%s)
+    while true; do
+        sleep 120
+        _elapsed=$(( ($(date +%s) - _start) / 60 ))
+        # analyze_simulation.py prints "analyzing frame# N..." per frame
+        _frame=$(grep -oE 'analyzing frame# [0-9]+' "$_log" 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo 0)
+        _frame=${_frame:-0}
+        _pct=$(( _frame * 100 / _total ))
+        echo "    [PROGRESS] ${_label}: frame ${_frame}/${_total} (${_pct}%, ${_elapsed}m elapsed)"
+    done
+}
+
 # ── Run Loop ─────────────────────────────────────────────────────────────────
+JOB_INDEX=0
 for dir in $JOB_DIRS; do
     JOBNAME=$(basename "$dir")
     RANK="${JOBNAME##*_md_job_Rank_}"
@@ -182,38 +234,36 @@ for dir in $JOB_DIRS; do
     CMS_FILE="${JOBDIR}/${JOBNAME}-out.cms"
     TRJ_DIR="${JOBDIR}/${JOBNAME}_trj"
 
-    # 1. Skip if already finished (output exists with >= 100000 frames)
+    # 1. Skip if already finished (EAF holds >= trajectory frame count).
     if [ -f "$OUT_EAF" ]; then
-        _frames=$(python3 -c "
-import sys, re
-try:
-    with open(sys.argv[1]) as f:
-        content = f.read()
-    m = re.search(r'Result\s*=\s*\[([\d\.\-\s+eE]+)\]', content)
-    print(len(m.group(1).split()) if m else 0)
-except Exception:
-    print(0)
-" "$OUT_EAF" 2>/dev/null || echo 0)
-        
-        if [ "$_frames" -ge 99990 ]; then
+        _of=$(out_eaf_frames "$OUT_EAF")
+        _tf=$(traj_frame_count "$TRJ_DIR")
+
+        if is_eaf_complete "$_of" "$_tf"; then
             continue
         else
+            JOB_INDEX=$((JOB_INDEX + 1))
             echo ""
             echo "============================================================================="
-            echo "Re-processing Job (Incomplete): $JOBNAME (Rank $RANK)"
+            echo "[Job $JOB_INDEX/$TO_RUN_JOBS] Re-processing (Incomplete): $JOBNAME (Rank $RANK)"
             echo "============================================================================="
-            echo "  [RE-RUN] Output EAF is incomplete ($_frames/100000 frames). Re-running analysis..."
-            rm -f "$OUT_EAF"
+            echo "  [RE-RUN] Output EAF is incomplete ($_of/$_tf frames). Re-running analysis..."
+            # Preserve the partial EAF instead of deleting it — a misjudged
+            # "incomplete" must never destroy a good result.
+            _bak="${OUT_EAF}.incomplete.$(date +%Y%m%d%H%M%S).bak"
+            mv -f "$OUT_EAF" "$_bak"
+            echo "  [BACKUP] Previous EAF moved to: $_bak"
         fi
     else
         # Verify readiness before echoing and entering directory
-        if pgrep -f "$JOBNAME" >/dev/null || [ ! -f "$CMS_FILE" ]; then
+        if [ ! -f "$CMS_FILE" ] || pgrep -f "$JOBNAME" >/dev/null; then
             continue
         fi
-        
+
+        JOB_INDEX=$((JOB_INDEX + 1))
         echo ""
         echo "============================================================================="
-        echo "Processing Job: $JOBNAME (Rank $RANK)"
+        echo "[Job $JOB_INDEX/$TO_RUN_JOBS] Processing: $JOBNAME (Rank $RANK)"
         echo "============================================================================="
     fi
 
@@ -237,18 +287,26 @@ except Exception:
 
     # Step 2: analyze_simulation.py (generates SID-out.eaf)
     # Using local execution (-LOCAL) to avoid remote server overhead and cap memory
-    echo "  Running analyze_simulation.py..."
+    # Resolve the trajectory length up front so the heartbeat reports a true
+    # percentage and completion can be validated afterwards.
+    TOTAL_FRAMES=$(traj_frame_count "$TRJ_DIR")
+    [ "$TOTAL_FRAMES" -gt 0 ] || TOTAL_FRAMES=100000
+    echo "  Running analyze_simulation.py (long step, ~10-15h; $TOTAL_FRAMES frames)..."
+    heartbeat "${JOBDIR}/${JOBNAME}_analyze_simulation.log" "Job $JOB_INDEX/$TO_RUN_JOBS Rank $RANK" "$TOTAL_FRAMES" &
+    HB_PID=$!
     $SCHRODINGER/run analyze_simulation.py -NOJOBID -LOCAL \
         "$CMS_FILE" \
         "$TRJ_DIR" \
         "${JOBNAME}_SID-out.eaf" \
         "${JOBNAME}_SID-in.eaf" > "${JOBNAME}_analyze_simulation.log" 2>&1
+    kill "$HB_PID" 2>/dev/null || true
+    wait "$HB_PID" 2>/dev/null || true
 
-    if [ -f "$OUT_EAF" ]; then
-        echo "  [SUCCESS] Created output: $OUT_EAF"
+    if [ -f "$OUT_EAF" ] && is_eaf_complete "$(out_eaf_frames "$OUT_EAF")" "$TOTAL_FRAMES"; then
+        echo "  [SUCCESS] Created output: $OUT_EAF ($(out_eaf_frames "$OUT_EAF")/$TOTAL_FRAMES frames)"
         echo "  [LOGS] Logs written to ${JOBNAME}_event_analysis.log and ${JOBNAME}_analyze_simulation.log"
     else
-        echo "  [ERROR] Failed to generate output: $OUT_EAF"
+        echo "  [ERROR] Failed to generate complete output: $OUT_EAF"
         exit 1
     fi
 
