@@ -1559,7 +1559,7 @@ University of Copenhagen, Denmark
 *Bioinformatics · AI in Drug Discovery · PFAS Biodegradation · Molecular Simulation*
 
 <p>
-  <a href="https://shabanahmad.github.io/"><img src="https://img.shields.io/badge/🌐 Portfolio-dca11d?style=flat-square"></a>
+  <a href="https://shabanahmad.github.io/"><img src="https://img.shields.io/badge/🌐 Website-dca11d?style=flat-square"></a>
   <a href="mailto:shaban.ucph@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
   <a href="https://orcid.org/0000-0001-9832-2830"><img src="https://img.shields.io/badge/ORCID-A6CE39?style=flat-square&logo=orcid&logoColor=white"></a>
 </p>
@@ -1580,7 +1580,7 @@ University of Copenhagen, Denmark
 
 <p>
   <a href="mailto:tkn@plen.ku.dk"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
-  <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://img.shields.io/badge/Asst_Professor-UCPH-002e5f?style=flat-square"></a>
+  <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://img.shields.io/badge/🌐 Website-002e5f?style=flat-square"></a>
   <a href="https://orcid.org/0000-0001-6610-8450"><img src="https://img.shields.io/badge/ORCID-A6CE39?style=flat-square&logo=orcid&logoColor=white"></a>
 </p>
 
