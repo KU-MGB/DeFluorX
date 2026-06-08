@@ -23,34 +23,33 @@
 
 **Science & Overview**
 1. [FAcD Scientific Mandate](#-facd-scientific-mandate)
-2. [Key Features](#-key-features)
-3. [Pipeline Architecture](#-pipeline-architecture)
-4. [PFAS Ligand Panel](#-pfas-ligand-panel-27-compounds)
+2. [Pipeline Architecture](#-pipeline-architecture)
+3. [PFAS Ligand Panel](#-pfas-ligand-panel-27-compounds)
 
 </td>
 <td valign="top">
 
 **Setup & Usage**
 
-5. [Installation](#-installation)
-6. [Quick Start](#-quick-start)
+4. [Installation](#-installation)
+5. [Quick Start](#-quick-start)
 
 **Technical Reference**
 
-7. [Script Reference](#-script-reference)
-8. [Reproducibility](#-reproducibility)
-9. [Hardware & Deployment](#-hardware--deployment)
-10. [Troubleshooting](#-troubleshooting)
+6. [Script Reference](#-script-reference)
+7. [Reproducibility](#-reproducibility)
+8. [Hardware & Deployment](#-hardware--deployment)
+9. [Troubleshooting](#-troubleshooting)
 
 </td>
 <td valign="top">
 
 **Reference**
 
-11. [Repository Structure](#-repository-structure)
-12. [References & Citations](#-references--citations)
-13. [License](#-license)
-14. [Authors](#-authors)
+10. [Repository Structure](#-repository-structure)
+11. [References & Citations](#-references--citations)
+12. [License](#-license)
+13. [Authors](#-authors)
 
 </td>
 </tr>
@@ -119,27 +118,6 @@ A candidate that binds PFOA with high affinity but presents the wrong face to As
 
 ---
 
-## ✨ Key features
-
-```diff
-+ End-to-end automation from raw FASTA to QM/MM-ready frames — single bash command
-+ Boltz-2 GPU-accelerated structure co-folding with ColabFold MSA enrichment
-+ 27 PFAS ligands screened simultaneously per candidate enzyme
-+ Mechanistic NAC scoring: distance, SN2 angle, triad integrity, fluoride cradle
-+ 7-tier catalytic classification (Perfect_A → Decoy) with colour-coded output
-+ Structural trust score calibrated against 3R3U crystal reference (RMSD-based)
-+ Interactive D3.js phylogenetic tree with tier-coloured overlays
-+ Schrödinger PrepWizard protein preparation (pH 8.0, disulfide detection)
-+ MDAnalysis trajectory processing with WaterMap-guided frame selection
-+ QM/MM frame extraction for Schrödinger QSite input generation
-+ Publication-quality figure generation (34 figure panels across analyses 01–25: tier distribution, AI confidence, mechanistic geometry, PFAS ligand network)
-+ Full crash recovery and job-state persistence via master CSV
-+ Colour-coded terminal output with structured per-step timing
-+ Single-source-of-truth configuration — all parameters in one dataclass
-```
-
----
-
 ## 🔄 Pipeline architecture
 
 ```mermaid
@@ -205,10 +183,13 @@ flowchart TD
 |---|---|---|---|---|
 | **Foundation** | 00_01, 00_02 | Environment installation & shared configuration | — | Conda environment, `CFG` & `ProjectUtils` |
 | **Phase 1 — HTS** | 01–04 | Database merging, co-folding, & database-wide validation | Raw sequence databases | Master CSV, D3 tree, publication figure panel |
-| **Phase 2 — Prep & Filter** | 05–06 | Protonation, minimisation, & top candidates extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
+| **Phase 2 — Filter & Prep** | 05–06 | Protonation, minimisation, & top candidates extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
 | **Phase 3 — Dynamics & QM** | External MD + 07 | MD trajectory simulation, hydration profiling, & QM/MM setup | Prepared structures from Step 06 | Desmond trajectories, WaterMaps, QSite `.inp` |
 
 Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the elite hits; Phase 3 evaluates candidate dynamics under thermodynamic fluctuations to confirm Near Attack Conformation (NAC) persistence.
+
+> [!NOTE]
+> In Phase 1, Step 02 (Boltz-2 production) co-folds every candidate against the PFAS panel. A fresh prediction takes approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations). The timing of `4h23m` for `02 Production (Boltz-2 scoring)` shown in the timing summary below is for resume mode checking 58,056 pre-existing jobs.
 
 ---
 
@@ -463,6 +444,9 @@ The script activates the environment, runs all steps in sequence, writes a times
   ──────────────────────────────────  ──────────
   TOTAL WALL TIME                           12h10m
 ```
+
+> [!NOTE]
+> The timing of `4h23m` for Step 02 shown above represents a run in **resume mode** checking 58,056 pre-existing jobs. In a **fresh run**, prediction throughput is approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations).
 
 ### Quick validation (smoke test)
 
@@ -1059,52 +1043,6 @@ If this pipeline is used in your research, please cite:
 }
 ```
 
-### Key publications (BibTeX)
-
-```bibtex
-@article{farajollahi2024deha4,
-  author  = {Farajollahi, Sanaz and others},
-  title   = {Defluorination of Organofluorine Compounds Using Dehalogenase Enzymes from Delftia acidovorans (D4B)},
-  journal = {ACS Omega},
-  year    = {2024},
-  volume  = {9},
-  number  = {26},
-  pages   = {28546--28555},
-  doi     = {10.1021/acsomega.4c02517}
-}
-
-@article{chan2011facd,
-  author  = {Chan, P.W.Y. and Yakunin, A.F. and Edwards, E.A. and Pai, E.F.},
-  title   = {Mapping the reaction coordinates of enzymatic defluorination},
-  journal = {Journal of the American Chemical Society},
-  year    = {2011},
-  volume  = {133},
-  pages   = {7461--7468},
-  doi     = {10.1021/ja200277d}
-}
-
-@article{jitsumori2009facd,
-  author  = {Jitsumori, K and others},
-  title   = {X-ray crystallographic and mutational studies of fluoroacetate dehalogenase from Burkholderia sp. strain FA1},
-  journal = {Journal of Bacteriology},
-  year    = {2009},
-  volume  = {191},
-  pages   = {2630--2637},
-  doi     = {10.1128/JB.01654-08}
-}
-```
-
-### Software tools — please also cite
-
-| Tool | Citation |
-|------|----------|
-| Boltz-1 | Wohlwend *et al.* (2024) *bioRxiv* |
-| Boltz-2 | Passaro *et al.* (2025) *bioRxiv* |
-| ColabFold | Mirdita *et al.* (2022) *Nature Methods* |
-| MDAnalysis | Michaud-Agrawal *et al.* (2011); Gowers *et al.* (2016) |
-| RDKit | Landrum *et al.* (2006) |
-| Gemmi | Wojdyr (2022) *J. Open Source Software* 7:4200 |
-
 ### Scientific references by script
 
 References grouped by pipeline step — the step that directly implements the underlying method or threshold.
@@ -1132,6 +1070,9 @@ References grouped by pipeline step — the step that directly implements the un
 | QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
 | QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j) |
 | QSite implementation | Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
+| FAcD Burkholderia reference | Jitsumori et al. (2009) *J Bacteriol* 191:2630–2637. [DOI](https://doi.org/10.1128/JB.01654-08) |
+| Metal coordination | Harding (2006) *Acta Crystallogr* D62:678–682. [DOI](https://doi.org/10.1107/S0907444906014594) |
+| Sequence alignment | Henikoff & Henikoff (1992) *PNAS* 89:10915–10919. [DOI](https://doi.org/10.1073/pnas.89.22.10915) |
 
 </details>
 
@@ -1142,7 +1083,7 @@ References grouped by pipeline step — the step that directly implements the un
 |---|---|
 | FAcD catalytic mechanism & PDB 3R3U | Chan et al. (2011) *JACS* 133:7461–7468. [DOI](https://doi.org/10.1021/ja200277d) |
 | DEHA4 defluorination validation (D4B) | Farajollahi et al. (2024) *ACS Omega* 9(26):28546–28555. [DOI](https://doi.org/10.1021/acsomega.4c02517) |
-| SN2 geometry (Bürgi–Dunitz) | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058) |
+| SN2 geometry (Bürgi–Dunitz) | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
 | Halogen bond stabilisation | Auffinger et al. (2004) *PNAS* 101:16789. [DOI](https://doi.org/10.1073/pnas.0407607101) |
 | Near attack conformation (NAC) | Hur & Bruice (2003) *PNAS* 100:12015. [DOI](https://doi.org/10.1073/pnas.1534873100) |
 | Fluorine in medicinal chemistry | Hagmann (2008) *J Med Chem* 51:4359. [DOI](https://doi.org/10.1021/jm800219f) |
@@ -1154,6 +1095,7 @@ References grouped by pipeline step — the step that directly implements the un
 | Gemmi CIF parsing | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
 | SciPy / cKDTree spatial queries | Virtanen et al. (2020) *Nature Methods* 17:261. [DOI](https://doi.org/10.1038/s41592-019-0686-2) |
 | RDKit cheminformatics | Landrum et al. (2006). [rdkit.org](https://www.rdkit.org) |
+| FAcD SN2 defluorination QM/MM | Yue et al. (2021) *Environ Sci Technol* 55(14):9817–9825. [DOI](https://doi.org/10.1021/acs.est.0c08811) |
 
 </details>
 
@@ -1200,7 +1142,83 @@ References grouped by pipeline step — the step that directly implements the un
 | QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j); Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
 | FAcD SN2 defluorination QM/MM energetics | Yue et al. (2021) *Environ Sci Technol* 55(14):9817–9825. [DOI](https://doi.org/10.1021/acs.est.0c08811) |
 | MD triad threshold calibration | Holmquist (2000); ±2 Å buffer for 300 K thermal fluctuations in solution MD |
+| MDAnalysis trajectory parsing | Michaud-Agrawal et al. (2011) *J Comput Chem* 32:2319–2327. [DOI](https://doi.org/10.1002/jcc.21787); Gowers et al. (2016) *Proc 15th Python Sci Conf*. [DOI](https://doi.org/10.25080/Majora-629e541a-00e) |
 
+</details>
+
+<details>
+<summary><b>Key Publications & Software Tools (BibTeX)</b></summary>
+
+For external databases, crystallographic references, and software dependencies, please use the following BibTeX entries:
+
+```bibtex
+@article{farajollahi2024deha4,
+  author  = {Farajollahi, Sanaz and others},
+  title   = {Defluorination of Organofluorine Compounds Using Dehalogenase Enzymes from Delftia acidovorans (D4B)},
+  journal = {ACS Omega},
+  year    = {2024},
+  volume  = {9},
+  number  = {26},
+  pages   = {28546--28555},
+  doi     = {10.1021/acsomega.4c02517}
+}
+
+@article{chan2011facd,
+  author  = {Chan, P.W.Y. and Yakunin, A.F. and Edwards, E.A. and Pai, E.F.},
+  title   = {Mapping the reaction coordinates of enzymatic defluorination},
+  journal = {Journal of the American Chemical Society},
+  year    = {2011},
+  volume  = {133},
+  pages   = {7461--7468},
+  doi     = {10.1021/ja200277d}
+}
+
+@article{jitsumori2009facd,
+  author  = {Jitsumori, K and others},
+  title   = {X-ray crystallographic and mutational studies of fluoroacetate dehalogenase from Burkholderia sp. strain FA1},
+  journal = {Journal of Bacteriology},
+  year    = {2009},
+  volume  = {191},
+  pages   = {2630--2637},
+  doi     = {10.1128/JB.01654-08}
+}
+
+@software{boltz1,
+  author = {Wohlwend, J. and others},
+  title = {Boltz-1: An open-source model for co-folding proteins, RNA, DNA, and small molecules},
+  year = {2024},
+  publisher = {bioRxiv},
+  doi = {10.1101/2024.11.19.624167}
+}
+
+@software{boltz2,
+  author = {Passaro, S. and others},
+  title = {Boltz-2: High-accuracy structure prediction and binding affinity estimation},
+  year = {2025},
+  publisher = {bioRxiv},
+  doi = {10.1101/2025.06.14.659707}
+}
+
+@article{mirdita2022colabfold,
+  author = {Mirdita, M. and others},
+  title = {ColabFold: making protein folding accessible to all},
+  journal = {Nature Methods},
+  volume = {19},
+  pages = {679--682},
+  year = {2022},
+  doi = {10.1038/s41592-022-01488-1}
+}
+
+@article{michaud2011mdanalysis,
+  author = {Michaud-Agrawal, N. and others},
+  title = {MDAnalysis: A toolkit for the analysis of molecular dynamics trajectories},
+  journal = {Journal of Computational Chemistry},
+  volume = {32},
+  pages = {2319--2327},
+  year = {2011},
+  doi = {10.1002/jcc.21787}
+}
+```
 </details>
 
 ---
