@@ -6,7 +6,6 @@
 *AI structure prediction · thermodynamic MD · QM/MM frame extraction — fully automated*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Active_Research-22C55E?style=for-the-badge">
   <img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-22C55E?style=for-the-badge">
   <img src="https://img.shields.io/badge/Python-3.10-22C55E?style=for-the-badge&logo=python&logoColor=white">
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20CUDA-22C55E?style=for-the-badge&logo=linux&logoColor=white">
@@ -39,21 +38,19 @@
 **Technical Reference**
 
 7. [Script Reference](#-script-reference)
-8. [Configuration](#-configuration---central-cfg)
-9. [Reproducibility](#-reproducibility)
-10. [Hardware & Deployment](#-hardware--deployment)
-11. [Troubleshooting](#-troubleshooting)
+8. [Reproducibility](#-reproducibility)
+9. [Hardware & Deployment](#-hardware--deployment)
+10. [Troubleshooting](#-troubleshooting)
 
 </td>
 <td valign="top">
 
 **Reference**
 
-12. [Repository Structure](#-repository-structure)
-13. [Running Step 07 (MD/QM-MM) — Memory Requirements](#-running-step-07-mdqm-mm---memory-requirements)
-14. [References & Citations](#-references--citations)
-15. [License](#-license)
-16. [Authors](#-authors)
+11. [Repository Structure](#-repository-structure)
+12. [References & Citations](#-references--citations)
+13. [License](#-license)
+14. [Authors](#-authors)
 
 </td>
 </tr>
@@ -557,6 +554,34 @@ cfg  = mod.CFG()
 print(cfg.NAC_DIST_STRICT)    # 3.2 Å
 print(cfg.TIER_THRESHOLDS)    # dict of tier definitions
 ```
+
+**Frequently Tuned Parameters:**
+To change any parameter, edit only `00_02_Project_Config_FAcDs.py`. Examples of frequently tuned attributes:
+```python
+# ── Tier thresholds (§9) — relax or tighten the scoring tiers (dicts keyed by tier)
+TIER_NUC_DIST  = {"Perfect_A": 3.0, ...}   # Å, Nuc–C upper bound per tier
+TIER_ANGLE_MIN = {"Perfect_A": 175.0, ...} # ° SN2 attack-angle lower bound per tier
+
+# ── Boltz-2 sampling (§2) — increase for higher structural diversity
+BOLTZ_DIFFUSION_SAMPLES: int = 5     # predicted structures per complex
+
+# ── MD frame-scoring weights (§10) — QM/MM frame selection only
+SCORE_DIST_WEIGHT:  float = 100.0    # per Å below the relaxed NAC distance
+SCORE_ANGLE_WEIGHT: float =   5.0    # per degree above the relaxed NAC angle
+
+# ── PrepWizard (§16)
+PREPWIZARD_PROPKA_PH: float = 8.0    # protein protonation pH
+
+# ── Visualisation (§14)
+VIS_IMG_WIDTH: int  = 2400   # output image width in pixels
+VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
+```
+
+**Environment Variables:**
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SCHRODINGER` | `/opt/schrodinger` | Schrödinger Suite installation path |
+
 </details>
 
 <details>
@@ -778,8 +803,6 @@ Interactive mode prompts tier selection if multiple tiers contain viable candida
 python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
-See also [Running Step 07 (MD/QM-MM) — Memory Requirements](#-running-step-07-mdqm-mm--memory-requirements) for stride and OOM-prevention details.
-
 **Pipeline stages:**
 
 *   **External Simulation Steps (Performed by User):**
@@ -809,44 +832,20 @@ See also [Running Step 07 (MD/QM-MM) — Memory Requirements](#-running-step-07-
 | Catalytic triad BA (MD) | ≤ 9.0 Å | ≤ 9.0 Å |
 | Walden improper dihedral | ≤ 15° | — |
 
+**Memory Requirements & OOM Prevention:**
+As the most memory-intensive step in the pipeline, the following behaviours are built in to prevent OOM (out-of-memory) kills:
+
+*   **Default trajectory stride:** The trajectory analysis loop defaults to **stride 1** (full-density analysis). However, the engine includes a dynamic memory check (`_auto_select_stride`) that evaluates available RAM before execution. If the estimated memory footprint for all processed ranks exceeds 80% of the system's available memory, the engine automatically falls back to **stride 5** or **stride 10** to prevent out-of-memory errors.
+*   **Automatic `systemd-oomd` masking:** Before initiating Schrödinger SID (System Interaction Diagram) analysis — the sub-step most likely to spike memory consumption — the script automatically applies `sudo systemctl mask systemd-oomd` to prevent the Linux out-of-memory daemon from terminating the Schrödinger process mid-run. The mask is removed automatically on clean exit. If the job is interrupted, restore the service manually using `sudo systemctl unmask systemd-oomd`.
+*   **Concurrent per-rank processing:** Candidates are processed **concurrently** using a thread pool (`ThreadPoolExecutor`), scaling dynamically with the available CPU cores (reserving 2 cores for system stability). To prevent cumulative memory accumulation from multiple resident Desmond trajectories, the auto-stride memory estimator automatically scales up the sampling stride if the estimated concurrent memory exceeds available physical memory.
+*   **Manual stride override:** To run full-frame density analysis (stride 1) — required for precise NAC frame counts in publication-quality results — pass `--stride 1` explicitly:
+    ```bash
+    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 1
+    ```
+    *Note: A 1000 ns Desmond trajectory for a ~300-residue FAcD + PFAS ligand in explicit solvent (~40,000 atoms) generates 100,000 frames and approximately 50–100 GB of trajectory data. Ensure at least 128 GB RAM is available before using `--stride 1`. On workstations with ≤ 64 GB RAM, stride 10 (the default) is strongly recommended.*
+
 **Configuration (CFG §8, §10, §11):** Smart-Lock biases, WaterMap radii, frame scoring weights, QSite region definitions, Desmond MD parameters.
 </details>
-
----
-
-### ⚙️ Configuration — central CFG
-
-All parameters reside in [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py). A Python `@dataclass` — no YAML, no JSON, just typed Python attributes with inline scientific documentation.
-
-**To change any parameter, edit only this file.**
-
-#### Frequently tuned parameters
-
-```python
-# ── Tier thresholds (§9) — relax or tighten the scoring tiers (dicts keyed by tier)
-TIER_NUC_DIST  = {"Perfect_A": 3.0, ...}   # Å, Nuc–C upper bound per tier
-TIER_ANGLE_MIN = {"Perfect_A": 175.0, ...} # ° SN2 attack-angle lower bound per tier
-
-# ── Boltz-2 sampling (§2) — increase for higher structural diversity
-BOLTZ_DIFFUSION_SAMPLES: int = 5     # predicted structures per complex
-
-# ── MD frame-scoring weights (§10) — QM/MM frame selection only
-SCORE_DIST_WEIGHT:  float = 100.0    # per Å below the relaxed NAC distance
-SCORE_ANGLE_WEIGHT: float =   5.0    # per degree above the relaxed NAC angle
-
-# ── PrepWizard (§16)
-PREPWIZARD_PROPKA_PH: float = 8.0    # protein protonation pH
-
-# ── Visualisation (§14)
-VIS_IMG_WIDTH: int  = 2400   # output image width in pixels
-VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
-```
-
-#### Environment variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `SCHRODINGER` | `/opt/schrodinger` | Schrödinger Suite installation path |
 
 ---
 
@@ -1041,44 +1040,6 @@ cp Boltz-2_Run_*/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv backup.csv
 python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 ```
 </details>
-
----
-
-## 🧠 Running step 07 (MD/QM-MM) — memory requirements
-
-Step 07 (`07_MD_Thermodynamics_QMMM_Engine_FAcDs.py`) performs Schrödinger Desmond MD followed by NAC trajectory analysis and QSite frame extraction. It is the most memory-intensive step in the pipeline. The following behaviours are built in to prevent OOM (out-of-memory) kills on workstations and HPC nodes.
-
-### Default trajectory stride
-
-The trajectory analysis loop defaults to **stride 1** (full-density analysis). However, the engine includes a dynamic memory check (`_auto_select_stride`) that evaluates available RAM before execution. If the estimated memory footprint for all processed ranks exceeds 80% of the system's available memory, the engine automatically falls back to **stride 5** or **stride 10** to prevent out-of-memory errors.
-
-### Automatic `systemd-oomd` masking
-
-Before initiating Schrödinger SID (System Interaction Diagram) analysis — the sub-step most likely to spike memory consumption — the script automatically applies:
-
-```bash
-sudo systemctl mask systemd-oomd
-```
-
-This prevents the Linux out-of-memory daemon from terminating the Schrödinger process mid-run. The mask is removed automatically on clean exit. If the job is interrupted, restore the service manually:
-
-```bash
-sudo systemctl unmask systemd-oomd
-```
-
-### Concurrent per-rank processing
-
-Candidates are processed **concurrently** using a thread pool (`ThreadPoolExecutor`), scaling dynamically with the available CPU cores (reserving 2 cores for system stability). To prevent cumulative memory accumulation from multiple resident Desmond trajectories, the auto-stride memory estimator automatically scales up the sampling stride if the estimated concurrent memory exceeds available physical memory.
-
-### Manual stride override
-
-To run full-frame density analysis (stride 1) — required for precise NAC frame counts in publication-quality results — pass `--stride 1` explicitly:
-
-```bash
-python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 1
-```
-
-> **RAM requirement for stride 1:** a 1000 ns Desmond trajectory for a ~300-residue FAcD + PFAS ligand in explicit solvent (~40,000 atoms) generates 100,000 frames and approximately 50–100 GB of trajectory data. Ensure at least 128 GB RAM is available before using `--stride 1`. On workstations with ≤ 64 GB RAM, stride 10 (the default) is strongly recommended.
 
 ---
 
@@ -1289,7 +1250,7 @@ University of Copenhagen, Denmark
 
 <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://KU-MGB.github.io/images/people/tue-nielsen.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
-**Dr Tue Kjærgaard Nielsen**  
+**Tue K. Nielsen**  
 Tenure Track Assistant Professor · Principal Supervisor  
 Department of Plant and Environmental Sciences  
 University of Copenhagen, Denmark
