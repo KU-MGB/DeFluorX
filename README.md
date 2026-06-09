@@ -1547,7 +1547,7 @@ For commercial licensing enquiries, contact: shaban.ucph@gmail.com · tkn@plen.k
 <tr>
 <td align="center" width="50%">
 
-**Developer**
+**Developer & Project Lead**
 
 <a href="https://shabanahmad.github.io/"><img src="https://KU-MGB.github.io/images/people/shaban-ahmad.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
@@ -1567,7 +1567,7 @@ University of Copenhagen, Denmark
 </td>
 <td align="center" width="50%">
 
-**Reviewer**
+**Scientific Supervisor**
 
 <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://KU-MGB.github.io/images/people/tue-nielsen.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
