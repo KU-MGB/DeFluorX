@@ -14,7 +14,7 @@ Date   : 10 June 2026 <───────────────────
   Script        : 05_CIF-PDB_Preparation_FAcDs.py
   Role          : "Builder" — converts Boltz-2 CIF outputs to analysis-ready PDB.
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — pH values)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                             console_title, console_info,
                                             console_separator)
   Reads         : <Run>/2_Best_Complexes_CIFs/*.cif
@@ -24,7 +24,7 @@ Date   : 10 June 2026 <───────────────────
                   <Run>/5_PDB_Generation_Preparation/3_PDB_prep_master.log
   Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
   Downstream    : 06_Top-N_Extraction_FAcDs.py  → reads prepared PDBs
-                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py → reads prepared PDBs for MD/QM-MM
+                  08_MD_Thermodynamics_QMMM_Engine_FAcDs.py → reads prepared PDBs for MD/QM-MM
 ───────────────────────────────────────────────────────────────────────────────
 
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -94,7 +94,7 @@ def _load_module(name: str, path: Path):
 
 _REPO_DIR   = Path(__file__).resolve().parent
 _cfg_mod    = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
 
 CFG             = _cfg_mod.CFG()
 ConsoleColours     = _utils_mod.ConsoleColours
@@ -130,7 +130,7 @@ PROTEIN_ASSOCIATED = CFG.PREP_PROTEIN_ASSOCIATED
 # ===============================================================================
 # SECTION 2: LOGGING INFRASTRUCTURE
 # ===============================================================================
-# Logging and console functions are provided by 00_02_Project_Utils.
+# Logging and console functions are provided by 00_03_Project_Utils.
 # Script-level wrappers capture the module-global `logger` so existing call
 # sites require no modification.
 

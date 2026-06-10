@@ -19,13 +19,13 @@ Date   : 10 June 2026 <───────────────────
   Downstream    : 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Phylogeny_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
                   06_Top-N_Extraction_FAcDs.py,
-                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+                  08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
 ───────────────────────────────────────────────────────────────────────────────
 
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Module Load Priority: This file MUST be imported before any other project
      modules to ensure CFG is available for dependent logic.
-  2. Statical Constancy: Changing thresholds (e.g., NAC_DIST) mid-pipeline will
+  2. Static Constancy: Changing thresholds (e.g., NAC_DIST) mid-pipeline will
      cause inconsistencies between stored CSV results and new analysis.
   3. Environment Sensitivity: Relies on `importlib.util` for path-safe imports;
      requires consistent relative directory structure.
@@ -74,12 +74,12 @@ Scientific references
   NAC criteria                 : Lightstone & Bruice (1996) JACS 118:2595–2605. https://doi.org/10.1021/ja952589l
                                  Bruice (2002) Acc Chem Res 35:139–148. https://doi.org/10.1021/ar0001665
   Catalytic triad distances    : Holmquist (2000) Curr Protein Pept Sci 1:209–235. https://doi.org/10.2174/1389203003381405
-  SN2 / Bürgi–Dunitz angle     : Bürgi, Dunitz & Shefter (1973) JACS 95:5065–5067. https://doi.org/10.1021/ja00796a058
+  Bürgi–Dunitz angle (aux)     : Bürgi, Dunitz & Shefter (1973) JACS 95:5065–5067. https://doi.org/10.1021/ja00796a058
                                  Bürgi, Dunitz, Lehn & Wipff (1974) Tetrahedron 30:1563–1572. https://doi.org/10.1016/S0040-4020(01)90678-7
   WaterMap thermodynamics      : Abel, R. et al. (2008) JACS 130:2817–2831. https://doi.org/10.1021/ja0771033
   QSite DFT functional (M06-2X): Zhao, Y. & Truhlar, D.G. (2008) Theor Chem Acc 120:215–241. https://doi.org/10.1007/s00214-007-0310-x
-  QSite QM/MM methodology      : Rosta, E. et al. (2006) J Phys Chem B 110:2934–2941. https://doi.org/10.1021/jp057109j
-                                 Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457. https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O
+  QSite QM/MM implementation   : Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457. https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O
+  QM/MM free-energy method     : Rosta, E. et al. (2006) J Phys Chem B 110:2934–2941. https://doi.org/10.1021/jp057109j  (general QM/MM benchmark, not QSite-specific)
   FAcD QM/MM defluorination    : Yue, Y. et al. (2021) Environ Sci Technol 55(14):9817–9825. https://doi.org/10.1021/acs.est.0c08811
   Sequence alignment           : Henikoff & Henikoff (1992) PNAS 89:10915–10919. https://doi.org/10.1073/pnas.89.22.10915
   PrepWizard protocol          : Madhavi Sastry et al. (2013) J Comput-Aided Mol Des 27:221–234. https://doi.org/10.1007/s10822-013-9644-8
@@ -161,8 +161,9 @@ class CFG:
     # ═════════════════════════════════════════════════════════════════════════════
 
     # ── § 3.1  Reference ligand ──────────────────────────────────────────
-    # Fluoroacetate (FA) is the canonical PFAS model substrate for DehH2.
+    # Fluoroacetate (FA) is the canonical FAcD substrate; benchmark for DEHA4 and 3R3U geometry calibration.
     FLUOROACETATE_SMILES: str = "C(C(=O)O)F"   # canonical SMILES for fluoroacetate
+    INPUT_SMILES: str = "D_INP_PFAS-27_Ligands.smi"  # ligand SMILES panel
 
     # ── § 3.2  Reference protein sequence ────────────────────────────────
     # DEHA4 = DeHa4_[Delftia acidovorans D4B] — structural reference for all alignments.
@@ -233,9 +234,11 @@ class CFG:
     # McGaughey et al. (1998): face–face ≤ 4.4 Å; edge–face ≤ 5.5 Å.
     THRESHOLD_PI_FACE: float       = 4.4    # Å  centroid–centroid, face–face (alias: PI_STACK_FACE_DIST_MAX)
     THRESHOLD_PI_EDGE: float       = 5.5    # Å  centroid–centroid, edge–face (alias: PI_STACK_EDGE_DIST_MAX)
-    PI_STACK_FACE_DIST_MAX: float  = 4.4    # Å  (kept for backward compatibility)
+    # Backward-compatibility aliases: reference the THRESHOLD_PI_* source above
+    # (not independent literals) so the pair can never silently diverge.
+    PI_STACK_FACE_DIST_MAX: float  = THRESHOLD_PI_FACE  # Å  alias of THRESHOLD_PI_FACE
     PI_STACK_FACE_ANGLE_MAX: float = 30.0   # °  maximum tilt angle, face–face
-    PI_STACK_EDGE_DIST_MAX: float  = 5.5    # Å  (kept for backward compatibility)
+    PI_STACK_EDGE_DIST_MAX: float  = THRESHOLD_PI_EDGE  # Å  alias of THRESHOLD_PI_EDGE
     PI_STACK_EDGE_ANGLE_MIN: float = 60.0   # °  minimum tilt angle, edge–face
 
     # ── § 4.5  π–cation ───────────────────────────────────────────────────
@@ -290,14 +293,14 @@ class CFG:
     #
     # Two threshold sets:
     #   Static (Step 02) — calibrated on crystal structures (energy-minimised).
-    #   MD     (Step 07) — +2.0 Å / +2.0 Å buffer for 300 K thermal fluctuations in
+    #   MD     (Step 08) — +2.0 Å / +2.0 Å buffer for 300 K thermal fluctuations in
     #                      solution; justified by Asp–His distance variance in FAcD MD
     #                      trajectories (σ ≈ 1–2 Å at 300 K).
     # ═════════════════════════════════════════════════════════════════════════════
     THRESHOLD_TRIAD_NB: float    = 4.5   # Å  crystal/static (Step 02)
     THRESHOLD_TRIAD_BA: float    = 7.0   # Å  crystal/static (Step 02)
-    THRESHOLD_TRIAD_NB_MD: float = 6.5   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
-    THRESHOLD_TRIAD_BA_MD: float = 9.0   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
+    THRESHOLD_TRIAD_NB_MD: float = 6.5   # Å  MD-calibrated  (Step 08) = crystal + 2.0 Å
+    THRESHOLD_TRIAD_BA_MD: float = 9.0   # Å  MD-calibrated  (Step 08) = crystal + 2.0 Å
 
     # ── § 6.1  Mechanistic-fingerprint & soft-score contact gates  (Step 02) ──
     # Used by 02_Production analyse_candidate_structure() mech_score / soft_score.
@@ -313,15 +316,21 @@ class CFG:
     # strict NAC cutoffs directly (NAC_DIST_STRICT / NAC_ANGLE_STRICT).
     SOFT_NB_MIDPOINT: float  = 4.5   # Å  soft s_int Nuc–Base sigmoid midpoint (= THRESHOLD_TRIAD_NB)
     SOFT_BA_MIDPOINT: float  = 5.0   # Å  soft s_int Base–Acid sigmoid midpoint
+                                     #    Intentionally < THRESHOLD_TRIAD_BA (7.0 Å): sigmoid midpoint sets
+                                     #    the steepest scoring gradient in the 4–6 Å pre-reactive range;
+                                     #    the hard 7.0 Å cutoff is the gate, not the sigmoid centre.
 
     # ═════════════════════════════════════════════════════════════════════════════
-    # SECTION 7 ── SN2 / WALDEN INVERSION GEOMETRY  (Step 07)
-    # Bürgi–Dunitz (1973): ideal SN2 at sp3 C is 180° backside attack.
+    # SECTION 7 ── SN2 / WALDEN INVERSION GEOMETRY  (Step 08)
+    # SN2 backside attack at sp³ C: ideal Walden-inversion trajectory = 180°.
+    # Note: the Bürgi–Dunitz angle (107°) applies to nucleophilic addition at
+    # sp² carbonyl carbons; it must NOT be conflated with the linear SN2 angle
+    # here (see calculate_burgi_dunitz() in 00_03 — auxiliary metric only).
     # ═════════════════════════════════════════════════════════════════════════════
     WALDEN_IMPROPER_MAX: float = 15.0  # °  |improper dihedral| < this → TS-like (planar) geometry
 
     # ═════════════════════════════════════════════════════════════════════════════
-    # SECTION 8 ── SMART-LOCK RESIDUE DETECTION  (Step 07)
+    # SECTION 8 ── SMART-LOCK RESIDUE DETECTION  (Step 08)
     # Geometry-biased scoring that steers 3D triad & fluoride-cradle detection
     # toward known residue positions from the 3R3U canonical mapping.
     # Negative values are distance bonuses (subtracted from the candidate distance;
@@ -508,7 +517,7 @@ class CFG:
         ['#D73027', '#FDAE61', '#A6D96A', '#1B7837'])   # worst→best, 4 bins
 
     # ═════════════════════════════════════════════════════════════════════════════
-    # SECTION 10 ── MD TRAJECTORY ANALYSIS  (Step 07)
+    # SECTION 10 ── MD TRAJECTORY ANALYSIS  (Step 08)
     # ═════════════════════════════════════════════════════════════════════════════
 
     # ── § 10.1  Solvent / water residue names ────────────────────────────
@@ -532,15 +541,24 @@ class CFG:
     SCORE_WATERMAP_WEIGHT: float =  10.0   # per kcal mol⁻¹ WaterMap dG unit
 
     # ── § 10.4  Catalytic viability display thresholds (%) ───────────────
-    # Used to colour-code console output and figures in Step 07.
+    # Used to colour-code console output and figures in Step 08.
     # Boltz-2 predicted structures (not crystal structures) typically show
     # lower NAC populations (0.01–2%) owing to the Boltz-2 starting geometry
     # not being pre-optimised for the reactive SN2 trajectory.
     VIABILITY_PASS_THRESHOLD: float = 0.05   # % — below this → "NAC FAIL" (red)
     VIABILITY_HIGH_THRESHOLD: float = 5.0    # % — above this → "NAC PASS – High" (green)
 
+    # ── § 10.5  Force field — Desmond MD ────────────────────────────────────
+    # System solvation, ion neutralisation, and NPT production MD all use the
+    # OPLS4 force field (Roos et al. 2019; Lu et al. 2021, JCTC) as configured
+    # in the Desmond .msj job file generated by the user via Maestro.
+    # The Python script (08_MD_Thermodynamics_QMMM_Engine_FAcDs.py) reads the
+    # completed trajectory — it does not control force-field selection.
+    # OPLS4 reference: Lu et al. (2021) J Chem Theory Comput 17:4291–4300.
+    #                  DOI: https://doi.org/10.1021/acs.jctc.1c00302
+
     # ═════════════════════════════════════════════════════════════════════════════
-    # SECTION 11 ── QM/MM EXTRACTION — QSite  (Step 07)
+    # SECTION 11 ── QM/MM EXTRACTION — QSite  (Step 08)
     # Level of theory: M06-2X / 6-31+G(d,p) — Zhao & Truhlar (2008) DFT
     # functional; Rosta et al. (2006) QM/MM free-energy methodology;
     # Murphy et al. (2000) QSite implementation.
@@ -565,9 +583,9 @@ class CFG:
     QSITE_SCAN_NSTEPS: int  = 23             # points total → covers 3.5 → 1.3 Å (last point: 3.5 + −0.1×22 = 1.3 Å)
 
     # ═════════════════════════════════════════════════════════════════════════════
-    # SECTION 12 ── CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 07)
+    # SECTION 12 ── CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 08)
     # Reference sequence positions in 3R3U / DEHA4_CONTROL_SEQ numbering.
-    # Step 07 looks these up as keys in aln_dict (which is keyed by 3R3U
+    # Step 08 looks these up as keys in aln_dict (which is keyed by 3R3U
     # reference positions from the Full_Sequence_Alignment_Map column).
     # Must stay in sync with REF_ACTIVE_SITE_MAP (§3.5).
     # ═════════════════════════════════════════════════════════════════════════════
@@ -594,13 +612,13 @@ class CFG:
     # SECTION 14 ── VISUALISATION PARAMETERS
     # ═════════════════════════════════════════════════════════════════════════════
 
-    # ── § 14.1  Global rendering (Step 07) ────────────────────────────────
+    # ── § 14.1  Global rendering (Step 08) ────────────────────────────────
     VIS_IMG_WIDTH: int   = 2400   # px  export width  (publication-quality figure)
     VIS_IMG_HEIGHT: int  = 2400   # px  export height
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
 
-    # ── § 14.2  Per-structure rendering timeouts — seconds (Step 07) ─────
+    # ── § 14.2  Per-structure rendering timeouts — seconds (Step 08) ─────
     VIS_TIMEOUT_PYMOL: int    = 600   # PyMOL render timeout (2× 2400-px ray traces ~5 min on CPU)
     VIS_TIMEOUT_CHIMERAX: int = 180   # ChimeraX render timeout
     VIS_TIMEOUT_MAESTRO: int  = 300   # Maestro render timeout
@@ -608,7 +626,7 @@ class CFG:
     VIS_TIMEOUT_LIGPLOT: int     =  60   # LigPlot+ render timeout
     VIS_TIMEOUT_PYMOL_HEAVY: int = 1200  # s  PyMOL timeout for structures with ≥4 C–F bonds (polyfluorinated PFAS)
 
-    # ── § 14.3  Geometric highlight radii (Step 07) ───────────────────────
+    # ── § 14.3  Geometric highlight radii (Step 08) ───────────────────────
     VIS_F_CONTACT_RADIUS: float = 4.0   # Å  fluorine contact highlight sphere
     VIS_POCKET_RADIUS: float    = 5.5   # Å  binding-pocket cartoon / surface shell
 

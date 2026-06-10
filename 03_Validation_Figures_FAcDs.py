@@ -15,7 +15,7 @@ Date   : 10 June 2026 <───────────────────
   Script        : 03_Validation_Figures_FAcDs.py
   Role          : Scoring, ranking, and visual reporting of Boltz-2 predictions.
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — tier colours, vis params)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                                  console_info, console_separator)
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
                   (Master CSV written by 02_Production_FAcDs.py; latest file selected)
@@ -163,7 +163,7 @@ def _load_module(name: str, path: Path):
     return mod
 
 _cfg_mod   = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_03_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
@@ -194,11 +194,7 @@ TIER_PALETTE = {
 }
 
 # Specific order for tiers to ensure logical plotting (Best to Worst)
-TIER_ORDER_LOGIC = [
-    "Perfect_A", "Perfect_B",
-    "Best_A", "Best_B",
-    "Good", "Poor", "Decoy"
-]
+TIER_ORDER_LOGIC = list(CFG.TIER_ORDER)
 
 CONFLICT_PALETTE = dict(CFG.CONFLICT_COLOUR)   # sourced from CFG § 9.7
 
@@ -251,22 +247,7 @@ class ReportManager:
         print(SEPARATOR_LIGHT, flush=True)
         with open(self.path, "a") as f: f.write(f"\n--- {title} ---\n")
 
-def calculate_alignment_grade(identity):
-    """Maps identity percentage to Grades A-I (matching Production logic)."""
-    try:
-        val = float(identity)
-    except (ValueError, TypeError):
-        return "Grade I (< 20%)"
-
-    if val >= 90.0: return "Grade A (90-100%)"
-    if val >= 80.0: return "Grade B (80-90%)"
-    if val >= 70.0: return "Grade C (70-80%)"
-    if val >= 60.0: return "Grade D (60-70%)"
-    if val >= 50.0: return "Grade E (50-60%)"
-    if val >= 40.0: return "Grade F (40-50%)"
-    if val >= 30.0: return "Grade G (30-40%)"
-    if val >= 20.0: return "Grade H (20-30%)"
-    return "Grade I (< 20%)"
+# (Dead code calculate_alignment_grade removed; use _utils_mod.get_alignment_grade instead)
 
 
 # ===============================================================================
@@ -1020,15 +1001,12 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     if 'identity_pct' in df.columns:
         # Use existing single-letter Alignment_Grade from CSV; only compute if missing
         if 'Alignment_Grade' not in df.columns or df['Alignment_Grade'].isnull().all():
-            _grade_map = {(90,100):'A',(80,90):'B',(70,80):'C',(60,70):'D',(50,60):'E',
-                          (40,50):'F',(30,40):'G',(20,30):'H',(0,20):'I'}
             def _simple_grade(v):
                 try:
-                    v = float(v)
-                except: return 'I'
-                for (lo, hi), g in _grade_map.items():
-                    if v >= lo: return g
-                return 'I'
+                    val = float(v)
+                except (ValueError, TypeError):
+                    return 'I'
+                return _utils_mod.get_alignment_grade(val, CFG)
             df['Alignment_Grade'] = df['identity_pct'].apply(_simple_grade)
         # Ensure single-letter format (convert "Grade A (...)" → 'A' if needed)
         _ag = df['Alignment_Grade'].astype(str)
@@ -4394,8 +4372,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
 # ===============================================================================
 
 def _load_pfas_smiles() -> dict:
-    """Load PFAS SMILES from D_PFAS27_Tue.smi in the script directory."""
-    path = Path(__file__).resolve().parent / "D_PFAS27_Tue.smi"
+    """Load PFAS SMILES from CFG.INPUT_SMILES in the script directory."""
+    path = Path(__file__).resolve().parent / CFG.INPUT_SMILES
     if not path.exists():
         return {}
     smiles: dict = {}

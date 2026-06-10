@@ -1,6 +1,6 @@
 """
 ===============================================================================
-FAcDs Pipeline  |  MODULE 00_02  |  Shared Utilities
+FAcDs Pipeline  |  MODULE 00_03  |  Shared Utilities
 ===============================================================================
 Canonical source for console styling, logging infrastructure, matplotlib
 spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
@@ -10,12 +10,12 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 10 June 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Module        : 00_02_Project_Utils_FAcDs.py
+  Module        : 00_03_Project_Utils_FAcDs.py
   Role          : Shared utility library; no executable entry point.
   Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Phylogeny_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
                   06_Top-N_Extraction_FAcDs.py,
-                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+                  08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
   Reads         : (none — pure utility module)
   Writes        : (none — pure utility module)
 ───────────────────────────────────────────────────────────────────────────────
@@ -482,6 +482,11 @@ def get_mic_vector(pos1, pos2, box):
 # -------------------------------------------------------------------------------
 # Step 5.2: Distance
 # -------------------------------------------------------------------------------
+
+def distance(pos1, pos2, box=None) -> float:
+    """PBC-corrected or Euclidean distance between two Cartesian coordinates (Å)."""
+    return float(np.linalg.norm(get_mic_vector(np.asarray(pos1), np.asarray(pos2), box)))
+
 
 def calculate_min_distance(
     frame_pos_a: np.ndarray,

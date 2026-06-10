@@ -14,7 +14,7 @@ Date   : 10 June 2026 <───────────────────
   Script        : 02_Production_FAcDs.py
   Role          : "Engine" — Boltz-2 prediction orchestrator and ranker.
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all geometric thresholds)
-                  00_02_Project_Utils_FAcDs.py   (geometric utilities, console funcs)
+                  00_03_Project_Utils_FAcDs.py   (geometric utilities, console funcs)
   Reads         : 01_Merge_FAcDs.py output — merged *.fasta (protein sequences)
                   User-supplied *.smi (SMILES ligand file)
   Writes        : <Run>/1_Boltz2_Production/  (Boltz-2 CIF outputs)
@@ -54,7 +54,7 @@ Key Features:
     • Dynamic Active Site: Spatially scans for any polar/aromatic stabilisers near the pocket.
     • Atom-Specific Stabilisation: Validates oxyanion hole interactions strictly 
       against functional sidechain atoms (Nitrogen/Oxygen), avoiding backbone false positives.
-    • NAC Geometry: Checks SN2 deviations via Bürgi-Dunitz trajectory analysis.
+    • NAC Geometry: Checks SN2 deviations via backside-attack (Walden-inversion) trajectory analysis.
     • High-Performance Physics: Utilises cKDTree for O(N log N) spatial queries, 
       replacing expensive nested loops.
     • Bias-Free Normalisation: Interaction density normalised by ligand heavy atom count.
@@ -128,7 +128,7 @@ Scientific References:
        - Mapping the reaction coordinates of enzymatic defluorination.
        - Chan, P.W.Y., Yakunin, A.F., Edwards, E.A. & Pai, E.F. (2011) JACS 133:7461–7468. PDB 3R3U/3R3Z.
        - DOI: https://doi.org/10.1021/ja200277d
-    2. SN2 Reaction Geometry (Bürgi-Dunitz Trajectory):
+    2. Bürgi–Dunitz Trajectory (auxiliary carbonyl-addition metric):
        - Stereochemistry of reaction paths at carbonyl centres.
        - Bürgi, H.B., Dunitz, J.D., Lehn, J.M. & Wipff, G. (1974) Tetrahedron 30:1563–1572.
        - DOI: https://doi.org/10.1016/S0040-4020(01)90678-7
@@ -310,7 +310,7 @@ def _load_module(name: str, path):
 
 _REPO_DIR  = _Path(__file__).resolve().parent
 _cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
 # Import centralised Ramachandran plotting helpers
@@ -322,6 +322,8 @@ safe_name = _utils_mod.safe_name
 # Auxiliary (non-gating) trajectory-geometry descriptors — see utils docstrings.
 calculate_burgi_dunitz = _utils_mod.calculate_burgi_dunitz
 calculate_flippin_lodge = _utils_mod.calculate_flippin_lodge
+distance = _utils_mod.distance
+calculate_angle = _utils_mod.calculate_angle
 
 
 # ===============================================================================
@@ -509,7 +511,7 @@ for k in REF_ACTIVE_SITE_MAP:
 # Step 2.9: Global State Variables
 # -------------------------------------------------------------------------------
 
-# ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
+# ConsoleColours sourced from 00_03_Project_Utils (single canonical definition).
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
@@ -1188,29 +1190,7 @@ def format_control_mappings(resname_map: Dict[str, str], full_map_str: str) -> T
 # -------------------------------------------------------------------------------
 # Step 6.1: Spatial Mathematical Utilities
 # -------------------------------------------------------------------------------
-def distance(a, b): 
-    """Calculates the rapid Euclidean distance between two three-dimensional points."""
-    return float(np.linalg.norm(np.array(a)-np.array(b)))
-
-def calculate_angle(a, b, c):
-    """
-    Computes the A-B-C angle in degrees using standard dot-product vectorisation.
-    This approach robustly handles mixed object types (dictionaries, tuples, and objects).
-    """
-    try:
-        def _to_arr(p):
-            if hasattr(p, 'x'): return np.array([float(p.x), float(p.y), float(p.z)])
-            return np.array(p, dtype=float)
-        ba = _to_arr(a) - _to_arr(b)
-        bc = _to_arr(c) - _to_arr(b)
-        norm_ba = np.linalg.norm(ba)
-        norm_bc = np.linalg.norm(bc)
-        if norm_ba < 1e-6 or norm_bc < 1e-6: return 0.0
-        cosine_angle = np.dot(ba, bc) / (norm_ba * norm_bc)
-        angle = np.arccos(np.clip(cosine_angle, -1, 1))
-        return float(np.degrees(angle))
-    except Exception:
-        return 0.0
+# (Local distance and calculate_angle definitions removed; imported from central utils instead)
     
 def get_plane_normal(atoms):
     """Calculates the optimal best-fit plane normal vector for Pi-stacking analysis using Singular Value Decomposition (SVD)."""
@@ -1615,7 +1595,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
 # -------------------------------------------------------------------------------
 # Step 7.1: Reference Data Handling (Calibration Logic)
 # -------------------------------------------------------------------------------
-# --- Ramachandran helpers (relocated to 00_02_Project_Utils_FAcDs.py) ---------
+# --- Ramachandran helpers (relocated to 00_03_Project_Utils_FAcDs.py) ---------
 
 
 
@@ -2267,7 +2247,7 @@ def generate_rich_justification(tier: str, meaning: str, constraint: str, aligne
 
 def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None) -> Tuple[float, float, int, Any, Any, Any]:
     """
-    Calculates the SN2 attack angle and the Bürgi-Dunitz trajectory deviation.
+    Calculates the SN2 attack angle and the SN2 backside-attack trajectory deviation.
     An ideal SN2 backside attack strictly requires an angle of approximately 180 degrees.
     Deviation quantifies the perpendicular distance measured from the ideal C-X vector.
     """

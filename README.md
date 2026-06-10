@@ -68,7 +68,7 @@ Enzymatic defluorination represents the most thermodynamically elegant route to 
 <details id="pfas-ligand-panel-27-compounds">
 <summary><b>🧪 27 PFAS Ligand (Click to expand)</b></summary>
 
-The screening panel spans the full regulatory PFAS priority list, from short-chain to ultra-long-chain perfluorinated acids and sulfonates, plus next-generation PFAS replacements. Compounds are grouped by chemical function; index numbers match `D_PFAS27_Tue.smi` entries and are fixed throughout the pipeline.
+The screening panel spans the full regulatory PFAS priority list, from short-chain to ultra-long-chain perfluorinated acids and sulfonates, plus next-generation PFAS replacements. Compounds are grouped by chemical function; index numbers match `D_INP_PFAS-27_Ligands.smi` entries and are fixed throughout the pipeline.
 
 **Positive controls — known FAcD substrates**
 
@@ -116,6 +116,8 @@ The screening panel spans the full regulatory PFAS priority list, from short-cha
 | 22 | 6:2 Fluorotelomer alcohol | **6:2-FTOH** | FTOH | 13 |
 | 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
 | 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | — |
+
+> †  **C–F count for GenX, ADONA and C6O4:** these are perfluoroether / cyclic next-generation replacements whose fluorine inventory is structure-dependent and branched. The count is listed as '—' pending a verified per-atom structural assignment rather than asserting an unconfirmed value; defluorination scoring uses the modelled 3D structure, not this tabulated count.
 
 > **Positive controls (25–27):** All 27 compounds are genuine screen targets, each modelled against the full ~2,150-protein panel. Entries 25–27 (TFA, FA, DFA) *additionally* serve as positive controls: alongside the 3R3U crystal structure and the experimentally validated DEHA4 enzyme they constitute **6 control cases** that anchor the NAC geometry thresholds. Every run benchmarks them—if a control tier drops below `Best_A`, investigate the thresholds or structure-prediction quality before trusting the wider screen.
 
@@ -174,7 +176,7 @@ A candidate that binds PFOA with high affinity but presents the wrong face to As
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
         CFG["📋 00_02 · Project Config\nSingle source of truth\nAll thresholds · constants · weights"]
-        UTL["🔧 00_02 · Project Utils\nGeometry · ConsoleColours\nLogging · MIC vectors"]
+        UTL["🔧 00_03 · Project Utils\nGeometry · ConsoleColours\nLogging · MIC vectors"]
         ENV["🛠 00_01 · Environment\nConda/Pip pinning\nReproducibility spec"]
         CFG --- UTL --- ENV
     end
@@ -231,7 +233,7 @@ flowchart TD
 
 | Phase | Steps | Goal | Input | Output |
 |---|---|---|---|---|
-| **Foundation** | 00_01, 00_02 | Environment installation & shared configuration | — | Conda environment, `CFG` & `ProjectUtils` |
+| **Foundation** | 00_01–00_03 | Environment installation, shared configuration, and utility functions | — | Conda environment, `CFG` & `ProjectUtils` |
 | **Phase 1 — HTS** | 01–04 | Database merging, co-folding, & database-wide validation | Raw sequence databases | Master CSV, D3 tree, publication figure panel |
 | **Phase 2 — Filter & Prep** | 05–06 | Protonation, minimisation, & top candidates extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
 | **Phase 3 — Dynamics & QM** | External MD + 07 | MD trajectory simulation, hydration profiling, & QM/MM setup | Prepared structures from Step 06 | Desmond trajectories, WaterMaps, QSite `.inp` |
@@ -248,29 +250,29 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 ```
 FAcDs_PFAS-27_Defluorination/
 │
-├── 00_02_Project_Config_FAcDs.py           ← ★ Central configuration (all parameters)
-├── 00_02_Project_Utils_FAcDs.py            ← Shared utilities (logging, geometry, colours)
+├── 00_00_run_pipeline_FAcDs.sh              ← One-command full pipeline runner
+├── 00_01_Environment_Installation_FAcDs.py  ← Environment check, conda/pip export
+├── 00_02_Project_Config_FAcDs.py            ← ★ Central configuration (all parameters)
+├── 00_03_Project_Utils_FAcDs.py             ← Shared utilities (logging, geometry, colours)
 │
-├── 00_01_Environment_Installation_FAcDs.py ← Environment check, conda/pip export
-├── 01_Merge_FAcDs.py                      ← FASTA merge, deduplication, QC
-├── 02_Production_FAcDs.py                 ← Boltz-2 prediction + scoring (MAIN ENGINE)
-├── 03_Validation_Figures_FAcDs.py         ← Publication-quality validation figures
-├── 04_Phylogeny_FAcDs.py                  ← Interactive D3 phylogenetic tree
-├── 05_CIF-PDB_Preparation_FAcDs.py        ← CIF→PDB + Schrödinger PrepWizard
-├── 06_Top-N_Extraction_FAcDs.py           ← Top-N extraction + PyMOL/PLIP figure generation
-├── 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py  ← MD + NAC analysis + QM/MM engine
+├── 01_Merge_FAcDs.py                        ← FASTA merge, deduplication, QC
+├── 02_Production_FAcDs.py                   ← Boltz-2 prediction + scoring (MAIN ENGINE)
+├── 03_Validation_Figures_FAcDs.py           ← Publication-quality validation figures
+├── 04_Phylogeny_FAcDs.py                    ← Interactive D3 phylogenetic tree
+├── 05_CIF-PDB_Preparation_FAcDs.py          ← CIF→PDB + Schrödinger PrepWizard
+├── 06_Top-N_Extraction_FAcDs.py             ← Top-N extraction + PyMOL/PLIP figure generation
+├── 07_SID_Post_Processing_FAcDs.py          ← Step 07 Desmond SID post-processing → *_SID-out.eaf
+├── 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py ← Step 08 MD + NAC analysis + QM/MM engine
 │
-├── 00_00_run_pipeline_FAcDs.sh                  ← One-command full pipeline runner
-├── run_sid_analysis_FAcDs.sh           ← Sequential Desmond SID post-simulation orchestrator
-├── PFAS.yml                         ← Conda environment (full reproducible spec)
-├── requirements.txt                 ← pip requirements (auto-exported)
+├── PFAS.yml                                 ← Conda environment (full reproducible spec)
+├── requirements.txt                         ← pip requirements (auto-exported)
 │
-├── A_Labelled_15-Seq.fasta           ← Curated seed sequences (~15 proteins)
-├── B_Downloaded-Blast_Uniprot_NCBI.fasta  ← BLAST/UniProt/NCBI expanded set
-├── C_Final_Merged_for_Boltz-2.fasta ← Merged, deduplicated input (auto-generated)
-├── C_Final_Merged_for_Boltz-2.log   ← Merge QC report (auto-generated)
-├── C_Final_Merged_for_Boltz-2.png   ← Length/identity distribution figure (auto-generated)
-├── D_PFAS27_Tue.smi                 ← 27 PFAS ligands (SMILES format, tab-separated)
+├── A_Labelled_15-Seq.fasta                  ← Curated seed sequences (~15 proteins)
+├── B_Downloaded-Blast_Uniprot_NCBI.fasta    ← BLAST/UniProt/NCBI expanded set
+├── C_INP_Merged_for_Boltz-2.fasta         ← Merged, deduplicated input (auto-generated)
+├── C_INP_Merged_for_Boltz-2.log           ← Merge QC report (auto-generated)
+├── C_INP_Merged_for_Boltz-2.png           ← Length/identity distribution figure (auto-generated)
+├── D_INP_PFAS-27_Ligands.smi                  ← 27 PFAS ligands (SMILES format, tab-separated)
 │
 ├── Boltz-2_Run_YYYYMMDDTHHMMSSZ/        ← Output directory generated for each pipeline execution run
 │   ├── 1_Boltz2_Production/             ← Prediction engine outputs (generated by 02_Production_FAcDs.py)
@@ -303,7 +305,7 @@ FAcDs_PFAS-27_Defluorination/
 │   │   ├── 6_Top-N_Extraction_Report.log
 │   │   └── 7_Perfect_A_*_Combined_Scientific_Data.csv
 │   │
-│   └── 7_Physics_Validation/            ← MD + QM/MM validation outputs (generated by 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py)
+│   └── 7_Physics_Validation/            ← MD + QM/MM validation outputs (generated by 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py)
 │       ├── MolecularDynamics/           ← Desmond topology, trajectory, NAC analysis
 │       ├── WaterMaps/                   ← WaterMap hydration-site results
 │       ├── SystemBuilder/               ← Schrödinger system build files
@@ -317,19 +319,19 @@ FAcDs_PFAS-27_Defluorination/
 
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
-| [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py) | **Single source of truth** — all thresholds, weights, paths | — | `CFG` dataclass instance |
-| [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
+| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
 | [`00_01_Environment_Installation_FAcDs.py`](./00_01_Environment_Installation_FAcDs.py) | Environment check, conda/pip export | — | `PFAS.yml`, `requirements.txt` |
-| [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_Final_Merged_for_Boltz-2.fasta` |
+| [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py) | **Single source of truth** — all thresholds, weights, paths | — | `CFG` dataclass instance |
+| [`00_03_Project_Utils_FAcDs.py`](./00_03_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
+| [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
 | [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** — MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
 | [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 34 figure panels (01–25) — tier/AI quality/mechanistic/PFAS network | ranked CSV | PNG figures + validated master CSV |
 | [`04_Phylogeny_FAcDs.py`](./04_Phylogeny_FAcDs.py) | Interactive phylogenetic D3 tree | merged FASTA + validated master CSV | `03_Global_Master_Interactive_App.html` (+ per-tier apps) |
 | [`05_CIF-PDB_Preparation_FAcDs.py`](./05_CIF-PDB_Preparation_FAcDs.py) | Gemmi CIF→PDB + PrepWizard | ranked CSV + CIF files | prepared `.pdb` files |
 | [`06_Top-N_Extraction_FAcDs.py`](./06_Top-N_Extraction_FAcDs.py) | Filter and export top candidates; PyMOL/PLIP figure generation | ranked CSV + prepared PDBs | tier CSV, PDB copies, interaction figures |
-| [`07_MD_Thermodynamics_QMMM_Engine_FAcDs.py`](./07_MD_Thermodynamics_QMMM_Engine_FAcDs.py) | MD + NAC analysis + QM/MM extraction | Desmond trajectories + WaterMaps + ranked CSV | final conformation frame, QSite inputs |
-| [`run_sid_analysis_FAcDs.sh`](./run_sid_analysis_FAcDs.sh) | Sequential Desmond SID post-simulation orchestrator | Desmond trajectories | `*_SID-in.eaf`, `*_SID-out.eaf`, logs |
-| [`D_PFAS27_Tue.smi`](./D_PFAS27_Tue.smi) | 27 PFAS ligand SMILES panel | — | — |
-| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
+| [`07_SID_Post_Processing_FAcDs.py`](./07_SID_Post_Processing_FAcDs.py) | **Step 07** Desmond SID post-processing — generates `*_SID-out.eaf` files for Step 08 | Desmond `*-out.cms` + trajectory | `*_SID-in.eaf`, `*_SID-out.eaf`, logs |
+| [`08_MD_Thermodynamics_QMMM_Engine_FAcDs.py`](./08_MD_Thermodynamics_QMMM_Engine_FAcDs.py) | **Step 08** MD + NAC analysis + QM/MM extraction (consumes `*_SID-out.eaf`) | Desmond trajectories + WaterMaps + ranked CSV | final conformation frame, QSite inputs |
+| [`D_INP_PFAS-27_Ligands.smi`](./D_INP_PFAS-27_Ligands.smi) | 27 PFAS ligand SMILES panel | — | — |
 
 
 ## 🛠 Installation
@@ -342,7 +344,7 @@ FAcDs_PFAS-27_Defluorination/
 | CUDA-capable GPU | ≥12 GB VRAM | Required for Boltz-2 |
 | CUDA Toolkit | 13.x | Installed via conda |
 | Miniconda / Conda | ≥24.x | Environment management |
-| Schrödinger Suite | 2024+ | PrepWizard (step 05) · Desmond MD · WaterMap · QSite (step 07) |
+| Schrödinger Suite | 2024+ | PrepWizard (step 05) · Desmond MD · WaterMap · QSite (step 08) |
 
 ### Step 1 — Clone the repository
 
@@ -386,7 +388,7 @@ Expected output:
   ✔ boltz            : 2.2.1
   ✔ colabfold        : 1.6.1
   ✔ MDAnalysis       : 2.9.0
-  ✔ rdkit            : 2025.9.6
+  ✔ rdkit            : 2026.3.3
   ✔ gemmi            : 0.6.5
   ✔ torch (CUDA)     : 2.11.0 — CUDA available
   ✔ PyMOL            : 3.1.0
@@ -395,7 +397,7 @@ Expected output:
 
 ### Step 4 — Optional: Schrödinger Suite
 
-PrepWizard (step 05) and QSite (step 07) require a Schrödinger licence. Set the environment variable before running:
+PrepWizard (step 05) and QSite (step 08) require a Schrödinger licence. Set the environment variable before running:
 
 ```bash
 export SCHRODINGER=/opt/schrodinger   # adjust to your installation path
@@ -483,7 +485,7 @@ python 03_Validation_Figures_FAcDs.py  Boltz-2_Run_20260309T085406Z
 python 04_Phylogeny_FAcDs.py           Boltz-2_Run_20260309T085406Z
 python 05_CIF-PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
 python 06_Top-N_Extraction_FAcDs.py    Boltz-2_Run_20260309T085406Z
-python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
 ---
@@ -491,6 +493,44 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ## 💻 Technical reference
 
 ### 📖 Script catalog
+
+<details>
+<summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
+
+**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, phylogeny, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
+
+**Usage:**
+```bash
+bash 00_00_run_pipeline_FAcDs.sh
+```
+
+**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
+</details>
+
+<details>
+<summary><b>00_01_Environment_Installation_FAcDs.py — Environment Setup</b></summary>
+
+**Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
+
+**Usage:**
+```bash
+# Check environment only
+python 00_01_Environment_Installation_FAcDs.py
+
+# Export current environment to PFAS.yml and requirements.txt
+python 00_01_Environment_Installation_FAcDs.py --export
+```
+
+**Arguments:**
+
+| Flag | Description |
+|------|-------------|
+| `--export` | Export conda environment to `PFAS.yml` and `requirements.txt` |
+
+**Outputs (with `--export`):**
+- `PFAS.yml` — full pinned conda environment spec
+- `requirements.txt` — pip requirements (auto-exported from conda)
+</details>
 
 <details>
 <summary><b>00_02_Project_Config_FAcDs.py — Central Configuration</b></summary>
@@ -507,7 +547,7 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 | §4 — Interaction Geometry | H-bond, salt bridge, hydrophobic, π–π, π–cation, halogen-bond cutoffs |
 | §5 — NAC Geometry | Strict + relaxed NAC distance/angle thresholds; fluoride cradle radius |
 | §6 — Catalytic Triad | Triad distance cutoffs and integrity scoring |
-| §7 — SN2 / Walden Geometry | Bürgi–Dunitz angle range, improper dihedral (TS flatness) |
+| §7 — SN2 / Walden Geometry | SN2 backside attack angle range, improper dihedral (TS flatness) |
 | §8 — Smart-Lock Detection | 3D geometry-biased residue auto-identification parameters |
 | §9 — Tier Classification | 7-tier distance/angle/score thresholds, colours (Okabe–Ito palette) |
 | §10 — MD Trajectory | Solvent names, WaterMap parameters, frame scoring weights, viability thresholds |
@@ -517,6 +557,9 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 | §14 — Visualisation | Figure dimensions, timeouts, geometric radii, layout constants |
 | §15 — Alignment & Scoring | BLOSUM62 gap penalties, likelihood scoring thresholds, GPU watchdog |
 | §16 — PDB Preparation | PrepWizard pH, RMSD restraint, chain assignment, residue classification |
+| §17 — Data Registry & Aesthetics | Master CSV column name constants (`COL_*`), tier marker sizes/alphas, alignment grade definitions |
+
+**Backward-compatibility aliases (§4 — π–π stacking):** `THRESHOLD_PI_FACE` ↔ `PI_STACK_FACE_DIST_MAX` and `THRESHOLD_PI_EDGE` ↔ `PI_STACK_EDGE_DIST_MAX` hold identical values. Both names are intentionally retained so that older analysis and figure code importing the `PI_STACK_*` names continues to resolve against the single source of truth; edit only the `THRESHOLD_PI_*` definitions and the aliases follow.
 
 **Usage:**
 ```python
@@ -571,40 +614,28 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 | Halogen bond | Wilcken et al. (2013) *J Med Chem* 56:1363–1388. [DOI](https://doi.org/10.1021/jm3012068) |
 | NAC dist/angle criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665) |
 | Catalytic triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
-| SN2 / Bürgi–Dunitz angle | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
+| Bürgi–Dunitz angle (auxiliary carbonyl metric) | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
 | WaterMap thermodynamics | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
 | QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
-| QSite QM/MM methodology | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j) |
+| QM/MM free-energy method (general) | Rosta et al. (2006) *J Phys Chem B* 110:2934. [DOI](https://doi.org/10.1021/jp057109j) |
 | QSite implementation | Murphy et al. (2000) *J Comput Chem* 21:1442. [DOI](https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O) |
 | FAcD Burkholderia reference | Jitsumori et al. (2009) *J Bacteriol* 191:2630–2637. [DOI](https://doi.org/10.1128/JB.01654-08) |
 | Metal coordination | Harding (2006) *Acta Crystallogr* D62:678–682. [DOI](https://doi.org/10.1107/S0907444906014594) |
 | Sequence alignment | Henikoff & Henikoff (1992) *PNAS* 89:10915–10919. [DOI](https://doi.org/10.1073/pnas.89.22.10915) |
+| OPLS4 force field (Desmond MD) | Lu et al. (2021) *J Chem Theory Comput* 17:4291–4300. [DOI](https://doi.org/10.1021/acs.jctc.1c00302) |
 
 </details>
 
+
+
 <details>
-<summary><b>00_01_Environment_Installation_FAcDs.py — Environment Setup</b></summary>
+<summary><b>00_03_Project_Utils_FAcDs.py — Shared Utilities</b></summary>
 
-**Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
+**Purpose:** Central utility module for console formatting, logging helpers, geometry calculations, and reusable plotting helpers imported by downstream pipeline scripts.
 
-**Usage:**
-```bash
-# Check environment only
-python 00_01_Environment_Installation_FAcDs.py
+**Usage:** Loaded by numbered pipeline scripts through `importlib.util.spec_from_file_location`, because the filename begins with digits.
 
-# Export current environment to PFAS.yml and requirements.txt
-python 00_01_Environment_Installation_FAcDs.py --export
-```
-
-**Arguments:**
-
-| Flag | Description |
-|------|-------------|
-| `--export` | Export conda environment to `PFAS.yml` and `requirements.txt` |
-
-**Outputs (with `--export`):**
-- `PFAS.yml` — full pinned conda environment spec
-- `requirements.txt` — pip requirements (auto-exported from conda)
+**Typical downstream consumers:** `01_Merge_FAcDs.py`, `02_Production_FAcDs.py`, `03_Validation_Figures_FAcDs.py`, `04_Phylogeny_FAcDs.py`, `05_CIF-PDB_Preparation_FAcDs.py`, `06_Top-N_Extraction_FAcDs.py`, and `08_MD_Thermodynamics_QMMM_Engine_FAcDs.py`.
 </details>
 
 <details>
@@ -617,7 +648,7 @@ python 00_01_Environment_Installation_FAcDs.py --export
 python 01_Merge_FAcDs.py \
     --master    A_Labelled_15-Seq.fasta \
     --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
-    --output    C_Final_Merged_for_Boltz-2.fasta
+    --output    C_INP_Merged_for_Boltz-2.fasta
 ```
 
 **Arguments:**
@@ -629,9 +660,9 @@ python 01_Merge_FAcDs.py \
 | `--output` | Output merged FASTA path |
 
 **Outputs:**
-- `C_Final_Merged_for_Boltz-2.fasta` — merged, deduplicated sequences
-- `C_Final_Merged_for_Boltz-2.log` — QC report (lengths, duplicates removed)
-- `C_Final_Merged_for_Boltz-2.png` — length distribution figure
+- `C_INP_Merged_for_Boltz-2.fasta` — merged, deduplicated sequences
+- `C_INP_Merged_for_Boltz-2.log` — QC report (lengths, duplicates removed)
+- `C_INP_Merged_for_Boltz-2.png` — length distribution figure
 </details>
 
 <details>
@@ -648,7 +679,7 @@ python 01_Merge_FAcDs.py \
 **Usage:**
 ```bash
 # New run — auto-creates a timestamped run directory
-python 02_Production_FAcDs.py --fasta C_Final_Merged_for_Boltz-2.fasta --smi D_PFAS27_Tue.smi
+python 02_Production_FAcDs.py --fasta C_INP_Merged_for_Boltz-2.fasta --smi D_INP_PFAS-27_Ligands.smi
 
 # Resume from checkpoint after interruption
 python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
@@ -788,6 +819,8 @@ Interactive mode prompts tier selection if multiple tiers contain viable candida
 
 **Output:** per-tier subdirectory within `6_Top_N_Extracted/` containing raw complexes, prepared PDBs, Ramachandran figures, a scientific data CSV, sequence FASTA, ligand SDF/SMI files, and interaction figure sets from all supported visualisation engines.
 
+> **Ramachandran disclaimer:** the favoured / allowed regions drawn on the Ramachandran plots are approximate visualisation boundaries for qualitative backbone inspection. They are not MolProbity-certified validation polygons and must not be cited as formal stereochemical-quality statistics.
+
 **Supported visualisation engines (auto-detected):**
 
 | Tool | Output | Notes |
@@ -810,13 +843,13 @@ Interactive mode prompts tier selection if multiple tiers contain viable candida
 </details>
 
 <details>
-<summary><b>07_MD_Thermodynamics_QMMM_Engine_FAcDs.py — MD Trajectory & QM/MM Analyzer</b></summary>
+<summary><b>08_MD_Thermodynamics_QMMM_Engine_FAcDs.py — MD Trajectory & QM/MM Analyzer</b></summary>
 
 **Purpose:** The final-stage analysis engine for thermodynamic validation and QM/MM input preparation of top FAcD candidates.
 
 **Usage:**
 ```bash
-python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
 **Pipeline stages:**
@@ -824,14 +857,17 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 *   **External Simulation Steps (Performed by User):**
     1.  **System Solvation & Setup:** prepared structures from Step 06 are built, solvated, and neutralised under the OPLS4 force field.
     2.  **Desmond MD Production Run:** solvated complexes undergo explicit-solvent molecular dynamics simulations (trajectories are saved under `7_Physics_Validation/MolecularDynamics/`).
-    3.  **Desmond SID Post-Processing:** run the helper script [run_sid_analysis_FAcDs.sh](./run_sid_analysis_FAcDs.sh) from the repository root to sequentially generate the Simulation Interaction Diagram (SID) `.eaf` files for all computed ranks:
+    3.  **Desmond SID Post-Processing:** run the helper script [07_SID_Post_Processing_FAcDs.py](./07_SID_Post_Processing_FAcDs.py) from the repository root to sequentially generate the Simulation Interaction Diagram (SID) `.eaf` files for all computed ranks:
+        **Step 07: Desmond SID Post-Processing (Automated by `07_SID_Post_Processing_FAcDs.py`)**
+
+        When called from the pipeline runner (`00_00_run_pipeline_FAcDs.sh`), this script runs automatically after Step 06 with the `--pipeline-mode` flag. Standalone usage:
         ```bash
-        ./run_sid_analysis_FAcDs.sh [optional_run_directory_name]
+        python 07_SID_Post_Processing_FAcDs.py [optional_run_directory_name]
         ```
-        This script automatically masks `systemd-oomd` at startup, checks for existing complete EAF files (minimum 99,990 frames), and skips running/completed jobs.
+        This script automatically masks `systemd-oomd` at startup, checks for existing complete EAF files (frame count verified against the actual trajectory length via the Schrödinger traj API), and skips running/completed jobs.
     4.  **WaterMap Hydration Mapping:** Desmond trajectories are analysed via Schrödinger WaterMap to generate hydration thermodynamics (exported CSVs are placed under `7_Physics_Validation/WaterMaps/`).
 
-*   **Step 07 Analysis & QM/MM Automation (Performed by Script):**
+*   **Step 08 Analysis & QM/MM Automation (Performed by Script):**
     1.  **Smart-Lock residue identification** — 3D geometry-biased automatic detection of catalytic triad residues from structure (no manual input required)
     2.  **NAC trajectory analysis** — parses the Desmond trajectory to compute geometry metrics (Nuc–C distance, SN2 angle, triad distances, Walden improper dihedral, and cradle occupancy) across all frames.
     3.  **WaterMap thermodynamic integration** — reads the hydration-site CSV reports to calculate dG-weighted water blockade scores on the SN2 reaction runway.
@@ -856,7 +892,7 @@ As the most memory-intensive step in the pipeline, the following behaviours are 
 *   **Concurrent per-rank processing:** Candidates are processed **concurrently** using a thread pool (`ThreadPoolExecutor`), scaling dynamically with the available CPU cores (reserving 2 cores for system stability). To prevent cumulative memory accumulation from multiple resident Desmond trajectories, the auto-stride memory estimator automatically scales up the sampling stride if the estimated concurrent memory exceeds available physical memory.
 *   **Manual stride override:** To run full-frame density analysis (stride 1) — required for precise NAC frame counts in publication-quality results — pass `--stride 1` explicitly:
     ```bash
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 1
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 1
     ```
     *Note: A 1000 ns Desmond trajectory for a ~300-residue FAcD + PFAS ligand in explicit solvent (~40,000 atoms) generates 100,000 frames and approximately 50–100 GB of trajectory data. Ensure at least 128 GB RAM is available before using `--stride 1`. On workstations with ≤ 64 GB RAM, stride 10 (the default) is strongly recommended.*
 
@@ -872,7 +908,7 @@ As the most memory-intensive step in the pipeline, the following behaviours are 
 | Dream Team triad distances | Holmquist (2000) *Curr Protein Pept Sci* 1:209. [DOI](https://doi.org/10.2174/1389203003381405) |
 | Haloalkane dehalogenase mechanism | Verschueren et al. (1993) *Nature* 363:693. [DOI](https://doi.org/10.1038/363693a0) |
 | NAC criteria | Lightstone & Bruice (1996) *JACS* 118:2595. [DOI](https://doi.org/10.1021/ja952589l); Bruice (2002) *Acc Chem Res* 35:139. [DOI](https://doi.org/10.1021/ar0001665); Hur & Bruice (2003) *PNAS* 100:12015. [DOI](https://doi.org/10.1073/pnas.1534873100) |
-| Bürgi–Dunitz SN2 geometry | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
+| Bürgi–Dunitz angle (auxiliary carbonyl metric) | Bürgi et al. (1973) *JACS* 95:5065. [DOI](https://doi.org/10.1021/ja00796a058); Bürgi et al. (1974) *Tetrahedron* 30:1563. [DOI](https://doi.org/10.1016/S0040-4020(01)90678-7) |
 | WaterMap hydration scoring | Abel et al. (2008) *JACS* 130:2817. [DOI](https://doi.org/10.1021/ja0771033) |
 | Desmond MD engine | Bowers et al. (2006) *SC06*. [DOI](https://doi.org/10.1109/SC.2006.54) |
 | QSite DFT functional (M06-2X) | Zhao & Truhlar (2008) *Theor Chem Acc* 120:215. [DOI](https://doi.org/10.1007/s00214-007-0310-x) |
@@ -920,7 +956,7 @@ All intermediate outputs are preserved:
 |-------|---------|-------------|
 | Steps 01, 03–06 | 8-core CPU, 16 GB RAM | 32-core, 64 GB RAM |
 | Step 02 (Boltz-2) | 1× NVIDIA A100 40 GB | 2–4× A100/H100 80 GB |
-| Step 07 (MD) | 1× A100 + 32-core CPU | GPU-accelerated Desmond MD |
+| Step 08 (MD) | 1× A100 + 32-core CPU | GPU-accelerated Desmond MD |
 
 #### Runtime estimates (1000 proteins × 27 ligands)
 
@@ -942,7 +978,7 @@ Boltz-2 v2.2.1 requires ~12–24 GB VRAM per prediction batch depending on prote
 
 - **Step 02**: ColabFold MSA uses cloud API concurrently; Boltz-2 uses GPU parallelism internally
 - **Step 05**: PrepWizard runs `os.cpu_count() - CFG.PREP_CPU_RESERVE` parallel workers via `ThreadPoolExecutor`
-- **Step 07**: Desmond exploits GPU offloading for PME and non-bonded calculations; NAC trajectory analysis is sequential per rank to prevent OOM (see [Memory Requirements](#-running-step-07-mdqm-mm--memory-requirements))
+- **Step 08**: Desmond exploits GPU offloading for PME and non-bonded calculations; NAC trajectory analysis is sequential per rank to prevent OOM (see [Memory Requirements](#-running-step-08-mdqm-mm--memory-requirements))
 
 #### Storage
 
@@ -950,7 +986,7 @@ A full run over ~1000 proteins × 27 ligands generates approximately **200–500
 
 #### HPC deployment (Slurm)
 
-The pipeline runs on any Linux system with CUDA. For institutional clusters (Slurm/PBS), the two GPU bottlenecks are step 02 (Boltz-2 inference) and step 07 (Desmond MD). Below is a Slurm template for step 02:
+The pipeline runs on any Linux system with CUDA. For institutional clusters (Slurm/PBS), the two GPU bottlenecks are step 02 (Boltz-2 inference) and step 08 (Desmond MD). Below is a Slurm template for step 02:
 
 ```bash
 #!/bin/bash
@@ -977,7 +1013,7 @@ python 02_Production_FAcDs.py
 # python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
-For step 07 (Desmond MD), GPU offloading handles the PME and non-bonded calculations. Request the same GPU partition; 32 CPUs are recommended for the CPU-side NAC trajectory analysis loop.
+For step 08 (Desmond MD), GPU offloading handles the PME and non-bonded calculations. Request the same GPU partition; 32 CPUs are recommended for the CPU-side NAC trajectory analysis loop.
 
 ```bash
 #!/bin/bash
@@ -995,7 +1031,7 @@ module load cuda/12.x anaconda3
 conda activate PFAS
 export SCHRODINGER=/opt/schrodinger
 
-python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
 > Steps 01, 03–06 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism.
@@ -1177,7 +1213,7 @@ For external databases, crystallographic references, and software dependencies, 
   number = {12},
   journal = {Tetrahedron},
   publisher = {Elsevier BV},
-  author = {B:urgi, H.B. and Dunitz, J.D. and Lehn, J.M. and Wipff, G.},
+  author = {B{\"u}rgi, H. B. and Dunitz, J. D. and Lehn, J. M. and Wipff, G.},
   year = {1974},
   month = {Jan},
   pages = {1563–1572}
@@ -1235,7 +1271,7 @@ For external databases, crystallographic references, and software dependencies, 
   url = {http://dx.doi.org/10.1021/acs.est.0c08811},
   DOI = {10.1021/acs.est.0c08811},
   number = {14},
-  journal = {Environmental Science &amp; Technology},
+  journal = {Environmental Science \& Technology},
   publisher = {American Chemical Society (ACS)},
   author = {Yue, Yue and Fan, Jiaqian and Xin, Guoqing and Huang, Qun and Wang, Jian-bo and Li, Yanwei and Zhang, Qingzhu and Wang, Wenxing},
   year = {2021},

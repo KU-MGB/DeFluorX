@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 07  |  MD Thermodynamics & QM/MM Engine
+FAcDs Pipeline  |  Step 08  |  MD Thermodynamics & QM/MM Engine
 ===============================================================================
 
 Molecular dynamics trajectory analysis: near-attack conformation (NAC) geometry,
@@ -14,11 +14,11 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 10 June 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+  Script        : 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
+                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
   Reads         : <Run>/7_Physics_Validation/MolecularDynamics/*Rank_N*/*-out.cms
                                                                /*_trj/   (any dir name containing Rank_N)
                                                                /*.eaf
@@ -32,7 +32,8 @@ Date   : 10 June 2026 <───────────────────
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2.inp         (QM/MM scan input)
                   <Run>/7_Physics_Validation/MD_Thermodynamics_Results/07_MD_Master_Ranking.csv
-  Upstream      : 06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
+  Upstream      : 07_SID_Post_Processing_FAcDs.py → produces *_SID-out.eaf consumed here
+                  06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
                   06_Top-N_Extraction_FAcDs.py   → visual reporting of hits (figures merged into Step 06)
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
@@ -50,9 +51,9 @@ Date   : 10 June 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
 
 Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
@@ -87,7 +88,7 @@ Arguments:
      gyration (RG) extracted from pl_interact_survey EAF files.
   6. Water blockade: dG-weighted count of waters obstructing the SN2 runway.
   7. Walden pre-organisation: improper dihedral check for TS flattening (×1.1).
-  8. QSite automation: M06-2X/6-31+G** .inp generation for coordinate scan.
+  8. QSite automation: M06-2X/6-31+G(d,p) .inp generation for coordinate scan.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
  11. Master aggregation: 07_MD_Master_Ranking.csv.
@@ -120,7 +121,7 @@ Scientific references
     DOI: https://doi.org/10.1021/ar0001665
     Hur, S. & Bruice, T.C. (2003) PNAS 100:12015–12020.
     DOI: https://doi.org/10.1073/pnas.1534873100
-  SN2 / Bürgi–Dunitz trajectory (180° backside attack):
+  Bürgi–Dunitz angle (auxiliary carbonyl-addition metric):
     Bürgi, H.B., Dunitz, J.D. & Shefter, E. (1973) JACS 95:5065–5067.
     DOI: https://doi.org/10.1021/ja00796a058
     Bürgi, H.B., Dunitz, J.D., Lehn, J.M. & Wipff, G. (1974) Tetrahedron 30:1563–1572.
@@ -132,7 +133,7 @@ Scientific references
     Bowers, K.J. et al. (2006) Scalable algorithms for molecular dynamics simulations on
       commodity clusters. SC 06: Proc. ACM/IEEE Conf. Supercomputing.
     DOI: https://doi.org/10.1109/SC.2006.54
-  QSite QM/MM level of theory (M06-2X/6-31+G**):
+  QSite QM/MM level of theory (M06-2X/6-31+G(d,p)):
     Zhao, Y. & Truhlar, D.G. (2008) Theor Chem Acc 120:215–241.
     DOI: https://doi.org/10.1007/s00214-007-0310-x
     Rosta, E., Klähn, M. & Warshel, A. (2006) J Phys Chem B 110:2934–2941.
@@ -151,8 +152,8 @@ import os
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 # Both forms are equivalent:
-#   python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   $SCHRODINGER/run 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -217,15 +218,15 @@ def _load_module(name: str, path: Path):
 
 _REPO_DIR  = Path(__file__).resolve().parent
 _cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
-# ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
+# ConsoleColours sourced from 00_03_Project_Utils (single canonical definition).
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
 
-# Console helpers and logging setup sourced from 00_02_Project_Utils.
+# Console helpers and logging setup sourced from 00_03_Project_Utils.
 _console_title          = _utils_mod.console_title
 _console_info           = _utils_mod.console_info
 _console_sep            = _utils_mod.console_separator
@@ -333,7 +334,7 @@ def console_watermap_warning(msg: str) -> None:
 # SECTION 3: GEOMETRY & MATHEMATICAL UTILITIES
 # ===============================================================================
 
-# NOTE: This function is NOT equivalent to 00_02_Project_Utils.calculate_min_distance.
+# NOTE: This function is NOT equivalent to 00_03_Project_Utils.calculate_min_distance.
 # It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
 # The API divergence is intentional — required for Schrödinger/Maestro integration.
 def calculate_min_distance(frame, indices_A: list, indices_B: list) -> float:
@@ -416,7 +417,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     if not best_nuc_key or actual_dist > CFG.SMART_LOCK_NUC_MAX_DIST:
         # ── Oδ Orientation Fallback ────────────────────────────────────────────
         # Primary geometry search exhausted.  Delegate to shared utility
-        # find_nucleophile_od_fallback() (00_02_Project_Utils_FAcDs.py).
+        # find_nucleophile_od_fallback() (00_03_Project_Utils_FAcDs.py).
         # The function accepts plain NumPy arrays only; extract positions here
         # before calling so CMS atom-group objects never enter the utility.
         # Threshold aligns with CFG.NAC_ANGLE_RELAXED (BRAIN.md §7).
@@ -1342,13 +1343,19 @@ def generate_qsite_inputs(maegz_path: Path, job_name: str,
     if stab_f_num:
         qm_regions.append(f'  QM_REGION asl="res.num {stab_f_num} AND sidechain"')
 
-    # Resolve QM region charge: use caller-supplied value, or look up by ligand name, or default.
+    # Resolve total QM region charge by summing the ligand charge and catalytic sidechain charges.
+    # Asp110 (Nuc) is deprotonated (-1). His277 (Base) and His155 (StabH) are neutral (0).
+    # Asp134 (Acid) is protonated in the resting state (0).
     if lig_charge is None:
         jn_upper = job_name.upper()
         lig_charge = next(
             (v for k, v in CFG.LIGAND_QM_CHARGES.items() if k.upper() in jn_upper),
             CFG.QSITE_CHARGE,
         )
+    qm_charge = lig_charge
+    if nuc_num:
+        qm_charge -= 1  # Asp110 is deprotonated (-1)
+    # His277, His155, and protonated Asp134 are neutral (0), contributing no additional charge.
 
     # Coordinate scan: Nu–C distance from NAC start → product.
     # Start = CFG.QSITE_SCAN_START (3.5 Å, the strict NAC distance).
@@ -1365,7 +1372,7 @@ def generate_qsite_inputs(maegz_path: Path, job_name: str,
         "  METHOD dft\n"
         f"  FUNCTIONAL {CFG.QSITE_FUNCTIONAL}\n"
         f"  BASIS {CFG.QSITE_BASIS_SET}\n"
-        f"  CHARGE {lig_charge}\n"
+        f"  CHARGE {qm_charge}\n"
         f"  MULTIPLICITY {CFG.QSITE_MULT}\n"
         + "\n".join(qm_regions) + "\n"
         "  JOB_TYPE scan\n"
@@ -2019,12 +2026,14 @@ def _resolve_work_dir(raw: str) -> Path:
 
     # Case 1: already points into Physics_Validation
     if "Physics_Validation" in p.parts or p.name == "7_Physics_Validation":
+        p.mkdir(parents=True, exist_ok=True)
         return p.resolve()
 
     # Case 2/3: p is or looks like a Boltz-2_Run_* dir (possibly a prefix)
     if p.exists() and p.is_dir():
         pv = p / "7_Physics_Validation"
-        return pv.resolve() if pv.exists() else p.resolve()
+        pv.mkdir(parents=True, exist_ok=True)
+        return pv.resolve()
 
     # Partial prefix — glob parent for matching timestamped directories
     parent = p.parent
@@ -2033,9 +2042,12 @@ def _resolve_work_dir(raw: str) -> Path:
                      key=lambda x: x.stat().st_mtime)
     if matches:
         pv = matches[-1] / "7_Physics_Validation"
-        return pv.resolve() if pv.exists() else matches[-1].resolve()
+        pv.mkdir(parents=True, exist_ok=True)
+        return pv.resolve()
 
-    return p.resolve()  # best-effort; will fail gracefully later
+    pv = p / "7_Physics_Validation"
+    pv.mkdir(parents=True, exist_ok=True)
+    return pv.resolve()
 
 
 def main():
@@ -2086,13 +2098,13 @@ def main():
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = (_setup_logging(master_out_dir / "07_MD_Thermodynamics_Engine.log",
+    logger = (_setup_logging(master_out_dir / "08_MD_Thermodynamics_Engine.log",
                              "07_md_thermo_engine")
               if _setup_logging else None)
 
 
     _utils_mod.print_script_banner(
-        "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py",
+        "08_MD_Thermodynamics_QMMM_Engine_FAcDs.py",
         "MD Thermodynamics  ·  QM/MM Frame Extraction  ·  NAC Validation",
     )
     console_info(f"Run Directory    : {work_dir.parent}")
@@ -2411,4 +2423,4 @@ if __name__ == "__main__":
     import time as _time
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "08_MD_Thermodynamics_QMMM_Engine_FAcDs.py")

@@ -12,8 +12,8 @@ Date   : 10 June 2026 <───────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_FAcDs.py
-  Role          : Sequence curation; first step before Boltz-2 structure prediction.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (ConsoleColours, clean_spines)
+  Role          : Sequence merger and pre-processing pipeline wrapper.
+  Imports from  : 00_03_Project_Utils_FAcDs.py  (ConsoleColours, clean_spines)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   — merged, deduplicated sequence set
                   <output>.log     — inclusion/exclusion statistics
@@ -32,12 +32,12 @@ Date   : 10 June 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 01_Merge_FAcDs.py --master A_Sequences.fasta --secondary B_Sequences.fasta --output C_Final_Merged_for_Boltz-2.fasta
+    python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
 
     (bash multi-line — use a single backslash, not double \\):
-    python 01_Merge_FAcDs.py --master A_Sequences.fasta \
-                       --secondary B_Sequences.fasta \
-                       --output C_Final_Merged_for_Boltz-2.fasta
+    python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta \
+                       --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
+                       --output C_INP_Merged_for_Boltz-2.fasta
 
 Purpose:
     Intended for curating aligned enzyme sequence sets prior to structure
@@ -95,7 +95,7 @@ from scipy.stats import skew, gaussian_kde
 from Bio import SeqIO
 
 # -------------------------------------------------------------------------------
-# Step 1.4: Pipeline utilities (00_02) via importlib
+# Step 1.4: Pipeline utilities (00_03) via importlib
 # 01_Merge_FAcDs.py does not require CFG (no geometric thresholds).
 # -------------------------------------------------------------------------------
 import importlib.util as _ilu
@@ -108,7 +108,7 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
+_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_03_Project_Utils_FAcDs.py")
 _cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_02_Project_Config_FAcDs.py")
 CFG             = _cfg_mod.CFG()
 ConsoleColours  = _utils_mod.ConsoleColours
@@ -331,7 +331,7 @@ def process_and_write(
 # ===============================================================================
 
 def apply_clean_spines(ax):
-    """Delegate to 00_02_Project_Utils.clean_spines."""
+    """Delegate to 00_03_Project_Utils.clean_spines."""
     if clean_spines is not None:
         clean_spines(ax)
     else:
@@ -548,7 +548,7 @@ def main():
     parser = argparse.ArgumentParser(description="Production Grade FASTA Merge (2 Files)")
     parser.add_argument("--master", required=True, help="File 1 (MASTER): Trusted.")
     parser.add_argument("--secondary", required=True, help="File 2 (Secondary): Deduped & Filtered.")
-    parser.add_argument("--output", default="Final_Merged_Sequences.fasta", help="Output filename")
+    parser.add_argument("--output", default="C_INP_Merged_for_Boltz-2.fasta", help="Output filename")
     parser.add_argument("--min-len", type=int, default=250, help="Min length for Secondary file")
     parser.add_argument("--max-len", type=int, default=360, help="Max length for Secondary file")
     parser.add_argument("--keep-gaps", action="store_true", help="Preserves '-' in output.")

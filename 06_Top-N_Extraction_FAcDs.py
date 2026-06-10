@@ -23,7 +23,7 @@ Date   : 10 June 2026 <───────────────────
                   for handover, then renders publication-quality figures.
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — threshold documentation,
                                             rendering parameters)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                             console_info, console_separator)
   Reads         : <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/5_PDB_Generation_Preparation/1_Converted_Raw_PDB/*.pdb
@@ -41,7 +41,7 @@ Date   : 10 June 2026 <───────────────────
                   <Run>/6_Top_N_Extracted/7_<Tier>_Combined_Scientific_Data.csv
   Upstream      : 02_Production_FAcDs.py → writes ranked CSV
                   05_CIF-PDB_Preparation_FAcDs.py → writes the PDB files extracted here
-  Downstream    : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py → uses extracted structures for MD
+  Downstream    : 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py → uses extracted structures for MD
 ───────────────────────────────────────────────────────────────────────────────
 
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -139,7 +139,7 @@ def _load_module(name: str, path: Path):
 
 _REPO_DIR  = Path(__file__).resolve().parent
 _cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
 
 CFG            = _cfg_mod.CFG()
 ConsoleColours     = _utils_mod.ConsoleColours
@@ -183,7 +183,7 @@ def console_separator() -> None:
 # SECTION 3: RAMACHANDRAN PLOTTING ENGINE
 # ===============================================================================
 
-# --- Ramachandran helpers (relocated to 00_02_Project_Utils_FAcDs.py) ---------
+# --- Ramachandran helpers (relocated to 00_03_Project_Utils_FAcDs.py) ---------
 
 
 # ===============================================================================

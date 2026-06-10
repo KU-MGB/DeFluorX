@@ -44,8 +44,8 @@ from pathlib import Path
 
 
 # ConsoleColours is defined locally here because this script runs BEFORE the
-# PFAS conda environment is guaranteed to exist — importing 00_02_Project_Utils
-# is not safe at this point. If the canonical definition in 00_02 is updated,
+# PFAS conda environment is guaranteed to exist — importing 00_03_Project_Utils
+# is not safe at this point. If the canonical definition in 00_03 is updated,
 # this local copy must be synchronised manually.
 class ConsoleColours:
     OKGREEN = '\033[92m'  # Green text designating success
@@ -178,12 +178,12 @@ def main():
 
     try:
         import importlib.util as _ilu
-        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_FAcDs.py")
+        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_03_Project_Utils_FAcDs.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
         assert ConsoleColours.OKGREEN == _u.ConsoleColours.OKGREEN, \
-            "ConsoleColours.OKGREEN drift: update 00_01 to match 00_02"
+            "ConsoleColours.OKGREEN drift: update 00_01 to match 00_03"
         assert ConsoleColours.FAIL == _u.ConsoleColours.FAIL, \
-            "ConsoleColours.FAIL drift: update 00_01 to match 00_02"
+            "ConsoleColours.FAIL drift: update 00_01 to match 00_03"
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         pass
 

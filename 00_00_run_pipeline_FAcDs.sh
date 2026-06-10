@@ -4,14 +4,24 @@
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 # Date   : 10 June 2026
 # =============================================================================
-# Usage:
+# Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_FAcDs.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
 #
-# Run mode (auto-detected when --run-id is omitted):
-#   Resume  : Boltz-2_<name>/ directory found   → python 02 --resume <run_id>
-#   Fresh   : no run directory found             → python 02 --fasta <fasta> --smi <smi>
-#             FASTA = C_Final_Merged_for_Boltz-2.fasta (step-01 output)
-#             SMI   = first *.smi file found in repo root
+# Usage (interactive — default):
+#   bash 00_00_run_pipeline_FAcDs.sh
+#   → prompted: Fresh or Resume?  (+ sudo password)
+#   → runs fully unattended thereafter
+#
+# Run modes:
+#   Interactive : Script asks "Fresh or Resume" and (if Resume) which run dir.
+#   Non-interactive (--run-id supplied):
+#     --run-id directory exists → resume that run
+#     ERROR if directory not found (fresh runs require the interactive prompt)
+#
+# Fresh run:
+#   Step 01 merges sequences → C_INP_Merged_for_Boltz-2.fasta
+#   Step 02 creates a new Boltz-2_<timestamp>/ directory; its name is
+#   auto-captured and passed to all downstream steps (03–08).
 #
 # Monitor progress in a second terminal:
 #   tail -f <log file printed at start>
@@ -23,13 +33,16 @@
 #
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
 #   1. Sequential Execution: Steps are strictly ordered; if Step 02 fails,
-#      downstream analysis (03-07) cannot be launched until fixed.
+#      downstream analysis (03-08) cannot be launched until fixed.
 #   2. Log Interleaving: Concurrent runs in the same directory will interleave
 #      output in the same log file unless unique --run-id is provided.
 #   3. Environment: Assumes the 'PFAS' conda environment is correctly configured
 #      via Step 00; lacks internal dependency verification.
-#   4. Path Assumptions: Relies on `C_Final_Merged_for_Boltz-2.fasta` from Step 01
-#      being present for fresh runs.
+#   4. Fresh mode RUN_ID: The run directory created by Step 02 is auto-detected
+#      after that step completes; if Step 02 creates no directory, the pipeline
+#      halts with a diagnostic message.
+#   5. --resume-from with fresh mode: Not supported (no existing run to skip
+#      into). Use --resume-from only together with --run-id.
 # ─────────────────────────────────────────────────────────────────────────────
 # =============================================================================
 
@@ -52,51 +65,156 @@ for _arg in "$@"; do
     esac
 done
 
-# ── RUN_ID resolution ──────────────────────────────────────────────────────────
-# Priority: (1) explicit --run-id dir exists → resume
-#           (2) any Boltz-2_* dir exists     → resume latest found
-#           (3) neither                       → fresh run (needs *.smi; FASTA from step 01)
-
-_PIPELINE_MODE="resume"
-_FRESH_FASTA="C_Final_Merged_for_Boltz-2.fasta"
-_FRESH_SMI=""
-
 if [[ -n "$RUN_ID" && ! "$RUN_ID" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     echo "ERROR: --run-id may only contain letters, digits, underscores, hyphens, and dots." >&2
     exit 1
 fi
 
-if [[ -n "$RUN_ID" && -d "${SCRIPT_DIR}/${RUN_ID}" ]]; then
-    _PIPELINE_MODE="resume"
-else
-    _auto=$(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' 2>/dev/null | sort | tail -1)
-    if [[ -n "$_auto" ]]; then
-        RUN_ID="$(basename "$_auto")"
+# ── Canonical filenames ───────────────────────────────────────────────────────
+_FRESH_FASTA="C_INP_Merged_for_Boltz-2.fasta"
+_FRESH_SMI="D_INP_PFAS-27_Ligands.smi"
+
+# ── Interactive run-mode selection ────────────────────────────────────────────
+# Skipped when --run-id is supplied (non-interactive / scripted context).
+_PIPELINE_MODE="fresh"   # default; overridden below
+
+if [[ -n "$RUN_ID" ]]; then
+    # Non-interactive path: directory must exist for a resume
+    if [[ -d "${SCRIPT_DIR}/${RUN_ID}" ]]; then
         _PIPELINE_MODE="resume"
     else
-        _PIPELINE_MODE="fresh"
-        _FRESH_SMI=$(find "${SCRIPT_DIR}" -maxdepth 1 -name '*.smi' 2>/dev/null | sort | tail -1)
-        if [[ -z "$_FRESH_SMI" ]]; then
-            echo "ERROR: Fresh run requires a .smi ligand file in ${SCRIPT_DIR}" >&2
+        echo "ERROR: --run-id '${RUN_ID}' directory not found." >&2
+        echo "       For a fresh run, omit --run-id and use the interactive prompt." >&2
+        exit 1
+    fi
+else
+    # Collect available Boltz-2 run directories (sorted oldest → newest)
+    _available_runs=()
+    while IFS= read -r _d; do
+        _available_runs+=("$(basename "$_d")")
+    done < <(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' 2>/dev/null | sort)
+
+    echo ""
+    echo "  ══════════════════════════════════════════════════════════════════════════════"
+    echo "  FAcDs Pipeline — Run Mode Selection"
+    echo "  ══════════════════════════════════════════════════════════════════════════════"
+    echo ""
+
+    if [[ ${#_available_runs[@]} -gt 0 ]]; then
+        echo "  Existing Boltz-2 run directories:"
+        for i in "${!_available_runs[@]}"; do
+            printf "    [%d]  %s\n" "$((i+1))" "${_available_runs[$i]}"
+        done
+        echo ""
+        echo "  Select mode:"
+        echo "    [F]  Fresh   — start a new prediction run from scratch"
+        echo "    [R]  Resume  — continue from an existing run (default: latest)"
+        echo ""
+        read -r -p "  Your choice [F/R, default=R]: " _mode_choice </dev/tty
+        _mode_choice="${_mode_choice:-R}"
+    else
+        echo "  No existing Boltz-2 run directories found."
+        echo "  A fresh run is required."
+        echo ""
+        _mode_choice="F"
+    fi
+
+    case "${_mode_choice^^}" in
+        F|FRESH)
+            _PIPELINE_MODE="fresh"
+            echo "  Mode: FRESH — a new run directory will be created by Step 02."
+            ;;
+        R|RESUME)
+            _PIPELINE_MODE="resume"
+            if [[ ${#_available_runs[@]} -eq 0 ]]; then
+                echo "  ERROR: Resume selected but no Boltz-2 run directories exist." >&2
+                echo "         Re-run without --run-id and select Fresh." >&2
+                exit 1
+            elif [[ ${#_available_runs[@]} -eq 1 ]]; then
+                RUN_ID="${_available_runs[0]}"
+                echo "  Mode: RESUME — auto-selected: ${RUN_ID}"
+            else
+                echo ""
+                echo "  Enter the number of the run to resume"
+                printf "  [1–%d, default=%d for latest]: " \
+                    "${#_available_runs[@]}" "${#_available_runs[@]}"
+                read -r _run_idx </dev/tty
+                _run_idx="${_run_idx:-${#_available_runs[@]}}"
+                if [[ "$_run_idx" =~ ^[0-9]+$ \
+                   && "$_run_idx" -ge 1 \
+                   && "$_run_idx" -le "${#_available_runs[@]}" ]]; then
+                    RUN_ID="${_available_runs[$((_run_idx-1))]}"
+                else
+                    echo "  Invalid selection — defaulting to latest."
+                    RUN_ID="${_available_runs[-1]}"
+                fi
+                echo "  Mode: RESUME — selected: ${RUN_ID}"
+            fi
+            ;;
+        *)
+            echo "  ERROR: Unrecognised choice '${_mode_choice}'. Enter F or R." >&2
             exit 1
-        fi
+            ;;
+    esac
+fi
+
+# ── Validate prerequisites ────────────────────────────────────────────────────
+if [[ "$_PIPELINE_MODE" == "fresh" ]]; then
+    if [[ ! -f "${SCRIPT_DIR}/${_FRESH_SMI}" ]]; then
+        echo "" >&2
+        echo "ERROR: Ligand SMILES file not found: ${_FRESH_SMI}" >&2
+        echo "       Expected at: ${SCRIPT_DIR}/${_FRESH_SMI}" >&2
+        exit 1
     fi
 fi
 
-LOG_DIR="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
-[[ "$_PIPELINE_MODE" == "fresh" ]] && LOG_DIR="${SCRIPT_DIR}/0_FAcDs_Pipeline_Staging_Logs"
+if [[ "$_PIPELINE_MODE" == "fresh" && "$RESUME_FROM" -gt 0 ]]; then
+    echo "" >&2
+    echo "WARNING: --resume-from=${RESUME_FROM} is not meaningful for a fresh run" >&2
+    echo "         (no existing run to skip into). Flag will be ignored." >&2
+    RESUME_FROM=0
+fi
+
+# ── Sudo credential cache ─────────────────────────────────────────────────────
+echo ""
+echo "  Steps 07-08 (SID + MD thermodynamics) requires sudo to mask systemd-oomd."
+echo "  Please authenticate now so the pipeline can run fully unattended:"
+echo "  (systemctl commands are also covered by NOPASSWD in sudoers for safety)"
+echo ""
+sudo -v </dev/tty
+# Keepalive: refresh credential every 60 s for long-running pipelines
+( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
+_SUDO_KEEPALIVE_PID=$!
+echo ""
+
+# ── Log directory setup ───────────────────────────────────────────────────────
+if [[ "$_PIPELINE_MODE" == "resume" ]]; then
+    LOG_DIR="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
+else
+    # Fresh: staging directory until Step 02 creates the real run directory
+    LOG_DIR="${SCRIPT_DIR}/0_FAcDs_Pipeline_Staging_Logs"
+fi
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/pipeline_$(date +%Y%m%d_%H%M%S).log"
 
 # Redirect all stdout+stderr through a single tee — one write to log, one to terminal.
 exec > >(tee >(sed 's/\x1B\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]//g' >> "$LOG_FILE")) 2>&1
 
+# Trap: restore systemd-oomd on any exit, and kill the keepalive
+trap 'kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+      sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
+      sudo systemctl start systemd-oomd 2>/dev/null || true
+      true' EXIT
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 _sep="════════════════════════════════════════════════════════════════════════════════"
 
-# Write to log + terminal (exec tee above handles the split)
-_log() { echo "$@"; }
+# _tee is a thin wrapper around echo: it does NOT itself fork to a file.
+# Terminal/log duplication is handled once, globally, by the `exec > >(tee ...)`
+# redirect installed above — so every echo (and all child-process output) is
+# already mirrored to both the terminal and ${LOG_FILE}. The wrapper exists only
+# to give pipeline-progress lines a single, greppable call site.
 _tee() { echo "$@"; }
 
 # Timing registry — parallel arrays
@@ -114,8 +232,7 @@ _fmt_elapsed() {
 
 run_step() {
     local name="$1"; shift
-    # Extract the leading numeric prefix (e.g. "07" from "07  MD …") as the step number.
-    # 10# forces base-10 so "08"/"09" never trip octal parsing; :-0 guards a non-numeric prefix.
+    # Extract leading numeric prefix as step number (base-10 safe)
     local step_num _digits="${name%%[^0-9]*}"
     step_num=$(( 10#${_digits:-0} ))
 
@@ -201,22 +318,6 @@ fi
 
 PIPELINE_START=$SECONDS
 
-# ── Sudo credential cache ─────────────────────────────────────────────────────
-# Prompt for sudo password NOW (while user is present) so the cached credential
-# is available for the systemd-oomd mask/unmask commands that wrap step 07.
-# The four systemctl commands also have NOPASSWD in sudoers as a belt-and-braces
-# guarantee — no expiry risk even if steps 01–06 run longer than 2–3 hours.
-echo ""
-echo "  Step 07 (MD thermodynamics) requires sudo to mask systemd-oomd."
-echo "  systemctl commands are covered by NOPASSWD in sudoers."
-# Non-interactive credential refresh — succeeds silently if already cached;
-# falls through harmlessly if no TTY (nohup/background context).
-sudo -vn 2>/dev/null || true
-( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
-_SUDO_KEEPALIVE_PID=$!
-trap 'kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true; sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true; sudo systemctl start systemd-oomd 2>/dev/null || true; true' EXIT
-echo ""
-
 # ── Header ────────────────────────────────────────────────────────────────────
 
 _tee "$_sep"
@@ -228,8 +329,9 @@ _tee "  Mode    : ${_PIPELINE_MODE^^}"
 if [[ "$_PIPELINE_MODE" == "resume" ]]; then
     _tee "  Run ID  : ${RUN_ID}"
 else
-    _tee "  FASTA   : ${_FRESH_FASTA}"
+    _tee "  FASTA   : ${_FRESH_FASTA}  (produced by Step 01)"
     _tee "  SMI     : ${_FRESH_SMI}"
+    _tee "  Run ID  : <assigned by Step 02>"
 fi
 _tee "  Log     : ${LOG_FILE}"
 _tee "$_sep"
@@ -246,22 +348,38 @@ run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \
         --master    A_Labelled_15-Seq.fasta \
         --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
-        --output    C_Final_Merged_for_Boltz-2.fasta
+        --output    "${_FRESH_FASTA}"
 
+# ── Step 02: Production (Boltz-2 co-folding) ──────────────────────────────────
 if [[ "$_PIPELINE_MODE" == "resume" ]]; then
-    run_step "02  Production (Boltz-2 scoring)" \
+    run_step "02  Production (Boltz-2 scoring — resume)" \
         python 02_Production_FAcDs.py --resume "$RUN_ID"
 else
     run_step "02  Production (Boltz-2 scoring — fresh)" \
-        python 02_Production_FAcDs.py --fasta "$_FRESH_FASTA" --smi "$_FRESH_SMI"
-    _new_run=$(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' 2>/dev/null | sort | tail -1)
+        python 02_Production_FAcDs.py \
+            --fasta "${_FRESH_FASTA}" \
+            --smi   "${_FRESH_SMI}"
+
+    # Auto-detect the run directory just created by Step 02
+    _new_run=$(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' 2>/dev/null \
+               | sort | tail -1)
     if [[ -z "$_new_run" ]]; then
+        _tee ""
         _tee "  ERROR: Step 02 did not create a Boltz-2_* run directory."
+        _tee "         Check the Step 02 log above for errors."
         exit 1
     fi
     RUN_ID="$(basename "$_new_run")"
     _tee "  Fresh run directory: ${RUN_ID}"
+
+    # Move / copy the staging log into the real run directory
+    _real_log_dir="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
+    mkdir -p "$_real_log_dir"
+    cp "$LOG_FILE" "${_real_log_dir}/" 2>/dev/null || true
+    _tee "  Pipeline log copied to: ${_real_log_dir}/"
 fi
+
+# ── Steps 03–08: downstream analysis (all modes use RUN_ID) ──────────────────
 
 run_step "03  Validation figures" \
     python 03_Validation_Figures_FAcDs.py "$RUN_ID"
@@ -275,12 +393,23 @@ run_step "05  CIF/PDB preparation" \
 run_step "06  Top-N extraction" \
     python 06_Top-N_Extraction_FAcDs.py "$RUN_ID"
 
-if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
-    sudo systemctl stop systemd-oomd && sudo systemctl mask systemd-oomd.socket
+# Mask systemd-oomd before Steps 07 (SID) and 08 (MD), the OOM-prone phase.
+# The SID script is called with --pipeline-mode so it does NOT unmask on exit,
+# leaving the mask in place for the subsequent MD thermodynamics engine.
+# Guard on step 08 (the higher step number): mask whenever the MD engine runs.
+if [[ $DRY_RUN -eq 0 && 8 -ge $RESUME_FROM ]]; then
+    sudo systemctl stop systemd-oomd 2>/dev/null || true
+    sudo systemctl mask systemd-oomd.socket
 fi
-run_step "07  MD thermodynamics + QM/MM engine" \
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py "$RUN_ID"
-if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
+
+run_step "07  SID Desmond post-processing (generates *_SID-out.eaf)" \
+    python 07_SID_Post_Processing_FAcDs.py "$RUN_ID" --pipeline-mode
+
+run_step "08  MD thermodynamics + QM/MM engine" \
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py "$RUN_ID"
+
+# Restore systemd-oomd after both Steps 07 and 08 have completed.
+if [[ $DRY_RUN -eq 0 && 8 -ge $RESUME_FROM ]]; then
     sudo systemctl unmask systemd-oomd.socket && sudo systemctl start systemd-oomd
 fi
 
@@ -290,6 +419,7 @@ _tee ""
 _tee "$_sep"
 _tee "  ALL STEPS COMPLETE"
 _tee "  Finished: $(date '+%Y-%m-%d %H:%M:%S')"
+_tee "  Run ID  : ${RUN_ID}"
 _tee "  Full log: ${LOG_FILE}"
 
 _print_timing_table
