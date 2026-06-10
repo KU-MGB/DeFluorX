@@ -141,6 +141,65 @@ def install_environment(env_name: str):
               f"Verify your Conda installation: {e}{ConsoleColours.ENDC}")
 
 
+def verify_environment() -> None:
+    """Verifies installed packages in the current environment and prints a checklist."""
+    print("Verifying installed pipeline packages:")
+
+    # Python
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} Python           : {py_ver}")
+
+    # Helper to check package
+    def check_pkg(name: str, import_name: str = None) -> None:
+        import_name = import_name or name
+        try:
+            mod = __import__(import_name)
+            ver = getattr(mod, "__version__", "Available")
+            print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} {name:<16} : {ver}")
+        except ImportError:
+            print(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} {name:<16} : Missing")
+
+    check_pkg("boltz")
+    check_pkg("colabfold")
+    check_pkg("MDAnalysis")
+    check_pkg("rdkit")
+    check_pkg("gemmi")
+
+    # Torch (CUDA)
+    try:
+        import torch
+        cuda_avail = "CUDA available" if torch.cuda.is_available() else "CUDA NOT available"
+        print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} torch (CUDA)     : {torch.__version__} — {cuda_avail}")
+    except ImportError:
+        print(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} torch (CUDA)     : Missing")
+
+    # PyMOL
+    try:
+        import pymol
+        ver = getattr(pymol, "__version__", "Available")
+        print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL            : {ver}")
+    except ImportError:
+        import shutil
+        p = shutil.which("pymol")
+        if p:
+            print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL            : Available (binary located)")
+        else:
+            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PyMOL            : Missing (will be auto-installed in Step 06)")
+
+    # PLIP
+    try:
+        import plip
+        ver = getattr(plip, "__version__", "Available")
+        print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : {ver}")
+    except ImportError:
+        import shutil
+        p = shutil.which("plip")
+        if p:
+            print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : Available (binary located)")
+        else:
+            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PLIP             : Missing (will be auto-installed in Step 06)")
+
+
 # ===============================================================================
 # SECTION 3: MAIN EXECUTION
 # ===============================================================================
@@ -192,8 +251,7 @@ def main():
     elif args.install:
         install_environment(args.name)
     else:
-        print(f"{ConsoleColours.FAIL}Please specify an action: --export or --install.{ConsoleColours.ENDC}\n")
-        parser.print_help()
+        verify_environment()
 
 
 if __name__ == "__main__":
