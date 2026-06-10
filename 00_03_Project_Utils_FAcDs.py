@@ -463,6 +463,17 @@ def get_mic_vector(pos1, pos2, box):
     pos2 : numpy array of Cartesian coordinates (Å).
     box  : 3×3 box matrix (triclinic) or None (vacuum / already-unwrapped).
     """
+    # Coerce inputs to numpy arrays if they are gemmi.Position or list/tuple
+    if hasattr(pos1, 'x') and hasattr(pos1, 'y') and hasattr(pos1, 'z'):
+        pos1 = np.array([pos1.x, pos1.y, pos1.z], dtype=float)
+    else:
+        pos1 = np.asarray(pos1, dtype=float)
+
+    if hasattr(pos2, 'x') and hasattr(pos2, 'y') and hasattr(pos2, 'z'):
+        pos2 = np.array([pos2.x, pos2.y, pos2.z], dtype=float)
+    else:
+        pos2 = np.asarray(pos2, dtype=float)
+
     vec = pos1 - pos2
     if box is not None:
         try:

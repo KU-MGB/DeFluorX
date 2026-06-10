@@ -26,12 +26,12 @@ Date   : 10 June 2026 <───────────────────
                   <Run>/7_Physics_Validation/WaterMaps/*Rank_N*/*_wm.maegz
                   <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
-  Writes        : <Run>/7_Physics_Validation/MD_Thermodynamics_Results/Rank_N_<Name>/
+  Writes        : <Run>/8_MD_Thermodynamics_Results/Rank_N_<Name>/
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2.inp         (QM/MM scan input)
-                  <Run>/7_Physics_Validation/MD_Thermodynamics_Results/07_MD_Master_Ranking.csv
+                  <Run>/8_MD_Thermodynamics_Results/07_MD_Master_Ranking.csv
   Upstream      : 07_SID_Post_Processing_FAcDs.py → produces *_SID-out.eaf consumed here
                   06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
@@ -2073,14 +2073,14 @@ def main():
     work_dir = _resolve_work_dir(raw_dir)
 
     # Auto-detect all available MD rank indices — scan MD, WaterMaps, and
-    # MD_Thermodynamics_Results so that any previously processed rank is included.
+    # 8_MD_Thermodynamics_Results so that any previously processed rank is included.
     _auto_rank_list: list[int] = []
     if args.ranks is None:
         _found_ranks: set[int] = set()
         for _scan_root in [
             work_dir / "MolecularDynamics",
             work_dir / "WaterMaps",
-            work_dir / "MD_Thermodynamics_Results",
+            work_dir.parent / "8_MD_Thermodynamics_Results",
         ]:
             if _scan_root.exists():
                 for _d in _scan_root.iterdir():
@@ -2094,7 +2094,7 @@ def main():
         else:
             args.ranks = 5
 
-    master_out_dir = work_dir / "MD_Thermodynamics_Results"
+    master_out_dir = work_dir.parent / "8_MD_Thermodynamics_Results"
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger

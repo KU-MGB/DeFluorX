@@ -3002,7 +3002,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     try: best_model = re.search(r"(model_\d+)", cifs[0].name).group(1)
                     except Exception: pass
                 data["best_model_name"] = best_model
-                geom = check_catalytic_geometry(cifs[0], mapped)
+                geom = check_catalytic_geometry(cifs[0], mapped, job.get("smiles", ""))
                 data.update(geom)
 
         cif_path = None
@@ -4096,9 +4096,10 @@ def main():
                     ctrl_results[_lig_name]["Carboxylate_Clamp"] = _deha4_mfp_res.get(
                         "Carboxylate_Clamp", False
                     )
-                    ctrl_results[_lig_name]["Active_Site_RMSD"] = _deha4_mfp_res.get(
-                        "Active_Site_RMSD", 99.0
-                    )
+                    _rmsd = _deha4_mfp_res.get("Active_Site_RMSD", 99.0)
+                    ctrl_results[_lig_name]["Active_Site_RMSD"] = _rmsd
+                    _geo = 0.0 if _rmsd >= 99.0 else 100.0 / (1.0 + _rmsd)
+                    ctrl_results[_lig_name]["Likelihood_Degrader_Score"] = round(25.0 + 0.75 * _geo, 2)
             except Exception as _mfp_err:
                 console_info(f"  [Warning] DeHa4 MFP retroactive computation failed for {_lig_name}: {_mfp_err}")
 

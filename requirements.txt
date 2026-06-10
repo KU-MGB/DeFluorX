@@ -1,5 +1,5 @@
 # PFAS pip Requirements
-# Exported : 10 June 2026, 14:11
+# Exported : 10 June 2026, 15:23
 # Script   : 00_01_Environment_Installation_FAcDs.py --export
 #
 accelerate==1.13.0
