@@ -31,7 +31,7 @@ Date   : 10 June 2026 <───────────────────
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2.inp         (QM/MM scan input)
-                  <Run>/8_MD_Thermodynamics_Results/07_MD_Master_Ranking.csv
+                  <Run>/8_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
   Upstream      : 07_SID_Post_Processing_FAcDs.py → produces *_SID-out.eaf consumed here
                   06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
@@ -91,7 +91,7 @@ Arguments:
   8. QSite automation: M06-2X/6-31+G(d,p) .inp generation for coordinate scan.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
- 11. Master aggregation: 07_MD_Master_Ranking.csv.
+ 11. Master aggregation: 08_MD_Master_Ranking.csv.
 ───────────────────────────────────────────────────────────────────────────────
 
 Scientific references
@@ -238,6 +238,8 @@ clean_spines            = _utils_mod.clean_spines
 _calc_improper_dihedral = _utils_mod.calculate_improper_dihedral
 _ensure_box_3x3             = _utils_mod._ensure_box_3x3
 find_nucleophile_od_fallback = _utils_mod.find_nucleophile_od_fallback
+
+PLOT_LOCK = threading.Lock()
 
 
 # ===============================================================================
@@ -863,97 +865,110 @@ def find_latest_master_csv(base_dir: Path):
 def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                                   output_path: Path, stats: dict) -> None:
     """2-panel per-job dashboard: SN2 scatter and dual-trace anchoring time series."""
-    sns.set_theme(style="whitegrid", context="paper")
-    plt.rcParams.update({'font.family': 'sans-serif'})
+    with PLOT_LOCK:
+        sns.set_theme(style="whitegrid", context="paper")
+        plt.rcParams.update({'font.family': 'sans-serif'})
 
-    fig = plt.figure(figsize=(15, 6.5))
-    gs  = gridspec.GridSpec(1, 2, width_ratios=[1, 1.2], wspace=0.15)
+        fig = plt.figure(figsize=(15, 6.5))
+        gs  = gridspec.GridSpec(1, 2, width_ratios=[1, 1.2], wspace=0.15)
 
-    # Panel 1: SN2 scatter with catalytic zones
-    ax1 = fig.add_subplot(gs[0])
-    ax1.add_patch(plt.Rectangle(
-        (0, THRESHOLD_RELAXED_NAC_ANGLE), THRESHOLD_RELAXED_NAC_DIST,
-        180 - THRESHOLD_RELAXED_NAC_ANGLE, color='#74C476', alpha=0.3, zorder=0))
-    ax1.add_patch(plt.Rectangle(
-        (0, THRESHOLD_STRICT_NAC_ANGLE), THRESHOLD_STRICT_NAC_DIST,
-        180 - THRESHOLD_STRICT_NAC_ANGLE, color='#006D2C', alpha=0.4, zorder=0))
+        # Panel 1: SN2 scatter with catalytic zones
+        ax1 = fig.add_subplot(gs[0])
+        ax1.add_patch(plt.Rectangle(
+            (0, THRESHOLD_RELAXED_NAC_ANGLE), THRESHOLD_RELAXED_NAC_DIST,
+            180 - THRESHOLD_RELAXED_NAC_ANGLE, color='#74C476', alpha=0.3, zorder=0))
+        ax1.add_patch(plt.Rectangle(
+            (0, THRESHOLD_STRICT_NAC_ANGLE), THRESHOLD_STRICT_NAC_DIST,
+            180 - THRESHOLD_STRICT_NAC_ANGLE, color='#006D2C', alpha=0.4, zorder=0))
 
-    mid_relaxed = (THRESHOLD_RELAXED_NAC_ANGLE + THRESHOLD_STRICT_NAC_ANGLE) / 2
-    mid_strict  = (THRESHOLD_STRICT_NAC_ANGLE + 180) / 2
-    ax1.text(0.15, mid_relaxed, "Relaxed S_N2", ha='left', va='center', rotation=90,
-             color='#00441B', fontweight='bold', fontsize=8, alpha=0.85, zorder=1)
-    ax1.text(0.15, mid_strict, "Strict S_N2", ha='left', va='center', rotation=90,
-             color='#FFFFFF', fontweight='bold', fontsize=8, alpha=0.95, zorder=1)
+        sc = ax1.scatter(df["NAC_Distance_A"], df["NAC_Angle_Deg"],
+                         c=df["Frame"], cmap="viridis", s=20, alpha=0.7, edgecolor='none', zorder=2)
+        if len(df.dropna(subset=["NAC_Distance_A", "NAC_Angle_Deg"])) > 10:
+            sns.kdeplot(data=df, x="NAC_Distance_A", y="NAC_Angle_Deg", ax=ax1,
+                        levels=5, color="#111111", linewidths=1.0, alpha=0.5, zorder=3,
+                        warn_singular=False)
 
-    sc = ax1.scatter(df["NAC_Distance_A"], df["NAC_Angle_Deg"],
-                     c=df["Frame"], cmap="viridis", s=20, alpha=0.7, edgecolor='none', zorder=2)
-    if len(df.dropna(subset=["NAC_Distance_A", "NAC_Angle_Deg"])) > 10:
-        sns.kdeplot(data=df, x="NAC_Distance_A", y="NAC_Angle_Deg", ax=ax1,
-                    levels=5, color="#111111", linewidths=1.0, alpha=0.5, zorder=3,
-                    warn_singular=False)
+        ax1.axvline(THRESHOLD_RELAXED_NAC_DIST, color='#D55E00', linestyle='--', linewidth=2.5)
+        ax1.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2.5)
+        ax1.set_title("Thermodynamic S_N2 Reaction Trajectory", fontsize=12, fontweight='bold', pad=10)
+        ax1.set_xlabel("Nucleophile – Ligand Distance (Å)", fontweight='bold', fontsize=10)
+        ax1.set_ylabel("Attack Angle: O–C–F (°)",           fontweight='bold', fontsize=10)
+        ax1.set_ylim(0, 180); ax1.set_xlim(left=0)
+        
+        # Legend moved to bottom right and contains zones
+        ax1.legend(handles=[
+            Line2D([0], [0], color='#D55E00', linestyle='--', lw=2.5,
+                   label=f'Relaxed Dist < {THRESHOLD_RELAXED_NAC_DIST}Å'),
+            Line2D([0], [0], color='#0072B2', linestyle='--', lw=2.5,
+                   label=f'Relaxed Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
+            Patch(facecolor='#74C476', alpha=0.3, label='Relaxed S_N2 Zone'),
+            Patch(facecolor='#006D2C', alpha=0.4, label='Strict S_N2 Zone'),
+        ], loc='lower right', frameon=True, framealpha=0.95,
+           edgecolor='#E2E8F0', fancybox=True, fontsize=9)
+           
+        cbar = plt.colorbar(sc, ax=ax1, pad=0.02)
+        cbar.set_label("Simulation Frame (Time)", rotation=270, labelpad=15,
+                       fontweight='bold', fontsize=10)
+        clean_spines(ax1)
 
-    ax1.axvline(THRESHOLD_RELAXED_NAC_DIST, color='#D55E00', linestyle='--', linewidth=2.5,
-                label=f'Relaxed Dist < {THRESHOLD_RELAXED_NAC_DIST}Å')
-    ax1.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2.5,
-                label=f'Relaxed Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°')
-    ax1.set_title("Thermodynamic S_N2 Reaction Trajectory", fontsize=12, fontweight='bold', pad=10)
-    ax1.set_xlabel("Nucleophile – Ligand Distance (Å)", fontweight='bold', fontsize=10)
-    ax1.set_ylabel("Attack Angle: O–C–F (°)",           fontweight='bold', fontsize=10)
-    ax1.set_ylim(0, 180); ax1.set_xlim(left=0)
-    ax1.legend(loc='lower right', frameon=True, framealpha=0.95,
-               edgecolor='#E2E8F0', fancybox=True, fontsize=9)
-    cbar = plt.colorbar(sc, ax=ax1, pad=0.02)
-    cbar.set_label("Simulation Frame (Time)", rotation=270, labelpad=15,
-                   fontweight='bold', fontsize=10)
-    clean_spines(ax1)
+        # Panel 2: Lock & Key dual-trace
+        ax2 = fig.add_subplot(gs[1])
+        window = min(25, max(1, len(df) // 10))
+        df = df.copy()
+        df['Warhead_Smooth'] = df["NAC_Distance_A"].rolling(window=window, min_periods=1).mean()
 
-    # Panel 2: Lock & Key dual-trace
-    ax2 = fig.add_subplot(gs[1])
-    window = min(25, max(1, len(df) // 10))
-    df = df.copy()
-    df['Warhead_Smooth'] = df["NAC_Distance_A"].rolling(window=window, min_periods=1).mean()
+        ax2.plot(df["Frame"], df["NAC_Distance_A"],   color='#D55E00', linewidth=1.0, alpha=0.15)
+        ax2.plot(df["Frame"], df['Warhead_Smooth'],   color='#D55E00', linewidth=2.5, alpha=0.95,
+                 label='Warhead Anchor (Nuc – LigC)')
+        ax2.axhline(4.5, color='#D55E00', linestyle=':', linewidth=1.5, alpha=0.7)
 
-    ax2.plot(df["Frame"], df["NAC_Distance_A"],   color='#D55E00', linewidth=1.0, alpha=0.15)
-    ax2.plot(df["Frame"], df['Warhead_Smooth'],   color='#D55E00', linewidth=2.5, alpha=0.95,
-             label='Warhead Anchor (Nuc – LigC)')
-    ax2.axhline(4.5, color='#D55E00', linestyle=':', linewidth=1.5, alpha=0.7)
+        if "Tail_Cradle_Dist_A" in df.columns and not df["Tail_Cradle_Dist_A"].isna().all():
+            df['Tail_Smooth'] = df["Tail_Cradle_Dist_A"].rolling(window=window, min_periods=1).mean()
+            ax2.plot(df["Frame"], df["Tail_Cradle_Dist_A"], color='#0072B2', linewidth=1.0, alpha=0.15)
+            ax2.plot(df["Frame"], df['Tail_Smooth'],        color='#0072B2', linewidth=2.5, alpha=0.95,
+                     label='Tail Anchor (Cradle – LigF)')
+            ax2.axhline(6.0, color='#0072B2', linestyle=':', linewidth=1.5, alpha=0.7)
 
-    if "Tail_Cradle_Dist_A" in df.columns and not df["Tail_Cradle_Dist_A"].isna().all():
-        df['Tail_Smooth'] = df["Tail_Cradle_Dist_A"].rolling(window=window, min_periods=1).mean()
-        ax2.plot(df["Frame"], df["Tail_Cradle_Dist_A"], color='#0072B2', linewidth=1.0, alpha=0.15)
-        ax2.plot(df["Frame"], df['Tail_Smooth'],        color='#0072B2', linewidth=2.5, alpha=0.95,
-                 label='Tail Anchor (Cradle – LigF)')
-        ax2.axhline(6.0, color='#0072B2', linestyle=':', linewidth=1.5, alpha=0.7)
+        data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
+        ax2.set_ylim(1.5, max(12.0, data_max * 1.4))
+        ax2.set_title("Lock & Key: Dynamic Active Site Anchoring", fontsize=12, fontweight='bold', pad=10)
+        ax2.set_xlabel("Simulation Frame",     fontweight='bold', fontsize=10)
+        ax2.set_ylabel("Interaction Distance (Å)", fontweight='bold', fontsize=10)
+        ax2.legend(loc='upper right', frameon=True, framealpha=1.0,
+                   edgecolor='#E2E8F0', fancybox=True, fontsize=9)
+        clean_spines(ax2)
 
-    data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
-    ax2.set_ylim(1.5, max(12.0, data_max * 1.4))
-    ax2.set_title("Lock & Key: Dynamic Active Site Anchoring", fontsize=12, fontweight='bold', pad=10)
-    ax2.set_xlabel("Simulation Frame",     fontweight='bold', fontsize=10)
-    ax2.set_ylabel("Interaction Distance (Å)", fontweight='bold', fontsize=10)
-    ax2.legend(loc='upper right', frameon=True, framealpha=1.0,
-               edgecolor='#E2E8F0', fancybox=True, fontsize=9)
-    clean_spines(ax2)
+        summary_text = (
+            f"THERMODYNAMIC OUTCOME\n"
+            f"-------------------------\n"
+            f"Pocket Retention    : {stats.get('Pocket_Retention_Pct', 0.0):.1f}% of simulation\n"
+            f"Relaxed Viability   : {stats.get('Catalytic_Viability_Pct', 0.0):.1f}% (While bound)\n"
+            f"Strict Viability    : {stats.get('Strict_Viability_Pct', 0.0):.1f}% (While bound)\n"
+            f"MD Min Distance     : {stats.get('MD_Min_NAC_Dist_A', 0.0):.2f} Å\n"
+            f"MD Avg Attack Angle : {stats.get('MD_Avg_NAC_Angle_Deg', 0.0):.1f}°\n"
+            f"Triad Integrity     : {stats.get('Triad_Integrity_Pct', 0.0):.1f}%\n"
+            f"WM Stable Sites     : {stats.get('WM_N_Stable', 'N/A')}\n"
+            f"WM Mean dG          : {stats.get('WM_Mean_dG', float('nan')):.2f} kcal/mol"
+        )
+        ax2.text(0.03, 0.96, summary_text, transform=ax2.transAxes,
+                 fontsize=9, fontfamily='monospace', va='top', ha='left', zorder=10,
+                 bbox=dict(facecolor='white', edgecolor='#CBD5E1',
+                           boxstyle='round,pad=0.6', alpha=1.0))
 
-    summary_text = (
-        f"THERMODYNAMIC OUTCOME\n"
-        f"-------------------------\n"
-        f"Pocket Retention    : {stats.get('Pocket_Retention_Pct', 0.0):.1f}% of simulation\n"
-        f"Relaxed Viability   : {stats.get('Catalytic_Viability_Pct', 0.0):.1f}% (While bound)\n"
-        f"Strict Viability    : {stats.get('Strict_Viability_Pct', 0.0):.1f}% (While bound)\n"
-        f"MD Avg Distance     : {stats.get('MD_Avg_NAC_Dist_A', 0.0):.2f} Å\n"
-        f"MD Avg Attack Angle : {stats.get('MD_Avg_NAC_Angle_Deg', 0.0):.1f}°\n"
-        f"Triad Integrity     : {stats.get('Triad_Integrity_Pct', 0.0):.1f}%\n"
-        f"WM Stable Sites     : {stats.get('WM_N_Stable', 'N/A')}\n"
-        f"WM Mean dG          : {stats.get('WM_Mean_dG', float('nan')):.2f} kcal/mol"
-    )
-    ax2.text(0.03, 0.96, summary_text, transform=ax2.transAxes,
-             fontsize=9, fontfamily='monospace', va='top', ha='left', zorder=10,
-             bbox=dict(facecolor='white', edgecolor='#CBD5E1',
-                       boxstyle='round,pad=0.6', alpha=1.0))
+        # Title removed as requested by the user, but metadata is written to the log
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
 
-    plt.suptitle(f"Dynamic Assessment: {job_name}", fontsize=15, fontweight='bold', y=1.02)
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+    if logger:
+        logger.info(
+            f"    [Dashboard Meta] Generated dashboard for {job_name} at {output_path.name}.\n"
+            f"      - Panel 1: S_N2 Reaction Trajectory scatter plot of Attack Angle (O-C-F) against Nucleophile-Ligand Distance.\n"
+            f"        Points represent simulation frames colored from start (purple/dark) to end (yellow/light).\n"
+            f"        Shaded green regions define the Catalytic Zones (Relaxed: distance <= {THRESHOLD_RELAXED_NAC_DIST}A, angle >= {THRESHOLD_RELAXED_NAC_ANGLE}°; "
+            f"Strict: distance <= {THRESHOLD_STRICT_NAC_DIST}A, angle >= {THRESHOLD_STRICT_NAC_ANGLE}°).\n"
+            f"      - Panel 2: Lock & Key active site anchoring time series. Shows the nucleophile-carbon warhead distance (orange) "
+            f"and cradle-fluorine tail anchor distance (blue) over simulation frames to assess binding durability."
+        )
 
 
 def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame) -> None:
@@ -973,160 +988,186 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     if not all_data:
         return
     combined_df   = pd.concat(all_data, ignore_index=True)
-    unique_jobs    = combined_df['Job'].unique()
-    job_colour_map = dict(zip(unique_jobs, sns.color_palette("tab20", n_colors=len(unique_jobs))))
+    
+    # Consistent colour map based on ascending Dynamic_Rank
+    sorted_df = df_master.sort_values('Dynamic_Rank', ascending=True)
+    sorted_labels = [format_job_label(row['Job_Name'], row['Dynamic_Rank']) for _, row in sorted_df.iterrows()]
+    job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
+
+    # Vectorised piecewise distance transformation function
+    def transform_distance(x):
+        return np.where(x <= 4.0, x, 4.0 + np.log(np.maximum(x - 3.0, 1e-9)))
+
+    combined_df = combined_df.copy()
+    combined_df["NAC_Distance_A_Transformed"] = transform_distance(combined_df["NAC_Distance_A"])
 
     fig = plt.figure(figsize=(22, 10))
     gs  = fig.add_gridspec(1, 3, width_ratios=[1, 1, 1.6], wspace=0.15)
 
+    # Panel 1: Nucleophile Distance Distribution violin plot
     ax1 = fig.add_subplot(gs[0])
-    sns.violinplot(data=combined_df, y="Job", x="NAC_Distance_A", ax=ax1,
+    sns.violinplot(data=combined_df, y="Job", x="NAC_Distance_A_Transformed", ax=ax1,
                    palette=job_colour_map, inner="quartile", linewidth=1.2)
-    ax1.axvspan(0, THRESHOLD_RELAXED_NAC_DIST, color='#009E73', alpha=0.15, zorder=0)
-    ax1.axvline(THRESHOLD_RELAXED_NAC_DIST, color='#D55E00', linestyle='--', linewidth=2)
-    ax1.set_title("Nucleophile Distance Distribution", fontweight='bold')
-    ax1.set_xlabel("Distance (Å)"); ax1.set_ylabel("")
+    ax1.axvspan(0, transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#009E73', alpha=0.15, zorder=0)
+    ax1.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#D55E00', linestyle='--', linewidth=2)
+    ax1.set_title("Nucleophile Distance Distribution\n(Distribution over MD Frames)", fontweight='bold')
+    ax1.set_xlabel("Distance (Å) [non-linear scale]"); ax1.set_ylabel("")
+    
+    dist_ticks = [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 40, 50]
+    ax1.set_xticks([transform_distance(t) for t in dist_ticks])
+    ax1.set_xticklabels([str(t) for t in dist_ticks], rotation=90)
+    ax1.set_xlim(left=0)
+    
     fig.canvas.draw()
     for lbl in ax1.get_yticklabels():
         lbl.set_color(job_colour_map.get(lbl.get_text(), '#333333'))
         lbl.set_fontweight('bold'); lbl.set_fontsize(11)
     clean_spines(ax1)
 
+    # Panel 2: Attack Angle Distribution violin plot
     ax2 = fig.add_subplot(gs[1], sharey=ax1)
     sns.violinplot(data=combined_df, y="Job", x="NAC_Angle_Deg", ax=ax2,
                    palette=job_colour_map, inner="quartile", linewidth=1.2)
     ax2.axvspan(THRESHOLD_RELAXED_NAC_ANGLE, 180, color='#009E73', alpha=0.15, zorder=0)
     ax2.axvline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2)
-    ax2.set_title("Attack Angle Distribution", fontweight='bold')
+    ax2.set_title("Attack Angle Distribution\n(Distribution over MD Frames)", fontweight='bold')
     ax2.set_xlabel("Angle (°)"); ax2.set_ylabel("")
+    ax2.set_xlim(0, 180) # strictly physical bounds
     ax2.tick_params(labelleft=False)
+    ax2.tick_params(axis='x', labelrotation=90)
     clean_spines(ax2)
 
+    # Panel 3: Global Catalytic Landscape scatter plot
     ax3 = fig.add_subplot(gs[2])
-    sns.scatterplot(data=combined_df, x="NAC_Distance_A", y="NAC_Angle_Deg",
+    sns.scatterplot(data=combined_df, x="NAC_Distance_A_Transformed", y="NAC_Angle_Deg",
                     hue="Job", palette=job_colour_map, s=35, alpha=0.5,
                     edgecolor='none', ax=ax3, legend=False)
+    
+    # Draw zones using transformed distance widths
+    relaxed_w = transform_distance(THRESHOLD_RELAXED_NAC_DIST)
+    strict_w  = transform_distance(THRESHOLD_STRICT_NAC_DIST)
+    
     ax3.add_patch(plt.Rectangle(
-        (0, THRESHOLD_RELAXED_NAC_ANGLE), THRESHOLD_RELAXED_NAC_DIST,
+        (0, THRESHOLD_RELAXED_NAC_ANGLE), relaxed_w,
         180 - THRESHOLD_RELAXED_NAC_ANGLE, color='#74C476', alpha=0.3, zorder=0))
     ax3.add_patch(plt.Rectangle(
-        (0, THRESHOLD_STRICT_NAC_ANGLE), THRESHOLD_STRICT_NAC_DIST,
+        (0, THRESHOLD_STRICT_NAC_ANGLE), strict_w,
         180 - THRESHOLD_STRICT_NAC_ANGLE, color='#006D2C', alpha=0.4, zorder=0))
-    mid_relaxed = (THRESHOLD_RELAXED_NAC_ANGLE + THRESHOLD_STRICT_NAC_ANGLE) / 2
-    mid_strict  = (THRESHOLD_STRICT_NAC_ANGLE + 180) / 2
-    ax3.text(0.15, mid_relaxed, "Relaxed S_N2", ha='left', va='center', rotation=90,
-             color='#00441B', fontweight='bold', fontsize=8, alpha=0.85, zorder=1)
-    ax3.text(0.15, mid_strict, "Strict S_N2", ha='left', va='center', rotation=90,
-             color='#FFFFFF', fontweight='bold', fontsize=8, alpha=0.95, zorder=1)
-    ax3.axvline(THRESHOLD_RELAXED_NAC_DIST, color='#D55E00', linestyle='--', linewidth=2)
+        
+    ax3.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#D55E00', linestyle='--', linewidth=2)
     ax3.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2)
     ax3.set_title("Global Catalytic Landscape (colours match Y-axis labels)", fontweight='bold')
-    ax3.set_xlabel("Nucleophile – Ligand Distance (Å)")
+    ax3.set_xlabel("Nucleophile – Ligand Distance (Å) [non-linear scale]")
     ax3.set_ylabel("Attack Angle: O–C–F (°)")
+    
+    ax3.set_xticks([transform_distance(t) for t in dist_ticks])
+    ax3.set_xticklabels([str(t) for t in dist_ticks], rotation=90)
+    ax3.set_xlim(0, transform_distance(50))
     ax3.set_ylim(0, 180)
+    
+    # Legend at bottom left containing both lines and zones
     ax3.legend(handles=[
         Line2D([0], [0], color='#D55E00', linestyle='--', lw=2,
                label=f'Distance < {THRESHOLD_RELAXED_NAC_DIST}Å'),
         Line2D([0], [0], color='#0072B2', linestyle='--', lw=2,
                label=f'Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
-        Patch(facecolor='#74C476', alpha=0.3, label='Relaxed Catalytic Zone'),
-        Patch(facecolor='#006D2C', alpha=0.4, label='Strict Catalytic Zone'),
-    ], loc='upper right', frameon=True, framealpha=0.95,
+        Patch(facecolor='#74C476', alpha=0.3, label='Relaxed S_N2 Zone'),
+        Patch(facecolor='#006D2C', alpha=0.4, label='Strict S_N2 Zone'),
+    ], loc='lower left', frameon=True, framealpha=0.95,
        edgecolor='#E2E8F0', fancybox=True)
     clean_spines(ax3)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "07_MD_Comparative_Analysis.png"
+    out_path = out_dir / "09_MD_Comparative_Analysis.png"
     plt.savefig(out_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Comparative Dashboard Saved : {out_path.resolve()}")
 
 
 def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None:
-    """Catalytic funnel bar chart: stacked segments show each MD filtering stage.
+    """Catalytic viability summary bar chart: parallel nested bars inside a master track.
 
-    Segments (left to right per candidate, % of total simulation frames):
-      pocket_only  → in pocket but no geometric/triad criterion met    (steel-grey)
-      triad_only   → catalytic triad intact, NAC distance not met      (indigo)
-      nac_only     → NAC geometry met, triad not intact                 (cyan)
-      relaxed_only → relaxed catalysis (NAC + partial triad)            (medium green)
-      strict       → strict catalysis (NAC + full triad)                (dark green)
+    Sub-bars show percentage of total simulation time:
+      - Pocket Retention (faint opacity of candidate colour)
+      - Triad Integrity (medium opacity of candidate colour)
+      - Relaxed Catalysis (high opacity of candidate colour)
+      - Strict Catalysis (solid candidate colour)
 
-    Right annotation panel shows per-candidate: WaterMap mean ΔG, mean NAC
+    Right annotation panel shows per-candidate: WaterMap mean ΔG, minimum NAC
     distance, and Dream Team residues matched.
     """
     sns.set_theme(style="whitegrid", context="paper")
     plt.rcParams.update({'font.family': 'sans-serif'})
+    from matplotlib.colors import to_rgba
 
     df_plot = df_master.sort_values('Dynamic_Rank', ascending=True).copy()
 
-    c_strict  = '#15803D'
-    c_relaxed = '#4ADE80'
-    c_nac     = '#67E8F9'
-    c_triad   = '#818CF8'
-    c_pocket  = '#94A3B8'
-    c_bg      = '#F1F5F9'
+    # Consistent colour map based on ascending Dynamic_Rank (tab20)
+    sorted_labels = [format_job_label(r['Job_Name'], r['Dynamic_Rank']) for _, r in df_plot.iterrows()]
+    job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
 
     n_rows  = len(df_plot)
-    row_h   = 1.15
-    fig_h   = max(5.0, n_rows * row_h + 2.2)
+    row_h   = 0.85
+    fig_h   = max(4.0, n_rows * row_h + 1.8)
     fig, (ax, ax_ann) = plt.subplots(
         1, 2, figsize=(15, fig_h),
         gridspec_kw={'width_ratios': [3, 1], 'wspace': 0.04})
 
-    bar_h       = 0.58
+    bar_h       = 0.72
     y_positions = list(range(n_rows))
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y = y_positions[i]
-        pocket   = float(row.get('Pocket_Retention_Pct',    0.0) or 0.0)
-        nac_o    = float(row.get('NAC_Geom_Only_Pct',       0.0) or 0.0)
+        job_label = format_job_label(row['Job_Name'], row['Dynamic_Rank'])
+        rank_color = job_colour_map.get(job_label, '#475569')
+
+        pocket = float(row.get('Pocket_Retention_Pct', 0.0) or 0.0)
         triad_o  = float(row.get('Triad_Integrity_Pct',     0.0) or 0.0)
         viab_r   = float(row.get('Catalytic_Viability_Pct', 0.0) or 0.0)
         viab_s   = float(row.get('Strict_Viability_Pct',    0.0) or 0.0)
 
-        relax_only  = max(0.0, viab_r - viab_s)
-        pocket_only = max(0.0, pocket - nac_o - triad_o - viab_r)
+        # Convert pocket-bound percentages to absolute percentage of total simulation time
+        triad_total   = triad_o * pocket / 100.0
+        relaxed_total = viab_r * pocket / 100.0
+        strict_total  = viab_s * pocket / 100.0
 
-        # Background (out-of-pocket)
-        ax.barh(y, 100.0, height=bar_h, color=c_bg, edgecolor='none', zorder=1)
+        # Background master container representing 100% of simulation
+        bg_face = to_rgba(rank_color, alpha=0.05)
+        bg_edge = to_rgba(rank_color, alpha=0.60)
+        ax.barh(y, 100.0, height=bar_h, color=bg_face, edgecolor=bg_edge, linewidth=1.2, zorder=1)
 
-        # Stacked segments: pocket_only | triad_only | nac_only | relaxed_only | strict
-        left = 0.0
-        for width, colour in [
-            (pocket_only, c_pocket),
-            (triad_o,     c_triad),
-            (nac_o,       c_nac),
-            (relax_only,  c_relaxed),
-            (viab_s,      c_strict),
-        ]:
-            if width > 1e-4:
-                ax.barh(y, width, left=left, height=bar_h,
-                        color=colour, edgecolor='white', linewidth=0.4, zorder=2)
-                left += width
-
-        # Outline the total pocket extent
-        ax.barh(y, pocket, height=bar_h + 0.06, color='none',
-                edgecolor='#475569', linewidth=1.2, zorder=3)
-
-        # Pocket % label (inside or outside bar depending on width)
-        if pocket >= 10.0:
-            ax.text(pocket - 1.0, y, f'{pocket:.1f}%',
-                    ha='right', va='center', fontsize=8.5, fontweight='bold',
-                    color='white', zorder=4)
-        else:
-            ax.text(pocket + 0.8, y, f'{pocket:.1f}%',
-                    ha='left', va='center', fontsize=8.5, fontweight='bold',
-                    color='#334155', zorder=4)
-
-        # Catalytic viability label (green, below bar)
-        viab_label = f'{viab_r:.2f}%' if viab_r > 0 else '0%'
-        viab_col   = '#166534' if viab_r > 0 else '#94A3B8'
-        ax.text(max(viab_r, 0.5) + 0.5, y + bar_h * 0.52, viab_label,
-                ha='left', va='bottom', fontsize=7.5, fontweight='bold',
-                color=viab_col, zorder=4)
+        # Plot the 4 parallel sub-bars inside the track with progressive opacities of the rank color
+        sub_bars = [
+            (pocket,        to_rgba(rank_color, alpha=0.35), -0.21, '*'),
+            (triad_total,   to_rgba(rank_color, alpha=0.55), -0.07, '**'),
+            (relaxed_total, to_rgba(rank_color, alpha=0.75),  0.07, '***'),
+            (strict_total,  to_rgba(rank_color, alpha=1.0),   0.21, '****')
+        ]
+        
+        sub_bar_h = 0.13
+        for val, col, offset, star in sub_bars:
+            if val > 1e-4:
+                ax.barh(y + offset, val, height=sub_bar_h, color=col, edgecolor='none', zorder=2)
+                # Value label (in solid black)
+                if val >= 8.0:
+                    ax.text(val - 1.0, y + offset, f'{val:.1f}%',
+                            ha='right', va='center', fontsize=6.5, fontweight='bold',
+                            color='black', zorder=4)
+                else:
+                    ax.text(val + 0.5, y + offset, f'{val:.1f}%',
+                            ha='left', va='center', fontsize=6.5, fontweight='bold',
+                            color='black', zorder=4)
+            else:
+                # Value label for 0% (in solid black)
+                ax.text(0.5, y + offset, "0.0%",
+                        ha='left', va='center', fontsize=6.5, fontweight='bold',
+                        color='black', zorder=4)
+            
+            # Place the category identifier star(s) after the 100% mark (e.g. at x = 103.0) in black colour
+            ax.text(103.0, y + offset, star, ha='left', va='center',
+                    fontsize=7, fontweight='bold', color='black', zorder=4)
 
     ax.set_yticks(y_positions)
     ax.set_yticklabels(
@@ -1138,6 +1179,11 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     ax.set_xlabel("Percentage of Simulation Time (%)", fontweight='bold', fontsize=11)
     ax.axvline(100, color='#94A3B8', linestyle=':', linewidth=1.0, alpha=0.6, zorder=1)
     clean_spines(ax)
+
+    # Set y-axis tick label colors to match job colors
+    fig.canvas.draw()
+    for lbl in ax.get_yticklabels():
+        lbl.set_color(job_colour_map.get(lbl.get_text(), '#333333'))
 
     # ── Annotation panel ──────────────────────────────────────────────────────
     ax_ann.set_xlim(0, 1)
@@ -1151,16 +1197,16 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 
     hdr_y = -0.45
     ax_ann.text(0.20, hdr_y, 'WM ΔG\n(kcal/mol)', ha='center', va='center',
-                fontsize=8, fontweight='bold', color='#334155')
-    ax_ann.text(0.55, hdr_y, '⟨d_NAC⟩\n(Å)',     ha='center', va='center',
-                fontsize=8, fontweight='bold', color='#334155')
+                 fontsize=8, fontweight='bold', color='#334155')
+    ax_ann.text(0.55, hdr_y, 'min d_NAC\n(Å)',     ha='center', va='center',
+                 fontsize=8, fontweight='bold', color='#334155')
     ax_ann.text(0.87, hdr_y, 'DT\n(n)',            ha='center', va='center',
-                fontsize=8, fontweight='bold', color='#334155')
+                 fontsize=8, fontweight='bold', color='#334155')
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y    = y_positions[i]
         wm   = row.get('WM_Mean_dG',        float('nan'))
-        dist = row.get('MD_Avg_NAC_Dist_A',  float('nan'))
+        dist = row.get('MD_Min_NAC_Dist_A',  float('nan'))
         dt   = row.get('Dream_Team_Mapped',  0)
 
         try:    wm_str   = f'{float(wm):.2f}'
@@ -1170,8 +1216,8 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         try:    dt_str   = str(int(float(dt or 0)))
         except: dt_str   = '–'
 
-        dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < 5.0)
-                    else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 8.0)
+        dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < 3.8)
+                    else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 5.0)
                     else '#DC2626'))
 
         ax_ann.text(0.20, y, wm_str,   ha='center', va='center', fontsize=9,
@@ -1183,23 +1229,20 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 
     # ── Legend ────────────────────────────────────────────────────────────────
     from matplotlib.patches import Patch
+    c_neutral = '#475569'
     legend_handles = [
-        Patch(facecolor=c_strict,  edgecolor='none',    label='Strict catalysis'),
-        Patch(facecolor=c_relaxed, edgecolor='none',    label='Relaxed catalysis'),
-        Patch(facecolor=c_nac,     edgecolor='none',    label='NAC geometry only'),
-        Patch(facecolor=c_triad,   edgecolor='none',    label='Catalytic triad only'),
-        Patch(facecolor=c_pocket,  edgecolor='#475569', linewidth=0.6,
-              label='In pocket — no criterion met'),
-        Patch(facecolor=c_bg,      edgecolor='#CBD5E1', linewidth=0.6,
-              label='Out of pocket'),
+        Patch(facecolor=to_rgba(c_neutral, alpha=0.35), edgecolor='none', label='Pocket Retention (*)'),
+        Patch(facecolor=to_rgba(c_neutral, alpha=0.55), edgecolor='none', label='Triad Integrity (Total) (**)'),
+        Patch(facecolor=to_rgba(c_neutral, alpha=0.75), edgecolor='none', label='Relaxed Catalysis (Total) (***)'),
+        Patch(facecolor=to_rgba(c_neutral, alpha=1.0),  edgecolor='none', label='Strict Catalysis (Total) (****)'),
     ]
-    ax.legend(handles=legend_handles, loc='upper left', frameon=True,
-              framealpha=0.95, edgecolor='#CBD5E1', fontsize=8.5, ncol=3)
+    ax.legend(handles=legend_handles, loc='lower left', bbox_to_anchor=(0.0, 1.02),
+              frameon=True, framealpha=0.95, edgecolor='#CBD5E1', fontsize=7.5, ncol=4, columnspacing=0.8)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "08_MD_Viability_Summary.png"
+    out_path = out_dir / "10_MD_Viability_Summary.png"
     plt.savefig(out_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Viability Bar Chart Saved   : {out_path.resolve()}")
@@ -1930,6 +1973,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         vals = [r[col] for r in src if col in r and r[col] == r[col]]  # NaN check
         return round(float(np.mean(vals)), 3) if vals else np.nan
 
+    def _min_col(col: str, rows=None) -> float:
+        src  = rows if rows is not None else results
+        vals = [r[col] for r in src if col in r and r[col] == r[col]]  # NaN check
+        return round(float(np.min(vals)), 3) if vals else np.nan
+
     stats = {
         "Job_Name":                 job_name,
         "Scientific_Rank":          rank,
@@ -1945,6 +1993,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         "Triad_Integrity_Pct":      round((n_triad   / n_pocket) * 100, 2) if n_pocket else 0.0,
         "NAC_Geom_Only_Pct":        round((n_nac     / n_pocket) * 100, 2) if n_pocket else 0.0,
         "MD_Avg_NAC_Dist_A":        _mean_col("NAC_Distance_A"),
+        "MD_Min_NAC_Dist_A":        _min_col("NAC_Distance_A"),
         "MD_Avg_NAC_Angle_Deg":     _mean_col("NAC_Angle_Deg"),
         "MD_Best_Score":            round(best_score, 2),
         # Dream Team mean distances (pocket-bound frames only)
@@ -2059,7 +2108,7 @@ def main():
                         help="Alternative to positional run_dir (legacy --dir flag)")
     parser.add_argument("--lig",    default="LIG", help="Ligand residue name")
     parser.add_argument("--stride", type=int, default=1,
-                        help="Frame stride (1 = all frames, default). Auto-reduces to 5 or 10 if RAM is insufficient.")
+                        help="Frame stride (1 = all frames, default).")
     parser.add_argument("--ranks",  type=int, default=None,
                         help="Number of ranked jobs (default: auto-detect from MolecularDynamics dirs)")
     parser.add_argument("--nuc",    type=int, default=DREAM_TEAM_REF.get('Nuc', 110),  help="Fallback nucleophile resnum")
@@ -2098,8 +2147,8 @@ def main():
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = (_setup_logging(master_out_dir / "08_MD_Thermodynamics_Engine.log",
-                             "07_md_thermo_engine")
+    logger = (_setup_logging(master_out_dir / "11_MD_Thermodynamics_Engine.log",
+                             "08_md_thermo_engine")
               if _setup_logging else None)
 
 
@@ -2154,64 +2203,6 @@ def main():
     _rank_list     = _auto_rank_list if _auto_rank_list else list(range(1, args.ranks + 1))
     _n_workers     = min(len(_rank_list), max(1, (os.cpu_count() or 4) - 2))
 
-    # ── Auto-stride RAM check ────────────────────────────────────────────────
-    def _auto_select_stride(requested: int, n_ranks: int) -> int:
-        avail_bytes = 60 * 1024 ** 3
-        try:
-            with open("/proc/meminfo") as _mf:
-                for _ln in _mf:
-                    if _ln.startswith("MemAvailable"):
-                        avail_bytes = int(_ln.split()[1]) * 1024
-                        break
-        except Exception:
-            pass
-
-        _traj_len = 100_000
-        try:
-            _md_root  = work_dir / "MolecularDynamics"
-            _trj_dirs = sorted(_md_root.glob("*_trj")) if _md_root.exists() else []
-            if _trj_dirs:
-                from schrodinger.application.desmond.packages import traj as _t
-                _traj_len = len(_t.read_traj(str(_trj_dirs[0])))
-        except Exception:
-            pass
-
-        # Base overhead per rank: CMS model + trajectory metadata + Schrödinger libs.
-        # Empirically measured at ~7.6 GB/rank on this system (stride=10 run).
-        _BASE_GB_PER_RANK = 8.0
-        # Frame position cache (preloaded atom subset only).
-        _N_ATOMS_EST      = 500
-        _avail_gb         = avail_bytes / 1024 ** 3
-        _fallbacks        = [requested] + [s for s in [5, 10] if s > requested]
-        for _s in _fallbacks:
-            _nf          = max(1, (_traj_len + _s - 1) // _s)
-            _frame_gb    = _nf * _N_ATOMS_EST * 3 * 8 * n_ranks / 1024 ** 3
-            _mem_gb      = _BASE_GB_PER_RANK * n_ranks + _frame_gb
-            if _mem_gb < _avail_gb * 0.80:
-                if _s != requested:
-                    _req_nf   = max(1, (_traj_len + requested - 1) // requested)
-                    _req_mem  = _BASE_GB_PER_RANK * n_ranks + _req_nf * _N_ATOMS_EST * 3 * 8 * n_ranks / 1024 ** 3
-                    console_info(
-                        f"  {ConsoleColours.WARNING}[AUTO-STRIDE] stride={requested} needs "
-                        f"~{_req_mem:.1f} GB (base {_BASE_GB_PER_RANK * n_ranks:.0f} GB + frames) "
-                        f"> 80% of available {_avail_gb:.1f} GB. "
-                        f"Falling back to stride={_s} (~{_mem_gb:.1f} GB).{ConsoleColours.ENDC}"
-                    )
-                else:
-                    console_info(
-                        f"  [AUTO-STRIDE] stride={_s} confirmed "
-                        f"(~{_mem_gb:.1f} GB estimated — "
-                        f"{_BASE_GB_PER_RANK * n_ranks:.0f} GB base + {_frame_gb:.1f} GB frames, "
-                        f"{_avail_gb:.1f} GB available)."
-                    )
-                return _s
-        console_info(
-            f"  {ConsoleColours.WARNING}[AUTO-STRIDE] All strides exceed 80% RAM — "
-            f"using stride=10 as safe fallback.{ConsoleColours.ENDC}"
-        )
-        return 10
-
-    args.stride = _auto_select_stride(args.stride, len(_rank_list))
     console_info(f"  Effective Stride : {args.stride}{' (all frames)' if args.stride == 1 else f' (1-in-{args.stride})'}")
     console_separator()
 
@@ -2378,7 +2369,7 @@ def main():
         df_master = df_master.sort_values(by="Catalytic_Viability_Pct", ascending=False)
         df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
 
-        master_csv_path = master_out_dir / "07_MD_Master_Ranking.csv"
+        master_csv_path = master_out_dir / "08_MD_Master_Ranking.csv"
         df_master.to_csv(master_csv_path, index=False)
         console_info(f"Total Simulations Validated : {len(df_master)}")
         console_info(f"Master Ranking Sheet Saved  : {master_csv_path.resolve()}")

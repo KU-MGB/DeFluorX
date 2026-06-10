@@ -282,21 +282,24 @@ run_step() {
 
 _print_timing_table() {
     local total=0
+    local line_c1="$(printf '─%.0s' {1..60})"
+    local line_c2="$(printf '─%.0s' {1..12})"
+    local line_c3="$(printf '─%.0s' {1..10})"
+
     _tee ""
-    _tee "$_sep"
     _tee "  TIMING SUMMARY"
-    _tee "$_sep"
-    _tee "  $(printf '%-36s  %10s  %s' 'STEP' 'ELAPSED' 'STATUS')"
-    _tee "  $(printf '%-36s  %10s  %s' '----' '-------' '------')"
+    _tee "  ┌${line_c1}┬${line_c2}┬${line_c3}┐"
+    _tee "  │ $(printf '%-58s │ %10s │ %-8s' 'STEP' 'ELAPSED' 'STATUS') │"
+    _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
     for i in "${!STEP_NAMES[@]}"; do
         local t="${STEP_TIMES[$i]}"
         local st="${STEP_STATUS[$i]}"
-        _tee "  $(printf '%-36s  %10s  %s' "${STEP_NAMES[$i]}" "$(_fmt_elapsed $t)" "$st")"
+        _tee "  │ $(printf '%-58s │ %10s │ %-8s' "${STEP_NAMES[$i]}" "$(_fmt_elapsed $t)" "$st") │"
         total=$(( total + t ))
     done
-    _tee "  $(printf '%-36s  %10s' '──────────────────────────────────' '──────────')"
-    _tee "  $(printf '%-36s  %10s' 'TOTAL WALL TIME' "$(_fmt_elapsed $total)")"
-    _tee "$_sep"
+    _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
+    _tee "  │ $(printf '%-58s │ %10s │ %-8s' 'TOTAL WALL TIME' "$(_fmt_elapsed $total)" "") │"
+    _tee "  └${line_c1}┴${line_c2}┴${line_c3}┘"
 }
 
 # ── Conda activation ──────────────────────────────────────────────────────────
