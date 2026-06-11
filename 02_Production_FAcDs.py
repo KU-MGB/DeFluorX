@@ -3809,12 +3809,7 @@ def main():
 
             job_name_log = f"{jid}_{job_pid}_{lid}"
             if task_count % 1000 == 0 or task_count == total_ops:
-                _end = "\r" if sys.stdout.isatty() else "\n"
-                if sys.stdout.isatty():
-                    _tty_write(f"\rPre-Processing sequence evaluation {task_count}/{total_ops} | {job_name_log}\033[K")
-                else:
-                    print(f"Pre-Processing sequence evaluation {task_count}/{total_ops} | {job_name_log}",
-                          end=_end, flush=True)
+                _tty_write(f"\rPre-Processing sequence evaluation {task_count}/{total_ops} | {job_name_log}\033[K")
                         
             yaml_needs_write = True
             job_stem = y_name.replace(".yaml", "")

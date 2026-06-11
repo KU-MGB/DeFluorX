@@ -204,7 +204,7 @@ LOG_FILE="${LOG_DIR}/pipeline_$(date +%Y%m%d_%H%M%S).log"
 #             sudoers entries, so the detached (tty-less) process still works.
 _BG_MODE=0
 echo ""
-read -r -p "  Run unattended in background (detach; log only)? [y/N]: " _bg_choice </dev/tty || _bg_choice=""
+read -r -p "  Run unattended in background (detach; log only, default = N)? [y/N]: " _bg_choice </dev/tty || _bg_choice=""
 case "${_bg_choice^^}" in
     Y|YES) _BG_MODE=1 ;;
 esac
@@ -452,7 +452,7 @@ if [[ "$_BG_MODE" -eq 1 ]]; then
     # subshell in its own process group (PGID == PID) so every step + child can
     # be killed together with a single negative-PID signal.
     set -m
-    ( _run_all_steps ) > >(sed "$_ANSI_STRIP" >> "$LOG_FILE") 2>&1 </dev/null &
+    ( _run_all_steps ) > >(sed -u "$_ANSI_STRIP" >> "$LOG_FILE") 2>&1 </dev/null &
     _BG_PID=$!
     set +m
     disown 2>/dev/null || true
@@ -464,6 +464,6 @@ if [[ "$_BG_MODE" -eq 1 ]]; then
     exit 0
 else
     # Foreground: original behaviour — one write to log (ANSI-stripped), one to terminal.
-    exec > >(tee >(sed "$_ANSI_STRIP" >> "$LOG_FILE")) 2>&1
+    exec > >(tee >(sed -u "$_ANSI_STRIP" >> "$LOG_FILE")) 2>&1
     _run_all_steps
 fi
