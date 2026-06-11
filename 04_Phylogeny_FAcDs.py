@@ -948,7 +948,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const protRaw = row['Protein_Name'] || row.protein || row.protein_id || (row.job_name ? row.job_name.split('_')[1] : null);
                 const ligRaw = row['Ligand_Name'] || row.ligand || (row.job_name ? row.job_name.split('_')[2] : null);
                 const tier = row.Degrader_Tier || row.degrader_tier || row.Tier || "Decoy";
-                const score = row.Likelihood_Degrader_Score || row.binding_likelihood_computed || row.Binding_Probability || 0;
+                const score = row.ActiveSite_Conservation_Score || row.binding_likelihood_computed || row.Binding_Probability || 0;
                 
                 if (!protRaw || !ligRaw) return;
                 const normProt = normalizeProtName(protRaw);

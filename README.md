@@ -524,6 +524,8 @@ python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 bash 00_00_run_pipeline_FAcDs.sh
 ```
 
+The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
+
 **Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
 </details>
 
@@ -727,7 +729,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 | `dist_nuc_base_internal` / `dist_base_acid_internal` | Internal catalytic-triad distances (Å) |
 | `Mechanistic_Fingerprint_Score` | 0–1 active-site fingerprint vs DEHA4 control (`analyse_candidate_structure`) |
 | `mechanistic_score` | 0–1 in-pose mechanistic gate used by the tier cascade |
-| `Likelihood_Degrader_Score` | Final degradation-likelihood score (0–100) |
+| `ActiveSite_Conservation_Score` | Final degradation-likelihood score (0–100) |
 | `degrader_tier` | Categorical: Perfect_A → Perfect_B → Best_A → Best_B → Good → Poor → Decoy |
 | `Active_Site_RMSD` | Active-site Cα RMSD of prediction vs DEHA4 control (Å) |
 
@@ -747,6 +749,8 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 > (Nuc–Base ≤ `TIER_NB_MAX`, Base–Acid ≤ `TIER_BA_MAX`). All threshold values are
 > defined once in [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py) §9
 > (`TIER_NUC_DIST`, `TIER_ANGLE_MIN`, `TIER_NB_MAX`, `TIER_BA_MAX`, `TIER_MECH_MIN`).
+>
+> Note: Perfect_A, Perfect_B, and Best_A tiers enforce strict multi-gate mechanistic checks (including internal catalytic triad distances and cradle residue mappings). In contrast, the Best_B tier acts as a relaxed geometrical filter (shortlist) designed to capture candidates with reasonable docking geometries that are subsequently subjected to verification during downstream molecular dynamics simulations.
 </details>
 
 <details>
@@ -919,17 +923,18 @@ python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 | Catalytic triad BA (MD) | ≤ 9.0 Å | ≤ 9.0 Å |
 | Walden improper dihedral | ≤ 15° | — |
 
-**Memory Requirements & OOM Prevention:**
-As the most memory-intensive step in the pipeline, the following behaviours are built in to prevent OOM (out-of-memory) kills:
+**Memory Requirements & Concurrency Control:**
+As the final computational analysis step, the following design architectures are built in to ensure robust execution and prevent memory exhaustion:
 
-*   **Default trajectory stride:** The trajectory analysis loop defaults to **stride 1** (full-density analysis). However, the engine includes a dynamic memory check (`_auto_select_stride`) that evaluates available RAM before execution. If the estimated memory footprint for all processed ranks exceeds 80% of the system's available memory, the engine automatically falls back to **stride 5** or **stride 10** to prevent out-of-memory errors.
-*   **Automatic `systemd-oomd` masking:** Before initiating Schrödinger SID (System Interaction Diagram) analysis — the sub-step most likely to spike memory consumption — the script automatically applies `sudo systemctl mask systemd-oomd` to prevent the Linux out-of-memory daemon from terminating the Schrödinger process mid-run. The mask is removed automatically on clean exit. If the job is interrupted, restore the service manually using `sudo systemctl unmask systemd-oomd`.
-*   **Concurrent per-rank processing:** Candidates are processed **concurrently** using a thread pool (`ThreadPoolExecutor`), scaling dynamically with the available CPU cores (reserving 2 cores for system stability). To prevent cumulative memory accumulation from multiple resident Desmond trajectories, the auto-stride memory estimator automatically scales up the sampling stride if the estimated concurrent memory exceeds available physical memory.
-*   **Manual stride override:** To run full-frame density analysis (stride 1) — required for precise NAC frame counts in publication-quality results — pass `--stride 1` explicitly:
+*   **Memory-Optimised Lazy Trajectory Concatenation:** Instead of loading all frames of all segments into RAM at startup, the engine uses a memory-efficient `LazyTrajectory` wrapper. Trajectory files are loaded lazily, bounding the coordinate memory overhead.
+*   **Chunk-Level Deallocation:** Frame coordinate data is streamed and analysed in chunks (5,000 frames at a time). After each chunk is processed, the local sub-readers are deleted to force immediate deallocation of the coordinate cache. This ensures that peak memory footprint remains low and constant (typically <2 GB per worker), regardless of trajectory length.
+*   **Default Trajectory Stride:** The analysis loop defaults to **stride 1** (full-density trajectory analysis, 100% of frames). High-frame analyses can be performed safely on workstations with standard RAM (e.g. 16–32 GB) without requiring high strides or encountering out-of-memory errors.
+*   **Concurrency Control (`--workers`):** Ranks are processed concurrently using a thread pool (`ThreadPoolExecutor`). To customise the concurrency or run the pipeline sequentially (which prevents interleaved stdout prints), specify the `--workers` CLI option:
     ```bash
-    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 1
+    # Run sequentially (rank-by-rank)
+    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --workers 1
     ```
-    *Note: A 1000 ns Desmond trajectory for a ~300-residue FAcD + PFAS ligand in explicit solvent (~40,000 atoms) generates 100,000 frames and approximately 50–100 GB of trajectory data. Ensure at least 128 GB RAM is available before using `--stride 1`. On workstations with ≤ 64 GB RAM, stride 10 (the default) is strongly recommended.*
+*   **Automatic `systemd-oomd` masking:** The pipeline wrapper script automatically masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 07 and 08 to prevent termination by the system daemon, and unmasks it upon completion.
 
 **Configuration (CFG §8, §10, §11):** Smart-Lock biases, WaterMap radii, frame scoring weights, QSite region definitions, Desmond MD parameters.
 

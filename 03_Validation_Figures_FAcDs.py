@@ -3072,7 +3072,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     # per tier on the left axis (zoomed to ~0.97-1.0 since all values cluster there);
     # a connected dot-line shows Product Inhibition Penalty per tier on the right axis.
     # Together they reveal whether the tiers that bind well also carry high inhibition risk.
-    bind_col   = next((c for c in ["Binding_Probability", "Likelihood_Degrader_Score"] if c in df.columns), None)
+    bind_col   = next((c for c in ["Binding_Probability", "ActiveSite_Conservation_Score"] if c in df.columns), None)
     _has_bind  = bind_col is not None and 'degrader_tier' in df.columns
     _has_pip   = 'product_inhibition_penalty' in df.columns and 'degrader_tier' in df.columns
     if _has_bind or _has_pip:

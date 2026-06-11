@@ -311,16 +311,37 @@ logger    = None  # Initialised in main()
 # SECTION 2: CONSOLE WRAPPER FUNCTIONS
 # ===============================================================================
 
+import threading
+thread_logger = threading.local()
+
+_strip_ansi = getattr(_utils_mod, '_strip_ansi', lambda x: x)
+
+
 def console_title(msg: str) -> None:
-    _console_title(msg, logger)
+    if hasattr(thread_logger, 'lines'):
+        thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {msg}")
+        if logger:
+            logger.info(f"Rank {thread_logger.rank} | {_strip_ansi(msg)}")
+    else:
+        _console_title(msg, logger)
 
 
 def console_info(msg: str) -> None:
-    _console_info(msg, logger)
+    if hasattr(thread_logger, 'lines'):
+        for line in str(msg).split('\n'):
+            thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {line}")
+        if logger:
+            logger.info(f"Rank {thread_logger.rank} | {_strip_ansi(msg)}")
+    else:
+        _console_info(msg, logger)
 
 
 def console_separator(heavy: bool = True) -> None:
-    _console_sep(logger, heavy=heavy)
+    if hasattr(thread_logger, 'lines'):
+        sep = SEPARATOR_HEAVY if heavy else SEPARATOR_LIGHT
+        thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {sep}")
+    else:
+        _console_sep(logger, heavy=heavy)
 
 
 def _print_labeled(label: str, ansi_col: str, msg: str,
@@ -328,12 +349,16 @@ def _print_labeled(label: str, ansi_col: str, msg: str,
     """Print a prefixed status line with ANSI colour.
     Colour passes through pipeline tee to the terminal; file logger stays clean."""
     _log = log_label or label
-    if _rcon:
-        _rcon.print(f"  [bold]{label}[/bold] {msg}", markup=False)
+    if hasattr(thread_logger, 'lines'):
+        thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {ansi_col}{label}\033[0m {msg}")
     else:
-        print(f"  {ansi_col}{label}\033[0m {msg}", flush=True)
+        if _rcon:
+            _rcon.print(f"  [bold]{label}[/bold] {msg}", markup=False)
+        else:
+            print(f"  {ansi_col}{label}\033[0m {msg}", flush=True)
     if logger:
-        getattr(logger, level)(f"{_log} | {msg}")
+        r_prefix = f"Rank {thread_logger.rank} | " if hasattr(thread_logger, 'rank') else ""
+        getattr(logger, level)(f"{r_prefix}{_log} | {msg}")
 
 
 def console_nac_pass(msg: str) -> None:
@@ -1507,6 +1532,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        fallback_base: int = DREAM_TEAM_REF.get('Base', 277),
                        fallback_acid: int = DREAM_TEAM_REF.get('Acid', 134)):
     """Orchestrates the full analysis pipeline for one MD trajectory."""
+
     try:
         row = df_ranked[df_ranked['Scientific_Rank'] == rank].iloc[0]
     except (IndexError, KeyError):
@@ -1514,6 +1540,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         return None
 
     job_name   = row['job_name']
+    print(f"  [Rank {rank}] Initialising analysis for: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}", flush=True)
     # Flexible discovery: try every directory pattern Desmond/pipeline may produce
     _md_root   = work_dir / "MolecularDynamics"
     _candidates = [
@@ -1549,6 +1576,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     _first_path  = folder / _first_entry.split('/')[0]
                     if _first_path.exists():
                         continue
+                    print(f"  [Rank {rank}] Extracting compressed files from: {_tgz.name} ...", flush=True)
                     console_info(f"      [+] Extracting {_tgz.name} ...")
                     _tf.extractall(path=str(folder))
             except Exception as _te:
@@ -1576,6 +1604,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     msys_model, cms_model = topo.read_cms(str(cms_path))
 
     tr = LazyTrajectory(_trj_flat)
+    print(f"  [Rank {rank}] Loading trajectory: {len(_trj_flat)} segment(s) | {len(tr):,} total frames...", flush=True)
     if len(_trj_flat) > 1:
         console_info(f"      [+] Multi-segment trajectory: {len(_trj_flat)} segments → "
                      f"{len(tr):,} total frames (lazy)")
@@ -1748,6 +1777,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _nf          = len(_stride_list)
     _n_chunks    = (_nf + _CHUNK_SIZE - 1) // _CHUNK_SIZE
 
+    print(f"  [Rank {rank}] Starting chunked streaming: {_nf} frames | setup completed in {time.time()-_t_pre:.1f}s", flush=True)
     console_info(
         f"  Chunked streaming: {_nf} frames × {_n_pre} atoms "
         f"({len(_sol_use)} solvent) | chunk={_CHUNK_SIZE} | {_n_chunks} chunks | "
@@ -1784,6 +1814,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _done_c    = _ce
             _rate_c    = _done_c / _elapsed_c if _elapsed_c > 1e-6 else 0.0
             _eta_c     = int((_nf - _done_c) / _rate_c) if _rate_c > 0.0 else 0
+            print(f"  [Rank {rank}] Processing: {_done_c}/{_nf} frames ({_rate_c:.0f} fr/s, ETA ~{_eta_c}s)", flush=True)
             console_info(
                 f"  Chunk {_ci + 1}/{_n_chunks}: {_done_c}/{_nf} frames "
                 f"({_rate_c:.0f} fr/s, ETA ~{_eta_c}s)"
@@ -2052,6 +2083,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=50, min_periods=1).mean()
     df_res.to_csv(job_out_dir / f"{job_name}_NAC_Data.csv", index=False)
 
+    print(f"  [Rank {rank}] Generating dashboard chart...", flush=True)
     generate_individual_dashboard(
         df_res, job_name, job_out_dir / f"{job_name}_NAC_Dashboard.png", stats)
 
@@ -2062,6 +2094,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         inp_path = generate_qsite_inputs(mae_path, job_name, nuc_num, stab_f_num,
                                          ideal_geom['lig_c'], ideal_geom['nuc_o'],
                                          base_num=base_num, acid_num=acid_num)
+        print(f"  [Rank {rank}] QM/MM frame extracted | best frame: {ideal_frame_idx} | score: {best_score:.2f}", flush=True)
         console_qmm_ready(f"Best frame: {ideal_frame_idx} | Score: {best_score:.2f} | "
                           f"QSite: {mae_path.name}")
         # ── Post-write sanity check: verify the artifacts THIS step writes ─────
@@ -2074,6 +2107,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     f"  [!] QSite input missing or empty for {job_name}: {_artifact.name}"
                 )
 
+    print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats
 
 
@@ -2138,6 +2172,8 @@ def main():
     parser.add_argument("--acid",   type=int, default=DREAM_TEAM_REF.get('Acid', 134), help="Fallback acid resnum")
     parser.add_argument("--csv",    default=None,
                         help="Path to master CSV (auto-detected if omitted)")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="Number of parallel workers (default: auto-detect based on CPU cores)")
     args = parser.parse_args()
 
     raw_dir  = args.run_dir or args.dir or "."
@@ -2202,11 +2238,12 @@ def main():
     triad_csv = Path(args.csv) if args.csv else ranked_csv_path
     triad_map = {}
     if triad_csv and triad_csv.exists():
-        console_info(f"Ranked CSV       : {triad_csv.name}")
+        if args.csv and Path(args.csv).resolve() != ranked_csv_path.resolve():
+            console_info(f"Triad CSV        : {triad_csv.name}")
         triad_map = load_triad_mapping(triad_csv)
         console_info(f"Triad Entries    : {len(triad_map)} jobs mapped")
     else:
-        console_info(f"{ConsoleColours.WARNING}Ranked CSV       : Not found — using alignment map / fallback defaults.{ConsoleColours.ENDC}")
+        console_info(f"{ConsoleColours.WARNING}Triad CSV        : Not found — using alignment map / fallback defaults.{ConsoleColours.ENDC}")
 
     # Build rank → triad_override lookup
     rank_to_override = {}
@@ -2223,18 +2260,15 @@ def main():
     master_stats   = []
     _stats_lock    = threading.Lock()
     _rank_list     = _auto_rank_list if _auto_rank_list else list(range(1, args.ranks + 1))
-    _n_workers     = min(len(_rank_list), max(1, (os.cpu_count() or 4) - 2))
+    _n_workers     = args.workers if args.workers is not None else min(len(_rank_list), max(1, (os.cpu_count() or 4) - 2))
 
     console_info(f"  Effective Stride : {args.stride}{' (all frames)' if args.stride == 1 else f' (1-in-{args.stride})'}")
     console_separator()
 
     def _process_one_rank(r):
-        """Process a single rank; called from worker thread.
+        thread_logger.rank = r
+        thread_logger.lines = []
 
-        Returns (r, _log_lines, res) so the main thread can print all ranks
-        in sorted order — preventing interleaved output when ranks run in
-        parallel.  The header line is always the first entry in _log_lines.
-        """
         _log_lines: list = []
         _log_lines.append(f"\n{SEPARATOR_LIGHT}")
         _log_lines.append(
@@ -2255,6 +2289,11 @@ def main():
                                  fallback_nuc=args.nuc,
                                  fallback_base=args.base,
                                  fallback_acid=args.acid)
+        if hasattr(thread_logger, 'lines'):
+            _log_lines.extend(thread_logger.lines)
+            del thread_logger.lines
+        if hasattr(thread_logger, 'rank'):
+            del thread_logger.rank
         if res:
             if triad_override and 'static_data' in triad_override:
                 for k, v in triad_override['static_data'].items():
@@ -2357,16 +2396,25 @@ def main():
     with ThreadPoolExecutor(max_workers=_n_workers,
                             thread_name_prefix="Rank") as _pool:
         _futures = {_pool.submit(_process_one_rank, r): r for r in _rank_list}
+        _completed_count = 0
         for _fut in as_completed(_futures):
             try:
                 _rank_num, _rank_log, _rank_res = _fut.result()
                 _all_results.append((_rank_num, _rank_log, _rank_res))
+                _completed_count += 1
+                if sys.stdout.isatty():
+                    print(f"\r  [FAcDs Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed...", end="", flush=True)
+                else:
+                    print(f"  [FAcDs Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed.", flush=True)
             except Exception as _exc:
                 _r = _futures[_fut]
                 _failed_ranks.append(_r)
+                _completed_count += 1
                 console_info(f"{ConsoleColours.FAIL}[!] Rank {_r} failed: {_exc}{ConsoleColours.ENDC}")
                 import traceback as _tb
                 _tb.print_exc()
+        if sys.stdout.isatty():
+            print("\n", flush=True)
 
     # Print all rank output blocks in ascending rank order to prevent
     # interleaved lines from parallel workers.

@@ -68,7 +68,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
 
     1. Perfect_A (Elite Catalysis - High Priority for MD)
        • Mechanistic Fingerprint >= 0.9 (Near-complete anchor set required — GATE)
-       • (Likelihood Degrader is reported downstream for ranking; it is NOT a tier gate.)
+       • (Active Site Conservation is reported downstream for ranking; it is NOT a tier gate.)
        • Nucleophile (Asp110): <= 3.0 A (Tight pre-reactive ground-state gate)
        • Base (His277):        <= 3.5 A (Optimal Proton Transfer Gate)
        • Acid (Asp134):        <= 4.5 A (Strict Internal Gate)
@@ -466,7 +466,7 @@ COLUMN_RENAMING_MAP = {
     "sn2_trajectory_dev": "SN2_Trajectory_Deviation_A",
     "Mapped_to_Control_All": "Full_Sequence_Alignment_Map",
     "Mapped_to_Control_Cat_Triad": "Active_Site_Triad_Map",
-    "Likelihood_Degrader_Score": "Likelihood_Degrader_Score",
+    "ActiveSite_Conservation_Score": "ActiveSite_Conservation_Score",
     "Mechanistic_Fingerprint_Score": "Mechanistic_Fingerprint_Score",
     "Active_Site_RMSD": "Active_Site_RMSD_to_Control",
     "Halide_Stabilisation": "Has_Halide_Stabilisation",
@@ -487,7 +487,7 @@ DEFAULT_METRICS = {
     "elapsed_seconds": 0.0,
     "degrader_tier": "Decoy",
     "is_degrader": False,
-    "Likelihood_Degrader_Score": 0.0,
+    "ActiveSite_Conservation_Score": 0.0,
     "Mechanistic_Fingerprint_Score": 0.0,
     "Active_Site_RMSD": 999.0,
     "Identity_to_Control": 0.0,
@@ -2286,17 +2286,30 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None) -> Tup
 
     if not valid_cx_pairs: return 0.0, 999.0, 0, None, None, None
 
-    # Iteratively evaluate all specific C-X pairs to strictly isolate the primary attack point
+    # Pick the C-X pair whose carbon is closest to a nucleophile oxygen
     min_dist_O_C = 999.0
-    best_O, best_C, best_X = None, None, None
+    best_O, best_C = None, None
     for o in asp_oxygens:
         for c, x in valid_cx_pairs:
             d = o.pos.dist(c.pos)
             if d < min_dist_O_C:
                 min_dist_O_C = d
-                best_O, best_C, best_X = o, c, x
+                best_O, best_C = o, c
 
-    if not best_O or not best_C or not best_X: return 0.0, 999.0, 0, None, None, None
+    if not best_O or not best_C: return 0.0, 999.0, 0, None, None, None
+
+    # Over the fluorines bonded to the chosen best_C, select the one
+    # that maximises the Nu-C-F angle (backside attack directionality)
+    best_X = None
+    max_ang = -1.0
+    for c, x in valid_cx_pairs:
+        if c == best_C:
+            ang = calculate_angle(best_O.pos, best_C.pos, x.pos)
+            if ang > max_ang:
+                max_ang = ang
+                best_X = x
+
+    if not best_X: return 0.0, 999.0, 0, None, None, None
     
     # Derives the final structured Geometric Result (Vector Angle)
     angle = calculate_angle(best_O.pos, best_C.pos, best_X.pos)
@@ -3143,7 +3156,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 else:
                     data["product_inhibition_penalty"] = 0.0
 
-                data["Likelihood_Degrader_Score"] = round(max(0, min(100, likelihood)), 2)
+                data["ActiveSite_Conservation_Score"] = round(max(0, min(100, likelihood)), 2)
 
             if r3u_cif and r3u_cif.exists() and r3u_map:
                 _r3u = analyse_candidate_structure(cif_path, r3u_cif, r3u_map)
@@ -3154,13 +3167,13 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 data["r3u_Mechanistic_Fingerprint_Score"] = _r3u.get("Mechanistic_Fingerprint_Score", 0.0)
                 data["r3u_Halide_Stabilisation"]          = _r3u.get("Halide_Stabilisation", False)
                 data["r3u_Carboxylate_Clamp"]             = _r3u.get("Carboxylate_Clamp", False)
-                data["r3u_Likelihood_Degrader_Score"]     = round(max(0.0, 0.25 * _r3u_ident + 0.75 * _r3u_geo), 2)
+                data["r3u_ActiveSite_Conservation_Score"]     = round(max(0.0, 0.25 * _r3u_ident + 0.75 * _r3u_geo), 2)
             else:
                 data["r3u_Active_Site_RMSD"]              = 99.0
                 data["r3u_Mechanistic_Fingerprint_Score"] = 0.0
                 data["r3u_Halide_Stabilisation"]          = False
                 data["r3u_Carboxylate_Clamp"]             = False
-                data["r3u_Likelihood_Degrader_Score"]     = 0.0
+                data["r3u_ActiveSite_Conservation_Score"]     = 0.0
 
             if preserved_fields:
                 for _pf_k, _pf_v in preserved_fields.items():
@@ -3276,7 +3289,7 @@ CSV_COLUMN_ORDER = [
     "status", "completed_at", "elapsed_seconds",
     # --- Primary degrader scores ---
     "degrader_tier", "is_degrader",
-    "Likelihood_Degrader_Score", "Mechanistic_Fingerprint_Score",
+    "ActiveSite_Conservation_Score", "Mechanistic_Fingerprint_Score",
     # --- Confidence scores ---
     "confidence_score", "iptm", "ptm", "ligand_iptm", "protein_iptm",
     "mean_plddt", "cross_interface_pae_mean",
@@ -4099,7 +4112,7 @@ def main():
                     _rmsd = _deha4_mfp_res.get("Active_Site_RMSD", 99.0)
                     ctrl_results[_lig_name]["Active_Site_RMSD"] = _rmsd
                     _geo = 0.0 if _rmsd >= 99.0 else 100.0 / (1.0 + _rmsd)
-                    ctrl_results[_lig_name]["Likelihood_Degrader_Score"] = round(25.0 + 0.75 * _geo, 2)
+                    ctrl_results[_lig_name]["ActiveSite_Conservation_Score"] = round(25.0 + 0.75 * _geo, 2)
             except Exception as _mfp_err:
                 console_info(f"  [Warning] DeHa4 MFP retroactive computation failed for {_lig_name}: {_mfp_err}")
 
@@ -4240,7 +4253,7 @@ def main():
             _row("Base Distance (HIS)",        "dist_Base",                     fmt="{:.2f}", unit=" Å")
             _row("Acid Distance (ASP)",        "dist_Acid",                     fmt="{:.2f}", unit=" Å")
             _row("Mechanistic Fingerprint",    "Mechanistic_Fingerprint_Score", fmt="{:.2f}", unit="")
-            _row("Likelihood Degrader Score",  "Likelihood_Degrader_Score",     fmt="{:.2f}", unit="%")
+            _row("Active Site Conservation Score",  "ActiveSite_Conservation_Score",     fmt="{:.2f}", unit="%")
             _row("Boltz-2 Confidence",         "confidence_score",              fmt="{:.4f}", unit="")
             console_info(f"  {'─'*_tot}")
 
@@ -5165,7 +5178,7 @@ def main():
             fill_dict["r3u_Mechanistic_Fingerprint_Score"] = 0.0
             fill_dict["r3u_Halide_Stabilisation"]          = False
             fill_dict["r3u_Carboxylate_Clamp"]             = False
-            fill_dict["r3u_Likelihood_Degrader_Score"]     = 0.0
+            fill_dict["r3u_ActiveSite_Conservation_Score"]     = 0.0
 
             df = df.fillna(fill_dict)
             df.rename(columns=COLUMN_RENAMING_MAP, inplace=True)
@@ -5223,7 +5236,7 @@ def main():
             bind_col = "Binding_Probability" if "Binding_Probability" in df_rank.columns else "Binding_Probability_Score"
             if bind_col not in df_rank.columns: df_rank[bind_col] = 0.0
             
-            for c in ["Likelihood_Degrader_Score", "Mechanistic_Fingerprint_Score"]:
+            for c in ["ActiveSite_Conservation_Score", "Mechanistic_Fingerprint_Score"]:
                 if c not in df_rank.columns: df_rank[c] = 0.0
             if 'degrader_tier' not in df_rank.columns: df_rank['degrader_tier'] = 'Decoy'
 
@@ -5240,7 +5253,7 @@ def main():
             df_rank['tier_val'] = df_rank['degrader_tier'].map(tier_map).fillna(0)
 
             df_rank = df_rank.sort_values(
-                by=["tier_val", "Mechanistic_Fingerprint_Score", "Likelihood_Degrader_Score",
+                by=["tier_val", "Mechanistic_Fingerprint_Score", "ActiveSite_Conservation_Score",
                     "sn2_score_norm", bind_col],
                 ascending=[False, False, False, False, False]
             )
@@ -5248,7 +5261,7 @@ def main():
             df_rank['Ranking_Score_Calc'] = (
                 "Tier:"  + df_rank['degrader_tier'].astype(str)
                 + " | Mech:" + df_rank['Mechanistic_Fingerprint_Score'].map('{:.2f}'.format)
-                + " | Like:" + df_rank['Likelihood_Degrader_Score'].map('{:.2f}'.format)
+                + " | Like:" + df_rank['ActiveSite_Conservation_Score'].map('{:.2f}'.format)
             )
 
             cols_to_drop = ['tier_val', 'sn2_score_norm']

@@ -655,7 +655,7 @@ class CFG:
         "Protein_Name": ["Protein_Name", "protein", "protein_id"],
         "Ligand_Name":  ["Ligand_Name",  "ligand",  "Ligand"],
         "Tier":         ["degrader_tier", "Degrader_Tier", "Tier"],
-        "Score":        ["Binding_Probability", "Likelihood_Degrader_Score", "binding_likelihood_computed"]
+        "Score":        ["Binding_Probability", "ActiveSite_Conservation_Score", "binding_likelihood_computed"]
     })
 
     # ═════════════════════════════════════════════════════════════════════════════
@@ -754,7 +754,7 @@ class CFG:
     COL_SN2:      str = "sn2_attack_angle"
     COL_NUC_DIST: str = "NAC_dist_Nuc"
     COL_MECH_S:   str = "Mechanistic_Fingerprint_Score"
-    COL_LIKE_S:   str = "Likelihood_Degrader_Score"
+    COL_LIKE_S:   str = "ActiveSite_Conservation_Score"
     COL_ALN_G:    str = "Alignment_Grade"
 
     # ── § 17.2  Visual Plotting Properties ──────────────────────────────────

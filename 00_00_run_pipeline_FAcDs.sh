@@ -197,14 +197,17 @@ fi
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/pipeline_$(date +%Y%m%d_%H%M%S).log"
 
-# Redirect all stdout+stderr through a single tee — one write to log, one to terminal.
-exec > >(tee >(sed 's/\x1B\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]//g' >> "$LOG_FILE")) 2>&1
-
-# Trap: restore systemd-oomd on any exit, and kill the keepalive
-trap 'kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
-      sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
-      sudo systemctl start systemd-oomd 2>/dev/null || true
-      true' EXIT
+# ── Background / foreground selection ─────────────────────────────────────────
+# Foreground (default): live output streamed to terminal + log via tee.
+# Background: detach the run, write to the log only, and return the shell so the
+#             terminal can be closed. Steps 07-08 sudo calls rely on the NOPASSWD
+#             sudoers entries, so the detached (tty-less) process still works.
+_BG_MODE=0
+echo ""
+read -r -p "  Run unattended in background (detach; log only)? [y/N]: " _bg_choice </dev/tty || _bg_choice=""
+case "${_bg_choice^^}" in
+    Y|YES) _BG_MODE=1 ;;
+esac
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -324,6 +327,16 @@ fi
 
 PIPELINE_START=$SECONDS
 
+# ── Pipeline body ─────────────────────────────────────────────────────────────
+# Wrapped in a function so it can run either in the foreground (output tee'd to
+# terminal + log) or detached in the background (output to log only). The trap is
+# registered here so cleanup fires in whichever context actually runs the body.
+_run_all_steps() {
+trap 'kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+      sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
+      sudo systemctl start systemd-oomd 2>/dev/null || true
+      true' EXIT
+
 # ── Header ────────────────────────────────────────────────────────────────────
 
 _tee "$_sep"
@@ -429,3 +442,28 @@ _tee "  Run ID  : ${RUN_ID}"
 _tee "  Full log: ${LOG_FILE}"
 
 _print_timing_table
+}
+
+# ── Dispatch: foreground (tee to terminal + log) or background (detached) ──────
+_ANSI_STRIP='s/\x1B\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]//g'
+if [[ "$_BG_MODE" -eq 1 ]]; then
+    # Detach: log-only output, stdin from /dev/null, removed from the job table
+    # so closing the terminal (SIGHUP) does not kill the run. 'set -m' puts the
+    # subshell in its own process group (PGID == PID) so every step + child can
+    # be killed together with a single negative-PID signal.
+    set -m
+    ( _run_all_steps ) > >(sed "$_ANSI_STRIP" >> "$LOG_FILE") 2>&1 </dev/null &
+    _BG_PID=$!
+    set +m
+    disown 2>/dev/null || true
+    echo ""
+    echo "  Pipeline detached — PID ${_BG_PID}. Safe to close this terminal."
+    echo "  Monitor:  tail -f ${LOG_FILE}"
+    echo "  Stop it :  kill -- -${_BG_PID}      # kills the run and its current step"
+    echo ""
+    exit 0
+else
+    # Foreground: original behaviour — one write to log (ANSI-stripped), one to terminal.
+    exec > >(tee >(sed "$_ANSI_STRIP" >> "$LOG_FILE")) 2>&1
+    _run_all_steps
+fi
