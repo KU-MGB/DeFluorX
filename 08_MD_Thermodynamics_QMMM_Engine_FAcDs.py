@@ -206,6 +206,34 @@ except ImportError:
 import importlib.util as _ilu
 
 
+class LazyTrajectory:
+    """Memory-efficient lazy trajectory wrapper that concatenates multiple segment paths
+    without loading all frames or segment contents in memory at once.
+    """
+    def __init__(self, trj_paths):
+        self.trj_paths = list(trj_paths)
+        self._readers = [traj.read_traj(str(p)) for p in self.trj_paths]
+        self._lengths = [len(r) for r in self._readers]
+        self._total_frames = sum(self._lengths)
+
+    def __len__(self):
+        return self._total_frames
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            raise NotImplementedError("Slices not supported")
+        curr = idx
+        if curr < 0:
+            curr += self._total_frames
+        if curr < 0 or curr >= self._total_frames:
+            raise IndexError(f"Index {idx} out of range")
+        for r, l in zip(self._readers, self._lengths):
+            if curr < l:
+                return r[curr]
+            curr -= l
+        raise IndexError(f"Index {idx} out of range")
+
+
 def _load_module(name: str, path: Path):
     """Load a Python file as a module regardless of its filename."""
     if not path.exists():
@@ -1401,7 +1429,7 @@ def generate_qsite_inputs(maegz_path: Path, job_name: str,
     # His277, His155, and protonated Asp134 are neutral (0), contributing no additional charge.
 
     # Coordinate scan: Nu–C distance from NAC start → product.
-    # Start = CFG.QSITE_SCAN_START (3.5 Å, the strict NAC distance).
+    # Start = CFG.QSITE_SCAN_START (3.5 Å, the pre-reaction approach distance).
     # Step  = CFG.QSITE_SCAN_STEP  (−0.1 Å per point).
     # Steps = CFG.QSITE_SCAN_NSTEPS (23 points → 3.5 → 1.3 Å; 3.5 + −0.1×22 = 1.3).
     _scan_start  = CFG.QSITE_SCAN_START
@@ -1547,16 +1575,10 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     cms_path = _cms_flat[-1]   # final stage CMS (highest segment number)
     msys_model, cms_model = topo.read_cms(str(cms_path))
 
-    if len(_trj_flat) == 1:
-        tr = traj.read_traj(str(_trj_flat[0]))
-    else:
-        # Multi-segment restart: concatenate all trajectory segments in order
-        _seg_frames: list = []
-        for _seg_trj in _trj_flat:
-            _seg_frames.extend(traj.read_traj(str(_seg_trj)))
-        tr = _seg_frames
+    tr = LazyTrajectory(_trj_flat)
+    if len(_trj_flat) > 1:
         console_info(f"      [+] Multi-segment trajectory: {len(_trj_flat)} segments → "
-                     f"{len(tr):,} total frames")
+                     f"{len(tr):,} total frames (lazy)")
 
     # ── WaterMap spatial sites (maegz) — flexible naming discovery ───────────
     _wm_root = work_dir / "WaterMaps"
@@ -1737,27 +1759,27 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     def _iter_frames():
         """Yield (fi, f_idx, pos, box, frame_t) one frame at a time.
 
-        Loads _CHUNK_SIZE frames into a temporary array, yields them all, then
-        frees the array before moving to the next chunk.  This keeps peak memory
-        bounded to a single chunk rather than the full trajectory.
+        Loads _CHUNK_SIZE frames using a fresh local LazyTrajectory wrapper,
+        yields them all, and then deletes the wrapper to free cached coordinate memory.
         """
         for _ci in range(_n_chunks):
             _cs = _ci * _CHUNK_SIZE
             _ce = min(_cs + _CHUNK_SIZE, _nf)
             _cz = _ce - _cs
+            _local_tr = LazyTrajectory(_trj_flat)
             _cpos = np.empty((_cz, _n_pre, 3), dtype=np.float64)
             _cbox = [None] * _cz
             _ctim = [0.0]  * _cz
             for _li in range(_cz):
                 _fx    = _stride_list[_cs + _li]
-                _frame = tr[_fx]
+                _frame = _local_tr[_fx]
                 _cpos[_li] = _frame.pos(_preload_list)
                 _cbox[_li] = _frame.box  if hasattr(_frame, 'box')  else None
                 _ctim[_li] = (_frame.time if hasattr(_frame, 'time')
                                else t_start + _fx * sim_span / n_tr)
             for _li in range(_cz):
                 yield _cs + _li, _stride_list[_cs + _li], _cpos[_li], _cbox[_li], _ctim[_li]
-            del _cpos, _cbox, _ctim
+            del _cpos, _cbox, _ctim, _local_tr
             _elapsed_c = time.time() - _t_loop
             _done_c    = _ce
             _rate_c    = _done_c / _elapsed_c if _elapsed_c > 1e-6 else 0.0

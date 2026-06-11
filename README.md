@@ -170,7 +170,7 @@ Boltz-2 confidence metrics (ipTM, pLDDT, cross-PAE) assess structural plausibili
 
 A candidate that binds PFOA with high affinity but presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr217 aromatic basket to stabilise the departing fluoride, is **classified as non-degrader regardless of its Boltz-2 confidence score**. High-affinity PFAS binders are not FAcDs.
 
-**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide — high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-base electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the linear trajectory that minimises orbital overlap with the adjacent C–F σ* in the transition state.
+**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide — high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-base electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
 
 ---
 

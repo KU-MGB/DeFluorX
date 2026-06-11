@@ -294,7 +294,10 @@ _print_timing_table() {
     for i in "${!STEP_NAMES[@]}"; do
         local t="${STEP_TIMES[$i]}"
         local st="${STEP_STATUS[$i]}"
-        _tee "  │ $(printf '%-58s │ %10s │ %-8s' "${STEP_NAMES[$i]}" "$(_fmt_elapsed $t)" "$st") │"
+        local name="${STEP_NAMES[$i]}"
+        name="${name//—/-}"
+        name="${name//–/-}"
+        _tee "  │ $(printf '%-58s │ %10s │ %-8s' "$name" "$(_fmt_elapsed $t)" "$st") │"
         total=$(( total + t ))
     done
     _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
