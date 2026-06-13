@@ -17,7 +17,7 @@ Date   : 10 June 2026 <───────────────────
   Writes        : Nothing.
   Upstream      : None (root module — must load before all others).
   Downstream    : 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
-                  04_Phylogeny_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
+                  04_Dendrogram_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
                   06_Top-N_Extraction_FAcDs.py,
                   08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
 ───────────────────────────────────────────────────────────────────────────────
@@ -215,6 +215,26 @@ class CFG:
     # SECTION 4 ── INTERACTION GEOMETRY THRESHOLDS  (Step 02)
     # All distances are heavy-atom unless labelled (HA = H-to-acceptor).
     # ═════════════════════════════════════════════════════════════════════════════
+
+
+    # ── § 4.x  Spatial Validation Thresholds (Step 02/08) ───────────────────
+    CF_DIST_TOLERANCE: float       = 2.2    # Å (C-F) clash distance tolerance
+    CLASH_DIST_TOLERANCE: float    = 2.5    # Å generic clash distance
+    QC_MIN_DIST_5: float           = 5.0    # Å
+    QC_MIN_DIST_4: float           = 4.0    # Å
+    QC_RMSD_SQ_SUM: float          = 25.0   # RMSD squared
+    TAIL_CLASH_RATIO: float        = 0.15   # Max allowed clash ratio
+    TRUST_SCORE_EXCELLENT: float   = 2.0    # Å Trust score limit 1
+    TRUST_SCORE_ACCEPTABLE: float  = 3.0    # Å Trust score limit 2
+    SOLVENT_SPHERE_RADIUS: float   = 20.0   # Å MD solvent sphere
+    BOLTZ_THREADS: int             = 4      # Default thread limit
+    PFAS_ORDER: list = field(default_factory=lambda: [
+        "25_TFA", "26_Fluoroacetate", "27_Difluoroacetate", "7_PFBA", "8_PFPeA",
+        "6_PFHxA", "13_PFHpA", "1_PFOA", "4_PFNA", "10_PFDA", "12_PFUnDA",
+        "11_PFDoDA", "14_PFTrDA", "17_PFTeDA", "18_PFHxDA", "19_PFODA",
+        "5_PFBS", "9_PFPeS", "3_PFHxS", "15_PFHpS", "2_PFOS", "16_PFDS",
+        "20_GenX", "21_ADONA", "24_C6O4", "22_6-2-FTOH", "23_8-2-FTOH",
+    ])
 
     # ── § 4.1  Hydrogen bonds ─────────────────────────────────────────────
     # Jeffrey (1997): D···A ≤ 3.5 Å; Baker & Hubbard (1984): H···A ≤ 2.8 Å
@@ -611,7 +631,10 @@ class CFG:
     # SECTION 13 ── PROCESSING PARAMETERS
     # ═════════════════════════════════════════════════════════════════════════════
 
-    # ── § 13.1  File I/O & batching (Step 05) ────────────────────────────
+    @property
+    def GLOBAL_MAX_WORKERS(self) -> int:
+        import multiprocessing
+        return max(1, multiprocessing.cpu_count() - self.PREP_CPU_RESERVE)
     PROC_BATCH_SIZE: int         = 2000   # max futures submitted at once — caps peak memory
     PROC_HEADER_CHECK_LINES: int =   30   # lines to scan when reading a PDB header tag
 

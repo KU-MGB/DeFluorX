@@ -30,7 +30,7 @@ Date   : 10 June 2026 <───────────────────
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
-                    - <Name>_QSite_SN2.inp         (QM/MM scan input)
+                    - <Name>_QSite_SN2.in         (QM/MM scan input)
                   <Run>/8_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
   Upstream      : 07_SID_Post_Processing_FAcDs.py → produces *_SID-out.eaf consumed here
                   06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
@@ -806,7 +806,10 @@ def format_job_label(job_name: str, rank: int) -> str:
     clean = job_name.replace("desmond_md_job_", "").replace("_Prepared", "").replace("_CONTROL", "")
     clean = re.sub(r"^Rank_\d+_", "", clean)
     parts = [p for p in clean.split('_') if p]
-    if len(parts) >= 3:
+    if len(parts) >= 5:
+        prot = "_".join(parts[2:-2])
+        lig = parts[-1]
+    elif len(parts) >= 3:
         prot = parts[1]; lig = parts[-1]
     elif len(parts) == 2:
         prot = parts[0]; lig = parts[1]
@@ -1034,8 +1037,8 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
         csv_path = next(out_dir.glob(f"**/{row['Job_Name']}_NAC_Data.csv"), None)
         if csv_path and csv_path.exists():
             df_job = pd.read_csv(csv_path)
-            df_job['Job']  = format_job_label(row['Job_Name'], row['Dynamic_Rank'])
-            df_job['Rank'] = row['Dynamic_Rank']
+            df_job['Job']  = format_job_label(row['Job_Name'], row['Scientific_Rank'])
+            df_job['Rank'] = row['Scientific_Rank']
             all_data.append(df_job)
 
     if not all_data:
@@ -1044,7 +1047,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     
     # Consistent colour map based on ascending Dynamic_Rank
     sorted_df = df_master.sort_values('Dynamic_Rank', ascending=True)
-    sorted_labels = [format_job_label(row['Job_Name'], row['Dynamic_Rank']) for _, row in sorted_df.iterrows()]
+    sorted_labels = [format_job_label(row['Job_Name'], row['Scientific_Rank']) for _, row in sorted_df.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
 
     # Vectorised piecewise distance transformation function
@@ -1158,7 +1161,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     df_plot = df_master.sort_values('Dynamic_Rank', ascending=True).copy()
 
     # Consistent colour map based on ascending Dynamic_Rank (tab20)
-    sorted_labels = [format_job_label(r['Job_Name'], r['Dynamic_Rank']) for _, r in df_plot.iterrows()]
+    sorted_labels = [format_job_label(r['Job_Name'], r['Scientific_Rank']) for _, r in df_plot.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
 
     n_rows  = len(df_plot)
@@ -1166,14 +1169,14 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     fig_h   = max(4.0, n_rows * row_h + 1.8)
     fig, (ax, ax_ann) = plt.subplots(
         1, 2, figsize=(15, fig_h),
-        gridspec_kw={'width_ratios': [3, 1], 'wspace': 0.04})
+        gridspec_kw={'width_ratios': [2.8, 1], 'wspace': 0.01})
 
     bar_h       = 0.72
     y_positions = list(range(n_rows))
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y = y_positions[i]
-        job_label = format_job_label(row['Job_Name'], row['Dynamic_Rank'])
+        job_label = format_job_label(row['Job_Name'], row['Scientific_Rank'])
         rank_color = job_colour_map.get(job_label, '#475569')
 
         pocket = float(row.get('Pocket_Retention_Pct', 0.0) or 0.0)
@@ -1191,16 +1194,16 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         bg_edge = to_rgba(rank_color, alpha=0.60)
         ax.barh(y, 100.0, height=bar_h, color=bg_face, edgecolor=bg_edge, linewidth=1.2, zorder=1)
 
-        # Plot the 4 parallel sub-bars inside the track with progressive opacities of the rank color
+        # Plot the 4 parallel sub-bars with distinct functional colours
         sub_bars = [
-            (pocket,        to_rgba(rank_color, alpha=0.35), -0.21, '*'),
-            (triad_total,   to_rgba(rank_color, alpha=0.55), -0.07, '**'),
-            (relaxed_total, to_rgba(rank_color, alpha=0.75),  0.07, '***'),
-            (strict_total,  to_rgba(rank_color, alpha=1.0),   0.21, '****')
+            (pocket,        '#94A3B8', -0.21),
+            (triad_total,   '#FBBF24', -0.07),
+            (relaxed_total, '#60A5FA',  0.07),
+            (strict_total,  '#10B981',   0.21)
         ]
         
         sub_bar_h = 0.13
-        for val, col, offset, star in sub_bars:
+        for val, col, offset in sub_bars:
             if val > 1e-4:
                 ax.barh(y + offset, val, height=sub_bar_h, color=col, edgecolor='none', zorder=2)
                 # Value label (in solid black)
@@ -1217,16 +1220,12 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
                 ax.text(0.5, y + offset, "0.0%",
                         ha='left', va='center', fontsize=6.5, fontweight='bold',
                         color='black', zorder=4)
-            
-            # Place the category identifier star(s) after the 100% mark (e.g. at x = 103.0) in black colour
-            ax.text(103.0, y + offset, star, ha='left', va='center',
-                    fontsize=7, fontweight='bold', color='black', zorder=4)
 
     ax.set_yticks(y_positions)
     ax.set_yticklabels(
-        [format_job_label(r['Job_Name'], r['Dynamic_Rank']) for _, r in df_plot.iterrows()],
+        [format_job_label(r['Job_Name'], r['Scientific_Rank']) for _, r in df_plot.iterrows()],
         fontsize=10.5, fontweight='bold')
-    ax.set_xlim(0, 112)
+    ax.set_xlim(0, 105)
     ax.set_ylim(-0.65, n_rows - 0.35)
     ax.invert_yaxis()
     ax.set_xlabel("Percentage of Simulation Time (%)", fontweight='bold', fontsize=11)
@@ -1249,48 +1248,66 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     ax_ann.axvline(0.0, color='#CBD5E1', linewidth=0.8)
 
     hdr_y = -0.45
-    ax_ann.text(0.20, hdr_y, 'WM ΔG\n(kcal/mol)', ha='center', va='center',
-                 fontsize=8, fontweight='bold', color='#334155')
-    ax_ann.text(0.55, hdr_y, 'min d_NAC\n(Å)',     ha='center', va='center',
-                 fontsize=8, fontweight='bold', color='#334155')
-    ax_ann.text(0.87, hdr_y, 'DT\n(n)',            ha='center', va='center',
-                 fontsize=8, fontweight='bold', color='#334155')
+    ax_ann.text(0.10, hdr_y, 'WM ΔG\n(kcal/mol)', ha='center', va='center',
+                 fontsize=6.5, fontweight='bold', color='#334155')
+    ax_ann.text(0.30, hdr_y, 'WM_N\n(stable)',     ha='center', va='center',
+                 fontsize=6.5, fontweight='bold', color='#334155')
+    ax_ann.text(0.50, hdr_y, 'min d_NAC\n(Å)',     ha='center', va='center',
+                 fontsize=6.5, fontweight='bold', color='#334155')
+    ax_ann.text(0.72, hdr_y, 'avg a_NAC\n(°)',     ha='center', va='center',
+                 fontsize=6.5, fontweight='bold', color='#334155')
+    ax_ann.text(0.92, hdr_y, 'DT\n(n)',            ha='center', va='center',
+                 fontsize=6.5, fontweight='bold', color='#334155')
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y    = y_positions[i]
         wm   = row.get('WM_Mean_dG',        float('nan'))
+        wmn  = row.get('WM_N_Stable',       float('nan'))
         dist = row.get('MD_Min_NAC_Dist_A',  float('nan'))
+        ang  = row.get('MD_Avg_NAC_Angle_Deg', float('nan'))
         dt   = row.get('Dream_Team_Mapped',  0)
 
         try:    wm_str   = f'{float(wm):.2f}'
         except: wm_str   = 'N/A'
+        try:    wmn_str  = str(int(float(wmn)))
+        except: wmn_str  = 'N/A'
         try:    dist_str = f'{float(dist):.2f}'
         except: dist_str = 'N/A'
+        try:    ang_str  = f'{float(ang):.1f}°'
+        except: ang_str  = 'N/A'
         try:    dt_str   = str(int(float(dt or 0)))
         except: dt_str   = '–'
 
         dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < 3.8)
                     else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 5.0)
                     else '#DC2626'))
+        
+        ang_col = ('#15803D' if (ang_str != 'N/A' and float(ang) > 145.0)
+                   else ('#EA580C' if (ang_str != 'N/A' and float(ang) > 120.0)
+                   else '#DC2626'))
 
-        ax_ann.text(0.20, y, wm_str,   ha='center', va='center', fontsize=9,
+        ax_ann.text(0.10, y, wm_str,   ha='center', va='center', fontsize=8,
                     color='#334155', fontweight='bold')
-        ax_ann.text(0.55, y, dist_str, ha='center', va='center', fontsize=9,
+        ax_ann.text(0.30, y, wmn_str,  ha='center', va='center', fontsize=8,
+                    color='#0284C7', fontweight='bold')
+        ax_ann.text(0.50, y, dist_str, ha='center', va='center', fontsize=8,
                     color=dist_col,  fontweight='bold')
-        ax_ann.text(0.87, y, dt_str,   ha='center', va='center', fontsize=9,
+        ax_ann.text(0.72, y, ang_str,  ha='center', va='center', fontsize=8,
+                    color=ang_col,   fontweight='bold')
+        ax_ann.text(0.92, y, dt_str,   ha='center', va='center', fontsize=8,
                     color='#6D28D9', fontweight='bold')
+
 
     # ── Legend ────────────────────────────────────────────────────────────────
     from matplotlib.patches import Patch
-    c_neutral = '#475569'
     legend_handles = [
-        Patch(facecolor=to_rgba(c_neutral, alpha=0.35), edgecolor='none', label='Pocket Retention (*)'),
-        Patch(facecolor=to_rgba(c_neutral, alpha=0.55), edgecolor='none', label='Triad Integrity (Total) (**)'),
-        Patch(facecolor=to_rgba(c_neutral, alpha=0.75), edgecolor='none', label='Relaxed Catalysis (Total) (***)'),
-        Patch(facecolor=to_rgba(c_neutral, alpha=1.0),  edgecolor='none', label='Strict Catalysis (Total) (****)'),
+        Patch(facecolor='#94A3B8', edgecolor='none', label='Pocket Retention'),
+        Patch(facecolor='#FBBF24', edgecolor='none', label='Triad Integrity (Total)'),
+        Patch(facecolor='#60A5FA', edgecolor='none', label='Relaxed Catalysis (Total)'),
+        Patch(facecolor='#10B981', edgecolor='none', label='Strict Catalysis (Total)'),
     ]
     ax.legend(handles=legend_handles, loc='lower left', bbox_to_anchor=(0.0, 1.02),
-              frameon=True, framealpha=0.95, edgecolor='#CBD5E1', fontsize=7.5, ncol=4, columnspacing=0.8)
+              frameon=True, framealpha=0.95, edgecolor='#94A3B8', fontsize=7.5, ncol=4, columnspacing=0.8)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -1428,7 +1445,7 @@ def generate_qsite_inputs(maegz_path: Path, job_name: str,
     transfer half of the SN2 mechanism onto the MM force field, making full-
     mechanism reaction-coordinate scans chemically meaningless.
     """
-    inp_path   = maegz_path.parent / f"{job_name}_QSite_SN2.inp"
+    inp_path   = maegz_path.parent / f"{job_name}_QSite_SN2.in"
     qm_regions = ['  QM_REGION asl="res.ptype LIG"']
     if nuc_num:
         qm_regions.append(f'  QM_REGION asl="res.num {nuc_num}  AND sidechain"')
@@ -1492,12 +1509,12 @@ def generate_qsite_inputs(maegz_path: Path, job_name: str,
 # Number of threads used for parallel DTR frame pre-loading.
 # Each thread opens its own read_traj instance (thread-safe).
 # For HDD: keep at 2-4 (seek contention); for SSD: use cpu_count().
-_N_PRELOAD_WORKERS = min(4, max(1, (os.cpu_count() or 4) - 2))
+_N_PRELOAD_WORKERS = min(4, CFG.GLOBAL_MAX_WORKERS)
 
 # Solvent sphere radius (Å) around the nucleophile for water blockade.
 # Only solvent within this radius at frame 0 is tracked — reduces per-frame
 # work from ~10,000 solvent atoms to ~100-200 while covering the SN2 runway.
-_SOL_SPHERE_RADIUS = 20.0
+_SOL_SPHERE_RADIUS = getattr(CFG, "SOLVENT_SPHERE_RADIUS", 20.0)
 
 
 def _load_frame_chunk(chunk: list, trj_path: str, atom_indices: list,
@@ -2260,7 +2277,7 @@ def main():
     master_stats   = []
     _stats_lock    = threading.Lock()
     _rank_list     = _auto_rank_list if _auto_rank_list else list(range(1, args.ranks + 1))
-    _n_workers     = args.workers if args.workers is not None else min(len(_rank_list), max(1, (os.cpu_count() or 4) - 2))
+    _n_workers     = args.workers if args.workers is not None else min(len(_rank_list), CFG.GLOBAL_MAX_WORKERS)
 
     console_info(f"  Effective Stride : {args.stride}{' (all frames)' if args.stride == 1 else f' (1-in-{args.stride})'}")
     console_separator()
@@ -2457,7 +2474,7 @@ def main():
                 colour = "green" if viab >= CFG.VIABILITY_HIGH_THRESHOLD else ("yellow" if viab >= CFG.VIABILITY_PASS_THRESHOLD else "red")
                 tbl.add_row(
                     str(int(row["Dynamic_Rank"])),
-                    format_job_label(row["Job_Name"], row["Dynamic_Rank"]),
+                    format_job_label(row["Job_Name"], row["Scientific_Rank"]),
                     f"{row.get('Pocket_Retention_Pct', 0):.1f}",
                     f"[{colour}]{viab:.1f}[/{colour}]",
                     f"{row.get('Strict_Viability_Pct', 0):.1f}",

@@ -13,7 +13,7 @@ Date   : 10 June 2026 <───────────────────
   Module        : 00_03_Project_Utils_FAcDs.py
   Role          : Shared utility library; no executable entry point.
   Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
-                  04_Phylogeny_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
+                  04_Dendrogram_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
                   06_Top-N_Extraction_FAcDs.py,
                   08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
   Reads         : (none — pure utility module)

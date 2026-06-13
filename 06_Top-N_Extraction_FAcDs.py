@@ -867,7 +867,7 @@ def _run_pymol(pdb_path, fig_root, log_dir, base_name, lig_name, lig_num, has_f,
 
     # Cap PyMOL ray-tracing threads: 2 PyMOL workers run concurrently, so each
     # should use at most (cpu-2)//2 ray threads to stay within the cpu-2 budget.
-    _max_rt = max(1, (multiprocessing.cpu_count() - 2) // 2)
+    _max_rt = max(1, CFG.GLOBAL_MAX_WORKERS // 2)
 
     script = [
         "reinitialize",
@@ -1652,7 +1652,7 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
 
     sw_mgr    = SoftwareManager()
     sw_status = sw_mgr.check_all()
-    workers   = max(1, multiprocessing.cpu_count() - 2)
+    workers   = CFG.GLOBAL_MAX_WORKERS
 
     _fig_log(f"\n{ConsoleColours.BOLD}Multi-Engine Figure Generation Pipeline (Concurrency: {workers}){ConsoleColours.ENDC}")
 

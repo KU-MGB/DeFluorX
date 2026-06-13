@@ -114,8 +114,8 @@ SCHRODINGER_PATH = Path(os.environ["SCHRODINGER"])
 PREPWIZARD_BIN   = SCHRODINGER_PATH / "utilities" / "prepwizard"
 
 # Concurrency: reserve 2 cores for OS/desktop stability
-_CPU_TOTAL    = os.cpu_count() or 4
-MAX_PREP_JOBS = max(1, _CPU_TOTAL - CFG.PREP_CPU_RESERVE)
+
+MAX_PREP_JOBS = CFG.GLOBAL_MAX_WORKERS
 
 # Formatting
 SEPARATOR          = "-" * 80
@@ -537,7 +537,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg) -
     except Exception:
         return {"offset": 0}
 
-    def find_type_near(ref, expected_types, window=20):
+    def find_type_near(ref, expected_types, window=CFG.SMART_LOCK_RESNUM_WINDOW):
         if resnum_to_resname.get(ref) in expected_types:
             return ref, 0
         for delta in range(1, window + 1):
@@ -624,7 +624,7 @@ def main():
     console_info(f"Outputs      : {analysis_dir}")
     console_info(f"Schrödinger  : {SCHRODINGER_PATH}")
     console_info(f"PrepWizard   : {'Found' if PREPWIZARD_BIN.exists() else 'NOT FOUND — Step 5.2 will be skipped'}")
-    console_info(f"Parallel Jobs: {MAX_PREP_JOBS} ({_CPU_TOTAL} total cores − 2 reserved)")
+    console_info(f"Parallel Jobs: {MAX_PREP_JOBS} (Globally managed by CFG)")
     console_separator()
     
     # -------------------------------------------------------------------------------

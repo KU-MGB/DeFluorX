@@ -1117,10 +1117,10 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         length += 1
         if c1 == c2 and c1 != '-': n_match += 1
             
-    pid = (n_match / length) * 100 if length > 0 else 0
+    identity_pct = (n_match / length) * 100 if length > 0 else 0
     
     stats = {
-        "align_score": aln.score, "identity_pct": round(pid, 2),
+        "align_score": aln.score, "identity_pct": round(identity_pct, 2),
         "target_sequence": target_seq, "seq_length": len(target_seq),
         "gap_count": seq2_str.count("-")
     }
@@ -1694,11 +1694,11 @@ def perform_control_calibration(control_cif: Path, ref_pdb: Path,
                     p = sup.transform.apply(atom.pos)
                     atom.pos = gemmi.Position(p.x, p.y, p.z)
 
-        if trust_score <= 2.0:
+        if trust_score <= CFG.TRUST_SCORE_EXCELLENT:
             verdict_colour = ConsoleColours.OKGREEN
             verdict_label  = "High Confidence"
             verdict_note   = "RMSD < 2.0 Å — Structures are reliable."
-        elif trust_score <= 3.0:
+        elif trust_score <= CFG.TRUST_SCORE_ACCEPTABLE:
             verdict_colour = ConsoleColours.WARNING
             verdict_label  = "Moderate Confidence"
             verdict_note   = "RMSD 2.0–3.0 Å — Marginal deviation detected."
@@ -2204,11 +2204,11 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                             mapped_res = res
                 
                 # Accrue internal RMSD values representing core active site geometry
-                if min_d < 5.0:
+                if min_d < CFG.QC_MIN_DIST_5:
                     rmsd_sq_sum += (min_d * min_d)
                     count += 1
                 else:
-                    rmsd_sq_sum += 25.0
+                    rmsd_sq_sum += CFG.QC_RMSD_SQ_SUM
                     count += 1
                     
                 # Validate exact spatial chemical identity requirements
@@ -2284,7 +2284,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None) -> Tup
     if not valid_cx_pairs:
         for c in lig_carbons:
             for x in lig_halogens:
-                if c.pos.dist(x.pos) < 2.2:
+                if c.pos.dist(x.pos) < CFG.CF_DIST_TOLERANCE:
                     valid_cx_pairs.append((c, x))
 
     if not valid_cx_pairs: return 0.0, 999.0, 0, None, None, None
@@ -2329,7 +2329,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None) -> Tup
     teflon_clashes = 0
     for f in lig_halogens:
         if f != best_X and f.element.name == "F":
-            if best_O.pos.dist(f.pos) <= 2.5:
+            if best_O.pos.dist(f.pos) <= CFG.CLASH_DIST_TOLERANCE:
                 teflon_clashes += 1
 
     # ── Auxiliary (NON-GATING) reference geometries — see utils docstrings ─────
@@ -2571,7 +2571,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         # Sub-Step 7.2.3: ULTRA-STRICT FAcD HIERARCHY LOGIC
         # -------------------------------------------------------------------------------
         
-        if tail_clash_ratio > 0.15:
+        if tail_clash_ratio > CFG.TAIL_CLASH_RATIO:
             tier, meaning, is_degrader = CFG.TIER_DECOY, f"Failed: Severe Mainchain Structural Clashing (>{int(tail_clash_ratio*100)}% of tail atoms).", False
         
         elif terminal_f_count >= 3:
@@ -2951,9 +2951,9 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         env["CXX"] = shutil.which("g++") or "g++"
         env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / "triton_cache")
         # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH
-        env["OMP_NUM_THREADS"] = "4"
-        env["MKL_NUM_THREADS"] = "4"
-        env["OPENBLAS_NUM_THREADS"] = "4"
+        env["OMP_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        env["MKL_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        env["OPENBLAS_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
         
         cmd = [
             BOLTZ_BIN, "predict", str(job["yaml"]), "--out_dir", str(job_dir),
@@ -4260,14 +4260,18 @@ def main():
         # Tier hierarchy dynamically loaded.
         # SN2 reactions require a nucleophilic attack angle close to 180° (back-side attack).
         _TIER_RANK = CFG.TIER_RANK
-        console_info(f"\n  {'─'*_tot}")
-        console_info(f"  {'Substrate Selectivity Ranking':^{_tot}}")
-        console_info(f"  {'Rank criteria: (1) Degrader Tier  (2) Mechanistic Fingerprint  (3) SN2 angle → 180°':^{_tot}}")
-        console_info(f"  {'─'*_tot}")
-        for _prot_s, _res_dict, _ts_dict in [
+        _w = 118
+        console_info(f"\n  ┌{'─'*_w}┐")
+        console_info(f"  │{'Substrate Selectivity Ranking':^{_w}}│")
+        console_info(f"  │{'Rank criteria: (1) Degrader Tier  (2) Mechanistic Fingerprint  (3) SN2 angle → 180°':^{_w}}│")
+        console_info(f"  ├{'─'*_w}┤")
+        for idx, (_prot_s, _res_dict, _ts_dict) in enumerate([
             ("3R3U  (Rhodopseudomonas palustris FAcD — crystal sequence)",  r3u_results,  r3u_trust_scores),
             ("DeHa4 (Input enzyme sequence — primary screening target)",    ctrl_results, ctrl_trust_scores),
-        ]:
+        ]):
+            if idx > 0:
+                console_info(f"  ├{'─'*_w}┤")
+            console_info(f"  │  {_prot_s:<{_w-2}}│")
             ranked = sorted(
                 [(ln, _res_dict.get(ln, {})) for ln, _ in CTRL_LIGANDS],
                 key=lambda x: (
@@ -4277,7 +4281,6 @@ def main():
                 ),
                 reverse=True
             )
-            console_info(f"\n  {_prot_s}:")
             for _rank, (ln, d) in enumerate(ranked, 1):
                 mfp   = float(d.get("Mechanistic_Fingerprint_Score") or 0.0)
                 sn2   = float(d.get("sn2_attack_angle") or 0.0)
@@ -4292,12 +4295,13 @@ def main():
                         tag = f"  ← Top-ranked by MFP/SN2  [Tier: {_tier} — no degradation activity confirmed]"
                 else:
                     tag = ""
-                console_info(
-                    f"    Rank {_rank}  │  {_lig_short:<20}  │  Tier: {_tier:<9}  │  "
-                    f"MFP: {mfp:.2f}  │  SN2: {sn2:.1f}°  │  {ts_s}{tag}"
+                row_content = (
+                    f"    Rank {_rank}  │  {_lig_short:<18}  │  Tier: {_tier:<12}  │  "
+                    f"MFP: {mfp:.2f}  │  SN2: {sn2:>5.1f}°  │  {ts_s}{tag}"
                 )
-        console_info(f"  {'─'*_tot}")
-        console_info(f"  {'MFP=0.00: no mechanistic fingerprint match.  MFP=0.75: partial match (3/4 checks).  MFP=1.00: full match.':^{_tot}}")
+                console_info(f"  │{row_content:<{_w}}│")
+        console_info(f"  └{'─'*_w}┘")
+        console_info(f"  {'MFP=0.00: no mechanistic fingerprint match.  MFP=0.75: partial match (3/4 checks).  MFP=1.00: full match.':^{_w+4}}")
         console_info(f"  {'─'*_tot}\n")
 
         r3u_csv_path = None  # reference data shown in tables above; no separate file written
@@ -4356,28 +4360,29 @@ def main():
     msa_missing = len(pending_proteins) - msa_ready
 
     console_info("")
-    _ww = 62
-    console_info(f"  {'─'*_ww}")
-    console_info(f"  {'SYSTEM WORKLOAD SUMMARY':^{_ww}}")
-    console_info(f"  {'─'*_ww}")
-    console_info(f"  {'Total jobs scheduled':<44}  {len(tasks):>8,}")
-    console_info(f"  {'  Completed (Boltz-2 prediction + CPU analysis)':<44}  {completed_jobs:>8,}")
+    _w1, _w2 = 60, 14
+    _ww = _w1 + _w2 + 1
+    console_info(f"  ┌{'─'*_ww}┐")
+    console_info(f"  │{'SYSTEM WORKLOAD SUMMARY':^{_ww}}│")
+    console_info(f"  ├{'─'*_w1}┬{'─'*_w2}┤")
+    console_info(f"  │ {'Total jobs scheduled':<{_w1-2}} │ {len(tasks):>{_w2-2},} │")
+    console_info(f"  │ {'  Completed (Boltz-2 prediction + CPU analysis)':<{_w1-2}} │ {completed_jobs:>{_w2-2},} │")
     if resumed:
         # On resume: GPU predictions on disk but summary JSONs wiped for re-analysis.
         # Distinguish jobs with existing prediction dirs from those needing full GPU run.
         _dirs_with_pred = max(0, min(initial_folders_count - 6, pending_jobs))  # subtract 6 control dirs
         _need_gpu       = max(0, pending_jobs - _dirs_with_pred)
-        console_info(f"  {'  Pending — GPU prediction on disk, CPU re-analysis queued':<44}  {_dirs_with_pred:>8,}")
-        console_info(f"  {'  Pending — full GPU + CPU pipeline required':<44}  {_need_gpu:>8,}")
-        console_info(f"  {'  (Resume mode: analysis outputs wiped for re-scoring)':<44}")
+        console_info(f"  │ {'  Pending — GPU prediction on disk, CPU re-analysis queued':<{_w1-2}} │ {_dirs_with_pred:>{_w2-2},} │")
+        console_info(f"  │ {'  Pending — full GPU + CPU pipeline required':<{_w1-2}} │ {_need_gpu:>{_w2-2},} │")
+        console_info(f"  │ {'  (Resume mode: analysis outputs wiped for re-scoring)':<{_w1-2}} │ {'':>{_w2-2}} │")
     else:
-        console_info(f"  {'  Pending — awaiting GPU prediction + CPU analysis':<44}  {pending_jobs:>8,}")
-    console_info(f"  {'─'*_ww}")
-    console_info(f"  {'Unique proteins requiring processing':<44}  {len(pending_proteins):>8,}")
-    console_info(f"  {'MSA (ColabFold) ready':<44}  {msa_ready:>8,}")
-    console_info(f"  {'MSA still required (will download during run)':<44}  {msa_missing:>8,}")
-    console_info(f"  {'Orphaned job folders purged at startup':<44}  {removed_folders_count:>8,}")
-    console_info(f"  {'─'*_ww}")
+        console_info(f"  │ {'  Pending — awaiting GPU prediction + CPU analysis':<{_w1-2}} │ {pending_jobs:>{_w2-2},} │")
+    console_info(f"  ├{'─'*_w1}┼{'─'*_w2}┤")
+    console_info(f"  │ {'Unique proteins requiring processing':<{_w1-2}} │ {len(pending_proteins):>{_w2-2},} │")
+    console_info(f"  │ {'MSA (ColabFold) ready':<{_w1-2}} │ {msa_ready:>{_w2-2},} │")
+    console_info(f"  │ {'MSA still required (will download during run)':<{_w1-2}} │ {msa_missing:>{_w2-2},} │")
+    console_info(f"  │ {'Orphaned job folders purged at startup':<{_w1-2}} │ {removed_folders_count:>{_w2-2},} │")
+    console_info(f"  └{'─'*_w1}┴{'─'*_w2}┘")
     console_info("")
 
     if completed_jobs > 0:
@@ -4464,14 +4469,13 @@ def main():
         batch_out_dir.mkdir(exist_ok=True)
 
         env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = "0"
         env["CC"] = shutil.which("gcc") or "gcc"
         env["CXX"] = shutil.which("g++") or "g++"
         env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / "triton_cache")
         # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH
-        env["OMP_NUM_THREADS"] = "4"
-        env["MKL_NUM_THREADS"] = "4"
-        env["OPENBLAS_NUM_THREADS"] = "4"
+        env["OMP_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        env["MKL_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        env["OPENBLAS_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
         env["PYTHONWARNINGS"] = "ignore"
         env["PYTORCH_LIGHTNING_SUPPRESS_WARNINGS"] = "1"
         env["TF_CPP_MIN_LOG_LEVEL"] = "3"

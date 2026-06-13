@@ -403,8 +403,8 @@ fi
 run_step "03  Validation figures" \
     python 03_Validation_Figures_FAcDs.py "$RUN_ID"
 
-run_step "04  Phylogeny" \
-    python 04_Phylogeny_FAcDs.py "$RUN_ID"
+run_step "04  Dendrogram" \
+    python 04_Dendrogram_FAcDs.py "$RUN_ID"
 
 run_step "05  CIF/PDB preparation" \
     python 05_CIF-PDB_Preparation_FAcDs.py "$RUN_ID"

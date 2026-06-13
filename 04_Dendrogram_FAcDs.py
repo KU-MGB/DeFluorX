@@ -11,7 +11,7 @@ isolations.
 Scientific scope — read before citing
 ─────────────────────────────────────
 This is a fast sequence-similarity dendrogram for clustering and visualisation,
-NOT a substitution-model phylogeny. K-mer cosine + UPGMA assumes a constant
+NOT a substitution-model dendrogram. K-mer cosine + UPGMA assumes a constant
 evolutionary rate (ultrametricity) and applies no substitution model, no
 indel/back-mutation handling, and no branch-support estimation. Treat the tree as
 a similarity map of the screened candidates — do not draw evolutionary-rate or
@@ -24,17 +24,17 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 10 June 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 04_Phylogeny_FAcDs.py
+  Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
   Imports from  : 00_03_Project_Utils_FAcDs.py  (ConsoleColours)
   Reads         : <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
                   <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*.fasta
-  Writes        : <Run>/4_Phylogeny/01_Global_Master_Phylogeny.nwk
-                  <Run>/4_Phylogeny/02_Global_Master_Matrix_Data.csv
-                  <Run>/4_Phylogeny/03_Global_Master_Interactive_App.html
-                  <Run>/4_Phylogeny/04_Global_Master_Delivery_Suite.zip
-                  <Run>/4_Phylogeny/05_Tiers/<Tier>_*  (per-tier tree + HTML)
-                  <Run>/4_Phylogeny/00_Phylogeny_Log.txt
+  Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
+                  <Run>/4_Dendrogram/02_Global_Master_Matrix_Data.csv
+                  <Run>/4_Dendrogram/03_Global_Master_Interactive_App.html
+                  <Run>/4_Dendrogram/04_Global_Master_Delivery_Suite.zip
+                  <Run>/4_Dendrogram/05_Tiers/<Tier>_*  (per-tier tree + HTML)
+                  <Run>/4_Dendrogram/00_Dendrogram_Log.txt
   Upstream      : 03_Validation_Figures_FAcDs.py → writes 03_Final_Validated_Master.csv
   Downstream    : None (terminal analysis step)
 ───────────────────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ Date   : 10 June 2026 <───────────────────
 
 Usage:
     conda activate PFAS
-    python 04_Phylogeny_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
 ───────────────────────────────────────────────────────────────────────────────
 """
 
@@ -134,7 +134,7 @@ def console_separator() -> None:
 class ReportManager:
     """Manages simultaneous logging to console and file."""
     def __init__(self, out_dir: Path):
-        self.path = out_dir / "00_Phylogeny_Log.txt"
+        self.path = out_dir / "00_Dendrogram_Log.txt"
         with open(self.path, "w") as f:
             f.write("BOLTZ-2 PHYLOGENY PIPELINE REPORT\n")
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -227,7 +227,7 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     """Writes Newick, CSV, interactive HTML app, and bundles them into a ZIP delivery suite."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    nwk_path  = out_dir / f"01_{prefix}_Phylogeny.nwk"
+    nwk_path  = out_dir / f"01_{prefix}_Dendrogram.tree"
     csv_path  = out_dir / f"02_{prefix}_Matrix_Data.csv"
     html_path = out_dir / f"03_{prefix}_Interactive_App.html"
     zip_path  = out_dir / f"04_{prefix}_Delivery_Suite.zip"
@@ -269,13 +269,13 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
 
 
 # -------------------------------------------------------------------------------
-# Step 4.2: Phylogeny Engine
+# Step 4.2: Dendrogram Engine
 # -------------------------------------------------------------------------------
 
 def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
                           out_dir: Path, reporter: ReportManager):
     """Drives global and per-tier phylogenetic tree generation."""
-    with open(reporter.path, "a") as f: f.write("\n[LOG] Phylogeny Engine Started\n")
+    with open(reporter.path, "a") as f: f.write("\n[LOG] Dendrogram Engine Started\n")
     console_separator()
 
     input_dir = next(
@@ -305,9 +305,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         fasta_dict[clean_key] = str(r.seq)
 
     # -------------------------------------------------------------------------------
-    # Phase 1: Global Master Phylogeny
+    # Phase 1: Global Master Dendrogram
     # -------------------------------------------------------------------------------
-    with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Master Phylogeny\n")
+    with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Master Dendrogram\n")
 
     valid_csv_prots = set(df[prot_col].astype(str).unique())
     global_seqs = {
@@ -316,7 +316,7 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     }
 
     if not global_seqs:
-        reporter.log("  ! Name mismatch between FASTA and CSV — no sequences matched. Skipping global phylogeny.")
+        reporter.log("  ! Name mismatch between FASTA and CSV — no sequences matched. Skipping global dendrogram.")
         return
 
     nwk_str, labels = generate_upgma_newick(global_seqs)
@@ -356,7 +356,7 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     else:
         reporter.log("  ! Skipping Phase 2: No tier column found in CSV.")
 
-    with open(reporter.path, "a") as f: f.write("\n[LOG] ✔ Phylogeny Pipeline Completed Successfully\n")
+    with open(reporter.path, "a") as f: f.write("\n[LOG] ✔ Dendrogram Pipeline Completed Successfully\n")
 
 
 # ===============================================================================
@@ -386,18 +386,18 @@ def main():
         run_path = runs[-1]
 
     _utils_mod.print_script_banner(
-        "04_Phylogeny_FAcDs.py",
+        "04_Dendrogram_FAcDs.py",
         "Phylogenetic Tree Construction  ·  Sequence Clustering  ·  Taxonomic Analysis",
     )
     print(f"  Run Name : {run_path.name}", flush=True)
 
     prod_dir = run_path / "1_Boltz2_Production"
     val_dir  = run_path / "3_Validation_Figures"
-    out_dir  = run_path / "4_Phylogeny"
+    out_dir  = run_path / "4_Dendrogram"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = _setup_logging(out_dir / "00_Phylogeny_Log.txt", "04_Phylogeny")
+    logger = _setup_logging(out_dir / "00_Dendrogram_Log.txt", "04_Dendrogram")
 
     # Locate validated master CSV produced by 03_Validation_Figures_FAcDs.py
     csv_candidates = (
@@ -419,7 +419,7 @@ def main():
     try:
         generate_phylogenies(df, prod_dir, out_dir, reporter)
     except Exception as e:
-        print(f"\n[CRITICAL ERROR] Phylogeny Pipeline Failed: {e}")
+        print(f"\n[CRITICAL ERROR] Dendrogram Pipeline Failed: {e}")
         traceback.print_exc()
         sys.exit(1)
 
@@ -433,7 +433,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PFAS Degradation Phylogeny Explorer</title>
+    <title>PFAS Degradation Dendrogram Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -490,7 +490,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             <div class="p-6 border-b border-slate-200 bg-white shrink-0">
                 <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-700 whitespace-nowrap">
                     <i class="ph ph-tree-structure text-2xl"></i>
-                    Phylogeny Explorer
+                    Dendrogram Explorer
                 </h1>
             </div>
 
@@ -500,8 +500,8 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     <div class="space-y-4 pt-2 border-slate-200">
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Load Data</h2>
                         <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Upload Tree (.nwk) OR Sequences (.fasta)</label>
-                            <input type="file" id="tree-upload" accept=".nwk,.tree,.txt,.fasta,.fa,.faa" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Upload Tree (.tree) OR Sequences (.fasta)</label>
+                            <input type="file" id="tree-upload" accept=".tree,.tree,.txt,.fasta,.fa,.faa" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Upload Boltz Master CSV</label>
@@ -604,7 +604,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             <p class="text-sm font-semibold text-slate-600" id="loading-text">Processing Data...</p>
         </div>
 
-        <svg id="phylogeny-svg" class="w-full h-full cursor-move"></svg>
+        <svg id="dendrogram-svg" class="w-full h-full cursor-move"></svg>
     </div>
 
     <!-- Tooltip & Color Palette -->
@@ -646,7 +646,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
         let historyStack = [];
 
-        const svg = d3.select("#phylogeny-svg");
+        const svg = d3.select("#dendrogram-svg");
         const container = document.getElementById('canvas-container');
         const tooltip = d3.select("#tooltip");
         const colorPalette = document.getElementById('color-palette');
@@ -736,7 +736,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
         function createHighResCanvas() {
             return new Promise((resolve) => {
-                const svgNode = document.getElementById("phylogeny-svg");
+                const svgNode = document.getElementById("dendrogram-svg");
                 const gNode = svgNode.querySelector("g");
                 const originalViewBox = svgNode.getAttribute("viewBox");
                 const originalTransform = gNode.getAttribute("transform");
@@ -1570,7 +1570,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         window.onload = function() {
             if (window.EMBEDDED_STATE) {
                 document.getElementById('upload-section').style.display = 'none';
-                state.rawNwk = window.EMBEDDED_STATE.nwk; state.treeData = parseNewick(state.rawNwk);
+                state.rawNwk = window.EMBEDDED_STATE.tree; state.treeData = parseNewick(state.rawNwk);
                 state.rawCsv = window.EMBEDDED_STATE.csv;
                 
                 Papa.parse(state.rawCsv, {
@@ -1589,5 +1589,5 @@ if __name__ == "__main__":
     import time as _time
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "04_Phylogeny_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "04_Dendrogram_FAcDs.py")
 

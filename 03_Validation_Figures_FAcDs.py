@@ -24,7 +24,7 @@ Date   : 10 June 2026 <───────────────────
                   <Run>/3_Validation_Figures/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/01_Analysis_Log.txt
   Upstream      : 02_Production_FAcDs.py → writes the master ranked CSV consumed here
-  Downstream    : 04_Phylogeny_FAcDs.py  → reads 03_Final_Validated_Master.csv
+  Downstream    : 04_Dendrogram_FAcDs.py  → reads 03_Final_Validated_Master.csv
 ───────────────────────────────────────────────────────────────────────────────
 
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -58,7 +58,7 @@ Purpose:
     3. Rescues "Hidden Gems" that AI missed but Physics loves.
     4. Generates a complete suite of high-resolution scientific figures.
 
-    Phylogenetic analysis is handled by the downstream 04_Phylogeny_FAcDs.py script.
+    Phylogenetic analysis is handled by the downstream 04_Dendrogram_FAcDs.py script.
 
 -------------------------------------------------------------------------------
 Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
@@ -5622,7 +5622,7 @@ def write_figure_descriptions(out_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Boltz-2 Master Validation & Phylogeny Framework",
+        description="Boltz-2 Master Validation & Dendrogram Framework",
         usage="%(prog)s <run_folder>  (e.g. Boltz-2_Run_20260309T085406Z)"
     )
     parser.add_argument("run", help="Name of the Boltz-2 run folder (e.g. Boltz-2_Run_20260309T085406Z)")
