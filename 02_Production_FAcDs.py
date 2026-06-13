@@ -66,38 +66,41 @@ EXPANDED TIER DEFINITIONS (Mechanism-First Classification - ULTRA STRICT):
 The pipeline assigns a "Degrader Tier" based on strictly tightened catalytic requirements 
 derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mechanics.
 
-    1. Perfect_A (Elite Catalysis - High Priority for MD)
+    1. Tier_1A (Elite Catalysis - High Priority for MD)
        • Mechanistic Fingerprint >= 0.9 (Near-complete anchor set required — GATE)
        • (Active Site Conservation is reported downstream for ranking; it is NOT a tier gate.)
        • Nucleophile (Asp110): <= 3.0 A (Tight pre-reactive ground-state gate)
        • Base (His277):        <= 3.5 A (Optimal Proton Transfer Gate)
        • Acid (Asp134):        <= 4.5 A (Strict Internal Gate)
-       • Attack Angle:         >= 175°  (Near-Perfect Linear Trajectory)
+       • Attack Angle:         >= 175°  (Near-Ideal Linear Trajectory)
        • Stabilisation:        REQUIRED (Trp156/Tyr217 or Dynamic Polar Residue)
 
-    2. Perfect_B (High Functional)
-       • Mechanistic Fingerprint >= 0.7   (CFG.TIER_MECH_MIN['Perfect_B'])
-       • Nucleophile (Asp110): <= 3.2 A   (CFG.TIER_NUC_DIST['Perfect_B'])
+    2. Tier_1B (High Functional)
+       • Mechanistic Fingerprint >= 0.7   
+       • Nucleophile (Asp110): <= 3.2 A   
        • Base/Acid:            <= 4.0 A / 5.0 A
        • Attack Angle:         >= 165°
        • Stabilisation:        REQUIRED
 
-    3. Best_A (Functional Geometry)
-       • Nucleophile (Asp110): <= 3.2 A   (CFG.TIER_NUC_DIST['Best_A'])
+    3. Tier_2A (Functional Geometry)
+       • Nucleophile (Asp110): <= 3.2 A   
        • Base/Acid:            <= 5.0 A / 6.0 A
        • Attack Angle:         >= 155°
        • Stabilisation:        Optional
 
-    4. Best_B (Marginal Functionality)
+    4. Tier_2B (Marginal Functionality)
        • Nucleophile (Asp110): <= 3.8 A
        • Attack Angle:         >= 145°
 
-    5. Good (Non-Catalytic Binding)
+    5. Tier_3 (Non-Catalytic Binding)
        • Nucleophile (Asp110): <= 4.2 A
        • Ligand is in the pocket, but orientation fails SN2 requirements.
 
-    6. Poor / None
+    6. Tier_4 (Poor)
        • Nucleophile (Asp110): > 4.2 A (Docking Failure)
+
+    7. Tier_5_Decoy (Invalid/Decoy)
+       • Missing sequences or severe structural clashes.
 
 -------------------------------------------------------------------------------
 RANKING LOGIC (Sorting the Master CSV):
@@ -105,8 +108,8 @@ The final `06_Ranked.csv` file uses a hierarchical scoring system to prioritise
 catalytic mechanism over generic binding affinity.
 
     1. Tier Value (Primary Sort Key):
-       Candidates are strictly grouped by Tier. 'Perfect_A' always ranks above 'Perfect_B'.
-       (Perfect_A=50 > Perfect_B=40 > Best_A=30 > Best_B=20 > Good=10)
+       Candidates are strictly grouped by Tier. The top tier always ranks above the subsequent tier.
+       (Tier_1A=50 > Tier_1B=40 > Tier_2A=30 > Tier_2B=20 > Tier_3=10)
 
     2. Mechanistic Fingerprint (Secondary Sort Key):
        Within the same Tier, candidates are ranked by their physical integrity score.
@@ -485,7 +488,7 @@ COLUMNS_TO_DROP = [
 DEFAULT_METRICS = {
     "status": "Unknown",
     "elapsed_seconds": 0.0,
-    "degrader_tier": "Decoy",
+    "degrader_tier": CFG.TIER_DECOY,
     "is_degrader": False,
     "ActiveSite_Conservation_Score": 0.0,
     "Mechanistic_Fingerprint_Score": 0.0,
@@ -2239,7 +2242,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
 def generate_rich_justification(tier: str, meaning: str, constraint: str, aligned_ok: bool, identity: float) -> str:
     """Generates a detailed justification string to objectively explain algorithmic decisions within the final report."""
     if not aligned_ok:
-        if "Perfect" in tier or "Best" in tier:
+        if tier in CFG.TIER_HIGH_QUALITY:
             return f"Caution: Documented low Sequence Identity ({identity}%) but Excellent Active Site Geometry. Identifies a likely remote homologue."
         else:
             return f"Failure: Overall sequence alignment proved unreliable (ID {identity}% < 25%). Structure is likely invalid."
@@ -2426,7 +2429,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         
         if not lig_coords: 
                     results.update({
-                        "catalytic_dist_A": 999.0, "degrader_tier": "Decoy", "is_degrader": False,
+                        "catalytic_dist_A": 999.0, "degrader_tier": CFG.TIER_DECOY, "is_degrader": False,
                         "residues_within_6A": "None", "constraint_check": "Ligand absence indicated",
                         "scientific_meaning": "No validated ligand atoms identified within structure.",
                         "Interaction_Density_Norm": 0.0, "Interaction_Density_Calc": "0.00",
@@ -2562,54 +2565,54 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         
         results["mainchain_clash_ratio"] = round(tail_clash_ratio, 3)
 
-        tier, is_degrader, meaning, constraint = "Decoy", False, "No significant documented interactions.", "Fail"
+        tier, is_degrader, meaning, constraint = CFG.TIER_DECOY, False, "No significant documented interactions.", "Fail"
         
         # -------------------------------------------------------------------------------
         # Sub-Step 7.2.3: ULTRA-STRICT FAcD HIERARCHY LOGIC
         # -------------------------------------------------------------------------------
         
         if tail_clash_ratio > 0.15:
-            tier, meaning, is_degrader = "Decoy", f"Failed: Severe Mainchain Structural Clashing (>{int(tail_clash_ratio*100)}% of tail atoms).", False
+            tier, meaning, is_degrader = CFG.TIER_DECOY, f"Failed: Severe Mainchain Structural Clashing (>{int(tail_clash_ratio*100)}% of tail atoms).", False
         
         elif terminal_f_count >= 3:
             # Allow short-chain substrates (≤2 C, e.g. TFA: CF3-COO⁻) — FAcD attacks alpha-CF3
             # Block only when CF3 is a terminus within a longer fluorocarbon chain
             _mol_c_count = sum(1 for _a in rd_mol.GetAtoms() if _a.GetSymbol() == "C") if rd_mol else 0
             if _mol_c_count > 2:
-                tier, meaning, is_degrader = "Decoy", "Failed: Electronic Dead-End Identified (Targeted Carbon is functionally a Terminal CF3 group).", False
+                tier, meaning, is_degrader = CFG.TIER_DECOY, "Failed: Electronic Dead-End Identified (Targeted Carbon is functionally a Terminal CF3 group).", False
 
-        # Tier 1: Perfect_A (Elite High-Performance pool)
+        # Tier 1 (Elite High-Performance pool)
         # Pruned efficiently for near-ideal geometry to reduce secondary molecular dynamics workload.
-        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.T_PA] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.T_PA] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.T_PA] and angle >= CFG.TIER_ANGLE_MIN[CFG.T_PA] and mech_score >= CFG.TIER_MECH_MIN[CFG.T_PA]:
-            tier, meaning, is_degrader = CFG.T_PA, "Elite-Grade Analysis: Near-perfect SN2 Trajectory demonstrating absolute anchor integrity.", True
+        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_TOP] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_TOP] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_TOP] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_TOP] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_TOP]:
+            tier, meaning, is_degrader = CFG.TIER_TOP, "Elite-Grade Analysis: Near-perfect SN2 Trajectory demonstrating absolute anchor integrity.", True
         
-        # Tier 2: Perfect_B (High Functional grade)
-        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.T_PB] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.T_PB] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.T_PB] and angle >= CFG.TIER_ANGLE_MIN[CFG.T_PB] and mech_score >= CFG.TIER_MECH_MIN[CFG.T_PB]:
-            tier, meaning, is_degrader = CFG.T_PB, "Crystal-Grade Analysis: Ideal ground-state contact sequence identified with strong anchoring profiles.", True
+        # Tier 2 (High Functional grade)
+        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[1]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[1]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[1]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[1]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[1]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[1], "Crystal-Grade Analysis: Ideal ground-state contact sequence identified with strong anchoring profiles.", True
         
-        # Tier 3: Best_A (Functional grade)
-        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.T_BA] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.T_BA] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.T_BA] and angle >= CFG.TIER_ANGLE_MIN[CFG.T_BA] and mech_score >= CFG.TIER_MECH_MIN[CFG.T_BA]:
-            tier, meaning, is_degrader = CFG.T_BA, "Functional Analysis: Nucleophile located in tight contact, accompanied by acceptable target attack angles.", True
+        # Tier 3 (Functional grade)
+        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[2], "Functional Analysis: Nucleophile located in tight contact, accompanied by acceptable target attack angles.", True
         
-        # Tier 4: Best_B (Marginal grade)
-        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.T_BB] and angle >= CFG.TIER_ANGLE_MIN[CFG.T_BB]:
-            tier, meaning, is_degrader = CFG.T_BB, "Marginal Analysis: Nucleophile indicates loose contact profiles paired with a marginal target attack angle.", True
+        # Tier 4 (Marginal grade)
+        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[3]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[3], "Marginal Analysis: Nucleophile indicates loose contact profiles paired with a marginal target attack angle.", True
         
-        # Tier 5: Good (Loose/Non-functional grade)
-        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.T_GD]:
-            tier, meaning, is_degrader = CFG.T_GD, "Loose Alignment: Routine proximity searches identified the ligand, but orientation metrics strictly fail defined SN2 physical requirements.", False
+        # Tier 5 (Loose/Non-functional grade)
+        elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[4]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[4], "Loose Alignment: Routine proximity searches identified the ligand, but orientation metrics strictly fail defined SN2 physical requirements.", False
         
-        # Tier 6: Poor/Decoy
+        # Tier_4/Tier_5_Decoy
         else:
-            tier = CFG.T_PR if d_nuc <= CFG.TIER_NUC_DIST[CFG.T_PR] else CFG.T_DY
+            tier = CFG.TIER_POOR if d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_POOR] else CFG.TIER_DECOY
             meaning = "Failed Analysis: Positional distance or established angle physically violates FAcD catalytic structural requirements."
             is_degrader = False
             
-        # Derive constraint_check from the assigned tier — Perfect/Best tiers pass,
+        # Derive constraint_check from the assigned tier — Tier_1/Tier_2 tiers pass,
         # Good is a partial pass (in pocket but wrong orientation), Poor/None fail.
         if is_degrader:
             constraint = "Pass"
-        elif tier == CFG.T_GD:
+        elif tier == CFG.TIER_ORDER[4]:
             constraint = "Partial"
         else:
             constraint = "Fail"
@@ -2641,7 +2644,7 @@ def analyse_model_task(args: Tuple[Path, Dict[str, int], Path, str, str]) -> Tup
 
 def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smiles_str: str = "") -> Tuple[str, Dict]:
     """Iterates iteratively through all predicted Boltz models, strictly selecting the candidate demonstrating optimal geometry."""
-    best_model, best_rank_score, best_meta = "model_0", -100.0, {"degrader_tier": "Decoy"}
+    best_model, best_rank_score, best_meta = "model_0", -100.0, {"degrader_tier": CFG.TIER_DECOY}
     TIER_SCORES = CFG.TIER_SCORE
     json_files = sorted(list(br_dir.rglob("confidence_*.json")))
     tasks = []
@@ -2656,7 +2659,7 @@ def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smile
     if tasks:
         results = [analyse_model_task(t) for t in tasks]
         for m_name, geom, conf in results:
-            total_rank = (TIER_SCORES.get(geom.get("degrader_tier", "Decoy"), 0) * 10) + conf
+            total_rank = (TIER_SCORES.get(geom.get("degrader_tier", CFG.TIER_DECOY), 0) * 10) + conf
             if total_rank > best_rank_score:
                 best_rank_score = total_rank
                 best_model = m_name
@@ -3118,7 +3121,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
             scientific_meaning = data.get("scientific_meaning", "No significant documented interactions.")
             constraint = data.get("constraint_check", "Fail")
-            tier = data.get("degrader_tier", "Decoy")
+            tier = data.get("degrader_tier", CFG.TIER_DECOY)
             
             base_justification = generate_rich_justification(
                 tier=tier, meaning=scientific_meaning, constraint=constraint,
@@ -4254,7 +4257,7 @@ def main():
 
         # --- Ligand selectivity ranking ---
         # Rank by: (1) Degrader Tier, (2) Mechanistic Fingerprint Score, (3) SN2 angle proximity to 180°.
-        # Tier hierarchy: Perfect_A > Perfect_B > Best_A > Best_B > Good > Poor > Decoy.
+        # Tier hierarchy dynamically loaded.
         # SN2 reactions require a nucleophilic attack angle close to 180° (back-side attack).
         _TIER_RANK = CFG.TIER_RANK
         console_info(f"\n  {'─'*_tot}")
@@ -4268,7 +4271,7 @@ def main():
             ranked = sorted(
                 [(ln, _res_dict.get(ln, {})) for ln, _ in CTRL_LIGANDS],
                 key=lambda x: (
-                    _TIER_RANK.get(x[1].get("degrader_tier", "Decoy"), 0),
+                    _TIER_RANK.get(x[1].get("degrader_tier", CFG.TIER_DECOY), 0),
                     float(x[1].get("Mechanistic_Fingerprint_Score") or 0.0),
                     -abs(float(x[1].get("sn2_attack_angle") or 0.0) - 180.0),
                 ),
@@ -4278,12 +4281,12 @@ def main():
             for _rank, (ln, d) in enumerate(ranked, 1):
                 mfp   = float(d.get("Mechanistic_Fingerprint_Score") or 0.0)
                 sn2   = float(d.get("sn2_attack_angle") or 0.0)
-                _tier = d.get("degrader_tier", "Decoy")
+                _tier = d.get("degrader_tier", CFG.TIER_DECOY)
                 ts    = _ts_dict.get(ln)
                 ts_s  = f"Trust: {ts:.3f} Å" if ts is not None else "Trust: —"
                 _lig_short = ln.split("_", 1)[-1] if "_" in ln else ln
                 if _rank == 1:
-                    if _tier not in ("Decoy", "Error", "Poor", ""):
+                    if _tier not in (CFG.TIER_DECOY, "Error", CFG.TIER_POOR, ""):
                         tag = f"  ← Preferred substrate"
                     else:
                         tag = f"  ← Top-ranked by MFP/SN2  [Tier: {_tier} — no degradation activity confirmed]"
@@ -5233,7 +5236,7 @@ def main():
             
             for c in ["ActiveSite_Conservation_Score", "Mechanistic_Fingerprint_Score"]:
                 if c not in df_rank.columns: df_rank[c] = 0.0
-            if 'degrader_tier' not in df_rank.columns: df_rank['degrader_tier'] = 'Decoy'
+            if 'degrader_tier' not in df_rank.columns: df_rank['degrader_tier'] = CFG.TIER_DECOY
 
             # SN2 angle column may be named 'sn2_attack_angle' (pre-rename) or
             # 'SN2_Attack_Angle' (post-rename) depending on pipeline path.
@@ -5309,7 +5312,7 @@ def main():
     else: df_final = pd.DataFrame()
     
     if not df_final.empty and CFG.COL_TIER in df_final.columns:
-        tiers = Counter(df_final[CFG.COL_TIER].fillna(CFG.T_DY).tolist())
+        tiers = Counter(df_final[CFG.COL_TIER].fillna(CFG.TIER_DECOY).tolist())
     else:
         tiers = Counter()
     

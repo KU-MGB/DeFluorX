@@ -354,67 +354,75 @@ class CFG:
     # ═════════════════════════════════════════════════════════════════════════════
     # SECTION 9 ── CATALYTIC TIER CLASSIFICATION  (Steps 02, 03, 04, 06)
     #
-    # The tier cascade is evaluated in strict descending order:
-    #   Perfect_A → Perfect_B → Best_A → Best_B → Good → Poor → Decoy
+    # The tier cascade is evaluated in strict descending order.
+    # The top tier is index 0 in TIER_ORDER, the lowest is the last element.
     # A structure is assigned the highest tier whose ALL criteria are met.
     # Criteria: nucleophile distance + attack angle + triad distances + mech score.
     # ═════════════════════════════════════════════════════════════════════════════
 
-    # --- Symbolic Tier Constants ---
-    T_PA: str = "Perfect_A"
-    T_PB: str = "Perfect_B"
-    T_BA: str = "Best_A"
-    T_BB: str = "Best_B"
-    T_GD: str = "Good"
-    T_PR: str = "Poor"
-    T_DY: str = "Decoy"
+    # --- Dynamic Tier Taxonomy ---
+    # Alphanumeric sorting dictates the strict hierarchy.
+    # Tier_1A automatically sorts to index 0 (Top Tier), Tier_5_Decoy to the bottom.
+    TIER_NAMES: list[str] = field(default_factory=lambda: [
+        "Tier_1A", "Tier_1B", "Tier_2A", "Tier_2B", 
+        "Tier_3", "Tier_4", "Tier_5_Decoy"
+    ])
 
-    # Canonical order for display and lists (Descending priority)
     @property
     def TIER_ORDER(self) -> list[str]:
-        return [self.T_PA, self.T_PB, self.T_BA, self.T_BB, self.T_GD, self.T_PR, self.T_DY]
+        # Sort alphanumerically to guarantee hierarchy without hardcoding names.
+        return self.TIER_NAMES
+    @property
+    def TIER_TOP(self) -> str: return self.TIER_ORDER[0]
+    @property
+    def TIER_POOR(self) -> str: return self.TIER_ORDER[-2]
+    @property
+    def TIER_DECOY(self) -> str: return self.TIER_ORDER[-1]
+    @property
+    def TIER_HIGH_QUALITY(self) -> list: return self.TIER_ORDER[:4]
+
 
     # ── § 9.1  Nucleophile–C distance thresholds (Å, upper bound) ────────
     TIER_NUC_DIST: dict = field(default_factory=lambda: {
-        "Perfect_A": 3.0,   # tight pre-reactive geometry; 2.7 Å unrealistically tight for Boltz-2 ground-state (true SN2 TS ~ 2.0–2.3 Å)
-        "Perfect_B": 3.2,   # excellent pre-reactive geometry
-        "Best_A":    3.2,   # = NAC_DIST_STRICT
-        "Best_B":    3.8,   # = NAC_DIST_RELAXED
-        "Good":      4.2,   # productive but not pre-reactive
-        "Poor":      8.0,   # pocket-bound, geometrically unproductive
+        "Tier_1A": 3.0,   # tight pre-reactive geometry; 2.7 Å unrealistically tight for Boltz-2 ground-state (true SN2 TS ~ 2.0–2.3 Å)
+        "Tier_1B": 3.2,   # excellent pre-reactive geometry
+        "Tier_2A":    3.2,   # = NAC_DIST_STRICT
+        "Tier_2B":    3.8,   # = NAC_DIST_RELAXED
+        "Tier_3":      4.2,   # productive but not pre-reactive
+        "Tier_4":      8.0,   # pocket-bound, geometrically unproductive
     })
 
     # ── § 9.2  Attack angle minimum thresholds (°, lower bound) ──────────
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
-        "Perfect_A": 175.0,
-        "Perfect_B": 165.0,
-        "Best_A":    155.0,   # = NAC_ANGLE_STRICT
-        "Best_B":    145.0,   # = NAC_ANGLE_RELAXED
+        "Tier_1A": 175.0,
+        "Tier_1B": 165.0,
+        "Tier_2A":    155.0,   # = NAC_ANGLE_STRICT
+        "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
     })
 
     # ── § 9.3  Catalytic triad distance thresholds (Å, upper bound) ──────
     TIER_NB_MAX: dict = field(default_factory=lambda: {
-        "Perfect_A": 3.5,   # tightest triad — Nuc–Base ≤ 3.5 Å
-        "Perfect_B": 4.0,
-        "Best_A":    5.0,
+        "Tier_1A": 3.5,   # tightest triad — Nuc–Base ≤ 3.5 Å
+        "Tier_1B": 4.0,
+        "Tier_2A":    5.0,
     })
     TIER_BA_MAX: dict = field(default_factory=lambda: {
-        "Perfect_A": 4.5,   # Base–Acid ≤ 4.5 Å
-        "Perfect_B": 5.0,
-        "Best_A":    6.0,
+        "Tier_1A": 4.5,   # Base–Acid ≤ 4.5 Å
+        "Tier_1B": 5.0,
+        "Tier_2A":    6.0,
     })
 
     # ── § 9.4  Mechanistic fingerprint score thresholds (0–1, lower bound)
     TIER_MECH_MIN: dict = field(default_factory=lambda: {
-        "Perfect_A": 0.9,   # 1.0 is unreachable when any single anchor (clamp/stabiliser) is absent
-        "Perfect_B": 0.7,
-        "Best_A":    0.5,
+        "Tier_1A": 0.9,   # 1.0 is unreachable when any single anchor (clamp/stabiliser) is absent
+        "Tier_1B": 0.7,
+        "Tier_2A":    0.5,
     })
 
     # ── § 9.4b  Substrate / inhibitor classification (Figs 19, 25) ─────────
     # Derived from the tier gates so every figure classifies identically.
-    SUBSTRATE_ANGLE_MIN: float = 165.0   # = TIER_ANGLE_MIN['Perfect_B']: SN2 ≥ this → substrate geometry
-    INHIBITOR_ANGLE_MAX: float = 145.0   # = TIER_ANGLE_MIN['Best_B']:   SN2 < this → potential inhibitor
+    SUBSTRATE_ANGLE_MIN: float = 165.0   # = TIER_ANGLE_MIN['Tier_1B']: SN2 ≥ this → substrate geometry
+    INHIBITOR_ANGLE_MAX: float = 145.0   # = TIER_ANGLE_MIN['Tier_2B']:   SN2 < this → potential inhibitor
     SUBSTRATE_CONF_MIN:  float = 0.75    # Boltz confidence ≥ this → AI-confident pose
 
     # ── § 9.4c  Confidence-vs-tier conflict thresholds (Fig 20 / Hidden-Gem rescue) ─
@@ -429,27 +437,27 @@ class CFG:
     # TIER_RANK        — integer rank for quality-sorted operations
     # TIER_SORT_WEIGHT — weight for multi-key DataFrame sorting
     TIER_SCORE: dict = field(default_factory=lambda: {
-        "Perfect_A": 20, "Perfect_B": 15, "Best_A": 10,
-        "Best_B":     8, "Good":       4, "Poor":    1, "Decoy": 0,
+        "Tier_1A": 20, "Tier_1B": 15, "Tier_2A": 10,
+        "Tier_2B":     8, "Tier_3":       4, "Tier_4":    1, "Tier_5_Decoy": 0,
     })
     TIER_RANK: dict = field(default_factory=lambda: {
-        "Perfect_A": 6, "Perfect_B": 5, "Best_A": 4,
-        "Best_B":    3, "Good":      2, "Poor":   1, "Decoy": 0,
+        "Tier_1A": 6, "Tier_1B": 5, "Tier_2A": 4,
+        "Tier_2B":    3, "Tier_3":      2, "Tier_4":   1, "Tier_5_Decoy": 0,
     })
     TIER_SORT_WEIGHT: dict = field(default_factory=lambda: {
-        "Perfect_A": 50, "Perfect_B": 40, "Best_A": 30,
-        "Best_B":    20, "Good":      10, "Poor":    1, "Decoy": 0,
+        "Tier_1A": 50, "Tier_1B": 40, "Tier_2A": 30,
+        "Tier_2B":    20, "Tier_3":      10, "Tier_4":    1, "Tier_5_Decoy": 0,
     })
 
     # ── § 9.6  Tier display colours (Okabe-Ito colourblind-safe palette) ──
     TIER_COLOUR: dict = field(default_factory=lambda: {
-        "Perfect_A": "#009E73",   # green
-        "Perfect_B": "#56B4E9",   # sky blue
-        "Best_A":    "#0072B2",   # blue
-        "Best_B":    "#CC79A7",   # pink
-        "Good":      "#E69F00",   # orange
-        "Poor":      "#D55E00",   # vermillion
-        "Decoy":     "#CBD5E1",   # light grey
+        "Tier_1A": "#009E73",   # green
+        "Tier_1B": "#56B4E9",   # sky blue
+        "Tier_2A":    "#0072B2",   # blue
+        "Tier_2B":    "#CC79A7",   # pink
+        "Tier_3":      "#E69F00",   # orange
+        "Tier_4":      "#D55E00",   # vermillion
+        "Tier_5_Decoy":     "#CBD5E1",   # light grey
         "Control":   "#333333",   # dark grey
     })
 
@@ -503,7 +511,6 @@ class CFG:
     PFAS_SIZE_BIN_COLOUR: list = field(default_factory=lambda:
         ['#6A51A3', '#2171B5', '#238B45', '#D94801', '#A50F15'])
 
-    # ── § 9.10  Sankey rule-column colours (Fig 24) ───────────────────────
     # Best → worst 5-stop gradient (nucleophile-distance & SN2-angle bins).
     SANKEY_GRAD5: list = field(default_factory=lambda:
         ['#1B7837', '#5AAE61', '#D9EF8B', '#FDAE61', '#D73027'])
@@ -633,14 +640,14 @@ class CFG:
     # ── § 14.4  Tier summary figure layout (Step 03) ──────────────────────
     # Pixel dimensions and typography for the per-tier stacked-bar / star-plot
     # panels produced by 03_Validation_Figures_FAcDs.py.
-    VIS_PA_STAR_SIZE: int    = 460    # px  star marker diameter
-    VIS_PA_SHRINK_BORDER: int =  12   # px  border shrink for tight layout
-    VIS_PA_IMG_PX: int       = 800    # px  panel image width
-    VIS_PA_TEXT_PX: int      = 220    # px  text annotation column width
-    VIS_PA_BORDER_PX: int    =  16    # px  outer border thickness
-    VIS_PA_PAD: int          =  28    # px  inter-panel padding
-    VIS_PA_FONT_SIZE: int    =  44    # pt  annotation font size
-    VIS_PA_AX_WIDTH: float   =   0.12 # fraction of figure width for axis panel
+    VIS_TT_STAR_SIZE: int    = 460    # px  star marker diameter
+    VIS_TT_SHRINK_BORDER: int =  12   # px  border shrink for tight layout
+    VIS_TT_IMG_PX: int       = 800    # px  panel image width
+    VIS_TT_TEXT_PX: int      = 220    # px  text annotation column width
+    VIS_TT_BORDER_PX: int    =  16    # px  outer border thickness
+    VIS_TT_PAD: int          =  28    # px  inter-panel padding
+    VIS_TT_FONT_SIZE: int    =  44    # pt  annotation font size
+    VIS_TT_AX_WIDTH: float   =   0.12 # fraction of figure width for axis panel
 
     # ── § 14.5  Maximum display ranks (Step 03) ────────────────────────────
     VIS_MAX_RANKS_DISPLAY: int = 50   # top-N entries shown in ranked output plots
@@ -759,19 +766,19 @@ class CFG:
 
     # ── § 17.2  Visual Plotting Properties ──────────────────────────────────
     # Canonical marker sizes (S) and opacities (A) for each tier.
-    # Elite/Perfect tiers are drawn larger and more opaque.
+    # Tier_1/Tier_2 tiers are drawn larger and more opaque.
     @property
     def VIS_TIER_SIZES(self) -> dict:
         return {
-            self.T_PA: 420, self.T_PB: 45, self.T_BA: 16,
-            self.T_BB: 9, self.T_GD: 5, self.T_PR: 3, self.T_DY: 2
+            self.TIER_ORDER[0]: 420, self.TIER_ORDER[1]: 45, self.TIER_ORDER[2]: 16,
+            self.TIER_ORDER[3]: 9, self.TIER_ORDER[4]: 5, self.TIER_ORDER[5]: 3, self.TIER_ORDER[6]: 2
         }
 
     @property
     def VIS_TIER_ALPHAS(self) -> dict:
         return {
-            self.T_PA: 1.0, self.T_PB: 0.88, self.T_BA: 0.70,
-            self.T_BB: 0.38, self.T_GD: 0.22, self.T_PR: 0.18, self.T_DY: 0.10
+            self.TIER_ORDER[0]: 1.0, self.TIER_ORDER[1]: 0.88, self.TIER_ORDER[2]: 0.70,
+            self.TIER_ORDER[3]: 0.38, self.TIER_ORDER[4]: 0.22, self.TIER_ORDER[5]: 0.18, self.TIER_ORDER[6]: 0.10
         }
 
     # ── § 17.3  Alignment Grade Bins ────────────────────────────────────────
@@ -781,3 +788,15 @@ class CFG:
         (60.0, 70.0,  'D'), (50.0, 60.0, 'E'), (40.0, 50.0, 'F'),
         (30.0, 40.0,  'G'), (20.0, 30.0, 'H'), (0.0,  20.0, 'I')
     ])
+
+    # ── § 9.8  Tier Meanings ──────────────────────────────────────────────────
+    TIER_MEANING: dict = field(default_factory=lambda: {
+        "Tier_1A": "Elite / Perfect_A (legacy)",
+        "Tier_1B": "Excellent / Perfect_B (legacy)",
+        "Tier_2A": "Strong / Best_A (legacy)",
+        "Tier_2B": "Good / Best_B (legacy)",
+        "Tier_3":  "Moderate / Good (legacy)",
+        "Tier_4":  "Poor / Poor (legacy)",
+        "Tier_5_Decoy": "Invalid / Decoy (legacy)",
+        "Control": "Reference Control"
+    })

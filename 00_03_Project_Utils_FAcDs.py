@@ -788,7 +788,7 @@ def standardise_dataframe_tiers(df, cfg):
         return df
 
     # 1. Fill missing/None with Decoy
-    df[col] = df[col].fillna(cfg.T_DY).replace('None', cfg.T_DY)
+    df[col] = df[col].fillna(cfg.TIER_DECOY).replace('None', cfg.TIER_DECOY)
 
     # 2. Enforce Categorical Type with Config Order
     df[col] = pd.Categorical(df[col], categories=cfg.TIER_ORDER, ordered=True)

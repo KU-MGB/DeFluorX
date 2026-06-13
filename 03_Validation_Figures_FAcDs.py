@@ -74,7 +74,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • Figure_03_Tier_Grade_Distribution.png           <-- Tier × alignment grade cross-tabulation
     ── Part 2: AI Prediction Quality ──
     • Figure_04a_AI_Quality_Assessment.png            <-- Boltz confidence boxes + pTM/ipTM panel
-    • Figure_04b_PA_AI_Quality_Space.png              <-- Perfect_A pTM/ipTM density + thumbnails
+    • Figure_04b_TT_AI_Quality_Space.png              <-- {CFG.TIER_TOP} pTM/ipTM density + thumbnails
     • Figure_05_pTM_vs_ipTM_by_Tier.png              <-- pTM vs ipTM 2-D scatter by tier
     ── Part 3: Structural Validation ──
     • Figure_06_ActiveSite_RMSD_by_Tier.png          <-- Active-site RMSD vs reference control
@@ -85,17 +85,17 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • Figure_10_Mechanistic_Fingerprint_by_Tier.png   <-- Catalytic fingerprint score mean ± CI
     • Figure_11_SN2_Angle_by_Tier.png                 <-- SN2 attack angle ECDF by tier
     • Figure_12a_Mechanism_Geometry_Scatter.png       <-- SN2 angle vs nucleophile distance scatter
-    • Figure_12b_PA_Mechanistic_Quality_Space.png     <-- Perfect_A mechanistic density + thumbnails
+    • Figure_12b_TT_Mechanistic_Quality_Space.png     <-- {CFG.TIER_TOP} mechanistic density + thumbnails
     ── Part 5: Ligand Interactions ──
     • Figure_13a_Molecular_Interaction_Profile.png    <-- Bond type profile + fluorine engagement
-    • Figure_13b_PA_Interaction_Quality_Space.png     <-- Perfect_A interaction density + thumbnails
+    • Figure_13b_TT_Interaction_Quality_Space.png     <-- {CFG.TIER_TOP} interaction density + thumbnails
     • Figure_14_Fluorine_Engagement_by_Tier.png       <-- Fluorine engagement ratio box + trend line
     ── Part 6: Binding Energetics ──
     • Figure_15_Binding_Energetics.png                <-- Binding probability violin + product inhibition
     • Figure_16_Product_Inhibition_by_Tier.png        <-- Product inhibition penalty box + strip
     ── Part 7: Chemical Space ──
     • Figure_17a_Chemical_Space_Map.png               <-- UMAP chemical space manifold by tier
-    • Figure_17b_PA_Chemical_Space_Landscape.png      <-- Perfect_A KDE density + structure thumbnails
+    • Figure_17b_TT_Chemical_Space_Landscape.png      <-- {CFG.TIER_TOP} KDE density + structure thumbnails
     ── Part 8: Multi-metric Synthesis ──
     • Figure_18a_Fingerprint_TopHits.png              <-- Radar: top-5 hits vs worst-tier baseline
     • Figure_18b_Fingerprint_TierReps.png             <-- Radar: one representative per tier
@@ -185,15 +185,15 @@ warnings.filterwarnings("ignore")
 WEIGHTS = CFG.VIS_FALLBACK_WEIGHTS
 
 # Tier palette — sourced from CFG.TIER_COLOUR (Okabe-Ito colourblind-safe).
-# Local overrides: "Decoy" uses a softer grey for unlabelled entries;
+# Local overrides: CFG.TIER_DECOY uses a softer grey for unlabelled entries;
 # "Error" is a 03-specific indicator for analytics failures (not in CFG).
 TIER_PALETTE = {
     **CFG.TIER_COLOUR,
-    "Decoy":  "#999999",
+    CFG.TIER_DECOY:  "#999999",
     "Error": "#FF6B6B",
 }
 
-# Specific order for tiers to ensure logical plotting (Best to Worst)
+# Specific order for tiers to ensure logical plotting (Tier_1A to Tier_5_Decoy)
 TIER_ORDER_LOGIC = list(CFG.TIER_ORDER)
 
 CONFLICT_PALETTE = dict(CFG.CONFLICT_COLOUR)   # sourced from CFG § 9.7
@@ -443,16 +443,16 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     reporter.section("Step 2: Conflict & Opportunity Analysis")
     
     def classify(row):
-        tier = row.get('degrader_tier', 'Decoy')
+        tier = row.get('degrader_tier', CFG.TIER_DECOY)
         conf = row.get('Boltz_Model_Confidence', 0.0)
 
-        _high_quality = [CFG.T_PA, CFG.T_PB, CFG.T_BA, CFG.T_BB]
+        _high_quality = [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]
         _hi = CFG.CONFLICT_CONF_HIGH
         _lo = CFG.CONFLICT_CONF_LOW
         if tier in _high_quality and conf >= _hi: return "Consensus High"
-        if tier in [CFG.T_PR, CFG.T_DY, 'Error'] and conf < _lo: return "Consensus Low"
+        if tier in [CFG.TIER_POOR, CFG.TIER_DECOY, 'Error'] and conf < _lo: return "Consensus Low"
         if tier in _high_quality and conf < _hi: return "Hidden Gem"
-        if tier in [CFG.T_PR, CFG.T_DY] and conf >= _hi: return "Decoy"
+        if tier in [CFG.TIER_POOR, CFG.TIER_DECOY] and conf >= _hi: return "Decoy"
         return "Ambiguous"
 
     df['Conflict_Category'] = df.apply(classify, axis=1)
@@ -466,34 +466,34 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     return df
 
 # ===============================================================================
-# SECTION 4B: Perfect_A Landscape Companion Figures (05b, 09b, 10b, 15b)
-# Companion figures overlaying Perfect_A structural thumbnails onto the same
-# chemical spaces as their parent figures, showing where the Perfect_A hits
+# SECTION 4B: Tier_1A Landscape Companion Figures (05b, 09b, 10b, 15b)
+# Companion figures overlaying Tier_1A structural thumbnails onto the same
+# chemical spaces as their parent figures, showing where the Tier_1A hits
 # sit relative to the full 58 k-complex dataset.
 # ===============================================================================
 
 # ── Design constants ──────────────────────────────────────────────────────────
-_PA_ENTRY_COLS = ["#E74C3C", "#17A589", "#27AE60", "#8E44AD", "#E67E22"]
-_PA_STAR_FILL  = "#2ECC71"
-_PA_STAR_S     = CFG.VIS_PA_STAR_SIZE
-_PA_TIER_S     = CFG.VIS_TIER_SIZES
-_PA_TIER_A     = CFG.VIS_TIER_ALPHAS
-_PA_STRUCT_COLS= ["tv_red","teal","forest","purple","tv_orange"]
-_PA_SHRINK_B   = CFG.VIS_PA_SHRINK_BORDER
-_PA_IMG_PX     = CFG.VIS_PA_IMG_PX
-_PA_TEXT_PX    = CFG.VIS_PA_TEXT_PX
-_PA_BORDER_PX  = CFG.VIS_PA_BORDER_PX
-_PA_PAD        = CFG.VIS_PA_PAD
-_PA_FONT_SIZE  = CFG.VIS_PA_FONT_SIZE
-_PA_FONT_PATH  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-_PA_AX_W       = CFG.VIS_PA_AX_WIDTH
-_PA_LEFT_X0    = 0.058
-_PA_RIGHT_X0   = 0.808
-_PA_INSET_Y    = [0.60, 0.22, 0.69, 0.43, 0.17]
-_PA_MARGINS    = dict(left=0.22, right=0.74, top=0.84, bottom=0.16)
+_TT_ENTRY_COLS = ["#E74C3C", "#17A589", "#27AE60", "#8E44AD", "#E67E22"]
+_TT_STAR_FILL  = "#2ECC71"
+_TT_STAR_S     = CFG.VIS_TT_STAR_SIZE
+_TT_TIER_S     = CFG.VIS_TIER_SIZES
+_TT_TIER_A     = CFG.VIS_TIER_ALPHAS
+_TT_STRUCT_COLS= ["tv_red","teal","forest","purple","tv_orange"]
+_TT_SHRINK_B   = CFG.VIS_TT_SHRINK_BORDER
+_TT_IMG_PX     = CFG.VIS_TT_IMG_PX
+_TT_TEXT_PX    = CFG.VIS_TT_TEXT_PX
+_TT_BORDER_PX  = CFG.VIS_TT_BORDER_PX
+_TT_PAD        = CFG.VIS_TT_PAD
+_TT_FONT_SIZE  = CFG.VIS_TT_FONT_SIZE
+_TT_FONT_PATH  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_TT_AX_W       = CFG.VIS_TT_AX_WIDTH
+_TT_LEFT_X0    = 0.058
+_TT_RIGHT_X0   = 0.808
+_TT_INSET_Y    = [0.60, 0.22, 0.69, 0.43, 0.17]
+_TT_MARGINS    = dict(left=0.22, right=0.74, top=0.84, bottom=0.16)
 
 
-def _pa_find_cif(pred_jobs: Path, job_name: str):
+def _tt_find_cif(pred_jobs: Path, job_name: str):
     jd = pred_jobs / job_name
     if not jd.exists():
         return None
@@ -502,7 +502,7 @@ def _pa_find_cif(pred_jobs: Path, job_name: str):
     return cifs[0] if cifs else None
 
 
-def _pa_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, height=800) -> bool:
+def _tt_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, height=800) -> bool:
     try:
         import pymol
         pymol.finish_launching(["pymol", "-cq"])
@@ -554,17 +554,17 @@ def _pa_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, heig
         return False
 
 
-def _pa_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter) -> list:
+def _tt_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter) -> list:
     thumb_dir.mkdir(exist_ok=True)
     imgs = []
     n_rendered = n_cached = n_failed = 0
     for local_i, (_, row) in enumerate(pa.iterrows()):
         png = thumb_dir / f"pa_{local_i}.png"
         if not png.exists():
-            cif = _pa_find_cif(pred_jobs, str(row.get("job_name", "")))
+            cif = _tt_find_cif(pred_jobs, str(row.get("job_name", "")))
             if cif:
-                col = _PA_STRUCT_COLS[local_i % len(_PA_STRUCT_COLS)]
-                ok = _pa_render_one(cif, png, col)
+                col = _TT_STRUCT_COLS[local_i % len(_TT_STRUCT_COLS)]
+                ok = _tt_render_one(cif, png, col)
                 if ok:
                     n_rendered += 1
                 else:
@@ -577,24 +577,24 @@ def _pa_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter)
     return imgs
 
 
-def _pa_make_composite(img_arr, label_str: str, colour_hex: str) -> np.ndarray:
-    PAD = _PA_PAD
+def _tt_make_composite(img_arr, label_str: str, colour_hex: str) -> np.ndarray:
+    PAD = _TT_PAD
     br, bg, bb = (int(colour_hex[i:i+2], 16) for i in (1, 3, 5))
-    W, H_s = _PA_IMG_PX, _PA_TEXT_PX
+    W, H_s = _TT_IMG_PX, _TT_TEXT_PX
     src = Image.fromarray(img_arr).convert("RGBA")
-    inner = _PA_IMG_PX - 2 * PAD
+    inner = _TT_IMG_PX - 2 * PAD
     src_small = src.resize((inner, inner), Image.LANCZOS)
     canvas = Image.new("RGBA", (W, W + H_s), (15, 15, 25, 255))
     canvas.paste(src_small, (PAD, PAD))
     draw = ImageDraw.Draw(canvas)
-    draw.line([(  _PA_BORDER_PX, W), (W - _PA_BORDER_PX, W)],
+    draw.line([(  _TT_BORDER_PX, W), (W - _TT_BORDER_PX, W)],
               fill=(br, bg, bb, 200), width=4)
-    usable_w = W - 2 * _PA_BORDER_PX - 8
+    usable_w = W - 2 * _TT_BORDER_PX - 8
     lines = label_str.split("\n")
     font = ImageFont.load_default()
-    for fs in range(_PA_FONT_SIZE, 14, -2):
+    for fs in range(_TT_FONT_SIZE, 14, -2):
         try:
-            f = ImageFont.truetype(_PA_FONT_PATH, fs)
+            f = ImageFont.truetype(_TT_FONT_PATH, fs)
         except Exception:
             break
         if max(draw.textbbox((0, 0), l, font=f)[2] for l in lines) <= usable_w:
@@ -605,37 +605,37 @@ def _pa_make_composite(img_arr, label_str: str, colour_hex: str) -> np.ndarray:
         tw, lh = bb_box[2] - bb_box[0], bb_box[3] - bb_box[1]
         draw.text(((W - tw) // 2, y_cur), line, font=font, fill=(220, 220, 230, 255))
         y_cur += lh + 10
-    draw.rectangle([_PA_BORDER_PX // 2, _PA_BORDER_PX // 2,
-                    W - _PA_BORDER_PX // 2 - 1, W + H_s - _PA_BORDER_PX // 2 - 1],
-                   outline=(br, bg, bb, 255), width=_PA_BORDER_PX)
+    draw.rectangle([_TT_BORDER_PX // 2, _TT_BORDER_PX // 2,
+                    W - _TT_BORDER_PX // 2 - 1, W + H_s - _TT_BORDER_PX // 2 - 1],
+                   outline=(br, bg, bb, 255), width=_TT_BORDER_PX)
     return np.array(canvas)
 
 
-def _pa_draw_scatter(ax, df):
-    for tier in [t for t in reversed(CFG.TIER_ORDER) if t != CFG.T_PA]:
+def _tt_draw_scatter(ax, df):
+    for tier in [t for t in reversed(CFG.TIER_ORDER) if t != CFG.TIER_TOP]:
         sub = df[df["degrader_tier"] == tier]
         if sub.empty: continue
         ax.scatter(sub["_X"], sub["_Y"],
                    c=TIER_PALETTE.get(tier, "#BBB"),
-                   s=_PA_TIER_S.get(tier, 4), alpha=_PA_TIER_A.get(tier, 0.2),
+                   s=_TT_TIER_S.get(tier, 4), alpha=_TT_TIER_A.get(tier, 0.2),
                    linewidths=0, rasterized=True, zorder=2)
 
 
-def _pa_draw_stars(ax, pa):
+def _tt_draw_stars(ax, pa):
     for local_i, (_, row) in enumerate(pa.iterrows()):
-        ec   = _PA_ENTRY_COLS[local_i % len(_PA_ENTRY_COLS)]
-        fill = "#F1C40F" if local_i == 4 else _PA_STAR_FILL
-        sz   = int(_PA_STAR_S * 0.82) if local_i == 4 else _PA_STAR_S
+        ec   = _TT_ENTRY_COLS[local_i % len(_TT_ENTRY_COLS)]
+        fill = "#F1C40F" if local_i == 4 else _TT_STAR_FILL
+        sz   = int(_TT_STAR_S * 0.82) if local_i == 4 else _TT_STAR_S
         ax.scatter(row["_X"], row["_Y"], c=fill, s=sz, marker="*",
                    edgecolors=ec, linewidths=1.2, zorder=10)
 
 
-def _pa_draw_thumbnails(fig, ax, pa, imgs):
+def _tt_draw_thumbnails(fig, ax, pa, imgs):
     fw, fh = fig.get_size_inches()
-    # Show ALL Perfect_A entries — distribute evenly between left and right columns
+    # Show ALL Tier_1A entries — distribute evenly between left and right columns
     n_max = min(len(pa), len(imgs))
-    _ax_w = 0.085 if n_max > 5 else _PA_AX_W
-    ax_h = _ax_w * (fw / fh) * (_PA_IMG_PX + _PA_TEXT_PX) / _PA_IMG_PX
+    _ax_w = 0.085 if n_max > 5 else _TT_AX_W
+    ax_h = _ax_w * (fw / fh) * (_TT_IMG_PX + _TT_TEXT_PX) / _TT_IMG_PX
     # Compute dynamic Y positions: split into left (even indices) and right (odd indices)
     # Each column gets ceil(n_max/2) entries; space them evenly within [0.10, 0.88]
     n_left  = (n_max + 1) // 2
@@ -649,9 +649,9 @@ def _pa_draw_thumbnails(fig, ax, pa, imgs):
     _y_left  = _ycols(n_left)
     _y_right = _ycols(n_right)
     for local_i, (_, row) in enumerate(pa.head(n_max).iterrows()):
-        colour = _PA_ENTRY_COLS[local_i % len(_PA_ENTRY_COLS)]
+        colour = _TT_ENTRY_COLS[local_i % len(_TT_ENTRY_COLS)]
         side   = "left" if local_i % 2 == 0 else "right"
-        x0     = _PA_LEFT_X0 if side == "left" else _PA_RIGHT_X0
+        x0     = _TT_LEFT_X0 if side == "left" else _TT_RIGHT_X0
         col_idx = local_i // 2
         y0      = (_y_left[col_idx] if side == "left" else _y_right[col_idx])
         sx, sy = row["_X"], row["_Y"]
@@ -667,7 +667,7 @@ def _pa_draw_thumbnails(fig, ax, pa, imgs):
         label = (f"{prot}  ·  {lig}\n"
                  f"SN2: {sn2:.1f}°   Conf: {conf:.3f}\n"
                  f"ipTM: {ipt:.3f}  IDens: {idn:.2f}")
-        comp  = _pa_make_composite(img, label, colour)
+        comp  = _tt_make_composite(img, label, colour)
         ax_in = fig.add_axes([x0, y0, _ax_w, ax_h])
         h_c, w_c = comp.shape[:2]
         ax_in.imshow(comp, aspect="auto", interpolation="lanczos",
@@ -681,25 +681,25 @@ def _pa_draw_thumbnails(fig, ax, pa, imgs):
             xyB=(sx, sy),   coordsB="data",
             axesA=None, axesB=ax,
             arrowstyle="-|>", color=colour, lw=2.5,
-            mutation_scale=22, shrinkA=4, shrinkB=_PA_SHRINK_B, zorder=11,
+            mutation_scale=22, shrinkA=4, shrinkB=_TT_SHRINK_B, zorder=11,
         ))
 
 
-def _pa_legend_handles(df):
-    n_pa = len(df[df["degrader_tier"] == "Perfect_A"])
+def _tt_legend_handles(df):
+    n_tt = len(df[df["degrader_tier"] == CFG.TIER_TOP])
     # Symbol-type header entries so the reader understands both glyphs
     h = [
         Line2D([0],[0], marker="o", color="w",
                markerfacecolor="#888888", markeredgecolor="none",
                markersize=7, alpha=0.55, label="Individual complex  (scatter dot)"),
         Line2D([0],[0], marker="*", color="w",
-               markerfacecolor=_PA_STAR_FILL, markeredgecolor=_PA_ENTRY_COLS[0],
-               markersize=14, label=f"Perfect_A ★ highlighted  (n={n_pa})"),
+               markerfacecolor=_TT_STAR_FILL, markeredgecolor=_TT_ENTRY_COLS[0],
+               markersize=14, label=f"{CFG.TIER_TOP} ★ highlighted  (n={n_tt})"),
         Line2D([0],[0], marker="*", color="w",
-               markerfacecolor="#F1C40F", markeredgecolor=_PA_ENTRY_COLS[4],
-               markersize=11, label="Perfect_A ★ gold (TFA duplicate)"),
+               markerfacecolor="#F1C40F", markeredgecolor=_TT_ENTRY_COLS[4],
+               markersize=11, label=f"{CFG.TIER_TOP} ★ gold (TFA duplicate)"),
     ]
-    for t in [t for t in CFG.TIER_ORDER if t != CFG.T_PA]:
+    for t in [t for t in CFG.TIER_ORDER if t != CFG.TIER_TOP]:
         sub = df[df["degrader_tier"] == t]
         if sub.empty:
             continue
@@ -709,23 +709,23 @@ def _pa_legend_handles(df):
     return h
 
 
-def _pa_add_legend(fig, handles):
+def _tt_add_legend(fig, handles):
     fig.legend(handles=handles, loc="lower center",
                bbox_to_anchor=(0.5, 0.02), ncol=4,
                fontsize=8.5, framealpha=0.95,
-               title="Degrader tier  (★ = Perfect_A highlighted; ● = scatter background)",
+               title=f"Degrader tier  (★ = {CFG.TIER_TOP} highlighted; ● = scatter background)",
                title_fontsize=9.0,
                borderpad=0.8, labelspacing=0.6, handletextpad=0.5)
 
 
-def _pa_new_fig():
+def _tt_new_fig():
     fig, ax = plt.subplots(figsize=(18, 12))
-    fig.subplots_adjust(**_PA_MARGINS)
+    fig.subplots_adjust(**_TT_MARGINS)
     ax.set_facecolor("#FAFAFA")
     return fig, ax
 
 
-def _pa_style(ax, xlabel, ylabel, title):
+def _tt_style(ax, xlabel, ylabel, title):
     ax.set_xlabel(xlabel, fontsize=11, labelpad=6)
     ax.set_ylabel(ylabel, fontsize=11, labelpad=6)
     ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
@@ -735,7 +735,7 @@ def _pa_style(ax, xlabel, ylabel, title):
 
 
 # ── Figure 17b — UMAP Chemical Space + PA Landscape ──────────────────────────
-def _fig_17b_pa_landscape(df, pa, imgs, out_dir: Path, reporter):
+def _fig_17b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["UMAP_X","UMAP_Y"]).copy()
         dv["_X"] = dv["UMAP_X"]; dv["_Y"] = dv["UMAP_Y"]
@@ -748,18 +748,18 @@ def _fig_17b_pa_landscape(df, pa, imgs, out_dir: Path, reporter):
         Xi,Yi = np.meshgrid(xi,yi)
         Zi = kde(np.vstack([Xi.ravel(),Yi.ravel()])).reshape(Xi.shape)
         F  = np.clip(-0.596*np.log(np.clip(Zi/Zi.max(),1e-6,None)), 0, 15)
-        fig, ax = _pa_new_fig()
+        fig, ax = _tt_new_fig()
         cf = ax.contourf(Xi,Yi,F, levels=45, cmap="Blues_r", vmin=0,vmax=15, alpha=0.90)
         ax.contour(Xi,Yi,F, levels=18, colors="white", linewidths=0.30, alpha=0.38)
         cb = fig.colorbar(cf, ax=ax, fraction=0.025, pad=0.01)
         cb.set_label("KDE Population Density  (darker = more complexes)", fontsize=9.5)
         cb.set_ticks([0,3,6,9,12,15])
-        _pa_draw_scatter(ax, dv); _pa_draw_stars(ax, pax)
-        _pa_draw_thumbnails(fig, ax, pax, imgs)
-        _pa_style(ax, "UMAP 1", "UMAP 2", "")
-        _pa_add_legend(fig, _pa_legend_handles(dv))
+        _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
+        _tt_draw_thumbnails(fig, ax, pax, imgs)
+        _tt_style(ax, "UMAP 1", "UMAP 2", "")
+        _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
-        out = out_dir / "Figure_17b_PA_Chemical_Space_Landscape.png"
+        out = out_dir / "Figure_17b_TT_Chemical_Space_Landscape.png"
         fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close(fig)
         reporter.log(f"  ✔ Saved: {out.resolve()}")
@@ -768,7 +768,7 @@ def _fig_17b_pa_landscape(df, pa, imgs, out_dir: Path, reporter):
 
 
 # ── Figure 12b — SN2 Angle × Confidence + PA Landscape ───────────────────────
-def _fig_12b_pa_mechanistic(df, pa, imgs, out_dir: Path, reporter):
+def _fig_12b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["SN2_Attack_Angle","Boltz_Model_Confidence"]).copy()
         dv["_X"] = pd.to_numeric(dv["SN2_Attack_Angle"],      errors="coerce")
@@ -779,28 +779,28 @@ def _fig_12b_pa_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         pax["_Y"] = pd.to_numeric(pa["Boltz_Model_Confidence"], errors="coerce")
         ylo = dv["_Y"].quantile(0.01) - 0.005
         yhi = dv["_Y"].max() + 0.005
-        fig, ax = _pa_new_fig()
+        fig, ax = _tt_new_fig()
         hb = ax.hexbin(dv["_X"], dv["_Y"], gridsize=60, cmap="YlOrBr",
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1,
                        extent=[dv["_X"].min(), dv["_X"].max(), ylo, yhi])
         cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
         cb.set_label("Complex count per bin", fontsize=9.5)
-        for angle, tlbl, tcol in [(175, "Perfect_A", _PA_STAR_FILL),
-                                   (165, "Perfect_B", TIER_PALETTE["Perfect_B"]),
-                                   (155, "Best_A",    TIER_PALETTE["Best_A"])]:
+        for angle, tlbl, tcol in [(175, CFG.TIER_TOP, _TT_STAR_FILL),
+                                   (165, CFG.TIER_ORDER[1], TIER_PALETTE[CFG.TIER_ORDER[1]]),
+                                   (155, CFG.TIER_ORDER[2],    TIER_PALETTE[CFG.TIER_ORDER[2]])]:
             ax.axvline(angle, color=tcol, ls="--", lw=1.6, alpha=0.85, zorder=4)
             ax.text(angle+0.3, yhi-0.002, f"≥{angle}°\n{tlbl}",
                     fontsize=5.5, color=tcol, fontweight="bold", va="top")
         ax.axhline(dv["_Y"].median(), color="#555", ls=":", lw=0.9, alpha=0.55, zorder=3)
-        _pa_draw_scatter(ax, dv); _pa_draw_stars(ax, pax)
-        _pa_draw_thumbnails(fig, ax, pax, imgs)
-        _pa_style(ax,
+        _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
+        _tt_draw_thumbnails(fig, ax, pax, imgs)
+        _tt_style(ax,
                   "SN2 Attack Angle (°) — higher = near-ideal nucleophilic trajectory",
                   "Boltz Model Confidence (AI structural quality, higher = better)",
                   "")
-        _pa_add_legend(fig, _pa_legend_handles(dv))
+        _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_ylim(ylo, yhi)
-        out = out_dir / "Figure_12b_PA_Mechanistic_Quality_Space.png"
+        out = out_dir / "Figure_12b_TT_Mechanistic_Quality_Space.png"
         fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close(fig)
         reporter.log(f"  ✔ Saved: {out.resolve()}")
@@ -809,7 +809,7 @@ def _fig_12b_pa_mechanistic(df, pa, imgs, out_dir: Path, reporter):
 
 
 # ── Figure 04b — Confidence × ipTM + PA Landscape ────────────────────────────
-def _fig_04b_pa_ai_quality(df, pa, imgs, out_dir: Path, reporter):
+def _fig_04b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["Boltz_Model_Confidence","iptm"]).copy()
         dv["_X"] = dv["Boltz_Model_Confidence"]; dv["_Y"] = dv["iptm"]
@@ -817,7 +817,7 @@ def _fig_04b_pa_ai_quality(df, pa, imgs, out_dir: Path, reporter):
         pax["_X"] = pa["Boltz_Model_Confidence"]; pax["_Y"] = pa["iptm"]
         xlo,xhi = dv["_X"].quantile(0.01)-0.01, dv["_X"].max()+0.005
         ylo,yhi = dv["_Y"].quantile(0.01)-0.01, dv["_Y"].max()+0.005
-        fig, ax = _pa_new_fig()
+        fig, ax = _tt_new_fig()
         hb = ax.hexbin(dv["_X"], dv["_Y"], gridsize=60, cmap="YlOrBr",
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1,
                        extent=[xlo,xhi,ylo,yhi])
@@ -825,15 +825,15 @@ def _fig_04b_pa_ai_quality(df, pa, imgs, out_dir: Path, reporter):
         cb.set_label("Complex count per bin", fontsize=9.5)
         for v, fn in [(dv["_X"].median(), ax.axvline),(dv["_Y"].median(), ax.axhline)]:
             fn(v, color="#555", ls="--", lw=0.9, alpha=0.55, zorder=3)
-        _pa_draw_scatter(ax, dv); _pa_draw_stars(ax, pax)
-        _pa_draw_thumbnails(fig, ax, pax, imgs)
-        _pa_style(ax,
+        _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
+        _tt_draw_thumbnails(fig, ax, pax, imgs)
+        _tt_style(ax,
                   "Boltz Model Confidence (higher = better folding quality)",
                   "ipTM — Interface Predicted TM-score",
                   "")
-        _pa_add_legend(fig, _pa_legend_handles(dv))
+        _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-        out = out_dir / "Figure_04b_PA_AI_Quality_Space.png"
+        out = out_dir / "Figure_04b_TT_AI_Quality_Space.png"
         fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close(fig)
         reporter.log(f"  ✔ Saved: {out.resolve()}")
@@ -842,7 +842,7 @@ def _fig_04b_pa_ai_quality(df, pa, imgs, out_dir: Path, reporter):
 
 
 # ── Figure 13b — Interaction Density × Count + PA Landscape ──────────────────
-def _fig_13b_pa_interactions(df, pa, imgs, out_dir: Path, reporter):
+def _fig_13b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["Interaction_Density_Norm","num_interactions"]).copy()
         dv["_X"] = pd.to_numeric(dv["Interaction_Density_Norm"], errors="coerce")
@@ -854,7 +854,7 @@ def _fig_13b_pa_interactions(df, pa, imgs, out_dir: Path, reporter):
         xhi = max(dv["_X"].quantile(0.99)+0.5, pax["_X"].max()+0.5)
         yhi = max(dv["_Y"].quantile(0.99)+2,   pax["_Y"].max()+2)
         dv  = dv[(dv["_X"] <= xhi) & (dv["_Y"] <= yhi)]
-        fig, ax = _pa_new_fig()
+        fig, ax = _tt_new_fig()
         hb = ax.hexbin(dv["_X"], dv["_Y"], gridsize=60, cmap="YlOrBr",
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1)
         cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
@@ -864,15 +864,15 @@ def _fig_13b_pa_interactions(df, pa, imgs, out_dir: Path, reporter):
         ax.axhline(ymed, color="#555", ls="--", lw=0.9, alpha=0.55, zorder=3)
         ax.text(xmed+0.05, 0.5, f"median {xmed:.2f}", fontsize=7.5, color="#555")
         ax.text(0.1, ymed+0.3, f"median {ymed:.0f}",  fontsize=7.5, color="#555")
-        _pa_draw_scatter(ax, dv); _pa_draw_stars(ax, pax)
-        _pa_draw_thumbnails(fig, ax, pax, imgs)
-        _pa_style(ax,
+        _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
+        _tt_draw_thumbnails(fig, ax, pax, imgs)
+        _tt_style(ax,
                   "Interaction Density Norm (interactions per ligand heavy atom)",
                   "Total Interactions (num_interactions, all contact types)",
                   "")
-        _pa_add_legend(fig, _pa_legend_handles(dv))
+        _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(0, xhi); ax.set_ylim(0, yhi)
-        out = out_dir / "Figure_13b_PA_Interaction_Quality_Space.png"
+        out = out_dir / "Figure_13b_TT_Interaction_Quality_Space.png"
         fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close(fig)
         reporter.log(f"  ✔ Saved: {out.resolve()}")
@@ -1123,25 +1123,25 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                     xytext=(70, _ymax02 * 0.60),
                     fontsize=5.0, color='#444', style='italic',
                     arrowprops=dict(arrowstyle='->', color='#888', lw=0.9))
-        # Perfect_A visibility annotation — arrow points to peak bar of the bottom stack layer
-        _pa_sub02 = id_plot[id_plot['degrader_tier'] == 'Perfect_A']
-        if len(_pa_sub02) > 0:
-            _pa_hist02, _ = np.histogram(_pa_sub02['identity_pct'], bins=bin_edges)
-            _pa_peak_idx = int(np.argmax(_pa_hist02))
-            _pa_peak_x   = float(bin_edges[_pa_peak_idx]) + 2.5
-            _pa_peak_cnt = int(_pa_hist02[_pa_peak_idx])
-            _pa_med_x    = float(_pa_sub02['identity_pct'].median())
+        # Tier_1A visibility annotation — arrow points to peak bar of the bottom stack layer
+        _tt_sub02 = id_plot[id_plot['degrader_tier'] == CFG.TIER_TOP]
+        if len(_tt_sub02) > 0:
+            _tt_hist02, _ = np.histogram(_tt_sub02['identity_pct'], bins=bin_edges)
+            _tt_peak_idx = int(np.argmax(_tt_hist02))
+            _tt_peak_x   = float(bin_edges[_tt_peak_idx]) + 2.5
+            _tt_peak_cnt = int(_tt_hist02[_tt_peak_idx])
+            _tt_med_x    = float(_tt_sub02['identity_pct'].median())
             ax.annotate(
-                f'Perfect_A  (n={len(_pa_sub02):,})\nmedian identity {_pa_med_x:.0f}%',
-                xy=(_pa_peak_x, max(_pa_peak_cnt, 1)),
-                xytext=(min(_pa_peak_x + 12, 82), _ymax02 * 0.32),
+                f'{CFG.TIER_TOP}  (n={len(_tt_sub02):,})\nmedian identity {_tt_med_x:.0f}%',
+                xy=(_tt_peak_x, max(_tt_peak_cnt, 1)),
+                xytext=(min(_tt_peak_x + 12, 82), _ymax02 * 0.32),
                 fontsize=5.0,
-                color=TIER_PALETTE.get('Perfect_A', '#2E7D52'),
+                color=TIER_PALETTE.get(CFG.TIER_TOP, '#2E7D52'),
                 fontweight='bold',
                 arrowprops=dict(arrowstyle='->', lw=1.3,
-                                color=TIER_PALETTE.get('Perfect_A', '#2E7D52')),
+                                color=TIER_PALETTE.get(CFG.TIER_TOP, '#2E7D52')),
                 bbox=dict(boxstyle='round,pad=0.22', fc='white',
-                          ec=TIER_PALETTE.get('Perfect_A', '#2E7D52'),
+                          ec=TIER_PALETTE.get(CFG.TIER_TOP, '#2E7D52'),
                           alpha=0.90, linewidth=1.0),
                 zorder=15
             )
@@ -1153,7 +1153,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         _unified_handles = []
         _unified_labels  = []
         for _bh, _bl in zip(_bar_hdls_02, _bar_lbls_02):
-            # Extract tier name from label like "Perfect_A  (n=8)"
+            # Extract tier name from label like f"Tier_1A  (n=8)"
             _tname = _bl.split('  ')[0] if '  ' in _bl else _bl
             _tcol  = TIER_PALETTE.get(_tname, '#999')
             # Compound: bar patch (facecolor) + dot marker
@@ -1323,19 +1323,19 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         except Exception as e:
             reporter.log(f"  ! Figure 03 skipped: {e}")
 
-    # ── Perfect_A companion setup (shared by Figs 04b, 12b, 13b, 17b) ──────────
-    _pa   = (df[df["degrader_tier"] == "Perfect_A"].reset_index(drop=True)
+    # ── Tier_1A companion setup (shared by Figs 04b, 12b, 13b, 17b) ──────────
+    _pa   = (df[df["degrader_tier"] == CFG.TIER_TOP].reset_index(drop=True)
              if "degrader_tier" in df.columns else pd.DataFrame())
     _imgs = []
     try:
         if not _pa.empty:
             _pred_jobs = out_dir.parent / "1_Boltz2_Production" / "4_Prediction_Jobs"
-            _thumb_dir = out_dir / "_pa_thumbnails"
+            _thumb_dir = out_dir / "_tt_thumbnails"
             _thumb_dir.mkdir(parents=True, exist_ok=True)
-            _imgs = _pa_render_all(_pa, _pred_jobs, _thumb_dir, reporter)
+            _imgs = _tt_render_all(_pa, _pred_jobs, _thumb_dir, reporter)
     except Exception:
         pass
-    _pa_has_imgs = not _pa.empty and sum(i is not None for i in _imgs) > 0
+    _tt_has_imgs = not _pa.empty and sum(i is not None for i in _imgs) > 0
 
     # --- Figure 04: AI Quality — Boltz Confidence (boxes) + pTM & ipTM (lines) overlaid ---
     # Single chart: box plots show per-tier distribution of Boltz Model Confidence (primary
@@ -1375,11 +1375,11 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                     if not np.isnan(med):
                         ax.text(i, med + 0.003, f'{med:.3f}', ha='center', va='bottom',
                                 fontsize=8, color='black', fontweight='bold', zorder=7)
-                # Decoy overconfidence annotation
-                _decoy_vals = [v for t, v in zip(tier_order_f10, medians_f10) if t == 'Decoy']
+                # Tier_5_Decoy overconfidence annotation
+                _decoy_vals = [v for t, v in zip(tier_order_f10, medians_f10) if t == CFG.TIER_DECOY]
                 if _decoy_vals and _decoy_vals[0] > 0.95:
-                    _di = tier_order_f10.index('Decoy')
-                    ax.annotate("Decoy\noverconfidence",
+                    _di = tier_order_f10.index(CFG.TIER_DECOY)
+                    ax.annotate(f"{CFG.TIER_DECOY}\noverconfidence",
                                 xy=(_di, _decoy_vals[0]),
                                 xytext=(_di + 0.4, _decoy_vals[0] - 0.02),
                                 fontsize=7.5, color='#B22222', style='italic',
@@ -1453,7 +1453,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             _yt10 = ax.get_yaxis_transform()
             _y_top10 = 1.01
             # High confidence zone: 0.90–1.01 — fixed at top-right via transAxes so it is
-            # always visible regardless of ylim and never lands on Perfect_A box bodies.
+            # always visible regardless of ylim and never lands on Tier_1A box bodies.
             _hc_vis_lo10 = max(0.90, y_lo_f10)
             if _hc_vis_lo10 < _y_top10 - 0.005:
                 ax.text(0.01, 0.98, 'High confidence (≥0.90)', color='#007A50',
@@ -1514,8 +1514,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             reporter.log(f"  ! Figure 04 skipped: {e}")
 
     # Figure 04b: PA companion (Confidence × ipTM landscape)
-    if _pa_has_imgs:
-        _fig_04b_pa_ai_quality(df, _pa, _imgs, out_dir, reporter)
+    if _tt_has_imgs:
+        _fig_04b_tt_ai_quality(df, _pa, _imgs, out_dir, reporter)
 
     # --- Figure 05: pTM vs ipTM — 2-D Scatter (REDESIGN) ---
     # Each complex is a point: X = pTM (fold confidence), Y = ipTM (interface confidence).
@@ -1592,22 +1592,22 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                               alpha=0.80, linewidth=0.7))
 
             # Rendering strategy:
-            #   Good tier (n~34k) → hexbin background density (YlOrBr)
+            #   Tier_3 tier (n~34k) → hexbin background density (YlOrBr)
             #   All other tiers   → scatter with tier colour, drawn on top in order
             # This keeps tier colours distinguishable while showing the density of the bulk.
-            for tier in sorted(existing_tiers, key=lambda t: t == 'Perfect_A'):
+            for tier in sorted(existing_tiers, key=lambda t: t == CFG.TIER_TOP):
                 sub18 = f18_df[f18_df['degrader_tier'] == tier]
                 if sub18.empty:
                     continue
                 ptm_vals  = sub18['ptm'].values
                 iptm_vals = sub18['iptm'].values
                 col18     = TIER_PALETTE.get(tier, '#999')
-                if tier == 'Good':
+                if tier == CFG.TIER_ORDER[4]:
                     ax.hexbin(ptm_vals, iptm_vals, gridsize=45, cmap='YlOrBr',
                               mincnt=1, alpha=0.65, zorder=1)
                 else:
-                    _is_pa   = tier == 'Perfect_A'
-                    _is_top  = tier in ('Perfect_A', 'Perfect_B', 'Best_A')
+                    _is_pa   = tier == CFG.TIER_TOP
+                    _is_top  = tier in (CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2])
                     ax.scatter(ptm_vals, iptm_vals,
                                c=col18,
                                alpha=0.92 if _is_pa else (0.55 if _is_top else 0.20),
@@ -1639,10 +1639,10 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 col18 = TIER_PALETTE.get(tier, '#999')
                 ax.scatter([mx18], [my18], marker='D', s=160,
                            color=col18, edgecolors='black', linewidths=1.3, zorder=8)
-                # Perfect_A callout arrow on main scatter
-                if tier == 'Perfect_A':
+                # Tier_1A callout arrow on main scatter
+                if tier == CFG.TIER_TOP:
                     ax.annotate(
-                        f'Perfect_A\n(n={len(sub18)}, ★)',
+                        f'{CFG.TIER_TOP}\n(n={len(sub18)}, ★)',
                         xy=(mx18, my18),
                         xytext=(mx18 - 0.035, my18 + 0.015),
                         fontsize=8, color=col18, fontweight='bold', zorder=12,
@@ -1662,12 +1662,12 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             _kde_x18 = np.linspace(_lo18, _hi18, 300)
             for tier in existing_tiers18:
                 sub18_m = f18_df[f18_df['degrader_tier'] == tier]
-                _min_kde = 1 if tier == 'Perfect_A' else 10
+                _min_kde = 1 if tier == CFG.TIER_TOP else 10
                 if len(sub18_m) < _min_kde:
                     continue
                 _col18m = TIER_PALETTE.get(tier, '#999')
-                _is_pa18 = tier == 'Perfect_A'
-                _lw18    = 2.8 if _is_pa18 else (2.0 if tier == 'Perfect_B' else 1.3)
+                _is_pa18 = tier == CFG.TIER_TOP
+                _lw18    = 2.8 if _is_pa18 else (2.0 if tier == CFG.TIER_ORDER[1] else 1.3)
                 _alp18   = 0.95 if _is_pa18 else 0.80
                 _zo18    = 10  if _is_pa18 else 5
                 try:
@@ -1685,39 +1685,39 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                                            color=_col18m, zorder=_zo18 - 1)
                 except Exception:
                     pass
-            # Annotate Perfect_A KDE peak on both marginal axes
-            _pa_col_f05 = TIER_PALETTE.get('Perfect_A', '#009E73')
-            _pa_sub_f05 = f18_df[f18_df['degrader_tier'] == 'Perfect_A']
-            if len(_pa_sub_f05) >= 2:
+            # Annotate Tier_1A KDE peak on both marginal axes
+            _tt_col_f05 = TIER_PALETTE.get(CFG.TIER_TOP, '#009E73')
+            _tt_sub_f05 = f18_df[f18_df['degrader_tier'] == CFG.TIER_TOP]
+            if len(_tt_sub_f05) >= 2:
                 try:
-                    _kde_pa_ptm  = _gkde18(_pa_sub_f05['ptm'].values)(_kde_x18)
-                    _kde_pa_iptm = _gkde18(_pa_sub_f05['iptm'].values)(_kde_x18)
-                    _peak_ptm_x  = float(_kde_x18[np.argmax(_kde_pa_ptm)])
-                    _peak_ptm_y  = float(np.max(_kde_pa_ptm))
-                    _peak_iptm_x = float(_kde_x18[np.argmax(_kde_pa_iptm)])
-                    _peak_iptm_y = float(np.max(_kde_pa_iptm))
+                    _kde_tt_ptm  = _gkde18(_tt_sub_f05['ptm'].values)(_kde_x18)
+                    _kde_tt_iptm = _gkde18(_tt_sub_f05['iptm'].values)(_kde_x18)
+                    _peak_ptm_x  = float(_kde_x18[np.argmax(_kde_tt_ptm)])
+                    _peak_ptm_y  = float(np.max(_kde_tt_ptm))
+                    _peak_iptm_x = float(_kde_x18[np.argmax(_kde_tt_iptm)])
+                    _peak_iptm_y = float(np.max(_kde_tt_iptm))
                     # Top KDE: annotation placed BELOW the peak (away from legend box)
                     ax_top.annotate(
-                        'Perfect_A ▲',
+                        f'{CFG.TIER_TOP} ▲',
                         xy=(_peak_ptm_x, _peak_ptm_y),
                         xytext=(_peak_ptm_x + 0.008, _peak_ptm_y * 0.40),
-                        fontsize=7, color=_pa_col_f05, fontweight='bold',
+                        fontsize=7, color=_tt_col_f05, fontweight='bold',
                         ha='left', zorder=15,
-                        arrowprops=dict(arrowstyle='->', color=_pa_col_f05, lw=1.0,
+                        arrowprops=dict(arrowstyle='->', color=_tt_col_f05, lw=1.0,
                                         shrinkA=2, shrinkB=2),
                         bbox=dict(boxstyle='round,pad=0.14', fc='white',
-                                  ec=_pa_col_f05, alpha=0.95, linewidth=0.8))
+                                  ec=_tt_col_f05, alpha=0.95, linewidth=0.8))
                     # Right KDE: annotation to the left of peak where density is low
                     ax_right.annotate(
-                        'Perfect_A ▲',
+                        f'{CFG.TIER_TOP} ▲',
                         xy=(_peak_iptm_y, _peak_iptm_x),
                         xytext=(_peak_iptm_y * 0.45, _peak_iptm_x + 0.008),
-                        fontsize=7, color=_pa_col_f05, fontweight='bold',
+                        fontsize=7, color=_tt_col_f05, fontweight='bold',
                         ha='right', zorder=15,
-                        arrowprops=dict(arrowstyle='->', color=_pa_col_f05, lw=1.0,
+                        arrowprops=dict(arrowstyle='->', color=_tt_col_f05, lw=1.0,
                                         shrinkA=2, shrinkB=2),
                         bbox=dict(boxstyle='round,pad=0.14', fc='white',
-                                  ec=_pa_col_f05, alpha=0.95, linewidth=0.8))
+                                  ec=_tt_col_f05, alpha=0.95, linewidth=0.8))
                 except Exception:
                     pass
             plt.setp(ax_top.get_xticklabels(), visible=False)
@@ -1780,7 +1780,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             f17_df = df.dropna(subset=['Active_Site_RMSD']).copy()
             f17_df['Active_Site_RMSD'] = pd.to_numeric(f17_df['Active_Site_RMSD'], errors='coerce')
             f17_df = f17_df.dropna(subset=['Active_Site_RMSD'])
-            # Show ALL data — no percentile clip so small-n tiers (e.g. Perfect_A n=5)
+            # Show ALL data — no percentile clip so small-n tiers (e.g. Tier_1A n=5)
             # retain every value.  y_ceil caps the display at 4 Å, but is extended if any
             # small-n tier has a value beyond that so its dots always land inside the axes.
             f17_plot = f17_df.copy()
@@ -2572,7 +2572,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                                         shrinkA=0, shrinkB=3))
             _f14_annot_side *= -1   # flip side for next tier
         # Vertical threshold lines
-        for angle, tier_key in [(175, 'Perfect_A'), (165, 'Perfect_B'), (155, 'Best_A'), (145, 'Best_B')]:
+        for angle, tier_key in [(175, CFG.TIER_TOP), (165, CFG.TIER_ORDER[1]), (155, CFG.TIER_ORDER[2]), (145, CFG.TIER_ORDER[3])]:
             ax.axvline(x=angle, color=TIER_PALETTE.get(tier_key, '#999'), linestyle='--', alpha=0.65, linewidth=1.0)
         ax.set_xlim(30, 185)
         ax.set_ylim(0, 1.09)
@@ -2655,10 +2655,10 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         # exactly match the production tier gates in 02_Production.
         _nuc_cfg12 = CFG.TIER_NUC_DIST
         _ang_cfg12 = CFG.TIER_ANGLE_MIN
-        ax.axvspan(0, _nuc_cfg12['Perfect_A'], alpha=0.06, color='#009E73', label='_nolegend_')
-        ax.axhspan(_ang_cfg12['Perfect_A'], 180, alpha=0.06, color='#009E73', label='_nolegend_')
+        ax.axvspan(0, _nuc_cfg12[CFG.TIER_TOP], alpha=0.06, color='#009E73', label='_nolegend_')
+        ax.axhspan(_ang_cfg12[CFG.TIER_TOP], 180, alpha=0.06, color='#009E73', label='_nolegend_')
 
-        for _idx12, tier_key in enumerate(['Perfect_A', 'Perfect_B', 'Best_A', 'Best_B']):
+        for _idx12, tier_key in enumerate([CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]):
             dist = _nuc_cfg12[tier_key]
             col = TIER_PALETTE.get(tier_key, '#999')
             ax.axvline(x=dist, color=col, linestyle='--', alpha=0.65, linewidth=1.2)
@@ -2667,7 +2667,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                     bbox=dict(boxstyle='round,pad=0.15', fc='white', alpha=0.75, ec=col,
                               linewidth=0.5))
 
-        for tier_key in ['Perfect_A', 'Perfect_B', 'Best_A', 'Best_B']:
+        for tier_key in [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]:
             angle = _ang_cfg12[tier_key]
             col = TIER_PALETTE.get(tier_key, '#999')
             ax.axhline(y=angle, color=col, linestyle=':', alpha=0.65, linewidth=1.2, zorder=1)
@@ -2708,8 +2708,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         reporter.log(f"  ✔ Saved: {(out_dir / 'Figure_12a_Mechanism_Geometry_Scatter.png').resolve()}")
 
     # Figure 12b: PA companion (mechanistic scatter overlay)
-    if _pa_has_imgs:
-        _fig_12b_pa_mechanistic(df, _pa, _imgs, out_dir, reporter)
+    if _tt_has_imgs:
+        _fig_12b_tt_mechanistic(df, _pa, _imgs, out_dir, reporter)
 
     # --- Shared Data Prep: Interaction Bond Columns (used by Fig 13 + 14) ---
     int_cols_raw = {
@@ -2937,8 +2937,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             reporter.log(f"  ! Figure 13 skipped: {e}")
 
     # Figure 13b: PA companion (interaction profile overlay)
-    if _pa_has_imgs:
-        _fig_13b_pa_interactions(df, _pa, _imgs, out_dir, reporter)
+    if _tt_has_imgs:
+        _fig_13b_tt_interactions(df, _pa, _imgs, out_dir, reporter)
 
     # --- Figure 14: Fluorine Engagement Ratio by Tier (box + strip + median trend line) ---
     if 'interacting_fluorine_count' in df.columns and 'total_fluorine_count' in df.columns and 'degrader_tier' in df.columns:
@@ -3243,7 +3243,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 _best_t20 = valid_t20[0]
                 _best_med20 = float(f20_df.loc[f20_df['degrader_tier'] == _best_t20,
                                                'product_inhibition_penalty'].median())
-                ax.annotate(f'Best tier ({_best_t20})\nmedian = {_best_med20:.0f}',
+                ax.annotate(f'Top tier ({_best_t20})\nmedian = {_best_med20:.0f}',
                             xy=(0, _best_med20),
                             xytext=(0, _best_med20 + _ymax20 * 0.22),
                             ha='center', va='bottom', fontsize=8, color='#007A50',
@@ -3309,11 +3309,11 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     # --- Figure 17a: Chemical Space UMAP Manifold ---
     if 'UMAP_X' in df.columns:
         fig, ax = plt.subplots(figsize=(10, 7))
-        # Local colour overrides so Perfect_B and Best_A are visually distinct
+        # Local colour overrides so Tier_1B and Tier_2A are visually distinct
         # even if TIER_PALETTE assigns them similar shades.
         _f05_palette = dict(TIER_PALETTE)
-        _f05_palette['Perfect_B'] = '#C0392B'   # deep crimson — distinct from Perfect_A gold
-        _f05_palette['Best_A']    = '#8E44AD'   # purple — distinct from Best_B blue
+        _f05_palette[CFG.TIER_ORDER[1]] = '#C0392B'   # deep crimson — distinct from {CFG.TIER_TOP} gold
+        _f05_palette[CFG.TIER_ORDER[2]]    = '#8E44AD'   # purple — distinct from Tier_2B blue
         # Draw largest tiers first (background) → smallest tiers last (foreground)
         tiers_by_size = sorted(existing_tiers,
                                key=lambda t: df[df['degrader_tier'] == t].shape[0],
@@ -3322,8 +3322,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             sub = df[df['degrader_tier'] == tier]
             if sub.empty:
                 continue
-            is_pa  = tier == 'Perfect_A'
-            is_top = tier in ('Perfect_B', 'Best_A')
+            is_pa  = tier == CFG.TIER_TOP
+            is_top = tier in (CFG.TIER_ORDER[1], CFG.TIER_ORDER[2])
             ax.scatter(sub['UMAP_X'], sub['UMAP_Y'],
                        c=_f05_palette.get(tier, '#999'),
                        alpha=0.95 if is_pa else (0.75 if is_top else 0.45),
@@ -3416,7 +3416,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", fontsize=10)
         ax.set_ylabel("UMAP Dimension 2", fontsize=10)
         ax.grid(False)
-        # Rebuild handles in tier order (Perfect_A → worst), not size order
+        # Rebuild handles in tier order (Tier_1A → worst), not size order
         _h5, _l5 = [], []
         from matplotlib.lines import Line2D as _L5
         for t in existing_tiers:
@@ -3445,8 +3445,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         reporter.log(f"  ✔ Saved: {(out_dir / 'Figure_17a_Chemical_Space_Map.png').resolve()}")
 
     # Figure 17b: PA companion (chemical space landscape)
-    if _pa_has_imgs:
-        _fig_17b_pa_landscape(df, _pa, _imgs, out_dir, reporter)
+    if _tt_has_imgs:
+        _fig_17b_tt_landscape(df, _pa, _imgs, out_dir, reporter)
 
     # --- Figure 18: Candidate Fingerprint: 18a (top-5 hits) + 18b (one per tier) ---
     _radar_labels = {
@@ -3466,7 +3466,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     def _draw_radar(rows_df, baseline_df, metrics, fig_path, subtitle,
                     label_mode='tier'):
         # label_mode='rank'  → "Fluoroacetate (Rank 1)"
-        # label_mode='tier'  → "Fluoroacetate (Perfect_A)"
+        # label_mode=f'tier'  → "Fluoroacetate (Tier_1A)"
         if not metrics:
             return
         _all = pd.concat([rows_df[metrics], baseline_df[metrics]]) if not baseline_df.empty else rows_df[metrics]
@@ -3511,7 +3511,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         if not baseline_df.empty:
             bvals = _scaler_vals.iloc[-1].values.flatten().tolist() + [_scaler_vals.iloc[-1].values[0]]
             ax_r.plot(angles, bvals, linewidth=2, linestyle='--', color='#999',
-                      label='Decoy avg.  (reference)', zorder=3)
+                      label=f'{CFG.TIER_DECOY} avg.  (reference)', zorder=3)
             ax_r.fill(angles, bvals, color='#999', alpha=0.05, zorder=2)
             ax_r.scatter(angles[:-1], bvals[:-1],
                          color='#999', s=45, zorder=5, edgecolors='white', linewidths=0.8)
@@ -3558,8 +3558,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             worst_avg  = (df[df['degrader_tier'] == worst_tier].mean(numeric_only=True).to_frame().T
                           if worst_tier else pd.DataFrame())
 
-            # --- 18a: All Perfect_A complexes sorted by Scientific_Rank ---
-            _pa18a = df[df['degrader_tier'] == 'Perfect_A'].copy()
+            # --- 18a: All Tier_1A complexes sorted by Scientific_Rank ---
+            _pa18a = df[df['degrader_tier'] == CFG.TIER_TOP].copy()
             _sort_col18a = 'Scientific_Rank' if 'Scientific_Rank' in _pa18a.columns \
                            else 'Boltz_Model_Confidence'
             _asc18a = _sort_col18a == 'Scientific_Rank'
@@ -3568,7 +3568,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 _pa18a = df.sort_values('Boltz_Model_Confidence', ascending=False).head(8)
             _draw_radar(_pa18a, worst_avg, metrics_r,
                         out_dir / "Figure_18a_Fingerprint_TopHits.png",
-                        "All Perfect_A complexes vs. worst-tier baseline",
+                        f"All {CFG.TIER_TOP} complexes vs. worst-tier baseline",
                         label_mode='rank')
             reporter.log(f"  ✔ Saved: {(out_dir / 'Figure_18a_Fingerprint_TopHits.png').resolve()}")
 
@@ -3581,7 +3581,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             rep_df = pd.concat(reps_b) if reps_b else df.head(len(existing_tiers))
             _draw_radar(rep_df, pd.DataFrame(), metrics_r,
                         out_dir / "Figure_18b_Fingerprint_TierReps.png",
-                        "One best representative per tier (Perfect_A → worst)",
+                        f"One best representative per tier ({CFG.TIER_TOP} → worst)",
                         label_mode='tier')
             reporter.log(f"  ✔ Saved: {(out_dir / 'Figure_18b_Fingerprint_TierReps.png').resolve()}")
     except Exception as e:
@@ -3777,7 +3777,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     if 'Conflict_Category' in df.columns and 'degrader_tier' in df.columns:
         cat_colours_f2 = {
             'Consensus High': '#009E73', 'Hidden Gem': '#CC79A7',
-            'Decoy': '#D55E00', 'Consensus Low': '#777777', 'Ambiguous': '#E69F00'}
+            CFG.TIER_DECOY: '#D55E00', 'Consensus Low': '#777777', 'Ambiguous': '#E69F00'}
         # Canonical plotting order: favourable → concerning, left → right
         cat_order_f2 = ['Consensus High', 'Hidden Gem', 'Ambiguous', 'Consensus Low', 'Decoy']
         present_cats_f2 = [c for c in cat_order_f2 if c in df['Conflict_Category'].unique()]
@@ -4179,7 +4179,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     try:
         _phys_col22 = next((c for c in ['Pareto_Rank', 'Ensemble_Data_Rank'] if c in df.columns), None)
         _ai_col22   = next((c for c in ['Boltz_Model_Confidence', 'iptm', 'ptm'] if c in df.columns), None)
-        _tier_strong22 = {'Perfect_A', 'Perfect_B', 'Best_A'}
+        _tier_strong22 = {CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2]}
 
         if _phys_col22 and _ai_col22 and 'degrader_tier' in df.columns:
             _n22 = len(df)
@@ -4238,29 +4238,29 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                                    edgecolor='#444', linewidth=2.0,
                                    linestyle=':', zorder=4))
 
-            _set_PA22 = set(df.index[df['degrader_tier'] == 'Perfect_A'])
+            _set_PA22 = set(df.index[df['degrader_tier'] == CFG.TIER_TOP])
             _n_PA22   = len(_set_PA22)
-            _pa_cx22, _pa_cy22, _r_PA22, _pa_col22 = _cx_C, _cy_C, 0.50, '#CC79A7'
+            _tt_cx22, _tt_cy22, _r_PA22, _tt_col22 = _cx_C, _cy_C, 0.50, '#CC79A7'
             if _n_PA22 > 0:
                 _fA = len(_set_PA22 & _set_A) / _n_PA22
                 _fB = len(_set_PA22 & _set_B) / _n_PA22
                 _fC = len(_set_PA22 & _set_C) / _n_PA22
                 _ww = _fA + _fB + _fC
                 if _ww > 0:
-                    _pa_cx22 = (_fA * _cx_A + _fB * _cx_B + _fC * _cx_C) / _ww
-                    _pa_cy22 = (_fA * _cy_A + _fB * _cy_B + _fC * _cy_C) / _ww
-                ax22.add_patch(_Circ22((_pa_cx22, _pa_cy22), _r_PA22,
-                                       facecolor=_pa_col22, alpha=0.28,
-                                       edgecolor=_pa_col22, linewidth=2.5,
+                    _tt_cx22 = (_fA * _cx_A + _fB * _cx_B + _fC * _cx_C) / _ww
+                    _tt_cy22 = (_fA * _cy_A + _fB * _cy_B + _fC * _cy_C) / _ww
+                ax22.add_patch(_Circ22((_tt_cx22, _tt_cy22), _r_PA22,
+                                       facecolor=_tt_col22, alpha=0.28,
+                                       edgecolor=_tt_col22, linewidth=2.5,
                                        linestyle='--', zorder=5))
-                ax22.annotate(f'Perfect_A\n(n={_n_PA22:,})',
-                              xy=(_pa_cx22 - _r_PA22 * 0.7, _pa_cy22 + _r_PA22 * 0.7),
-                              xytext=(_pa_cx22 - 2.2, _pa_cy22 + 1.4),
+                ax22.annotate(f'{CFG.TIER_TOP}\n(n={_n_PA22:,})',
+                              xy=(_tt_cx22 - _r_PA22 * 0.7, _tt_cy22 + _r_PA22 * 0.7),
+                              xytext=(_tt_cx22 - 2.2, _tt_cy22 + 1.4),
                               ha='center', va='bottom', fontsize=8,
-                              color=_pa_col22, fontweight='bold', zorder=9,
+                              color=_tt_col22, fontweight='bold', zorder=9,
                               bbox=dict(boxstyle='round,pad=0.20', fc='#F9E4F2',
-                                        ec=_pa_col22, alpha=0.93, linewidth=1.3),
-                              arrowprops=dict(arrowstyle='->', color=_pa_col22,
+                                        ec=_tt_col22, alpha=0.93, linewidth=1.3),
+                              arrowprops=dict(arrowstyle='->', color=_tt_col22,
                                               lw=1.1, shrinkA=0, shrinkB=3))
 
             # Primary set labels — uniform size, bold, distinct filled-and-outlined box
@@ -4334,12 +4334,12 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 _Patch22(facecolor='#D55E00', alpha=0.45, edgecolor='#D55E00',
                          linewidth=1.2, label='AI-Strong  (top-33% confidence)'),
                 _Patch22(facecolor='#009E73', alpha=0.45, edgecolor='#009E73',
-                         linewidth=1.2, label='Tier-Strong  (Perfect_A/B, Best_A)'),
+                         linewidth=1.2, label=f'Tier-Strong  ({CFG.TIER_TOP}/B, {CFG.TIER_ORDER[2]})'),
             ]
             if _n_PA22 > 0:
                 _leg22.append(_L22([0], [0], color='#CC79A7', linewidth=2.2,
                                    linestyle='--',
-                                   label=f'Perfect_A overlay  (n={_n_PA22:,})'))
+                                   label=f'{CFG.TIER_TOP} overlay  (n={_n_PA22:,})'))
             _leg22.append(_L22([0], [0], color='#444', linewidth=1.8,
                                linestyle=':', marker='o', markersize=12,
                                markerfacecolor='none', markeredgecolor='#444',
@@ -4445,13 +4445,13 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         protein_summary = protein_summary.join(tier_counts_piv, on='prot').fillna(0)
         protein_summary = protein_summary.astype({t: int for t in tier_order})
         # Quality-weighted sort: sum of (tier_rank × count) then total as tiebreaker
-        _tier_wt23 = {'Perfect_A': 6, 'Perfect_B': 5, 'Best_A': 4,
-                      'Best_B': 3, 'Good': 2, 'Decoy': 1}
+        _tier_wt23 = {CFG.TIER_TOP: 6, CFG.TIER_ORDER[1]: 5, CFG.TIER_ORDER[2]: 4,
+                      CFG.TIER_ORDER[3]: 3, CFG.TIER_ORDER[4]: 2, CFG.TIER_DECOY: 1}
         protein_summary['_qscore'] = sum(
             protein_summary[t] * _tier_wt23.get(t, 0) for t in tier_order
         )
         protein_summary = protein_summary.sort_values(
-            ['_qscore', 'total_pfases', 'Perfect_A', 'Perfect_B'],
+            ['_qscore', 'total_pfases', CFG.TIER_TOP, CFG.TIER_ORDER[1]],
             ascending=False
         )
         top_proteins = protein_summary.head(25).set_index('prot')
@@ -4500,17 +4500,17 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         ax.set_axisbelow(True)
         for i, prot in enumerate(bar_data.index):
             total  = int(bar_data.loc[prot].sum())
-            pa_cnt = int(bar_data.loc[prot, 'Perfect_A']) \
-                     if 'Perfect_A' in bar_data.columns else 0
+            pa_cnt = int(bar_data.loc[prot, CFG.TIER_TOP]) \
+                     if CFG.TIER_TOP in bar_data.columns else 0
             _lbl = f'{total}' if pa_cnt == 0 else f'{total}  ★×{pa_cnt}'
             ax.text(total + 0.15, i, _lbl, va='center', fontsize=8.5,
-                    color=tier_colors['Perfect_A'] if pa_cnt > 0 else '#444',
+                    color=tier_colors[CFG.TIER_TOP] if pa_cnt > 0 else '#444',
                     fontweight='bold' if pa_cnt > 0 else 'normal')
         legend_h23 = [_mp.Patch(color=tier_colors[t], label=t.replace('_', ' '))
                       for t in tier_order]
         fig23a.legend(handles=legend_h23, loc='lower center', ncol=6, frameon=False,
                       fontsize=9.5,
-                      title='Degrader tier  (★×N = Perfect_A count per protein)',
+                      title=f'Degrader tier  (★×N = {CFG.TIER_TOP} count per protein)',
                       title_fontsize=9)
         # Figure title removed per request.
         plt.tight_layout(rect=[0, 0.07, 1, 1])
@@ -4555,12 +4555,12 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
         # 1) Nucleophile distance — cuts = CFG.TIER_NUC_DIST gate values
         _nd = CFG.TIER_NUC_DIST
-        _nuc_bins_24 = [-np.inf, _nd['Perfect_A'], _nd['Best_A'], _nd['Best_B'], _nd['Good'], np.inf]
-        _nuc_lbls_24 = [f'≤{_nd["Perfect_A"]:.1f}Å',
-                        f'{_nd["Perfect_A"]:.1f}–{_nd["Best_A"]:.1f}Å',
-                        f'{_nd["Best_A"]:.1f}–{_nd["Best_B"]:.1f}Å',
-                        f'{_nd["Best_B"]:.1f}–{_nd["Good"]:.1f}Å',
-                        f'>{_nd["Good"]:.1f}Å']
+        _nuc_bins_24 = [-np.inf, _nd[CFG.TIER_TOP], _nd[CFG.TIER_ORDER[2]], _nd[CFG.TIER_ORDER[3]], _nd[CFG.TIER_ORDER[4]], np.inf]
+        _nuc_lbls_24 = [f'≤{_nd[CFG.TIER_TOP]:.1f}Å',
+                        f'{_nd[CFG.TIER_TOP]:.1f}–{_nd[CFG.TIER_ORDER[2]]:.1f}Å',
+                        f'{_nd[CFG.TIER_ORDER[2]]:.1f}–{_nd[CFG.TIER_ORDER[3]]:.1f}Å',
+                        f'{_nd[CFG.TIER_ORDER[3]]:.1f}–{_nd[CFG.TIER_ORDER[4]]:.1f}Å',
+                        f'>{_nd[CFG.TIER_ORDER[4]]:.1f}Å']
         d['nuc_cat'] = (pd.cut(_num24('Dist_Nucleophile_ASP110'),
                                bins=_nuc_bins_24, labels=_nuc_lbls_24)
                         .astype(str).fillna('Unknown')) if 'Dist_Nucleophile_ASP110' in d.columns else 'Unknown'
@@ -4575,32 +4575,32 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _nb24, _ba24 = _num24('dist_nuc_base_internal'), _num24('dist_base_acid_internal')
         _nbm, _bam = CFG.TIER_NB_MAX, CFG.TIER_BA_MAX
         _triad_lbls_24 = ['Triad tight', 'Triad moderate', 'Triad loose']
-        d['triad_cat'] = np.where((_nb24 <= _nbm['Perfect_A']) & (_ba24 <= _bam['Perfect_A']), 'Triad tight',
-                          np.where((_nb24 <= _nbm['Best_A']) & (_ba24 <= _bam['Best_A']), 'Triad moderate',
+        d['triad_cat'] = np.where((_nb24 <= _nbm[CFG.TIER_TOP]) & (_ba24 <= _bam[CFG.TIER_TOP]), 'Triad tight',
+                          np.where((_nb24 <= _nbm[CFG.TIER_ORDER[2]]) & (_ba24 <= _bam[CFG.TIER_ORDER[2]]), 'Triad moderate',
                                    'Triad loose'))
         # 5) SN2 attack angle — cuts = CFG.TIER_ANGLE_MIN
         _am = CFG.TIER_ANGLE_MIN
-        _ang_ord_24 = [f'<{_am["Best_B"]:.0f}°',
-                       f'{_am["Best_B"]:.0f}–{_am["Best_A"]:.0f}°',
-                       f'{_am["Best_A"]:.0f}–{_am["Perfect_B"]:.0f}°',
-                       f'{_am["Perfect_B"]:.0f}–{_am["Perfect_A"]:.0f}°',
-                       f'≥{_am["Perfect_A"]:.0f}°']
+        _ang_ord_24 = [f'<{_am[CFG.TIER_ORDER[3]]:.0f}°',
+                       f'{_am[CFG.TIER_ORDER[3]]:.0f}–{_am[CFG.TIER_ORDER[2]]:.0f}°',
+                       f'{_am[CFG.TIER_ORDER[2]]:.0f}–{_am[CFG.TIER_ORDER[1]]:.0f}°',
+                       f'{_am[CFG.TIER_ORDER[1]]:.0f}–{_am[CFG.TIER_TOP]:.0f}°',
+                       f'≥{_am[CFG.TIER_TOP]:.0f}°']
         d['ang_cat'] = (pd.cut(_num24('SN2_Attack_Angle', -1),
-                               bins=[-np.inf, _am['Best_B'], _am['Best_A'], _am['Perfect_B'], _am['Perfect_A'], np.inf],
+                               bins=[-np.inf, _am[CFG.TIER_ORDER[3]], _am[CFG.TIER_ORDER[2]], _am[CFG.TIER_ORDER[1]], _am[CFG.TIER_TOP], np.inf],
                                labels=_ang_ord_24)
                         .astype(str).fillna('Unknown')) if 'SN2_Attack_Angle' in d.columns else 'Unknown'
         # 6) Mechanistic fingerprint score — cuts = CFG.TIER_MECH_MIN
         _mm = CFG.TIER_MECH_MIN
-        _mech_lbls_24 = [f'<{_mm["Best_A"]:.1f}',
-                         f'{_mm["Best_A"]:.1f}–{_mm["Perfect_B"]:.1f}',
-                         f'{_mm["Perfect_B"]:.1f}–{_mm["Perfect_A"]:.1f}',
-                         f'≥{_mm["Perfect_A"]:.1f}']
+        _mech_lbls_24 = [f'<{_mm[CFG.TIER_ORDER[2]]:.1f}',
+                         f'{_mm[CFG.TIER_ORDER[2]]:.1f}–{_mm[CFG.TIER_ORDER[1]]:.1f}',
+                         f'{_mm[CFG.TIER_ORDER[1]]:.1f}–{_mm[CFG.TIER_TOP]:.1f}',
+                         f'≥{_mm[CFG.TIER_TOP]:.1f}']
         d['mech_cat'] = (pd.cut(_num24('mechanistic_score', np.nan),
-                                bins=[-np.inf, _mm['Best_A'], _mm['Perfect_B'], _mm['Perfect_A'], np.inf],
+                                bins=[-np.inf, _mm[CFG.TIER_ORDER[2]], _mm[CFG.TIER_ORDER[1]], _mm[CFG.TIER_TOP], np.inf],
                                 labels=_mech_lbls_24)
                          .astype(str).fillna('Unknown')) if 'mechanistic_score' in d.columns else 'Unknown'
 
-        # Order mirrors 02_Production tier cascade: Perfect_A → … → Good → Poor → Decoy
+        # Order mirrors 02_Production tier cascade: Tier_1A → … → Tier_3 → Tier_4 → Tier_5_Decoy
         _tier_ord_24 = CFG.TIER_ORDER + ['Other']
         d['tier_cat'] = d[CFG.COL_TIER].astype(str)
         d.loc[~d['tier_cat'].isin(_tier_ord_24[:-1]), 'tier_cat'] = 'Other'
@@ -4635,10 +4635,10 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             'mech_cat':  dict(zip(_mech_lbls_24, CFG.SANKEY_MECH_GRAD)),
         }
         _tier_clr_24  = {t: TIER_PALETTE.get(t, '#999')
-                         for t in ['Perfect_A','Perfect_B','Best_A','Best_B','Good','Poor','Decoy','Other']}
+                         for t in [CFG.TIER_TOP,CFG.TIER_ORDER[1],CFG.TIER_ORDER[2],CFG.TIER_ORDER[3],CFG.TIER_ORDER[4],CFG.TIER_POOR,CFG.TIER_DECOY,'Other']}
         _tier_alp_24  = {
-            'Perfect_A': 0.72, 'Perfect_B': 0.68, 'Best_A': 0.62,
-            'Best_B': 0.57, 'Good': 0.48, 'Poor': 0.42, 'Decoy': 0.36, 'Other': 0.28,
+            CFG.TIER_TOP: 0.72, CFG.TIER_ORDER[1]: 0.68, CFG.TIER_ORDER[2]: 0.62,
+            CFG.TIER_ORDER[3]: 0.57, CFG.TIER_ORDER[4]: 0.48, CFG.TIER_POOR: 0.42, CFG.TIER_DECOY: 0.36, 'Other': 0.28,
         }
 
         def _clr_24(cat_col, lbl):
@@ -4671,7 +4671,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             total_h = _BH_24 - _BGAP_24 * max(len(nz) - 1, 0)
             total_c = max(sum(nz.values()), 1)
             # Stack TOP-DOWN so the first label in `order` sits at the top of the
-            # column (best category on top — Perfect_A, ≤3.0Å, ≥175°, …).
+            # column (best category on top — Tier_1A, ≤3.0Å, ≥175°, …).
             pos = {}
             y = _BY0_24 + _BH_24
             for lbl, cnt in nz.items():
@@ -4740,7 +4740,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _rr, _gg, _bb = _mcol24.to_rgb(box_color)
             _lum = 0.299 * _rr + 0.587 * _gg + 0.114 * _bb
             lbl_col = 'white' if _lum < 0.6 else '#111111'
-            # Show the actual COUNT (not %) — a rare class like Perfect_A (n=8) must
+            # Show the actual COUNT (not %) — a rare class like Tier_1A (n=8) must
             # read "8", never a rounded "0.0%".
             _cnt_s = f'{int(count):,}'
             # Single line "label  count" (wrap only if long). Font scales with box
@@ -4950,9 +4950,9 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _cb25.set_label('Count per hex', fontsize=9)
         _cb25.ax.tick_params(labelsize=8)
         _samp_A25 = _d25.sample(min(3000, len(_d25)), random_state=42)
-        for _t25a in sorted(TIER_ORDER_LOGIC, key=lambda t: t == 'Perfect_A'):
-            _is_pa25a = (_t25a == 'Perfect_A')
-            # Perfect_A is crucial and rare → plot ALL of its points (never sampled)
+        for _t25a in sorted(TIER_ORDER_LOGIC, key=lambda t: t == CFG.TIER_TOP):
+            _is_pa25a = (_t25a == CFG.TIER_TOP)
+            # Tier_1A is crucial and rare → plot ALL of its points (never sampled)
             _src25a = _d25 if _is_pa25a else _samp_A25
             _ts25 = _src25a[_src25a['degrader_tier'] == _t25a]
             if _ts25.empty:
@@ -5024,8 +5024,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
         # Outcome palette + per-bin colours — sourced from CFG (§ 9.9, § 9.9b).
         _oc25_colors_b = dict(CFG.OUTCOME_COLOUR)
-        _bin_palette_25 = list(CFG.PFAS_SIZE_BIN_COLOUR)
-        _bin_cols_25 = [_bin_palette_25[i % len(_bin_palette_25)] for i in range(len(_oc_pct25))]
+        _bin_ttlette_25 = list(CFG.PFAS_SIZE_BIN_COLOUR)
+        _bin_cols_25 = [_bin_ttlette_25[i % len(_bin_ttlette_25)] for i in range(len(_oc_pct25))]
 
         fig25b, axB = plt.subplots(figsize=(15, 8))
         _xB, _wB, _offB = np.arange(len(_oc_pct25)), 0.27, 0.19   # bars 75% of prior width
@@ -5200,7 +5200,7 @@ def write_figure_descriptions(out_dir: Path):
         "Figure 01 — Figure_01_Tier_Distribution.png",
         "  Title   : Distribution of Catalytic Tiers",
         "  Type    : Vertical bar chart — count + percentage annotations inside bars",
-        "  X-axis  : Tier name (ordered best→worst: Perfect_A, Perfect_B, Best_A, Best_B, Good, Poor)",
+        f"  X-axis  : Tier name (ordered best→worst: {CFG.TIER_TOP}, {CFG.TIER_ORDER[1]}, {CFG.TIER_ORDER[2]}, Tier_2B, {CFG.TIER_ORDER[4]}, {CFG.TIER_POOR})",
         "  Y-axis  : Count of protein–ligand complexes",
         "  Inset   : Pie chart showing Boltz-2 diffusion model selection frequency (model_0–model_4)",
         "  Look for: The fraction of candidates reaching each quality level.",
@@ -5226,7 +5226,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Colour  : Grade-specific green-to-brown ramp (same palette as Figure 02)",
         "  Annotations: Count + % for segments >=2.5%",
         "  Look for: Do higher-tier proteins cluster at higher sequence identity grades?",
-        "            If Perfect/Best rows are dominated by Grade A-C, conservation tracks quality.",
+        "            If Tier_1/Tier_2 rows are dominated by Grade A-C, conservation tracks quality.",
         "",
         "=" * 80,
         "PART 2 — AI PREDICTION QUALITY",
@@ -5245,13 +5245,13 @@ def write_figure_descriptions(out_dir: Path):
         "            Panel B: best-tier points should sit above the diagonal and cluster top-right.",
         "",
         "-" * 80,
-        "Figure 04b — Figure_04b_PA_AI_Quality_Space.png",
-        "  Title   : Perfect_A AI Quality Space (hexbin density + structure thumbnails)",
+        "Figure 04b — Figure_04b_TT_AI_Quality_Space.png",
+        f"  Title   : {CFG.TIER_TOP} AI Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of pTM vs. ipTM; inset PyMOL structure thumbnails",
         "  Axes    : X = pTM (global fold confidence, 0-1); Y = ipTM (interface confidence, 0-1)",
-        "  Stars   : Mark Perfect_A PFAS positions in the pTM/ipTM confidence space",
-        "  Insets  : PyMOL-rendered protein-ligand structures for each Perfect_A representative",
-        "  Look for: Perfect_A stars in the top-right quadrant (high pTM AND high ipTM).",
+        f"  Stars   : Mark {CFG.TIER_TOP} PFAS positions in the pTM/ipTM confidence space",
+        f"  Insets  : PyMOL-rendered protein-ligand structures for each {CFG.TIER_TOP} representative",
+        f"  Look for: {CFG.TIER_TOP} stars in the top-right quadrant (high pTM AND high ipTM).",
         "            Structure thumbnails show the active-site geometry at a glance.",
         "",
         "-" * 80,
@@ -5264,7 +5264,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Colour  : Catalytic tier; diamond markers show per-tier median positions",
         "  Zones   : Green band above diagonal = interface-dominant (preferred); red band below = fold-dominant",
         "  Look for: Best-tier points cluster above the diagonal and in the top-right corner.",
-        "            Decoy complexes often fall below the diagonal (fold confident, interface uncertain).",
+        f"            {CFG.TIER_DECOY} complexes often fall below the diagonal (fold confident, interface uncertain).",
         "",
         "=" * 80,
         "PART 3 — STRUCTURAL VALIDATION",
@@ -5329,7 +5329,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Zones   : Green (>=0.88 = strong), Yellow (0.50-0.88 = moderate), Red (<0.50 = weak)",
         "  Annotations: Large dot = mean; vertical bar = 95% CI; % label = fraction in strong zone",
         "  Look for: Most complexes score >=0.88 across all tiers — active-site architecture conserved.",
-        "            Poor tier has the widest spread (some missing residues in contact).",
+        f"            {CFG.TIER_POOR} tier has the widest spread (some missing residues in contact).",
         "",
         "-" * 80,
         "Figure 11 — Figure_11_SN2_Angle_by_Tier.png",
@@ -5340,8 +5340,8 @@ def write_figure_descriptions(out_dir: Path):
         "  Y-axis  : Cumulative fraction of complexes in each tier with angle <= X (read as %)",
         "  Dots    : Median angle per tier",
         "  How to read: Y% of complexes in this tier have SN2 angle <= X degrees",
-        "  Look for: Perfect/Best tiers: ECDF curves shifted right (most complexes at high angles).",
-        "            Good/Poor: curves shifted left. Tier thresholds show what % meet each criterion.",
+        "  Look for: Tier_1/Tier_2 tiers: ECDF curves shifted right (most complexes at high angles).",
+        f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR}: curves shifted left. Tier thresholds show what % meet each criterion.",
         "",
         "-" * 80,
         "Figure 12a — Figure_12a_Mechanism_Geometry_Scatter.png",
@@ -5353,17 +5353,17 @@ def write_figure_descriptions(out_dir: Path):
         "  Shape   : Circle = halide-stabilised (TRP/TYR aromatic shield present); X = not stabilised",
         "  Dashed lines: Vertical = distance thresholds per tier; Horizontal = angle thresholds.",
         "  Shading : Green zone = ideal geometry (short distance AND high angle).",
-        "  Look for: Perfect/Best tier points cluster top-left (short distance + high angle).",
-        "            Good/Poor tier points scatter widely — geometry less constrained.",
+        "  Look for: Tier_1/Tier_2 tier points cluster top-left (short distance + high angle).",
+        f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR} tier points scatter widely — geometry less constrained.",
         "",
         "-" * 80,
-        "Figure 12b — Figure_12b_PA_Mechanistic_Quality_Space.png",
-        "  Title   : Perfect_A Mechanistic Quality Space (hexbin density + structure thumbnails)",
+        "Figure 12b — Figure_12b_TT_Mechanistic_Quality_Space.png",
+        f"  Title   : {CFG.TIER_TOP} Mechanistic Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter; inset PyMOL protein-ligand structure thumbnails",
         "  Axes    : X = Dist_ASP110 (Ang); Y = SN2_Attack_Angle (degrees)",
-        "  Stars   : Highlight Perfect_A PFAS complexes within the mechanistic space",
-        "  Insets  : PyMOL-rendered active-site views for each Perfect_A representative protein",
-        "  Look for: Perfect_A stars clustered in the ideal mechanistic zone (top-left corner).",
+        f"  Stars   : Highlight {CFG.TIER_TOP} PFAS complexes within the mechanistic space",
+        f"  Insets  : PyMOL-rendered active-site views for each {CFG.TIER_TOP} representative protein",
+        f"  Look for: {CFG.TIER_TOP} stars clustered in the ideal mechanistic zone (top-left corner).",
         "            Insets confirm the geometry seen in data is reflected in the 3-D structure.",
         "",
         "=" * 80,
@@ -5382,16 +5382,16 @@ def write_figure_descriptions(out_dir: Path):
         "            NOTE: violin KDE may extend slightly above 1.0 (kernel smoothing artefact; raw data <=1.0)",
         "  Look for: Halogen contacts dominate (PFAS ligands carry many F atoms).",
         "            Higher tiers should show richer F-Polar / F-Hydrophobic engagement.",
-        "            Panel B: Perfect/Best tiers engage a higher fraction of ligand fluorine.",
+        "            Panel B: Tier_1/Tier_2 tiers engage a higher fraction of ligand fluorine.",
         "",
         "-" * 80,
-        "Figure 13b — Figure_13b_PA_Interaction_Quality_Space.png",
-        "  Title   : Perfect_A Interaction Quality Space (hexbin density + structure thumbnails)",
+        "Figure 13b — Figure_13b_TT_Interaction_Quality_Space.png",
+        f"  Title   : {CFG.TIER_TOP} Interaction Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of Binding_Prob vs. ipTM; inset PyMOL structures",
         "  Axes    : X = Binding Probability; Y = ipTM (interface confidence)",
-        "  Stars   : Mark Perfect_A PFAS positions in the binding-confidence 2-D space",
-        "  Insets  : PyMOL-rendered protein-ligand structures for each Perfect_A representative",
-        "  Look for: Perfect_A stars clustered top-right (high binding probability + high interface confidence).",
+        f"  Stars   : Mark {CFG.TIER_TOP} PFAS positions in the binding-confidence 2-D space",
+        f"  Insets  : PyMOL-rendered protein-ligand structures for each {CFG.TIER_TOP} representative",
+        f"  Look for: {CFG.TIER_TOP} stars clustered top-right (high binding probability + high interface confidence).",
         "",
         "-" * 80,
         "Figure 14 — Figure_14_Fluorine_Engagement_by_Tier.png",
@@ -5402,7 +5402,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Right axis: Median FER trend line per tier (blue diamonds with 95% CI band)",
         "  Annotations: med=X, n=Y badge above each box",
         "  Look for: Do higher tiers engage a greater fraction of ligand fluorine atoms?",
-        "            A rising trend line from Poor to Perfect confirms tier-quality tracks F-engagement.",
+        f"            A rising trend line from {CFG.TIER_POOR} to Tier_1A confirms tier-quality tracks F-engagement.",
         "",
         "=" * 80,
         "PART 6 — BINDING ENERGETICS",
@@ -5417,8 +5417,8 @@ def write_figure_descriptions(out_dir: Path):
         "  Panel B : Connected dot-line of Product Inhibition Penalty Score per tier (right axis)",
         "            Higher penalty = greater risk of product feedback inhibition after C-F cleavage",
         "            Shaded band = 95% CI around median",
-        "  Look for: Panel A: Poor tier may show a marginally broader/lower distribution.",
-        "            Panel B: Perfect/Best tiers may show higher penalty — tighter binding means product",
+        f"  Look for: Panel A: {CFG.TIER_POOR} tier may show a marginally broader/lower distribution.",
+        "            Panel B: Tier_1/Tier_2 tiers may show higher penalty — tighter binding means product",
         "            also binds more tightly, increasing feedback risk.",
         "",
         "-" * 80,
@@ -5453,15 +5453,15 @@ def write_figure_descriptions(out_dir: Path):
         "            Hidden Gems isolated from their tier cluster may have unusual chemistry.",
         "",
         "-" * 80,
-        "Figure 17b — Figure_17b_PA_Chemical_Space_Landscape.png",
-        "  Title   : Perfect_A Chemical Space Landscape (KDE density + structure thumbnails)",
+        "Figure 17b — Figure_17b_TT_Chemical_Space_Landscape.png",
+        f"  Title   : {CFG.TIER_TOP} Chemical Space Landscape (KDE density + structure thumbnails)",
         "  Type    : KDE density contour overlay on UMAP scatter; inset PyMOL structure thumbnails",
         "  Axes    : UMAP dimensions 1 & 2",
-        "  Stars   : Gold/green star markers indicate Perfect_A PFAS positions",
-        "  Insets  : PyMOL-rendered protein-ligand structures for each Perfect_A representative",
-        "  Look for: Density ridgelines isolating Perfect_A from lower-tier complexes.",
+        f"  Stars   : Gold/green star markers indicate {CFG.TIER_TOP} PFAS positions",
+        f"  Insets  : PyMOL-rendered protein-ligand structures for each {CFG.TIER_TOP} representative",
+        f"  Look for: Density ridgelines isolating {CFG.TIER_TOP} from lower-tier complexes.",
         "            Structure thumbnails reveal active-site geometry at a glance.",
-        "            If Perfect_A forms a tight cluster, they share structural/chemical features.",
+        f"            If {CFG.TIER_TOP} forms a tight cluster, they share structural/chemical features.",
         "",
         "=" * 80,
         "PART 8 — MULTI-METRIC SYNTHESIS",
@@ -5469,10 +5469,10 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "Figure 18a — Figure_18a_Fingerprint_TopHits.png",
-        "  Title   : Candidate Fingerprint — Top-5 Hits vs. Poor-Tier Baseline  [Radar]",
+        f"  Title   : Candidate Fingerprint — Top-5 Hits vs. {CFG.TIER_POOR}-Tier Baseline  [Radar]",
         "  Type    : Radar / spider chart with normalised metric spokes (0-1 each)",
         "  Spokes  : 5 normalised metrics: AI Confidence, ipTM, Interaction Density, mean pLDDT, Binding Prob.",
-        "  Lines   : Top-5 best-tier hits (coloured lines) vs. Poor-tier average baseline (red dashed)",
+        f"  Lines   : Top-5 best-tier hits (coloured lines) vs. {CFG.TIER_POOR}-tier average baseline (red dashed)",
         "  Look for: Hits forming large polygons outperform on multiple axes simultaneously.",
         "            Spokes where hits touch 1.0 = this metric is at its best possible value.",
         "            Spokes where baseline and hits overlap = metric does not discriminate.",
@@ -5506,23 +5506,23 @@ def write_figure_descriptions(out_dir: Path):
         "Figure 20 — Figure_20_Conflict_Composition.png",
         "  Title   : Conflict Category x Tier Composition — Stacked Bar",
         "  Type    : Side-by-side stacked bar (absolute counts left, % composition right)",
-        "  X-axis  : Conflict category (Consensus High, Hidden Gem, Ambiguous, Consensus Low, Decoy)",
+        f"  X-axis  : Conflict category (Consensus High, Hidden Gem, Ambiguous, Consensus Low, {CFG.TIER_DECOY})",
         "  Y-axis left : Absolute number of complexes in each category x tier combination",
         "  Y-axis right: Percentage composition of each conflict category by tier (sums to 100%)",
         "  Colour  : Degrader tier (same palette as all other figures)",
         "  Definitions:",
         "    Consensus High  = top 50% on both physics AND AI confidence",
-        "    Decoy           = high AI confidence but weak physics geometry (false positive risk)",
+        f"    {CFG.TIER_DECOY}           = high AI confidence but weak physics geometry (false positive risk)",
         "    Hidden Gem      = strong physics but low AI confidence (under-estimated by AI)",
         "    Ambiguous       = intermediate on both axes",
         "    Consensus Low   = bottom 50% on both axes",
-        "  Look for: Consensus High dominated by Perfect/Best tiers = metrics agree.",
-        "            Decoys concentrated in Poor/Good = AI over-confident on weaker candidates.",
+        "  Look for: Consensus High dominated by Tier_1/Tier_2 tiers = metrics agree.",
+        f"            {CFG.TIER_DECOY}s concentrated in {CFG.TIER_POOR}/{CFG.TIER_ORDER[4]} = AI over-confident on weaker candidates.",
         "            The % panel shows tier composition normalised — compare categories fairly.",
         "",
         "-" * 80,
         "Figure 21 — Figure_21_Hidden_Gems_DeepDive.png",
-        "  Title   : Hidden Gems — Physics-Good / AI-Missed Conflicts",
+        f"  Title   : Hidden Gems — Physics-{CFG.TIER_ORDER[4]} / AI-Missed Conflicts",
         "  Type    : Horizontal dual-dot lollipop slope chart (only generated if Hidden Gems exist)",
         "  X-axis  : Percentile rank (0-100%; 0 = worst, 100 = best)",
         "  Y-axis  : Each hidden gem complex (sorted by AI rank, best at top)",
@@ -5537,13 +5537,13 @@ def write_figure_descriptions(out_dir: Path):
         "-" * 80,
         "Figure 22 — Figure_22_Category_Overlap_Euler.png",
         "  Title   : Category Overlap — Euler / Venn Diagram",
-        "  Type    : Manual circle patches (3 main circles + Perfect_A dashed overlay)",
+        f"  Type    : Manual circle patches (3 main circles + {CFG.TIER_TOP} dashed overlay)",
         "  Sets    :",
         "    A (Physics-Strong)  : Pareto_Rank <= 33rd percentile (top 33% physics geometry)",
         "    B (AI-Strong)       : Boltz_Model_Confidence / ipTM / pTM >= 67th percentile (top 33% AI)",
-        "    C (Tier-Strong)     : degrader_tier in {Perfect_A, Perfect_B, Best_A}",
+        "    C (Tier-Strong)     : degrader_tier in {" + CFG.TIER_TOP + ", " + CFG.TIER_ORDER[1] + ", " + CFG.TIER_ORDER[2] + "}",
         "  Overlays:",
-        "    Dashed pink circle  : Perfect_A — weighted to their position across A/B/C",
+        f"    Dashed pink circle  : {CFG.TIER_TOP} — weighted to their position across A/B/C",
         "    Dotted grey circle  : All-three intersection highlight",
         "    Star markers        : 3R3U and DeHa4 reference controls (positioned in correct region)",
         "  Annotations: 7 region count boxes (count + row %); 4-column legend",
@@ -5556,7 +5556,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Type    : Horizontal stacked bar chart (one bar per protein, stacked by tier)",
         "  X-axis  : Number of unique PFAS ligands degraded (best tier per protein–ligand pair)",
         "  Y-axis  : Protein (top 25, ranked by quality-weighted degradation breadth)",
-        "  Colours : 6-tier palette (Perfect_A green → Decoy grey)",
+        f"  Colours : 6-tier palette ({CFG.TIER_TOP} green → {CFG.TIER_DECOY} grey)",
         "  Look for: Wide bars = broad-spectrum PFAS degraders. Deep-green left stack = top-tier activity across many ligands.",
         "",
         "-" * 80,
@@ -5567,7 +5567,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Colours : Same 6-tier palette; flow colour = tier of the protein–ligand pairing",
         "  Labels  : PFAS short name + total protein count outside each spoke cluster",
         "  Look for: Short-chain / polar PFAS (TFA, Fluoroacetate) have densest green spokes.",
-        "            Long-chain PFAS show fewer Perfect_A hits — used to guide substrate scope claims.",
+        f"            Long-chain PFAS show fewer {CFG.TIER_TOP} hits — used to guide substrate scope claims.",
         "",
         "-" * 80,
         "Figure 24 — Figure_24_Sankey_Workflow.png",
@@ -5576,11 +5576,11 @@ def write_figure_descriptions(out_dir: Path):
         "  Columns : Nuc Distance (CFG cuts) · Carboxylate Clamp (ARG111/114) ·",
         "            Halide Stabilisation · Triad Geometry (Nuc–Base · Base–Acid) ·",
         "            SN2 Angle · Mechanistic Fingerprint · Final Tier",
-        "  Order   : best category on top in every column (Perfect_A, ≤3.0 Å, ≥175°, ≥0.9)",
+        f"  Order   : best category on top in every column ({CFG.TIER_TOP}, ≤3.0 Å, ≥175°, ≥0.9)",
         "  Bins    : all cut points sourced from CFG (TIER_NUC_DIST / TIER_ANGLE_MIN /",
         "            TIER_NB_MAX / TIER_BA_MAX / TIER_MECH_MIN) — match 02_Production gates",
         "  Ribbons : Width proportional to complex count; coloured by destination tier",
-        "  Look for: Perfect_A requires ALL rules to pass (tight nuc + clamp + stabilisation",
+        f"  Look for: {CFG.TIER_TOP} requires ALL rules to pass (tight nuc + clamp + stabilisation",
         "            + tight triad + ≥175° + mech ≥0.9); the narrowing chain shows the attrition.",
         "",
         "-" * 80,
@@ -5589,7 +5589,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Type    : Hexbin density (F-count × SN2 angle) with tier scatter overlay and rolling median",
         "  X-axis  : Total fluorine count (proxy for carbon chain length); ticks every 2 units",
         "  Y-axis  : SN2 Attack Angle (°); green zone ≥165° = substrate; red zone <145° = inhibitor",
-        "  Look for: Rolling median SN2 trend across chain lengths; tier scatter reveals Perfect_A",
+        f"  Look for: Rolling median SN2 trend across chain lengths; tier scatter reveals {CFG.TIER_TOP}",
         "            distribution relative to substrate zone.",
         "",
         "-" * 80,
@@ -5599,7 +5599,7 @@ def write_figure_descriptions(out_dir: Path):
         "            a RIGHT stacked bar (degrader tier) side by side.",
         "  Left bar: Substrate (green), Borderline (amber), Reactive low conf (blue),",
         "            Non-reactive (grey), Potential Inhibitor (orange-red)",
-        "  Right bar: Degrader-tier composition (Perfect_A → Decoy palette)",
+        f"  Right bar: Degrader-tier composition ({CFG.TIER_TOP} → {CFG.TIER_DECOY} palette)",
         "  Look for: Substrate % peaks at short/medium chains; inhibition risk rises with chain length.",
         "",
         "-" * 80,
@@ -5629,19 +5629,19 @@ def main():
     args = parser.parse_args()
 
     root_dir = Path.cwd()
-    run_path = root_dir / args.run
-    if not run_path.exists():
-        print(f"Error: run folder not found: {run_path}")
+    run_ttth = root_dir / args.run
+    if not run_ttth.exists():
+        print(f"Error: run folder not found: {run_ttth}")
         sys.exit(1)
     
     _utils_mod.print_script_banner(
         "03_Validation_Figures_FAcDs.py",
         "Multi-Objective Ranking  ·  Pareto Frontiers  ·  Publication Figures",
     )
-    print(f"  Run Name : {run_path.name}", flush=True)
+    print(f"  Run Name : {run_ttth.name}", flush=True)
 
-    prod_dir = run_path / "1_Boltz2_Production"
-    out_dir = run_path / "3_Validation_Figures"
+    prod_dir = run_ttth / "1_Boltz2_Production"
+    out_dir = run_ttth / "3_Validation_Figures"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     np.random.seed(42)
@@ -5662,7 +5662,7 @@ def main():
 
         generate_comprehensive_figures(df, features, out_dir, reporter)
 
-        _thumb_dir_cleanup = out_dir / "_pa_thumbnails"
+        _thumb_dir_cleanup = out_dir / "_tt_thumbnails"
         if _thumb_dir_cleanup.exists():
             shutil.rmtree(_thumb_dir_cleanup)
 

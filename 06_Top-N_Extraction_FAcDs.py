@@ -50,7 +50,7 @@ Date   : 10 June 2026 <───────────────────
   2. Parallel Rendering: Spawns multiple PyMOL instances; on some systems (e.g.,
      macOS/Wayland), this may trigger GUI focus-stealing or X11 errors if not properly configured.
   3. Interactive Timeout: The 30-second tier-selection prompt requires an
-     active terminal; will auto-select the elite tier (CFG.T_PA) if no input is detected.
+     active terminal; will auto-select the elite tier (CFG.TIER_TOP) if no input is detected.
   4. PLIP Sensitivity: PLIP interaction detection is highly sensitive to PDB
      formatting; prepared PDBs from Step 05 are required for reliable signal.
 ───────────────────────────────────────────────────────────────────────────────

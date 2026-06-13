@@ -330,7 +330,7 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     if tier_col:
         df = _utils_mod.standardise_dataframe_tiers(df, CFG)
         with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 2: Generating Isolated Tier Phylogenies\n")
-        _raw_tiers = [t for t in df[tier_col].dropna().unique() if t not in ("Decoy", "Unknown")]
+        _raw_tiers = [t for t in df[tier_col].dropna().unique() if t not in (CFG.TIER_DECOY, "Unknown")]
         def _tier_key(t):
             try: return _TIER_RANK_ORDER.index(t)
             except ValueError: return len(_TIER_RANK_ORDER)
@@ -700,7 +700,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         }
 
         function getContrastColor(tier) {
-            if (tier === "Decoy" || tier === "Unknown") return "#334155";
+            if (tier === TIER_RANKING[TIER_RANKING.length-1] || tier === "Unknown") return "#334155";
             return "#ffffff"; 
         }
 
@@ -947,7 +947,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             data.forEach(row => {
                 const protRaw = row['Protein_Name'] || row.protein || row.protein_id || (row.job_name ? row.job_name.split('_')[1] : null);
                 const ligRaw = row['Ligand_Name'] || row.ligand || (row.job_name ? row.job_name.split('_')[2] : null);
-                const tier = row.Degrader_Tier || row.degrader_tier || row.Tier || "Decoy";
+                const tier = row.Degrader_Tier || row.degrader_tier || row.Tier || TIER_RANKING[TIER_RANKING.length-1];
                 const score = row.ActiveSite_Conservation_Score || row.binding_likelihood_computed || row.Binding_Probability || 0;
                 
                 if (!protRaw || !ligRaw) return;
@@ -999,7 +999,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             const normName = normalizeProtName(rawProteinName);
             if (!state.csvData[normName]) return { tier: "Unknown", ligand: null, score: 0, originalProtName: rawProteinName };
 
-            let bestRank = 999; let bestTier = "Decoy"; let bestLigand = null; let bestScore = -999;
+            let bestRank = 999; let bestTier = TIER_RANKING[TIER_RANKING.length-1]; let bestLigand = null; let bestScore = -999;
             const pData = state.csvData[normName];
 
             for (const lig of state.activeLigands) {
@@ -1011,7 +1011,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     }
                 }
             }
-            if (bestLigand === null) return { tier: "Decoy", ligand: null, score: 0, originalProtName: rawProteinName };
+            if (bestLigand === null) return { tier: TIER_RANKING[TIER_RANKING.length-1], ligand: null, score: 0, originalProtName: rawProteinName };
             return { tier: bestTier, ligand: bestLigand, score: bestScore, originalProtName: pData[bestLigand].originalProtName };
         }
 
@@ -1036,7 +1036,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const pData = state.csvData[normalizeProtName(leaf.data.name)];
                 if (pData) {
                     state.activeLigands.forEach(lig => {
-                        if (pData[lig] && state.activeTiers.has(pData[lig].tier) && pData[lig].tier !== "Unknown" && pData[lig].tier !== "Decoy") {
+                        if (pData[lig] && state.activeTiers.has(pData[lig].tier) && pData[lig].tier !== "Unknown" && pData[lig].tier !== TIER_RANKING[TIER_RANKING.length-1]) {
                             tierCounts[pData[lig].tier] = (tierCounts[pData[lig].tier] || 0) + 1; 
                         }
                     });
@@ -1049,7 +1049,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             
             let breakdownHtml = `<div class="grid grid-cols-2 gap-1 mt-2 text-[10px]">`;
             TIER_RANKING.forEach(t => {
-                if(t === "Decoy") return;
+                if(t === TIER_RANKING[TIER_RANKING.length-1]) return;
                 breakdownHtml += `<div class="flex justify-between items-center bg-white px-2 py-1.5 rounded border border-slate-100 shadow-sm"><span style="color:${getColorForTier(t)}" class="font-bold">${t.replace('_',' ')}</span> <span class="text-slate-700 font-bold">${tierCounts[t] || 0}</span></div>`;
             });
             document.getElementById('tier-breakdown').innerHTML = breakdownHtml + `</div>`;
@@ -1143,7 +1143,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             leaves.forEach(leaf => {
                 const pData = state.csvData[normalizeProtName(leaf.data.name)] || {};
                 visibleLigands.forEach((lig, ligIdx) => {
-                    const lData = pData[lig] || {tier: "Decoy", score: 0};
+                    const lData = pData[lig] || {tier: TIER_RANKING[TIER_RANKING.length-1], score: 0};
                     arcData.push({
                         uid: leaf.data.uid + '__' + lig,
                         leaf, lig, ligIdx,
@@ -1509,7 +1509,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 if (d.children || d._children) return []; 
                 const pData = state.csvData[normalizeProtName(d.data.name)] || {};
                 return visibleLigands.map(lig => {
-                    const lData = pData[lig] || {tier: "Decoy", score: 0, originalProtName: d.data.name};
+                    const lData = pData[lig] || {tier: TIER_RANKING[TIER_RANKING.length-1], score: 0, originalProtName: d.data.name};
                     return { lig: lig, tier: lData.tier, score: lData.score, parentY: d.finalY, protName: lData.originalProtName || d.data.name };
                 });
             }, d => d.lig);
