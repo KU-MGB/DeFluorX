@@ -1045,8 +1045,8 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
         return
     combined_df   = pd.concat(all_data, ignore_index=True)
     
-    # Consistent colour map based on ascending Dynamic_Rank
-    sorted_df = df_master.sort_values('Dynamic_Rank', ascending=True)
+    # Consistent colour map based on ascending Scientific_Rank
+    sorted_df = df_master.sort_values('Scientific_Rank', ascending=True)
     sorted_labels = [format_job_label(row['Job_Name'], row['Scientific_Rank']) for _, row in sorted_df.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
 
@@ -1063,7 +1063,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     # Panel 1: Nucleophile Distance Distribution violin plot
     ax1 = fig.add_subplot(gs[0])
     sns.violinplot(data=combined_df, y="Job", x="NAC_Distance_A_Transformed", ax=ax1,
-                   palette=job_colour_map, inner="quartile", linewidth=1.2)
+                   order=sorted_labels, palette=job_colour_map, inner="quartile", linewidth=1.2)
     ax1.axvspan(0, transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#009E73', alpha=0.15, zorder=0)
     ax1.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#D55E00', linestyle='--', linewidth=2)
     ax1.set_title("Nucleophile Distance Distribution\n(Distribution over MD Frames)", fontweight='bold')
@@ -1083,7 +1083,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     # Panel 2: Attack Angle Distribution violin plot
     ax2 = fig.add_subplot(gs[1], sharey=ax1)
     sns.violinplot(data=combined_df, y="Job", x="NAC_Angle_Deg", ax=ax2,
-                   palette=job_colour_map, inner="quartile", linewidth=1.2)
+                   order=sorted_labels, palette=job_colour_map, inner="quartile", linewidth=1.2)
     ax2.axvspan(THRESHOLD_RELAXED_NAC_ANGLE, 180, color='#009E73', alpha=0.15, zorder=0)
     ax2.axvline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2)
     ax2.set_title("Attack Angle Distribution\n(Distribution over MD Frames)", fontweight='bold')
@@ -1158,9 +1158,9 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     plt.rcParams.update({'font.family': 'sans-serif'})
     from matplotlib.colors import to_rgba
 
-    df_plot = df_master.sort_values('Dynamic_Rank', ascending=True).copy()
+    df_plot = df_master.sort_values('Scientific_Rank', ascending=True).copy()
 
-    # Consistent colour map based on ascending Dynamic_Rank (tab20)
+    # Consistent colour map based on ascending Scientific_Rank (tab20)
     sorted_labels = [format_job_label(r['Job_Name'], r['Scientific_Rank']) for _, r in df_plot.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
 
