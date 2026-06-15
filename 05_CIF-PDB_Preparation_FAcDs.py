@@ -751,10 +751,7 @@ def main():
                     # Residue identity guard: run after every successful PrepWizard job
                     if stat_text == "Success":
                         _prepared_pdb = dir_prep_clean / f"{res['job']}_Prepared.pdb"
-                        _guard = _check_residue_identity_guard(_prepared_pdb, res['job'], CFG)
-                        if _guard.get("offset", 0) != 0:
-                            console_info(f"  [!] PrepWizard renumbering detected for {res['job']}: "
-                                         f"offset={_guard['offset']}. index_offset.json written.")
+                        _check_residue_identity_guard(_prepared_pdb, res['job'], CFG)
 
     print("")
     console_separator()
