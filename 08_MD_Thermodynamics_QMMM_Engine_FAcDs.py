@@ -88,7 +88,7 @@ Arguments:
      gyration (RG) extracted from pl_interact_survey EAF files.
   6. Water blockade: dG-weighted count of waters obstructing the SN2 runway.
   7. Walden pre-organisation: improper dihedral check for TS flattening (×1.1).
-  8. QSite automation: M06-2X/6-31+G(d,p) .inp generation for coordinate scan.
+  8. QSite automation: B3LYP/6-31+G(d,p) QM/MM .in generation + execution.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
  11. Master aggregation: 08_MD_Master_Ranking.csv.
@@ -133,9 +133,12 @@ Scientific references
     Bowers, K.J. et al. (2006) Scalable algorithms for molecular dynamics simulations on
       commodity clusters. SC 06: Proc. ACM/IEEE Conf. Supercomputing.
     DOI: https://doi.org/10.1109/SC.2006.54
-  QSite QM/MM level of theory (M06-2X/6-31+G(d,p)):
-    Zhao, Y. & Truhlar, D.G. (2008) Theor Chem Acc 120:215–241.
-    DOI: https://doi.org/10.1007/s00214-007-0310-x
+  QSite QM/MM level of theory (B3LYP/6-31+G(d,p)):
+    Becke, A.D. (1993) J Chem Phys 98:5648–5652. DOI: https://doi.org/10.1063/1.464913
+    Lee, C., Yang, W. & Parr, R.G. (1988) Phys Rev B 37:785–789.
+    DOI: https://doi.org/10.1103/PhysRevB.37.785
+    (B3LYP is required: QSite frozen-orbital QM/MM cuts reject meta-GGA hybrids
+     such as M06-2X and dispersion-corrected variants such as B3LYP-D3.)
     Rosta, E., Klähn, M. & Warshel, A. (2006) J Phys Chem B 110:2934–2941.
     DOI: https://doi.org/10.1021/jp057109j
     Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457.
@@ -162,7 +165,6 @@ if "SCHRODINGER" not in os.environ:
 try:
     from schrodinger.application.desmond.packages import traj, topo
     from schrodinger import structure
-    from schrodinger.structutils import measure
 except ImportError:
     _run_exe = os.path.join(os.environ["SCHRODINGER"], "run")
     if os.path.isfile(_run_exe):
@@ -175,10 +177,19 @@ except ImportError:
 import re
 import time
 import argparse
-import logging
 import warnings
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+# MKL / OpenMP / NumExpr). Must precede numpy import to take effect;
+# setdefault() preserves any value exported by the caller or pipeline runner.
+_CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
+for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_tv, _CPU_CAP)
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -188,13 +199,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import seaborn as sns
-import matplotlib.patheffects as pe
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 try:
-    from rich.progress import (Progress, SpinnerColumn, BarColumn,
-                               TextColumn, TimeElapsedColumn, MofNCompleteColumn)
     from rich.console import Console as _RichConsole
     from rich.table import Table as _RichTable
     _RICH_AVAILABLE = True
@@ -261,7 +269,6 @@ _console_sep            = _utils_mod.console_separator
 _setup_logging          = _utils_mod.setup_logging
 get_mic_vector          = _utils_mod.get_mic_vector
 _mic_dists_2d           = _utils_mod.mic_dists_2d
-_mic_vecs_1d            = _utils_mod.mic_vecs_1d
 clean_spines            = _utils_mod.clean_spines
 _calc_improper_dihedral = _utils_mod.calculate_improper_dihedral
 _ensure_box_3x3             = _utils_mod._ensure_box_3x3
@@ -361,28 +368,8 @@ def _print_labeled(label: str, ansi_col: str, msg: str,
         getattr(logger, level)(f"{r_prefix}{_log} | {msg}")
 
 
-def console_nac_pass(msg: str) -> None:
-    _print_labeled("NAC PASS",  "\033[92m", msg)
-
-
-def console_nac_geom_pass(msg: str) -> None:
-    _print_labeled("GEOM PASS", "\033[93m", msg, log_label="GEOM PASS")
-
-
-def console_nac_fail(msg: str) -> None:
-    _print_labeled("NAC FAIL",  "\033[91m", msg)
-
-
 def console_qmm_ready(msg: str) -> None:
     _print_labeled("QM/MM READY", "\033[94m", msg)
-
-
-def console_scientific_alert(msg: str) -> None:
-    _print_labeled("SCIENTIFIC ALERT", "\033[95m", msg, level="warning")
-
-
-def console_watermap_warning(msg: str) -> None:
-    _print_labeled("WATERMAP WARNING", "\033[93m", msg, level="warning")
 
 
 # ===============================================================================
@@ -888,32 +875,6 @@ def load_triad_mapping(csv_path: Path) -> dict:
         return {}
 
 
-def find_latest_master_csv(base_dir: Path):
-    """
-    Finds the most recent 6_Boltz2_FAcDs_Master_*.csv (or any *_Master*.csv fallback)
-    in the run dir's 1_Boltz2_Production folder.
-    base_dir is expected to be 7_Physics_Validation; parent is the Boltz-2_Run_* dir.
-    """
-    run_dir   = base_dir.parent  # Boltz-2_Run_*
-    prod_dir  = run_dir / "1_Boltz2_Production"
-    all_csvs  = []
-    if prod_dir.exists():
-        # Priority 1: canonical PFAS-27 master naming (6_Boltz2_FAcDs_Master_*.csv)
-        all_csvs.extend(prod_dir.glob("6_Boltz2_FAcDs_Master_*.csv"))
-        # Priority 2: any *_Master*.csv in the same dir
-        if not all_csvs:
-            all_csvs.extend(prod_dir.glob("*_Master*.csv"))
-    # Fallback: search all sibling Boltz-2_Run_* dirs (handles multi-run setups)
-    if not all_csvs:
-        for sibling in run_dir.parent.glob("Boltz-2_Run_*"):
-            if not sibling.is_dir(): continue
-            sp = sibling / "1_Boltz2_Production"
-            if sp.exists():
-                all_csvs.extend(sp.glob("6_Boltz2_FAcDs_Master_*.csv"))
-                all_csvs.extend(sp.glob("*_Master*.csv"))
-    return sorted(all_csvs, key=lambda x: x.stat().st_mtime)[-1] if all_csvs else None
-
-
 # ===============================================================================
 # SECTION 5: VISUALISATION ENGINES
 # ===============================================================================
@@ -1011,7 +972,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                  bbox=dict(facecolor='white', edgecolor='#CBD5E1',
                            boxstyle='round,pad=0.6', alpha=1.0))
 
-        # Title removed as requested by the user, but metadata is written to the log
+        # No on-figure title; the descriptive metadata is written to the log instead
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close(fig)
 
@@ -1268,15 +1229,15 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         dt   = row.get('Dream_Team_Mapped',  0)
 
         try:    wm_str   = f'{float(wm):.2f}'
-        except: wm_str   = 'N/A'
+        except (ValueError, TypeError): wm_str   = 'N/A'
         try:    wmn_str  = str(int(float(wmn)))
-        except: wmn_str  = 'N/A'
+        except (ValueError, TypeError): wmn_str  = 'N/A'
         try:    dist_str = f'{float(dist):.2f}'
-        except: dist_str = 'N/A'
+        except (ValueError, TypeError): dist_str = 'N/A'
         try:    ang_str  = f'{float(ang):.1f}°'
-        except: ang_str  = 'N/A'
+        except (ValueError, TypeError): ang_str  = 'N/A'
         try:    dt_str   = str(int(float(dt or 0)))
-        except: dt_str   = '–'
+        except (ValueError, TypeError): dt_str   = '–'
 
         dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < 3.8)
                     else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 5.0)
@@ -1373,133 +1334,221 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
     return total
 
 
-def check_water_blockade(frame, nuc_pos, lig_c_pos, box, sol_indices,
-                         wm_sites=None) -> float:
-    """Checks if explicit waters obstruct the SN2 runway; weights by WaterMap dG."""
-    runway_vec = get_mic_vector(lig_c_pos, nuc_pos, box)
-    runway_len = np.linalg.norm(runway_vec)
-    if runway_len < 1e-3:
-        return 0.0
-    unit_runway = runway_vec / runway_len
-    total = 0.0
-    _block_r = CFG.WATERMAP_BLOCKADE_RADIUS
-    _match_r = CFG.WATERMAP_MATCH_RADIUS
-    for s_idx in sol_indices:
-        sol_pos = frame.pos(s_idx)
-        vec_ns  = get_mic_vector(sol_pos, nuc_pos, box)
-        proj    = np.dot(vec_ns, unit_runway)
-        if 0.5 < proj < (runway_len - 0.5):
-            perp = vec_ns - proj * unit_runway
-            if np.linalg.norm(perp) < _block_r:
-                weight = 1.0
-                if wm_sites:
-                    min_d = float('inf')
-                    best_dg = 0.0
-                    for site in wm_sites:
-                        d = np.linalg.norm(get_mic_vector(site['pos'], sol_pos, box))
-                        if d < min_d:
-                            min_d = d
-                            best_dg = site['dG']
-                    if min_d < _match_r:
-                        weight = 1.0 / (1.0 + np.exp(best_dg)) * 2.0
-                total += weight
-    return total
-
-
-def calculate_walden_bonus(frame, c_idx, f_idx, other_subst_indices, box) -> float:
-    """Returns 1.1 if transition-state flattening (|improper dihedral| < threshold), else 1.0."""
-    if len(other_subst_indices) < 2 or _calc_improper_dihedral is None:
-        return 1.0
-    try:
-        angle = _calc_improper_dihedral(
-            frame.pos(c_idx), frame.pos(f_idx),
-            frame.pos(other_subst_indices[0]), frame.pos(other_subst_indices[1]),
-            box,
-        )
-        if abs(angle) < _WALDEN_IMPROPER_MAX:
-            return 1.1
-    except Exception:
-        pass
-    return 1.0
 
 
 # ===============================================================================
 # SECTION 7: QSITE AUTOMATION
 # ===============================================================================
 
-def generate_qsite_inputs(maegz_path: Path, job_name: str,
+def generate_qsite_inputs(mae_path: Path, job_name: str,
                           nuc_num, stab_f_num, lig_c_idx, nuc_o_idx,
                           base_num=None, acid_num=None,
-                          lig_charge: int = None) -> Path:
+                          lig_charge: int = None, lig_resname: str = "LIG") -> Path:
     """
-    Writes a QSite coordinate-scan .inp for M06-2X/6-31+G(d,p) SN2 QM/MM.
+    Write a valid QSite/Jaguar QM/MM relaxed-scan .in for the SN2
+    dehalogenation reaction coordinate (Nu_O···C_lig distance scan).
 
-    QM region includes the full catalytic triad + fluoride stabiliser:
-      LIG   — substrate (bond-making/breaking atoms)
-      Nuc   — Asp110 sidechain (nucleophilic oxygen)
-      Base  — His277 sidechain (proton-transfer base; must be QM for relay step)
-      Acid  — Asp134 sidechain (proton-transfer acid; must be QM for relay step)
-      StabH — His155 sidechain (fluoride stabiliser)
+    The format follows the genuine Jaguar/QSite input specification — verified
+    against `schrodinger.application.qsite.input.QSiteInput` and the Jaguar
+    `scan-relaxed` example — rather than the previous non-parsable pseudo-format:
+      MAEFILE      — the structure (uncompressed .mae, same folder)
+      &gen         — DFT functional / basis / QM charge / QM-MM mode / relaxed opt
+      &qmregion    — ligand molecule (QM) + catalytic-sidechain QM/MM cuts
+      &zvar/&coord — relaxed scan of the Nu_O–C_lig distance (start → product)
 
-    Excluding Base (His277) and Acid (Asp134) from QM would force the proton-
-    transfer half of the SN2 mechanism onto the MM force field, making full-
-    mechanism reaction-coordinate scans chemically meaningless.
+    QM region = LIG substrate + Asp110 (Nuc) + His277 (Base) + Asp134 (Acid)
+    + His155 (StabH) sidechains. Excluding Base/Acid from QM would push the
+    proton-transfer half of the mechanism onto the MM force field.
+
+    NOTE: no implicit-solvation keyword is written. The extracted frame retains
+    its explicit TIP3P water box in the MM region, so adding an implicit model
+    (the old `SOLVATION_METHOD sgb`) would double-count solvation. Strip the box
+    and re-add `isolv` only for an implicit-solvent QM/MM variant.
     """
-    inp_path   = maegz_path.parent / f"{job_name}_QSite_SN2.in"
-    qm_regions = ['  QM_REGION asl="res.ptype LIG"']
-    if nuc_num:
-        qm_regions.append(f'  QM_REGION asl="res.num {nuc_num}  AND sidechain"')
-    if base_num:
-        qm_regions.append(f'  QM_REGION asl="res.num {base_num} AND sidechain"')
-    if acid_num:
-        qm_regions.append(f'  QM_REGION asl="res.num {acid_num} AND sidechain"')
-    if stab_f_num:
-        qm_regions.append(f'  QM_REGION asl="res.num {stab_f_num} AND sidechain"')
+    inp_path = mae_path.parent / f"{job_name}_QSite_SN2.in"
 
-    # Resolve total QM region charge by summing the ligand charge and catalytic sidechain charges.
-    # Asp110 (Nuc) is deprotonated (-1). His277 (Base) and His155 (StabH) are neutral (0).
-    # Asp134 (Acid) is protonated in the resting state (0).
+    # ── Read structure (needed for charge, ligand molid, and cut resolution) ──
+    st = next(structure.StructureReader(str(mae_path)))
+    lig_mol = next(
+        (m.number for m in st.molecule
+         if any(a.pdbres.strip() == lig_resname for a in m.atom)), None)
+
+    # Each QM/MM cut row must name the protein molecule id (QSite matches the
+    # residue within that molecule). Resolve it via the residue's backbone Cα,
+    # which also disambiguates the catalytic residue from any water that happens
+    # to share the same residue number. Returns (molid, chain) or None.
+    def _resolve_cut(resnum):
+        a = next((a for a in st.atom
+                  if a.resnum == resnum and a.pdbname.strip() == "CA"
+                  and a.chain.strip()), None)
+        return (a.molecule_number, a.chain) if a is not None else None
+
+    # ── Resolve every catalytic cut once → (resnum, molid, chain). The residue
+    #    identities (nuc/base/acid/stab) are alignment- and Smart-Lock-derived
+    #    upstream and passed in, never hardcoded, so the QM region adapts to each
+    #    homolog's own numbering. Reused for both the charge sum and the cut table.
+    _resolved_cuts = []
+    _seen = set()
+    for rn in (nuc_num, base_num, acid_num, stab_f_num):
+        if not rn or rn in _seen:        # de-dup: Base/Acid may map to one residue
+            continue
+        _seen.add(rn)
+        _r = _resolve_cut(rn)
+        if _r is not None:
+            _resolved_cuts.append((rn, _r[0], _r[1]))
+
+    # ── QM region net charge — derived from the structure, not assumed ─────
+    # QM atoms = full ligand + each catalytic residue's sidechain beyond the
+    # Cα–Cβ cut (CA/backbone remain MM). Instead of assuming protonation states
+    # (the old `lig − 1` counted only the nucleophile and silently presumed a
+    # protonated acid and neutral His), sum the *actual* formal charges those
+    # atoms carry in the prepared structure. This keeps `molchg` correct for
+    # whatever PrepWizard assigned (deprotonated Asp −1, neutral His, protonated
+    # catalytic acid 0, HIP +1, …) and for any residue numbering, so QSite/Jaguar
+    # does not abort on a QM charge/electron-count mismatch.
+    _backbone = {'N', 'C', 'CA', 'O', 'H', 'HA'}   # matches Smart-Lock convention (L429)
+
+    def _sidechain_formal_charge(molid, chain, resnum):
+        return sum(
+            a.formal_charge for a in st.atom
+            if a.resnum == resnum and a.chain == chain
+            and a.molecule_number == molid
+            and a.pdbname.strip() not in _backbone
+        )
+
+    # Ligand charge stays authoritative from CFG (curated per PFAS); only the
+    # protein-sidechain contribution is read dynamically from the structure.
     if lig_charge is None:
         jn_upper = job_name.upper()
         lig_charge = next(
             (v for k, v in CFG.LIGAND_QM_CHARGES.items() if k.upper() in jn_upper),
             CFG.QSITE_CHARGE,
         )
-    qm_charge = lig_charge
-    if nuc_num:
-        qm_charge -= 1  # Asp110 is deprotonated (-1)
-    # His277, His155, and protonated Asp134 are neutral (0), contributing no additional charge.
+    _sidechain_charge = sum(
+        _sidechain_formal_charge(molid, chain, rn)
+        for rn, molid, chain in _resolved_cuts
+    )
+    qm_charge = int(round(lig_charge + _sidechain_charge))
 
-    # Coordinate scan: Nu–C distance from NAC start → product.
-    # Start = CFG.QSITE_SCAN_START (3.5 Å, the pre-reaction approach distance).
-    # Step  = CFG.QSITE_SCAN_STEP  (−0.1 Å per point).
-    # Steps = CFG.QSITE_SCAN_NSTEPS (23 points → 3.5 → 1.3 Å; 3.5 + −0.1×22 = 1.3).
-    _scan_start  = CFG.QSITE_SCAN_START
-    _scan_step   = CFG.QSITE_SCAN_STEP
-    _scan_nsteps = CFG.QSITE_SCAN_NSTEPS
+    # ── Jaguar basis notation: 6-31+G(d,p) → 6-31+G** ─────────────────────
+    _basis = CFG.QSITE_BASIS_SET.replace("(d,p)", "**").replace("(d)", "*")
+
+    # ── &qmregion QM/MM cut table — one Cα–Cβ cut per catalytic sidechain ─
+    _cuts = [
+        f"  {molid:>5}  {chain:>4}  {rn:>6}       CB       CA"
+        for rn, molid, chain in _resolved_cuts
+    ]
+
+    # ── Relaxed scan: Nu_O–C_lig distance, NAC start → product ────────────
+    _start = CFG.QSITE_SCAN_START
+    _end   = CFG.QSITE_SCAN_START + CFG.QSITE_SCAN_STEP * (CFG.QSITE_SCAN_NSTEPS - 1)
+
+    _gen = [
+        f"basis={_basis}",
+        "igeopt=1",                       # relaxed (constrained-optimised) scan
+        f"molchg={qm_charge}",
+        f"dftname={CFG.QSITE_FUNCTIONAL}",
+        "mmqm=1",                         # enable QM/MM
+        "impversion=huge",
+    ]
+    if CFG.QSITE_MULT != 1:
+        _gen.append(f"multip={CFG.QSITE_MULT}")
+
     content = (
-        "# QSite Coordinate Scan: SN2 Dehalogenation\n"
-        "# Level of Theory: M06-2X / 6-31+G(d,p)\n"
-        "BEGIN_QSITE_INPUT\n"
-        f"  STRUCTURE_FILE {maegz_path.name}\n"
-        "  METHOD dft\n"
-        f"  FUNCTIONAL {CFG.QSITE_FUNCTIONAL}\n"
-        f"  BASIS {CFG.QSITE_BASIS_SET}\n"
-        f"  CHARGE {qm_charge}\n"
-        f"  MULTIPLICITY {CFG.QSITE_MULT}\n"
-        + "\n".join(qm_regions) + "\n"
-        "  JOB_TYPE scan\n"
-        f"  SCAN_COORD distance {nuc_o_idx} {lig_c_idx} "
-        f"{_scan_start} {_scan_step} {_scan_nsteps}\n"
-        # Implicit solvation (screening-grade — see CFG.QSITE_SOLVATION note;
-        # use explicit-solvent QM/MM-FEP for publication-grade barriers).
-        f"  SOLVATION_METHOD {CFG.QSITE_SOLVATION}\n"
-        "  MAX_ITER 100\n"
-        "END_QSITE_INPUT\n"
+        f"MAEFILE: {mae_path.name}\n"
+        "&gen\n" + "\n".join(_gen) + "\n&\n"
+        "&mmkey\n&\n"
+        "&qmregion\n"
+        " molid chain  resnum   qmatom   mmatom\n"
+        + ("\n".join(_cuts) + "\n" if _cuts else "")
+        + " molid theory\n"
+        + (f"     {lig_mol}     qm\n" if lig_mol else "")
+        + "&\n"
+        "&zvar\n"
+        f"r = {_start:g} to {_end:g} in {CFG.QSITE_SCAN_NSTEPS}\n"
+        "&\n"
+        "&coord\n"
+        f" {nuc_o_idx} {lig_c_idx} # r\n"
+        "&\n"
     )
     with open(inp_path, "w") as f:
         f.write(content)
     return inp_path
+
+
+def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool:
+    """
+    Launch the QSite/Jaguar executable on a generated .in, writing all output
+    inside `qsite_dir`. Returns True if a job was launched, False if QSite is
+    unavailable.
+
+    Run policy mirrors the PDB-preparation cache: the caller skips the whole
+    step when `qsite_dir` already exists, so this only runs for fresh folders.
+    `subprocess` is given an explicit `cwd`, which is per-process and therefore
+    thread-safe (unlike `os.chdir`) under the worker pool.
+    """
+    qsite_exe = os.path.join(os.environ.get("SCHRODINGER", ""), "qsite")
+    if not os.path.isfile(qsite_exe):
+        console_info(f"    {ConsoleColours.WARNING}[Rank {rank}] qsite executable not found "
+                     f"at {qsite_exe} — skipping launch (input written).{ConsoleColours.ENDC}")
+        return False
+
+    jobname = f"{job_name}_QSite_SN2"
+    cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS),
+           "-jobname", jobname, inp_path.name]
+    print(f"  [Rank {rank}] Launching QSite ({_QSITE_PROCS} proc): {inp_path.name}", flush=True)
+
+    # Live progress: QM/MM relaxed scans run for many minutes per frame, during
+    # which a blocking call looks frozen. Launch non-blocking (still -WAIT, so the
+    # driver process stays alive until the job finishes) and emit a heartbeat every
+    # CFG.QSITE_PROGRESS_INTERVAL_SEC. Progress is read from the Jaguar log: count
+    # completed scan points against CFG.QSITE_SCAN_NSTEPS for a k/N bar, falling
+    # back to elapsed-time only when no markers are present yet.
+    _interval = max(5, int(getattr(CFG, "QSITE_PROGRESS_INTERVAL_SEC", 20)))
+    _total    = max(1, int(getattr(CFG, "QSITE_SCAN_NSTEPS", 1)))
+    _log_path = qsite_dir / f"{jobname}.log"
+
+    def _scan_done():
+        try:
+            txt = _log_path.read_text(errors="ignore")
+        except OSError:
+            return None
+        for _m in ("Scan point", "scan point", "Geometry optimization has converged"):
+            _n = txt.count(_m)
+            if _n:
+                return _n
+        return None
+
+    try:
+        proc = _sp.Popen(cmd, cwd=str(qsite_dir),
+                         stdout=_sp.DEVNULL, stderr=_sp.STDOUT)
+    except Exception as e:
+        console_info(f"    {ConsoleColours.FAIL}[Rank {rank}] QSite launch failed: {e}{ConsoleColours.ENDC}")
+        return False
+
+    _t0 = time.time()
+    while proc.poll() is None:
+        time.sleep(_interval)
+        _elapsed = time.time() - _t0
+        _done = _scan_done()
+        if _done is not None:
+            _pct  = min(100, int(100 * _done / _total))
+            _fill = _pct // 5
+            _bar  = "#" * _fill + "-" * (20 - _fill)
+            print(f"  [Rank {rank}] QSite {jobname}: [{_bar}] {_done}/{_total} pts "
+                  f"({_pct}%) | {_elapsed / 60:.1f} min", flush=True)
+        else:
+            print(f"  [Rank {rank}] QSite {jobname}: running… {_elapsed / 60:.1f} min elapsed",
+                  flush=True)
+
+    _rc = proc.returncode
+    _elapsed = time.time() - _t0
+    if _rc == 0:
+        print(f"  [Rank {rank}] QSite {jobname} finished in {_elapsed / 60:.1f} min (rc=0).", flush=True)
+    else:
+        console_info(f"    {ConsoleColours.WARNING}[Rank {rank}] QSite {jobname} exited rc={_rc} "
+                     f"after {_elapsed / 60:.1f} min — check {_log_path.name}.{ConsoleColours.ENDC}")
+    return True
 
 
 # ===============================================================================
@@ -1516,22 +1565,11 @@ _N_PRELOAD_WORKERS = min(4, CFG.GLOBAL_MAX_WORKERS)
 # work from ~10,000 solvent atoms to ~100-200 while covering the SN2 runway.
 _SOL_SPHERE_RADIUS = getattr(CFG, "SOLVENT_SPHERE_RADIUS", 20.0)
 
-
-def _load_frame_chunk(chunk: list, trj_path: str, atom_indices: list,
-                      t_start: float, sim_span: float, n_tr: int) -> list:
-    """Worker: load a contiguous chunk of frames from a fresh trajectory reader.
-    Each thread has its own reader to avoid shared file-handle races.
-    Returns list of (fi, f_idx, pos_array, box, frame_time)."""
-    local_tr = traj.read_traj(trj_path)
-    results  = []
-    for fi, f_idx in chunk:
-        frame = local_tr[f_idx]
-        # Batch position read: one C-extension call per frame
-        pos = frame.pos(atom_indices)                  # (n_atoms, 3) ndarray
-        box = frame.box if hasattr(frame, 'box') else None
-        t   = frame.time if hasattr(frame, 'time') else (t_start + f_idx * sim_span / n_tr)
-        results.append((fi, f_idx, pos, box, t))
-    return results
+# QSite execution settings. Initialised from CFG and overridden per-run by main()
+# from the CLI. Kept as module globals (CFG is a frozen dataclass and cannot be
+# mutated). Read-only inside the worker threads.
+_QSITE_RUN = CFG.QSITE_RUN
+_QSITE_PROCS = CFG.QSITE_PROCS
 
 
 def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -> float:
@@ -1696,7 +1734,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     base_num  = cms_model.atom[idx_base[0]].resnum if idx_base else None
     acid_num  = cms_model.atom[idx_acid[0]].resnum if idx_acid else None
 
-    # ── Mapping sanity check: Nuc–Base distance in frame 0 (GEM-BUG-1 Fix 2) ───
+    # ── Mapping sanity check: Nuc–Base distance in frame 0 ─────────────────────
     # PrepWizard residue renumbering can silently mis-map the triad; catch it here
     # before any per-frame analysis runs.
     if idx_nuc and idx_base:
@@ -1855,7 +1893,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # ===============================================================================
     # Per-frame analysis loop (chunked streaming — _CHUNK_SIZE frames at a time)
     # ===============================================================================
-    for fi, f_idx, _p, box, frame_t in _iter_frames():
+    for _fi, f_idx, _p, box, frame_t in _iter_frames():
 
         # ── Position arrays from cache (numpy indexing — no API calls) ──────────
         _pos_nuc_f = _p[_li_nuc]  if _li_nuc   else np.empty((0, 3))
@@ -2105,24 +2143,49 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         df_res, job_name, job_out_dir / f"{job_name}_NAC_Dashboard.png", stats)
 
     if ideal_frame_idx != -1:
+        # 1. Snap the CMS model to the chosen trajectory frame.
         topo.update_cms(cms_model, tr[ideal_frame_idx])
+
+        # 2. Repair periodic-boundary wrapping. Desmond stores frame coordinates
+        #    wrapped into the box, so the solute sits at the box edge with all
+        #    water piled to one side — the "protein outside / broken water box"
+        #    artifact. make_whole_cms reconnects molecules; center_cms re-centres
+        #    the box on the protein+ligand and wraps solvent symmetrically around
+        #    it before writing.
+        topo.make_whole_cms(msys_model, cms_model)
+        _solute_gids = topo.asl2gids(cms_model, f"protein OR res.ptype {lig_resname}")
+        topo.center_cms(msys_model, _solute_gids, cms_model)
+
+        # 3. Viewer-friendly full-system structure (.maegz).
         mae_path = job_out_dir / f"{job_name}_Ideal_Final.maegz"
-        cms_model.write(str(mae_path))
-        inp_path = generate_qsite_inputs(mae_path, job_name, nuc_num, stab_f_num,
-                                         ideal_geom['lig_c'], ideal_geom['nuc_o'],
-                                         base_num=base_num, acid_num=acid_num)
+        cms_model.fsys_ct.write(str(mae_path))
         print(f"  [Rank {rank}] QM/MM frame extracted | best frame: {ideal_frame_idx} | score: {best_score:.2f}", flush=True)
-        console_qmm_ready(f"Best frame: {ideal_frame_idx} | Score: {best_score:.2f} | "
-                          f"QSite: {mae_path.name}")
-        # ── Post-write sanity check: verify the artifacts THIS step writes ─────
-        # (QSite itself is an external downstream Schrödinger/Jaguar run; this
-        #  script only produces the .maegz best-frame structure and the .inp scan
-        #  definition that feed it. Do NOT check for a QSite *output* here.)
-        for _artifact in (mae_path, inp_path):
-            if not _artifact.exists() or _artifact.stat().st_size == 0:
-                console_info(
-                    f"  [!] QSite input missing or empty for {job_name}: {_artifact.name}"
-                )
+
+        # 4. QSite QM/MM relaxed scan — folder-wise and idempotent: if the output
+        #    folder already exists the whole step is skipped (mirrors the PDB-prep
+        #    cache). A fresh folder gets the .mae + valid .in, then QSite is run.
+        qsite_dir = job_out_dir / f"{job_name}_QSite_SN2"
+        if qsite_dir.exists():
+            console_info(f"    [Rank {rank}] QSite folder exists — skipping: {qsite_dir.name}")
+        else:
+            qsite_dir.mkdir(parents=True, exist_ok=True)
+            # QSite/Jaguar reads uncompressed .mae (not .maegz).
+            qsite_mae = qsite_dir / f"{job_name}_Ideal_Final.mae"
+            cms_model.fsys_ct.write(str(qsite_mae))
+            inp_path = generate_qsite_inputs(
+                qsite_mae, job_name, nuc_num, stab_f_num,
+                ideal_geom['lig_c'], ideal_geom['nuc_o'],
+                base_num=base_num, acid_num=acid_num, lig_resname=lig_resname)
+            for _artifact in (qsite_mae, inp_path):
+                if not _artifact.exists() or _artifact.stat().st_size == 0:
+                    console_info(f"    [!] QSite input missing/empty for {job_name}: {_artifact.name}")
+            console_qmm_ready(f"Best frame: {ideal_frame_idx} | Score: {best_score:.2f} | "
+                              f"QSite input: {inp_path.name}")
+            if _QSITE_RUN:
+                run_qsite(qsite_dir, inp_path, job_name, rank)
+            else:
+                console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) — "
+                             f"inputs written to {qsite_dir.name}")
 
     print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats
@@ -2191,7 +2254,16 @@ def main():
                         help="Path to master CSV (auto-detected if omitted)")
     parser.add_argument("--workers", type=int, default=None,
                         help="Number of parallel workers (default: auto-detect based on CPU cores)")
+    parser.add_argument("--no-run-qsite", action="store_true",
+                        help="Only write QSite .in/.mae inputs; do not launch the QSite executable.")
+    parser.add_argument("--qsite-procs", type=int, default=CFG.QSITE_PROCS,
+                        help=f"CPUs per QSite job, qsite -PARALLEL (default: {CFG.QSITE_PROCS}).")
     args = parser.parse_args()
+
+    # QSite execution policy: CFG default, overridable per-run from the CLI.
+    global _QSITE_RUN, _QSITE_PROCS
+    _QSITE_RUN = CFG.QSITE_RUN and not args.no_run_qsite
+    _QSITE_PROCS = args.qsite_procs
 
     raw_dir  = args.run_dir or args.dir or "."
     work_dir = _resolve_work_dir(raw_dir)

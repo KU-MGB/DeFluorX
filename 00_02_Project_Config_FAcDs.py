@@ -77,7 +77,7 @@ Scientific references
   Bürgi–Dunitz angle (aux)     : Bürgi, Dunitz & Shefter (1973) JACS 95:5065–5067. https://doi.org/10.1021/ja00796a058
                                  Bürgi, Dunitz, Lehn & Wipff (1974) Tetrahedron 30:1563–1572. https://doi.org/10.1016/S0040-4020(01)90678-7
   WaterMap thermodynamics      : Abel, R. et al. (2008) JACS 130:2817–2831. https://doi.org/10.1021/ja0771033
-  QSite DFT functional (M06-2X): Zhao, Y. & Truhlar, D.G. (2008) Theor Chem Acc 120:215–241. https://doi.org/10.1007/s00214-007-0310-x
+  QSite DFT functional (B3LYP) : Becke, A.D. (1993) J Chem Phys 98:5648–5652. https://doi.org/10.1063/1.464913 ; Lee, Yang & Parr (1988) Phys Rev B 37:785. https://doi.org/10.1103/PhysRevB.37.785
   QSite QM/MM implementation   : Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457. https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O
   QM/MM free-energy method     : Rosta, E. et al. (2006) J Phys Chem B 110:2934–2941. https://doi.org/10.1021/jp057109j  (general QM/MM benchmark, not QSite-specific)
   FAcD QM/MM defluorination    : Yue, Y. et al. (2021) Environ Sci Technol 55(14):9817–9825. https://doi.org/10.1021/acs.est.0c08811
@@ -586,11 +586,16 @@ class CFG:
 
     # ═════════════════════════════════════════════════════════════════════════════
     # SECTION 11 ── QM/MM EXTRACTION — QSite  (Step 08)
-    # Level of theory: M06-2X / 6-31+G(d,p) — Zhao & Truhlar (2008) DFT
-    # functional; Rosta et al. (2006) QM/MM free-energy methodology;
+    # Level of theory: B3LYP / 6-31+G(d,p) — Becke (1993) + Lee, Yang & Parr (1988)
+    # hybrid functional; Rosta et al. (2006) QM/MM free-energy methodology;
     # Murphy et al. (2000) QSite implementation.
+    # NB: QSite frozen-orbital QM/MM cuts (used to place the catalytic sidechains in
+    # the QM region) only support a limited set of plain functionals — B3LYP/HF.
+    # Meta-GGA hybrids (e.g. M06-2X) and dispersion-corrected variants (B3LYP-D3)
+    # are rejected by QSite with frozen cuts, hence B3LYP for the residue-selective
+    # QM/MM coordinate scan.
     # ═════════════════════════════════════════════════════════════════════════════
-    QSITE_FUNCTIONAL: str   = "M062X"        # DFT functional
+    QSITE_FUNCTIONAL: str   = "b3lyp"        # DFT functional (QSite frozen-cut compatible; canonical Jaguar dftname)
     QSITE_BASIS_SET: str    = "6-31+G(d,p)"  # basis set
     QSITE_CHARGE: int       = -1             # default QM region charge (anionic carboxylate/sulfonate PFAS)
     # Neutral ligands (alcohols, non-ionised at pH 8) override the default charge.
@@ -608,6 +613,14 @@ class CFG:
     QSITE_SCAN_START: float = 3.5            # Å  scan start (pre-reaction approach; 3.5 → 1.3 Å = full SN2 coordinate)
     QSITE_SCAN_STEP: float  = -0.1           # Å  step per point (negative = bond compression)
     QSITE_SCAN_NSTEPS: int  = 23             # points total → covers 3.5 → 1.3 Å (last point: 3.5 + −0.1×22 = 1.3 Å)
+    # Execution of the generated QSite jobs from Step 08. When True, Step 08
+    # launches `$SCHRODINGER/qsite` on each freshly extracted frame, writing all
+    # output inside a per-job folder; jobs whose folder already exists are skipped
+    # (idempotent, mirroring the PDB-preparation cache). QM/MM relaxed scans are
+    # expensive — disable with --no-run-qsite to only write the .in/.mae inputs.
+    QSITE_RUN: bool         = True
+    QSITE_PROCS: int        = 4              # CPUs per QSite job (qsite -PARALLEL)
+    QSITE_PROGRESS_INTERVAL_SEC: int = 20    # heartbeat cadence while a QSite job runs (live progress, prevents "frozen" look)
 
     # ═════════════════════════════════════════════════════════════════════════════
     # SECTION 12 ── CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 08)
@@ -814,12 +827,12 @@ class CFG:
 
     # ── § 9.8  Tier Meanings ──────────────────────────────────────────────────
     TIER_MEANING: dict = field(default_factory=lambda: {
-        "Tier_1A": "Elite / Perfect_A (legacy)",
-        "Tier_1B": "Excellent / Perfect_B (legacy)",
-        "Tier_2A": "Strong / Best_A (legacy)",
-        "Tier_2B": "Good / Best_B (legacy)",
-        "Tier_3":  "Moderate / Good (legacy)",
-        "Tier_4":  "Poor / Poor (legacy)",
-        "Tier_5_Decoy": "Invalid / Decoy (legacy)",
+        "Tier_1A": "Elite",
+        "Tier_1B": "Excellent",
+        "Tier_2A": "Strong",
+        "Tier_2B": "Good",
+        "Tier_3":  "Moderate",
+        "Tier_4":  "Poor",
+        "Tier_5_Decoy": "Invalid / Decoy",
         "Control": "Reference Control"
     })

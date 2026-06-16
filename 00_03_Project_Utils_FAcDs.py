@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import re as _re
-import sys as _sys
 import time
 from pathlib import Path
 from typing import Any
@@ -314,7 +313,7 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans']})
     
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    for ax, angles, label, colour in [
+    for ax, angles, label, _colour in [
         (axes[0], angles_ref, label_ref, '#6a1b9a'),
         (axes[1], angles_con, label_con, '#1565c0'),
     ]:
@@ -547,26 +546,6 @@ def mic_dists_2d(pos_a: np.ndarray, pos_b: np.ndarray, box) -> np.ndarray:
     return np.linalg.norm(vecs, axis=2)
 
 
-def mic_vecs_1d(pos_batch: np.ndarray, pos_ref: np.ndarray, box) -> np.ndarray:
-    """
-    PBC-corrected displacement vectors (N, 3): pos_batch[i] − pos_ref for all i.
-    """
-    vecs = pos_batch - pos_ref[None, :]
-    if box is not None:
-        try:
-            b3    = _ensure_box_3x3(box)
-            inv_b = np.linalg.inv(b3)
-            frac  = vecs @ inv_b
-            frac -= np.round(frac)
-            vecs  = frac @ b3
-        except (np.linalg.LinAlgError, AttributeError, ValueError):
-            b3   = np.asarray(box, dtype=float)
-            diag = np.diag(b3) if b3.ndim == 2 else (b3 if b3.size == 3 else np.array([b3.flat[0], b3.flat[4], b3.flat[8]]))
-            diag = np.where(diag == 0, 1e-6, diag)
-            vecs = vecs - diag * np.round(vecs / diag)
-    return vecs
-
-
 # -------------------------------------------------------------------------------
 # Step 5.3: Angle
 # -------------------------------------------------------------------------------
@@ -720,7 +699,7 @@ def find_nucleophile_od_fallback(
 # Step 5.7: Flippin–Lodge Angle
 # -------------------------------------------------------------------------------
 
-def calculate_flippin_lodge(nuc_pos, c_pos, o_pos, r1_pos, r2_pos) -> float:
+def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     """
     Flippin–Lodge torsional pre-alignment angle in degrees.
 
@@ -805,13 +784,4 @@ def get_alignment_grade(identity_pct, cfg) -> str:
             return letter
     return 'I'  # Fallback for ultra-low identity
 
-
-def get_grade_full_label(grade: str, cfg) -> str:
-    """Return the expanded label (e.g. 'A (≥90%)') for a grade letter."""
-    for lo, hi, letter in cfg.ALIGN_GRADE_DEFS:
-        if letter == grade:
-            if lo >= 90: return f"{letter} (≥{int(lo)}%)"
-            if lo == 0:  return f"{letter} (<{int(hi)}%)"
-            return f"{letter} ({int(lo)}–{int(hi)}%)"
-    return f"{grade} (Unknown)"
 

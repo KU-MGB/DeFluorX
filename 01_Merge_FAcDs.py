@@ -76,16 +76,25 @@ import logging
 import traceback
 import re
 from pathlib import Path
-from typing import Set, Tuple, Dict, List
+from typing import Set, Tuple, Dict
 import hashlib
 
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack (Matplotlib configured for headless/HPC servers)
 # -------------------------------------------------------------------------------
+# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+# MKL / OpenMP / NumExpr). Must precede numpy import to take effect;
+# setdefault() preserves any value exported by the caller or pipeline runner.
+import os as _os
+_CPU_CAP = str(max(1, (_os.cpu_count() or 4) - 2))
+for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    _os.environ.setdefault(_tv, _CPU_CAP)
+
 import matplotlib
 matplotlib.use('Agg')  # Critical: Must be set before importing pyplot
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
 from scipy.stats import skew, gaussian_kde
 

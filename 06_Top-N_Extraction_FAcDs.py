@@ -92,11 +92,8 @@ import os
 import sys
 import shutil
 import argparse
-import logging
 import re
 import subprocess
-import multiprocessing
-import time
 from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -104,14 +101,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
 # -------------------------------------------------------------------------------
-import math
+# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+# MKL / OpenMP / NumExpr). Must precede numpy import to take effect;
+# setdefault() preserves any value exported by the caller or pipeline runner.
+_CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
+for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_tv, _CPU_CAP)
+
 import gemmi
 import tempfile
 import xml.etree.ElementTree as _ET
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # non-interactive backend; must be set before pyplot import
-import matplotlib.pyplot as plt
 import matplotlib.patches as _mpatches
 from matplotlib.patches import FancyBboxPatch as _FancyBboxPatch
 from matplotlib.figure import Figure
@@ -119,7 +123,6 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.lines import Line2D as _Line2D
 
 import pandas as pd
-from typing import List, Tuple, Dict, Any
 from Bio import SeqIO
 from Bio.PDB import PDBParser as _PDBParser
 from rdkit import Chem
@@ -581,7 +584,7 @@ def main():
                 except Exception as e:
                     console_info(f"    ! Ramachandran generation failed for {name}: {e}")
 
-            # --- B. Ligand Data Collection (Prefer RAW as requested) ---
+            # --- B. Ligand Data Collection (RAW source preferred) ---
             # Prioritize Raw for the structure data if available
             mol_source = src_raw if src_raw.exists() else (src_prep if src_prep.exists() else None)
         
@@ -766,13 +769,6 @@ def load_metadata(ext_dir: Path):
                 pass
     except ImportError:
         pass  # pandas optional; filenames fall back to base_name
-
-def get_meta(base_name: str) -> dict:
-    """Returns {'p': protein, 'l': ligand} for a complex base_name."""
-    for jn, val in METADATA_CACHE.items():
-        if jn in base_name:
-            return val
-    return {"p": base_name, "l": "PFAS"}
 
 # -------------------------------------------------------------------------------
 # Step 6.2: Figure-generation logger (separate from extraction logger)
@@ -1072,7 +1068,7 @@ def _parse_plip_xml(xml_path, lig, pro):
                 pkey = next((k for k in pro if k[0] == chain and k[1] == int(resnr)), None)
                 if pkey:
                     protcoo = pro[pkey]['center']
-                    la, dist_la = _closest_lig_atom(protcoo)
+                    la, _ = _closest_lig_atom(protcoo)
                     contacts_by_key[key] = {
                         'key': key, 'resname': restype, 'resnum': int(resnr),
                         'chain': chain, 'dist': float(bsr.get('min_dist', 5.0)),

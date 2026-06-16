@@ -124,7 +124,6 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
 # Step 1.1: Standard Library Imports
 # -------------------------------------------------------------------------------
 import sys
-import os
 import shutil
 import argparse
 import warnings
@@ -134,6 +133,16 @@ from datetime import datetime
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
 # -------------------------------------------------------------------------------
+# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+# MKL / OpenMP / NumExpr). Must precede numpy/scipy import to take effect;
+# setdefault() preserves any value exported by the caller or pipeline runner.
+import os as _os
+_CPU_CAP = str(max(1, (_os.cpu_count() or 4) - 2))
+for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    _os.environ.setdefault(_tv, _CPU_CAP)
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -550,7 +559,7 @@ def _tt_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, heig
         cmd.set("ray_opaque_background", 1)
         cmd.png(str(out_png), width=width, height=height, ray=1, quiet=1)
         return out_png.exists()
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -920,9 +929,9 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         fig, ax = plt.subplots(figsize=(11, _fig_h6))
         bar_x6 = np.arange(len(existing_tiers))
 
-        bars6 = ax.bar(bar_x6, counts6,
-                       color=[TIER_PALETTE.get(t, '#999') for t in existing_tiers],
-                       edgecolor='white', linewidth=0.8, width=0.65, zorder=2)
+        ax.bar(bar_x6, counts6,
+               color=[TIER_PALETTE.get(t, '#999') for t in existing_tiers],
+               edgecolor='white', linewidth=0.8, width=0.65, zorder=2)
         for xi, cnt in zip(bar_x6, counts6):
             pct = cnt / total_complexes * 100 if total_complexes else 0
             _pct_str6 = (f'{pct:.3f}' if pct < 0.1 else
@@ -954,7 +963,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             # Position: x=0.01, y=0.28 (lower — using the empty space above the bars)
             # Size: 0.34 wide × 0.50 tall — larger than before
             ax_pie = ax.inset_axes([0.01, 0.28, 0.34, 0.50])
-            wedges, texts, autotexts = ax_pie.pie(
+            _, _, autotexts = ax_pie.pie(
                 model_counts.values,
                 colors=_pie_colours,
                 autopct='%1.0f%%',
@@ -1084,7 +1093,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         ax2.set_ylim(0, _kde_ymax * 1.10)
 
         # Grade threshold vertical lines
-        for pct_v, lbl_v, col_v in [(90, 'Grade A boundary', '#1B7837'),
+        for pct_v, _lbl_v, col_v in [(90, 'Grade A boundary', '#1B7837'),
                                       (60, 'Grade D boundary', '#E69F00'),
                                       (40, 'Grade F boundary', '#D55E00')]:
             ax.axvline(x=pct_v, color=col_v, linestyle='--', alpha=0.65,
@@ -1148,7 +1157,6 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             pass  # Fig02 PA diag suppressed
         # Single unified legend: compound handles (bar patch + KDE line with median dot)
         from matplotlib.lines import Line2D as _L7
-        import matplotlib.patches as _mp02
         _bar_hdls_02, _bar_lbls_02 = ax.get_legend_handles_labels()
         _unified_handles = []
         _unified_labels  = []
@@ -1784,7 +1792,6 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             # retain every value.  y_ceil caps the display at 4 Å, but is extended if any
             # small-n tier has a value beyond that so its dots always land inside the axes.
             f17_plot = f17_df.copy()
-            n_outliers = 0
             valid_tiers_f17 = [t for t in existing_tiers if t in f17_plot['degrader_tier'].values]
             _sn_max17 = 0.0
             for _t17s in valid_tiers_f17:
@@ -2030,7 +2037,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             annot_f3.loc[_dn, _dn] = '1.00'
         # Dendrogram removed — features remain reordered by hierarchical clustering
         # (see _ord above); the footnote states this. Single-axes heatmap only.
-        fig_f3, ax_f3 = plt.subplots(figsize=(12, 11))
+        _, ax_f3 = plt.subplots(figsize=(12, 11))
         sns.heatmap(corr_raw, mask=mask_f3, annot=annot_f3, fmt='',
                     cmap='coolwarm', vmin=-1, vmax=1, center=0,
                     square=True, linewidths=0.5,
@@ -2183,7 +2190,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                         _is_tied08 = _met_tied_map08.get(metric, False)
 
                         _dot_data08 = []
-                        for ti, tier in enumerate(tiers_f08):
+                        for _ti, tier in enumerate(tiers_f08):
                             nv = float(_f08_norm.loc[tier, metric])
                             rv = float(_f08_df.loc[tier, metric])
                             if np.isnan(nv):
@@ -2381,7 +2388,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             except Exception:
                 _chi2_title = "Mechanistic State Cross-Tab  (Halide Stabilisation × Carboxylate Clamp)"
 
-            fig19, ax19 = plt.subplots(figsize=(11, 7))
+            _, ax19 = plt.subplots(figsize=(11, 7))
             sns.heatmap(cross_pct, annot=annot_labels, fmt='', cmap='YlOrRd', linewidths=0.5,
                         annot_kws={"size": 10, "weight": "bold"},
                         cbar_kws={'label': '% of tier'}, ax=ax19)
@@ -2775,10 +2782,10 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                         continue
                     vals_pct = tier_int[bond_type].values           # percent for bar height
                     vals_abs = _tier_int_abs[bond_type].values      # absolute mean for annotation
-                    bars = ax.bar(bar_x, vals_pct, bottom=bar_bottom,
-                                  color=bond_palette.get(bond_type, '#999'),
-                                  edgecolor='white', linewidth=0.5, width=0.55,
-                                  label=bond_type, zorder=2)
+                    ax.bar(bar_x, vals_pct, bottom=bar_bottom,
+                           color=bond_palette.get(bond_type, '#999'),
+                           edgecolor='white', linewidth=0.5, width=0.55,
+                           label=bond_type, zorder=2)
                     # Annotate segment with absolute mean count; skip tiny segments
                     for xi, vi, va, bi in zip(bar_x, vals_pct, vals_abs, bar_bottom):
                         if vi < 3.0:
@@ -2959,7 +2966,6 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             ax.axhline(y=0.50, color='#E69F00', linestyle=':', alpha=0.6, linewidth=1.1)
             ax.set_axisbelow(True)
             # KDE violin + IQR box overlay (no boxplot — keeps figure clean)
-            import scipy.stats as _stats14
             for _ti14, tier14 in enumerate(valid_t16):
                 _vals14 = f16_df.loc[f16_df['degrader_tier'] == tier14, 'FER'].dropna().values
                 if len(_vals14) < 4:
@@ -3477,7 +3483,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         N = len(metrics)
         angles = [n / float(N) * 2 * np.pi for n in range(N)] + [0]
         spoke_labels = [_radar_labels[m] for m in metrics]
-        fig_r, ax_r = plt.subplots(figsize=(9, 9), subplot_kw=dict(polar=True))
+        _, ax_r = plt.subplots(figsize=(9, 9), subplot_kw=dict(polar=True))
         colours_r = ["#057759", "#0BF1E2", "#E69F00", "#CC79A7", "#0072B2",
                      "#56B4E9", "#F0E442", "#009E73", "#D55E00", "#CC79A7"]
         lname_col = next((c for c in ['Ligand_Name', 'ligand'] if c in rows_df.columns), None)
@@ -3594,8 +3600,6 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     # in the biologically meaningful substrate-vs-inhibitor space.
     if "SN2_Attack_Angle" in df.columns and "Boltz_Model_Confidence" in df.columns:
         try:
-            from matplotlib.lines import Line2D as _L19
-            import matplotlib.patches as _mp19
 
             _d19 = df[['SN2_Attack_Angle', 'Boltz_Model_Confidence', 'degrader_tier']].copy()
             _d19['SN2_Attack_Angle']      = pd.to_numeric(_d19['SN2_Attack_Angle'],      errors='coerce')
@@ -4214,7 +4218,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             from matplotlib.patches import Patch as _Patch22
             from matplotlib.lines import Line2D as _L22
 
-            fig22, ax22 = plt.subplots(figsize=(11, 9))
+            _, ax22 = plt.subplots(figsize=(11, 9))
             ax22.set_aspect('equal')
             ax22.set_xlim(0.5, 9.5)
             ax22.set_ylim(0.4, 8.7)
@@ -4371,49 +4375,10 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
 # SECTION 4C: Publication Assembly Figures (23 / 24)
 # ===============================================================================
 
-def _load_pfas_smiles() -> dict:
-    """Load PFAS SMILES from CFG.INPUT_SMILES in the script directory."""
-    path = Path(__file__).resolve().parent / CFG.INPUT_SMILES
-    if not path.exists():
-        return {}
-    smiles: dict = {}
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.startswith('#'):
-            continue
-        parts = line.strip().split()
-        if len(parts) >= 2:
-            smiles[parts[1]] = parts[0]
-    return smiles
-
-
-def _render_mol_image(smiles_str: str, size=(180, 150)):
-    """Render SMILES to a matplotlib-compatible image array via RDKit Cairo."""
-    try:
-        import io as _io
-        from rdkit import Chem
-        from rdkit.Chem.Draw import rdMolDraw2D
-        mol = Chem.MolFromSmiles(smiles_str)
-        if mol is None:
-            return None
-        rdMolDraw2D.PrepareMolForDrawing(mol)
-        drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
-        opts = drawer.drawOptions()
-        opts.padding = 0.08
-        opts.bondLineWidth = 1.8
-        drawer.DrawMolecule(mol)
-        drawer.FinishDrawing()
-        buf = _io.BytesIO(drawer.GetDrawingText())
-        buf.seek(0)
-        return plt.imread(buf)
-    except Exception:
-        return None
-
-
 def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Figure 23: Top 25 multi-target proteins (stacked bar)."""
     try:
         import matplotlib.patches as _mp
-        from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
         d = _utils_mod.standardise_dataframe_tiers(df.copy(), CFG)
         d['tier'] = d[CFG.COL_TIER].astype(str)
@@ -4455,30 +4420,6 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             ascending=False
         )
         top_proteins = protein_summary.head(25).set_index('prot')
-
-        pfas_order = [
-            '25_TFA', '26_Fluoroacetate', '27_Difluoroacetate', '7_PFBA', '8_PFPeA',
-            '6_PFHxA', '13_PFHpA', '1_PFOA', '4_PFNA', '10_PFDA', '12_PFUnDA',
-            '11_PFDoDA', '14_PFTrDA', '17_PFTeDA', '18_PFHxDA', '19_PFODA',
-            '5_PFBS', '9_PFPeS', '3_PFHxS', '15_PFHpS', '2_PFOS', '16_PFDS',
-            '20_GenX', '21_ADONA', '24_C6O4', '22_6-2-FTOH', '23_8-2-FTOH',
-        ]
-        pfas_short  = {p: p.split('_', 1)[1] if '_' in p else p for p in pfas_order}
-        smiles_map  = _load_pfas_smiles()
-        pfas_images = {
-            p: _render_mol_image(smiles_map.get(p, ''), size=(180, 140))
-            for p in pfas_order
-        }
-        ligand_tier_counts = (
-            best_pairs.groupby(['lig', 'tier'])
-            .agg(protein_count=('prot', 'nunique'))
-            .reset_index()
-        )
-        ligand_tier_matrix = (
-            ligand_tier_counts.pivot(index='lig', columns='tier', values='protein_count')
-            .reindex(pfas_order, fill_value=0)[tier_order].fillna(0)
-        )
-        max_total = max(int(ligand_tier_matrix.sum(axis=1).max()), 1)
 
         # ── Figure 23a: stacked bar — top-25 proteins ────────────────────────
         fig23a, ax = plt.subplots(figsize=(16, 9))

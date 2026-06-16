@@ -63,6 +63,16 @@ Usage:
 # -------------------------------------------------------------------------------
 import os
 import sys
+
+# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+# MKL / OpenMP / NumExpr). Must precede numpy/pandas import to take effect;
+# setdefault() preserves any value exported by the caller or pipeline runner.
+_CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
+for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_tv, _CPU_CAP)
+
 import shutil
 import subprocess
 import tempfile
@@ -695,6 +705,7 @@ def main():
         if sys.stdout.isatty():
             print("")
 
+    console_info(f"Raw PDB generation stage completed in {time.time() - t0:.1f}s")
     console_separator()
 
     # -------------------------------------------------------------------------------

@@ -325,8 +325,6 @@ else
     _tee "WARNING: conda not found at ${CONDA_BASE}. Set CONDA_BASE env var or install miniconda."
 fi
 
-PIPELINE_START=$SECONDS
-
 # ── Pipeline body ─────────────────────────────────────────────────────────────
 # Wrapped in a function so it can run either in the foreground (output tee'd to
 # terminal + log) or detached in the background (output to log only). The trap is
