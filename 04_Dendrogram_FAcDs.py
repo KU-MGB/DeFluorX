@@ -282,7 +282,7 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
         embed_df = csv_df.drop_duplicates(subset=[prot_col], keep="first")
     else:
         embed_df = csv_df
-    state_json   = json.dumps({"nwk": nwk_str, "csv": embed_df.to_csv(index=False)})
+    state_json   = json.dumps({"tree": nwk_str, "csv": embed_df.to_csv(index=False)})
     html_content = HTML_APP_TEMPLATE.replace(
         "<!-- INJECT_EMBEDDED_STATE -->",
         f"<script>window.EMBEDDED_STATE = {state_json};</script>"
@@ -1627,7 +1627,8 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         window.onload = function() {
             if (window.EMBEDDED_STATE) {
                 document.getElementById('upload-section').style.display = 'none';
-                state.rawNwk = window.EMBEDDED_STATE.tree; state.treeData = parseNewick(state.rawNwk);
+                state.rawNwk = window.EMBEDDED_STATE.tree || window.EMBEDDED_STATE.nwk;
+                state.treeData = parseNewick(state.rawNwk);
                 state.rawCsv = window.EMBEDDED_STATE.csv;
 
                 Papa.parse(state.rawCsv, {

@@ -2119,7 +2119,7 @@ def prep_and_convert_phase(args):
 
     _utils_mod.print_script_banner(
         "05_TopN_and_PDB_Preparation_FAcDs.py",
-        "CIF → PDB Conversion  ·  PrepWizard Refinement  ·  Chain Assignment",
+        "PDB Conversion & Preparation  ·  Top-N Selection & Delivery  ·  Figure Generation",
     )
     console_info(f"  Run Name : {args.run_folder_name}")
     if _md_jobs:
@@ -2343,18 +2343,7 @@ def topn_extraction_phase(args):
     prep_pdb_dir = prep_dir / "2_Prepared_PDBs"
 
     # -------------------------------------------------------------------------------
-    # Step 5.4: Header output
-    # -------------------------------------------------------------------------------
-    _utils_mod.print_script_banner(
-        "05_TopN_and_PDB_Preparation_FAcDs.py",
-        "Top-N Delivery  ·  Tier Extraction  ·  Ramachandran Validation  ·  PyMOL/PLIP Figure Generation",
-    )
-    console_info(f"  Run Name : {args.run_folder_name}")
-    console_info(f"  Output   : {final_dir}")
-    console_separator()
-
-    # -------------------------------------------------------------------------------
-    # Step 5.5: Load ranking logic
+    # Step 5.4: Load ranking logic
     # -------------------------------------------------------------------------------
     # Primary: FAcDs Ranked CSV written by 02_Production_FAcDs.py
     rank_csvs = (sorted(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv")) or
@@ -2385,14 +2374,14 @@ def topn_extraction_phase(args):
         console_info("Warning: Rank column missing. Using default sort.")
 
     # -------------------------------------------------------------------------------
-    # Step 5.6: Load reference data (FASTA/SMILES)
+    # Step 5.5: Load reference data (FASTA/SMILES)
     # -------------------------------------------------------------------------------
     console_info("Loading reference sequences and SMILES...")
     seq_map, smi_map, fasta_count, smi_count = load_reference_data(input_data_dir)
     console_info(f"Loaded {fasta_count} Sequences, {smi_count} SMILES.")
 
     # -------------------------------------------------------------------------------
-    # Step 5.7: Tier / MD-ready selection
+    # Step 5.6: Tier / MD-ready selection
     # -------------------------------------------------------------------------------
     import select as _select
 
@@ -2489,7 +2478,7 @@ def topn_extraction_phase(args):
     console_separator()
 
     # -------------------------------------------------------------------------------
-    # Step 5.8: Prepare output folders
+    # Step 5.7: Prepare output folders
     # -------------------------------------------------------------------------------
     folder_tag = f"{tier_label}_{top_n}hits" if top_n else "Selected"
 
@@ -2515,7 +2504,7 @@ def topn_extraction_phase(args):
     try:
 
         # -------------------------------------------------------------------------------
-        # Step 5.8.1: Control-case extraction (always automatic)
+        # Step 5.7.1: Control-case extraction (always automatic)
         # -------------------------------------------------------------------------------
         ctrl_extracted_raw  = 0
         ctrl_extracted_prep = 0
@@ -2557,7 +2546,7 @@ def topn_extraction_phase(args):
         console_separator()
 
         # -------------------------------------------------------------------------------
-        # Step 5.9: Extraction loop with unique aggregation
+        # Step 5.8: Extraction loop with unique aggregation
         # -------------------------------------------------------------------------------
         extracted_raw_count = 0
         extracted_prep_count = 0
@@ -2572,7 +2561,8 @@ def topn_extraction_phase(args):
         protein_ranks = defaultdict(list) # Key: sequence,  Value: list of ranks
         protein_data  = {}                # Key: sequence,  Value: protein_name
 
-        for i, row in subset.iterrows():
+        for idx, (i, row) in enumerate(subset.iterrows()):
+            rel_rank = idx + 1
             # Metadata
             rank = row.get("Scientific_Rank", i+1)
             name = row["job_name"]
@@ -2667,8 +2657,24 @@ def topn_extraction_phase(args):
             if seq_key not in protein_data:
                 protein_data[seq_key] = p_name
 
+            # --- D. Export MD-ready PDB file to the handover folder ---
+            src_prep = prep_pdb_dir / fname_prep
+            if src_prep.exists():
+                try:
+                    title_line = f"TITLE     R{rel_rank}_{name}\n"
+                    with open(src_prep, "r") as f:
+                        pdb_lines = f.readlines()
+                    pdb_lines = [line for line in pdb_lines if not line.startswith("TITLE")]
+                    pdb_lines.insert(0, title_line)
+                    
+                    dest_pdb = out_handover / f"R{rel_rank}_{name}.pdb"
+                    with open(dest_pdb, "w") as f:
+                        f.writelines(pdb_lines)
+                except Exception as e:
+                    console_info(f"    ! Failed to copy MD-ready PDB to handover: {e}")
+
         # -------------------------------------------------------------------------------
-        # Step 5.10: Unique ligand writing (SDF & SMILES)
+        # Step 5.9: Unique ligand writing (SDF & SMILES)
         # -------------------------------------------------------------------------------
 
         # Iterate through unique SMILES found
@@ -2698,7 +2704,7 @@ def topn_extraction_phase(args):
                 count_sdf += 1
 
         # -------------------------------------------------------------------------------
-        # Step 5.11: Save data & summary
+        # Step 5.10: Save data & summary
         # -------------------------------------------------------------------------------
 
         # Save CSV Data (hits + controls merged; controls appended with is_control flag)
@@ -2741,7 +2747,7 @@ def topn_extraction_phase(args):
         ("2", "Prepared PDBs + Figures",       str(prep_pdb_dir.resolve())),
         ("3", "Comparative Ramachandran Plots", str(out_rama.resolve())),
         ("4", "Controls (Raw/Prep/CSV)",       str(out_ctrl.resolve())),
-        ("5", "Molecular Handover (FASTA/SDF)", str(out_handover.resolve())),
+        ("5", "Molecular Handover (FASTA/SDF/PDB)", str(out_handover.resolve())),
         ("6", "Combined Scientific Data (CSV)", str(subset_csv_path.resolve())),
         ("7", "Step-05 Log (prep + extraction)", str((prep_dir / "00_TopN_and_Preparation_Log.txt").resolve())),
     ]
