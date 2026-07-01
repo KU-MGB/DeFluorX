@@ -1,5 +1,5 @@
 # PFAS Conda Environment
-# Exported : 16 June 2026, 07:37
+# Exported : 01 July 2026, 12:12
 # Script   : 00_01_Environment_Installation_FAcDs.py --export
 #
 name: PFAS
@@ -300,7 +300,6 @@ dependencies:
       - cuequivariance-ops-cu12==0.9.1
       - cuequivariance-ops-torch-cu12==0.9.1
       - cuequivariance-torch==0.9.1
-      - dataclasses==0.6
       - datasets==4.8.4
       - decorator==5.2.1
       - defusedxml==0.7.1
@@ -437,6 +436,7 @@ dependencies:
       - safetensors==0.7.0
       - scanpy==1.11.5
       - scikit-learn==1.6.1
+      - scikit-posthocs==0.14.0
       - scipy==1.13.1
       - sentry-sdk==2.55.0
       - session-info2==0.4

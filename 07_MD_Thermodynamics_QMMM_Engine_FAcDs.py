@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 08  |  MD Thermodynamics & QM/MM Engine
+FAcDs Pipeline  |  Step 07  |  MD Thermodynamics & QM/MM Engine
 ===============================================================================
 
 Molecular dynamics trajectory analysis: near-attack conformation (NAC) geometry,
@@ -14,28 +14,27 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 10 June 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+  Script        : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
                   00_03_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
-  Reads         : <Run>/7_Physics_Validation/MolecularDynamics/*Rank_N*/*-out.cms
+  Reads         : <Run>/6_Physics_Validation/MolecularDynamics/*Rank_N*/*-out.cms
                                                                /*_trj/   (any dir name containing Rank_N)
                                                                /*.eaf
-                  <Run>/7_Physics_Validation/WaterMaps/*Rank_N*.csv  (Maestro WM export)
-                  <Run>/7_Physics_Validation/WaterMaps/*Rank_N*/*_wm.maegz
+                  <Run>/6_Physics_Validation/WaterMaps/*Rank_N*.csv  (Maestro WM export)
+                  <Run>/6_Physics_Validation/WaterMaps/*Rank_N*/*_wm.maegz
                   <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
-  Writes        : <Run>/8_MD_Thermodynamics_Results/Rank_N_<Name>/
+  Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2.in         (QM/MM scan input)
-                  <Run>/8_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
-  Upstream      : 07_SID_Post_Processing_FAcDs.py → produces *_SID-out.eaf consumed here
-                  06_Top-N_Extraction_FAcDs.py   → provides ranked structures & IDs
+                  <Run>/7_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
+  Upstream      : 06_SID_Prime-MMGBSA_FAcDs.py   → produces *_SID-out.eaf + Prime MM-GBSA summary consumed here
+                  05_TopN_and_PDB_Preparation_FAcDs.py → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
-                  06_Top-N_Extraction_FAcDs.py   → visual reporting of hits (figures merged into Step 06)
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
 ────────────────────────────────────────────────────────────────────────────────
 
@@ -51,14 +50,14 @@ Date   : 10 June 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
-    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
+    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
+    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
 
 Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
                       Boltz-2_Run_20260309T085406Z). Glob-expanded to match timestamp
-                      suffix automatically. Resolves into 7_Physics_Validation.
+                      suffix automatically. Resolves into 6_Physics_Validation.
     --dir    DIR      Alternative to positional (legacy). Same resolution logic.
     --lig    RESNAME  Ligand residue name in the CMS system file.  Default: LIG
     --stride N        Analyse every N-th trajectory frame (1 = all frames).
@@ -155,8 +154,8 @@ import os
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 # Both forms are equivalent:
-#   python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   $SCHRODINGER/run 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -544,16 +543,22 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
                          f"{res_dict[best_acid_key]['ptype']} {res_dict[best_acid_key]['resnum']} "
                          f"[Chain {res_dict[best_acid_key]['chain']}]{ConsoleColours.ENDC}")
 
-    # 6. Fluorine cradle: TRP/TYR heavy atoms within fluorine cradle radius of nucleophile
+    # 6. Fluorine cradle: TRP/TYR/HIS heavy atoms within fluorine cradle radius of
+    #    nucleophile. HIS is the third fluoride-stabilising H-bond donor (His155 in
+    #    native FAcD). The catalytic base His (best_base_key) is excluded so it is
+    #    not double-counted as both the general base and a cradle stabiliser.
     idx_cradle = []
     _fcr = CFG.F_CRADLE_RADIUS
+    _cradle_types = {'TRP', 'TYR', 'HIS', 'HIP', 'HIE', 'HID'}
     for res_key, data in res_dict.items():
-        if data['ptype'] in {'TRP', 'TYR'}:
+        if res_key == best_base_key:
+            continue
+        if data['ptype'] in _cradle_types:
             if calculate_min_distance(frame_0, idx_nuc, data['heavy_idx']) <= _fcr:
                 idx_cradle.extend(data['heavy_idx'])
 
     console_info(f"    {ConsoleColours.OKBLUE}↳ 3D Smart-Lock: Fluorine Cradle → "
-                 f"{len(idx_cradle)} TRP/TYR heavy atoms.{ConsoleColours.ENDC}")
+                 f"{len(idx_cradle)} TRP/TYR/HIS heavy atoms.{ConsoleColours.ENDC}")
     console_info(f"    {ConsoleColours.OKBLUE}↳ Polyfluorinated Engine: "
                  f"{len(cf_pairs)} C-F bonds tracked.{ConsoleColours.ENDC}")
 
@@ -2197,11 +2202,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
 def _resolve_work_dir(raw: str) -> Path:
     """
-    Resolves a run dir argument to the 7_Physics_Validation path.
+    Resolves a run dir argument to the 6_Physics_Validation path.
 
     Handles three input forms:
-      1. Exact path to 7_Physics_Validation (already correct).
-      2. Exact Boltz-2_Run_* dir (appends 7_Physics_Validation).
+      1. Exact path to 6_Physics_Validation (already correct).
+      2. Exact Boltz-2_Run_* dir (appends 6_Physics_Validation).
       3. Partial prefix such as 'Boltz-2_Run_20260309T085406Z' — glob-expanded to
          match the full timestamped directory on disk.
     """
@@ -2210,13 +2215,13 @@ def _resolve_work_dir(raw: str) -> Path:
         p = Path.cwd() / p
 
     # Case 1: already points into Physics_Validation
-    if "Physics_Validation" in p.parts or p.name == "7_Physics_Validation":
+    if "Physics_Validation" in p.parts or p.name == "6_Physics_Validation":
         p.mkdir(parents=True, exist_ok=True)
         return p.resolve()
 
     # Case 2/3: p is or looks like a Boltz-2_Run_* dir (possibly a prefix)
     if p.exists() and p.is_dir():
-        pv = p / "7_Physics_Validation"
+        pv = p / "6_Physics_Validation"
         pv.mkdir(parents=True, exist_ok=True)
         return pv.resolve()
 
@@ -2226,11 +2231,11 @@ def _resolve_work_dir(raw: str) -> Path:
     matches = sorted(parent.glob(f"{stem}*"),
                      key=lambda x: x.stat().st_mtime)
     if matches:
-        pv = matches[-1] / "7_Physics_Validation"
+        pv = matches[-1] / "6_Physics_Validation"
         pv.mkdir(parents=True, exist_ok=True)
         return pv.resolve()
 
-    pv = p / "7_Physics_Validation"
+    pv = p / "6_Physics_Validation"
     pv.mkdir(parents=True, exist_ok=True)
     return pv.resolve()
 
@@ -2269,14 +2274,14 @@ def main():
     work_dir = _resolve_work_dir(raw_dir)
 
     # Auto-detect all available MD rank indices — scan MD, WaterMaps, and
-    # 8_MD_Thermodynamics_Results so that any previously processed rank is included.
+    # 7_MD_Thermodynamics_Results so that any previously processed rank is included.
     _auto_rank_list: list[int] = []
     if args.ranks is None:
         _found_ranks: set[int] = set()
         for _scan_root in [
             work_dir / "MolecularDynamics",
             work_dir / "WaterMaps",
-            work_dir.parent / "8_MD_Thermodynamics_Results",
+            work_dir.parent / "7_MD_Thermodynamics_Results",
         ]:
             if _scan_root.exists():
                 for _d in _scan_root.iterdir():
@@ -2290,7 +2295,7 @@ def main():
         else:
             args.ranks = 5
 
-    master_out_dir = work_dir.parent / "8_MD_Thermodynamics_Results"
+    master_out_dir = work_dir.parent / "7_MD_Thermodynamics_Results"
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
@@ -2300,7 +2305,7 @@ def main():
 
 
     _utils_mod.print_script_banner(
-        "08_MD_Thermodynamics_QMMM_Engine_FAcDs.py",
+        "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py",
         "MD Thermodynamics  ·  QM/MM Frame Extraction  ·  NAC Validation",
     )
     console_info(f"Run Directory    : {work_dir.parent}")
@@ -2528,6 +2533,28 @@ def main():
         df_master = df_master.sort_values(by="Catalytic_Viability_Pct", ascending=False)
         df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
 
+        # Merge Prime MM-GBSA ΔG_bind (Step 06) onto the master by Scientific_Rank so the
+        # terminal ranking couples non-covalent binding thermodynamics with the QSite
+        # reaction barrier. Both keys are coerced to numeric before the join. A missing or
+        # partial summary (Step 06 not run) is non-fatal — the ΔG columns are left absent.
+        _mmgbsa_csv = (work_dir / "MolecularDynamics"
+                       / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
+                       / "00_MMGBSA_Summary.csv")
+        if _mmgbsa_csv.exists() and "Scientific_Rank" in df_master.columns:
+            try:
+                _mdf = pd.read_csv(_mmgbsa_csv)
+                _keep = [c for c in _mdf.columns if c.startswith("MMGBSA_dG")]
+                if "Scientific_Rank" in _mdf.columns and _keep:
+                    _mdf = _mdf[["Scientific_Rank"] + _keep].copy()
+                    _mdf["Scientific_Rank"] = pd.to_numeric(_mdf["Scientific_Rank"], errors="coerce")
+                    df_master["Scientific_Rank"] = pd.to_numeric(df_master["Scientific_Rank"], errors="coerce")
+                    df_master = df_master.merge(_mdf, on="Scientific_Rank", how="left")
+                    console_info(f"Merged Prime MM-GBSA ΔG_bind for {int(_mdf['Scientific_Rank'].notna().sum())} rank(s).")
+            except Exception as _e:
+                console_info(f"{ConsoleColours.WARNING}MM-GBSA merge skipped ({_e}).{ConsoleColours.ENDC}")
+        elif not _mmgbsa_csv.exists():
+            console_info("MM-GBSA summary not found (Step 06 not run) — master written without ΔG_bind columns.")
+
         master_csv_path = master_out_dir / "08_MD_Master_Ranking.csv"
         df_master.to_csv(master_csv_path, index=False)
         console_info(f"Total Simulations Validated : {len(df_master)}")
@@ -2573,4 +2600,4 @@ if __name__ == "__main__":
     import time as _time
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "08_MD_Thermodynamics_QMMM_Engine_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py")

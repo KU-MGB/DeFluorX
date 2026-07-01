@@ -7,18 +7,35 @@ spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
 All downstream scripts import from here — never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 June 2026 <────────────────────────────────────────────────────────
+Date   : 30 June 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_03_Project_Utils_FAcDs.py
   Role          : Shared utility library; no executable entry point.
   Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
-                  04_Dendrogram_FAcDs.py, 05_CIF-PDB_Preparation_FAcDs.py,
-                  06_Top-N_Extraction_FAcDs.py,
-                  08_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+                  04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
+                  05_TopN_and_PDB_Preparation_FAcDs.py, 06_SID_Prime-MMGBSA_FAcDs.py,
+                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+                  (also referenced by 00_01 for a ConsoleColours drift check)
   Reads         : (none — pure utility module)
   Writes        : (none — pure utility module)
 ───────────────────────────────────────────────────────────────────────────────
+
+-------------------------------------------------------------------------------
+Scientific References:
+    1. Numerical arrays & vector geometry:
+       - Harris, C.R. et al. (2020) Array programming with NumPy. Nature 585:357–362.
+       - DOI: https://doi.org/10.1038/s41586-020-2649-2
+    2. Plotting helpers (matplotlib spine/style utilities):
+       - Hunter, J.D. (2007) Matplotlib. Comput Sci Eng 9:90–95.
+       - DOI: https://doi.org/10.1109/MCSE.2007.55
+    3. Structure / data / cheminformatics helpers (lazily imported on demand):
+       - Gemmi: Wojdyr, M. (2022) J Open Source Softw 7:4200. DOI: https://doi.org/10.21105/joss.04200
+       - pandas: McKinney, W. (2010) Data Structures for Statistical Computing in Python. Proc 9th Python in Science Conf 56–61. DOI: https://doi.org/10.25080/Majora-92bf1922-00a
+       - RDKit: Landrum, G. (2006) RDKit: Open-source cheminformatics. https://www.rdkit.org
+    Note: the angle/dihedral helpers implement standard vector geometry; metric
+    definitions and their primary literature live in 00_02_Project_Config_FAcDs.py.
+-------------------------------------------------------------------------------
 """
 
 from __future__ import annotations
@@ -31,7 +48,7 @@ from typing import Any
 
 import numpy as np
 
-_ANSI_ESCAPE_RE = _re.compile(r'\033\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]')
+_ANSI_ESCAPE_RE = _re.compile(r"\033\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]")
 
 
 # ===============================================================================
@@ -40,13 +57,13 @@ _ANSI_ESCAPE_RE = _re.compile(r'\033\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]')
 
 class ConsoleColours:
     """ANSI terminal colour codes for pipeline console output."""
-    OKGREEN = '\033[92m'   # green   — success / pass
-    WARNING = '\033[93m'   # yellow  — caution
-    FAIL    = '\033[91m'   # red     — error / fail
-    OKBLUE  = '\033[94m'   # blue    — information
-    MAGENTA = '\033[95m'   # magenta — script banners
-    BOLD    = '\033[1m'    # bold    — section headers
-    ENDC    = '\033[0m'    # reset   — end all formatting
+    OKGREEN = "\033[92m"   # green   — success / pass
+    WARNING = "\033[93m"   # yellow  — caution
+    FAIL    = "\033[91m"   # red     — error / fail
+    OKBLUE  = "\033[94m"   # blue    — information
+    MAGENTA = "\033[95m"   # magenta — script banners
+    BOLD    = "\033[1m"    # bold    — section headers
+    ENDC    = "\033[0m"    # reset   — end all formatting
 
 
 # Horizontal separators — choose the weight that matches visual hierarchy.
@@ -106,13 +123,15 @@ def setup_logging(
 # ===============================================================================
 # SECTION 3: CONSOLE OUTPUT FUNCTIONS
 # ===============================================================================
-# All functions accept an optional `logger` parameter.  Pass the module-level
-# logger from the calling script so output goes to both terminal and log file.
-# When `logger=None`, output is terminal-only (useful for standalone testing).
+"""
+All functions accept an optional `logger` parameter. Pass the module-level
+logger from the calling script so output goes to both terminal and log file.
+When `logger=None`, output is terminal-only (useful for standalone testing).
+"""
 
 def _strip_ansi(s: str) -> str:
     """Remove all ANSI/VT100 escape sequences from a string."""
-    return _ANSI_ESCAPE_RE.sub('', s)
+    return _ANSI_ESCAPE_RE.sub("", s)
 
 
 def console_title(msg: str, logger: logging.Logger | None = None) -> None:
@@ -125,7 +144,7 @@ def console_title(msg: str, logger: logging.Logger | None = None) -> None:
 def console_info(msg: str, logger: logging.Logger | None = None) -> None:
     """Two-space-indented info line — printed and optionally written to log file."""
     # Ensure every line of a multi-line message is indented by two spaces.
-    for line in str(msg).split('\n'):
+    for line in str(msg).split("\n"):
         print(f"  {line}", flush=True)
     if logger:
         logger.info(_strip_ansi(msg))
@@ -203,19 +222,19 @@ def clean_spines(ax) -> None:
     Canonical replacement for any ``apply_clean_spines`` defined locally in
     individual scripts — import and call this function instead.
     """
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_linewidth(0.8)
-    ax.spines['bottom'].set_linewidth(0.8)
-    ax.tick_params(direction='out', length=4, width=0.8, labelsize=10)
-    ax.grid(axis='x', linestyle='--', alpha=0.3)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.tick_params(direction="out", length=4, width=0.8, labelsize=10)
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
 
 
 # --- Central Ramachandran Plotting Helpers ------------------------------------
 
 def _rama_get_atom_pos(res, name: str):
     """Find atom coordinates in a Gemmi residue structure."""
-    atom = res.find_atom(name, '*')
+    atom = res.find_atom(name, "*")
     return atom.pos if atom else None
 
 
@@ -228,18 +247,18 @@ def compute_ramachandran_angles(st) -> list[tuple[str, int, float, float]]:
     residues = [r for r in chain if r.entity_type != gemmi.EntityType.NonPolymer
                 and r.entity_type != gemmi.EntityType.Water]
     for i, res in enumerate(residues):
-        N  = _rama_get_atom_pos(res, 'N')
-        CA = _rama_get_atom_pos(res, 'CA')
-        C  = _rama_get_atom_pos(res, 'C')
+        N  = _rama_get_atom_pos(res, "N")
+        CA = _rama_get_atom_pos(res, "CA")
+        C  = _rama_get_atom_pos(res, "C")
         if not (N and CA and C):
             continue
         phi = psi = None
         if i > 0:
-            C_prev = _rama_get_atom_pos(residues[i - 1], 'C')
+            C_prev = _rama_get_atom_pos(residues[i - 1], "C")
             if C_prev:
                 phi = math.degrees(gemmi.calculate_dihedral(C_prev, N, CA, C))
         if i < len(residues) - 1:
-            N_next = _rama_get_atom_pos(residues[i + 1], 'N')
+            N_next = _rama_get_atom_pos(residues[i + 1], "N")
             if N_next:
                 psi = math.degrees(gemmi.calculate_dihedral(N, CA, C, N_next))
         if phi is not None and psi is not None:
@@ -256,49 +275,49 @@ def _rama_classify(phi: float, psi: float) -> str:
         (-180 <= phi <= -50 and (110 <= psi <= 180 or -180 <= psi <= -155)) or
         (  30 <= phi <=  90 and -25  <= psi <=  80)
     )
-    if favored: return 'Favored'
+    if favored: return "Favored"
     allowed = (
         (-180 <= phi <=   0 and -100 <= psi <=  80) or
         (-180 <= phi <= -30 and   80 <= psi <= 180) or
         (-180 <= phi <= -30 and -180 <= psi <= -130) or
         (   0 <= phi <= 130 and  -50 <= psi <= 100)
     )
-    return 'Allowed' if allowed else 'Outlier'
+    return "Allowed" if allowed else "Outlier"
 
 
 def _rama_stats(angles: list[tuple]) -> dict[str, Any]:
     """Calculate percentages of residues in favored, allowed, and outlier regions."""
     total = len(angles)
-    counts = {'Favored': 0, 'Allowed': 0, 'Outlier': 0}
+    counts = {"Favored": 0, "Allowed": 0, "Outlier": 0}
     for _, _, phi, psi in angles:
         counts[_rama_classify(phi, psi)] += 1
     pct = {k: (v / total * 100 if total else 0.0) for k, v in counts.items()}
-    return {'total': total, 'counts': counts, 'pct': pct}
+    return {"total": total, "counts": counts, "pct": pct}
 
 
 def _draw_rama_background(ax) -> None:
     """Draw the standard alpha/beta/L region backgrounds on a Ramachandran axes."""
     import matplotlib.pyplot as plt
-    fav_c = '#dcedc8' # light green
-    all_c = '#fff9c4' # light yellow
-    
-    alpha_fav  = plt.Polygon([(-165,-70),(-30,-70),(-30,50),(-165,50)], closed=True, fc=fav_c, ec='none', zorder=0)
-    beta_fav1  = plt.Polygon([(-180,110),(-50,110),(-50,180),(-180,180)], closed=True, fc=fav_c, ec='none', zorder=0)
-    beta_fav2  = plt.Polygon([(-180,-180),(-50,-180),(-50,-155),(-180,-155)], closed=True, fc=fav_c, ec='none', zorder=0)
-    lhand_fav  = plt.Polygon([(30,-25),(90,-25),(90,80),(30,80)], closed=True, fc=fav_c, ec='none', zorder=0)
-    
-    allowed1   = plt.Polygon([(-180,-100),(0,-100),(0,80),(-180,80)], closed=True, fc=all_c, ec='none', zorder=0)
-    allowed2   = plt.Polygon([(-180,80),(-30,80),(-30,180),(-180,180)], closed=True, fc=all_c, ec='none', zorder=0)
-    allowed3   = plt.Polygon([(-180,-180),(-30,-180),(-30,-130),(-180,-130)], closed=True, fc=all_c, ec='none', zorder=0)
-    allowed4   = plt.Polygon([(0,-50),(130,-50),(130,100),(0,100)], closed=True, fc=all_c, ec='none', zorder=0)
-    
+    fav_c = "#dcedc8" # light green
+    all_c = "#fff9c4" # light yellow
+
+    alpha_fav  = plt.Polygon([(-165,-70),(-30,-70),(-30,50),(-165,50)], closed=True, fc=fav_c, ec="none", zorder=0)
+    beta_fav1  = plt.Polygon([(-180,110),(-50,110),(-50,180),(-180,180)], closed=True, fc=fav_c, ec="none", zorder=0)
+    beta_fav2  = plt.Polygon([(-180,-180),(-50,-180),(-50,-155),(-180,-155)], closed=True, fc=fav_c, ec="none", zorder=0)
+    lhand_fav  = plt.Polygon([(30,-25),(90,-25),(90,80),(30,80)], closed=True, fc=fav_c, ec="none", zorder=0)
+
+    allowed1   = plt.Polygon([(-180,-100),(0,-100),(0,80),(-180,80)], closed=True, fc=all_c, ec="none", zorder=0)
+    allowed2   = plt.Polygon([(-180,80),(-30,80),(-30,180),(-180,180)], closed=True, fc=all_c, ec="none", zorder=0)
+    allowed3   = plt.Polygon([(-180,-180),(-30,-180),(-30,-130),(-180,-130)], closed=True, fc=all_c, ec="none", zorder=0)
+    allowed4   = plt.Polygon([(0,-50),(130,-50),(130,100),(0,100)], closed=True, fc=all_c, ec="none", zorder=0)
+
     for patch in [allowed1, allowed2, allowed3, allowed4]:
         ax.add_patch(patch)
     for patch in [alpha_fav, beta_fav1, beta_fav2, lhand_fav]:
         ax.add_patch(patch)
-        
-    ax.axhline(0, color='#bdbdbd', lw=1, zorder=1)
-    ax.axvline(0, color='#bdbdbd', lw=1, zorder=1)
+
+    ax.axhline(0, color="#bdbdbd", lw=1, zorder=1)
+    ax.axvline(0, color="#bdbdbd", lw=1, zorder=1)
 
 
 def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple],
@@ -309,103 +328,103 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     import matplotlib.lines as mlines
-    
-    plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans']})
-    
+
+    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"]})
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     for ax, angles, label, _colour in [
-        (axes[0], angles_ref, label_ref, '#6a1b9a'),
-        (axes[1], angles_con, label_con, '#1565c0'),
+        (axes[0], angles_ref, label_ref, "#6a1b9a"),
+        (axes[1], angles_con, label_con, "#1565c0"),
     ]:
         _draw_rama_background(ax)
         if angles:
-            for marker_type, m_shape in [('General', 'o'), ('Glycine', '^'), ('Proline', 's')]:
+            for marker_type, m_shape in [("General", "o"), ("Glycine", "^"), ("Proline", "s")]:
                 m_phis, m_psis, m_cols = [], [], []
                 for resname, resnum, phi, psi in angles:
-                    if (marker_type == 'Glycine' and resname == 'GLY') or \
-                       (marker_type == 'Proline' and resname == 'PRO') or \
-                       (marker_type == 'General' and resname not in ['GLY', 'PRO']):
+                    if (marker_type == "Glycine" and resname == "GLY") or \
+                       (marker_type == "Proline" and resname == "PRO") or \
+                       (marker_type == "General" and resname not in ["GLY", "PRO"]):
                         m_phis.append(phi)
                         m_psis.append(psi)
                         classification = _rama_classify(phi, psi)
-                        if classification == 'Favored':
-                            m_cols.append('#2e7d32')
-                        elif classification == 'Allowed':
-                            m_cols.append('#f57f17')
+                        if classification == "Favored":
+                            m_cols.append("#2e7d32")
+                        elif classification == "Allowed":
+                            m_cols.append("#f57f17")
                         else:
-                            m_cols.append('#c62828')
+                            m_cols.append("#c62828")
                 if m_phis:
-                    ax.scatter(m_phis, m_psis, c=m_cols, marker=m_shape, s=20, 
-                               alpha=0.85, linewidths=0.4, edgecolors='white', zorder=3)
-            
+                    ax.scatter(m_phis, m_psis, c=m_cols, marker=m_shape, s=20,
+                               alpha=0.85, linewidths=0.4, edgecolors="white", zorder=3)
+
             if critical_res:
                 triad_styles = {
-                    'Acid': {'marker': 'D', 'fc': '#d81b60', 'ec': '#880e4f', 's': 80},
-                    'Base': {'marker': 'p', 'fc': '#1e88e5', 'ec': '#0d47a1', 's': 100},
-                    'Nuc':  {'marker': '*', 'fc': '#00bcd4', 'ec': '#006064', 's': 180}
+                    "Acid": {"marker": "D", "fc": "#d81b60", "ec": "#880e4f", "s": 80},
+                    "Base": {"marker": "p", "fc": "#1e88e5", "ec": "#0d47a1", "s": 100},
+                    "Nuc":  {"marker": "*", "fc": "#00bcd4", "ec": "#006064", "s": 180}
                 }
                 for resname, resnum, phi, psi in angles:
                     if resnum in critical_res and critical_res[resnum][0] == resname:
                         role = critical_res[resnum][1]
-                        style = triad_styles.get(role, {'marker': 'X', 'fc': '#9c27b0', 'ec': '#4a148c', 's': 100})
-                        ax.scatter([phi], [psi], c=style['fc'], marker=style['marker'], s=style['s'], 
-                                   alpha=1.0, linewidths=0.8, edgecolors=style['ec'], zorder=5)
-        
+                        style = triad_styles.get(role, {"marker": "X", "fc": "#9c27b0", "ec": "#4a148c", "s": 100})
+                        ax.scatter([phi], [psi], c=style["fc"], marker=style["marker"], s=style["s"],
+                                   alpha=1.0, linewidths=0.8, edgecolors=style["ec"], zorder=5)
+
         st = _rama_stats(angles)
         fav_pct = f"({st['pct']['Favored']:.1f}%)"
         allowed_pct = f"({st['pct']['Allowed']:.1f}%)"
         out_pct = f"({st['pct']['Outlier']:.1f}%)"
         tot_pct = "(100.0%)"
-        
+
         txt = (f"Favoured  {st['counts']['Favored']:<4} {fav_pct:<8}\n"
                f"Allowed   {st['counts']['Allowed']:<4} {allowed_pct:<8}\n"
                f"Outlier   {st['counts']['Outlier']:<4} {out_pct:<8}\n"
                f"Total     {st['total']:<4} {tot_pct:<8}")
         ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=9,
-                va='top', ha='right', multialignment='left', family='monospace',
-                bbox=dict(fc='#ffffff', alpha=0.10, ec='#bdbdbd', boxstyle='round,pad=0.4'))
-                
+                va="top", ha="right", multialignment="left", family="monospace",
+                bbox=dict(fc="#ffffff", alpha=0.10, ec="#bdbdbd", boxstyle="round,pad=0.4"))
+
         ax.set_xlim(-180, 180)
         ax.set_ylim(-180, 180)
-        ax.set_aspect('equal')
-        ax.set_xlabel('φ (phi) °', fontsize=11, fontweight='500')
-        ax.set_ylabel('ψ (psi) °', fontsize=11, fontweight='500')
-        ax.set_title(label, fontsize=12, fontweight='bold', pad=10)
+        ax.set_aspect("equal")
+        ax.set_xlabel("φ (phi) °", fontsize=11, fontweight="500")
+        ax.set_ylabel("ψ (psi) °", fontsize=11, fontweight="500")
+        ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
         ax.set_xticks(range(-180, 181, 60))
         ax.set_yticks(range(-180, 181, 60))
         ax.tick_params(labelsize=9)
-        ax.grid(True, linestyle=':', alpha=0.6, color='#9e9e9e', zorder=1)
+        ax.grid(True, linestyle=":", alpha=0.6, color="#9e9e9e", zorder=1)
 
-    favoured_p = mpatches.Patch(color='#2e7d32', label='Favoured')
-    allowed_p  = mpatches.Patch(color='#f57f17', label='Allowed')
-    outlier_p  = mpatches.Patch(color='#c62828', label='Outlier')
-    
-    gen_m = mlines.Line2D([], [], color='none', marker='o', markerfacecolor='gray', markeredgecolor='white', markersize=7, label='General')
-    gly_m = mlines.Line2D([], [], marker='^', color='none', markerfacecolor='gray', markeredgecolor='white', markersize=7, label='Glycine')
-    pro_m = mlines.Line2D([], [], marker='s', color='none', markerfacecolor='gray', markeredgecolor='white', markersize=7, label='Proline')
+    favoured_p = mpatches.Patch(color="#2e7d32", label="Favoured")
+    allowed_p  = mpatches.Patch(color="#f57f17", label="Allowed")
+    outlier_p  = mpatches.Patch(color="#c62828", label="Outlier")
+
+    gen_m = mlines.Line2D([], [], color="none", marker="o", markerfacecolor="gray", markeredgecolor="white", markersize=7, label="General")
+    gly_m = mlines.Line2D([], [], marker="^", color="none", markerfacecolor="gray", markeredgecolor="white", markersize=7, label="Glycine")
+    pro_m = mlines.Line2D([], [], marker="s", color="none", markerfacecolor="gray", markeredgecolor="white", markersize=7, label="Proline")
     crit_handles = []
     if critical_res:
         triad_styles = {
-            'Acid': {'marker': 'D', 'fc': '#d81b60', 'ec': '#880e4f'},
-            'Base': {'marker': 'p', 'fc': '#1e88e5', 'ec': '#0d47a1'},
-            'Nuc':  {'marker': '*', 'fc': '#00bcd4', 'ec': '#006064'}
+            "Acid": {"marker": "D", "fc": "#d81b60", "ec": "#880e4f"},
+            "Base": {"marker": "p", "fc": "#1e88e5", "ec": "#0d47a1"},
+            "Nuc":  {"marker": "*", "fc": "#00bcd4", "ec": "#006064"}
         }
         for resnum, (resname, role) in sorted(critical_res.items(), key=lambda x: x[1][1]):
-            style = triad_styles.get(role, {'marker': 'X', 'fc': '#9c27b0', 'ec': '#4a148c'})
-            handle = mlines.Line2D([], [], color='none', marker=style['marker'], 
-                                   markerfacecolor=style['fc'], markeredgecolor=style['ec'], 
+            style = triad_styles.get(role, {"marker": "X", "fc": "#9c27b0", "ec": "#4a148c"})
+            handle = mlines.Line2D([], [], color="none", marker=style["marker"],
+                                   markerfacecolor=style["fc"], markeredgecolor=style["ec"],
                                    markersize=9, label=f"{role}: {resname}{resnum}")
             crit_handles.append(handle)
 
     all_handles = [favoured_p, allowed_p, outlier_p, gen_m, gly_m, pro_m] + crit_handles
-    
+
     fig.legend(handles=all_handles,
-               loc='upper center', ncol=len(all_handles), fontsize=9, frameon=True,
+               loc="upper center", ncol=len(all_handles), fontsize=9, frameon=True,
                bbox_to_anchor=(0.5, -0.005), columnspacing=0.8, handletextpad=0.4)
 
-    fig.suptitle('Ramachandran Comparison', fontsize=15, fontweight='bold', y=1.05)
+    fig.suptitle("Ramachandran Comparison", fontsize=15, fontweight="bold", y=1.05)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=dpi, bbox_inches='tight')
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -417,9 +436,9 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
     if angles:
         phis = [a[2] for a in angles]
         psis = [a[3] for a in angles]
-        colours = ['#1b5e20' if _rama_classify(p, s) == 'Favored'
-                   else ('#f9a825' if _rama_classify(p, s) == 'Allowed'
-                         else '#c62828')
+        colours = ["#1b5e20" if _rama_classify(p, s) == "Favored"
+                   else ("#f9a825" if _rama_classify(p, s) == "Allowed"
+                         else "#c62828")
                    for p, s in zip(phis, psis)]
         ax.scatter(phis, psis, c=colours, s=14, alpha=0.75, linewidths=0, zorder=3)
     stats = _rama_stats(angles)
@@ -428,18 +447,18 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
                   f"Outlier   {stats['pct']['Outlier']:.1f}%  ({stats['counts']['Outlier']})\n"
                   f"Total: {stats['total']} residues")
     ax.text(0.98, 0.98, legend_txt, transform=ax.transAxes, fontsize=8,
-            va='top', ha='right', family='monospace',
-            bbox=dict(fc='white', alpha=0.7, ec='#cccccc', boxstyle='round,pad=0.3'))
+            va="top", ha="right", family="monospace",
+            bbox=dict(fc="white", alpha=0.7, ec="#cccccc", boxstyle="round,pad=0.3"))
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
-    ax.set_xlabel('φ (phi) °', fontsize=11)
-    ax.set_ylabel('ψ (psi) °', fontsize=11)
-    ax.set_title(title, fontsize=12, fontweight='bold')
+    ax.set_xlabel("φ (phi) °", fontsize=11)
+    ax.set_ylabel("ψ (psi) °", fontsize=11)
+    ax.set_title(title, fontsize=12, fontweight="bold")
     ax.set_xticks(range(-180, 181, 60))
     ax.set_yticks(range(-180, 181, 60))
     ax.tick_params(labelsize=9)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=dpi, bbox_inches='tight')
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -463,12 +482,12 @@ def get_mic_vector(pos1, pos2, box):
     box  : 3×3 box matrix (triclinic) or None (vacuum / already-unwrapped).
     """
     # Coerce inputs to numpy arrays if they are gemmi.Position or list/tuple
-    if hasattr(pos1, 'x') and hasattr(pos1, 'y') and hasattr(pos1, 'z'):
+    if hasattr(pos1, "x") and hasattr(pos1, "y") and hasattr(pos1, "z"):
         pos1 = np.array([pos1.x, pos1.y, pos1.z], dtype=float)
     else:
         pos1 = np.asarray(pos1, dtype=float)
 
-    if hasattr(pos2, 'x') and hasattr(pos2, 'y') and hasattr(pos2, 'z'):
+    if hasattr(pos2, "x") and hasattr(pos2, "y") and hasattr(pos2, "z"):
         pos2 = np.array([pos2.x, pos2.y, pos2.z], dtype=float)
     else:
         pos2 = np.asarray(pos2, dtype=float)
@@ -482,9 +501,7 @@ def get_mic_vector(pos1, pos2, box):
             frac_vec = frac_vec - np.round(frac_vec)
             vec      = np.dot(frac_vec, b3)
         except (np.linalg.LinAlgError, AttributeError, ValueError):
-            b3   = np.asarray(box, dtype=float)
-            diag = np.diag(b3) if b3.ndim == 2 else (b3 if b3.size == 3 else np.array([b3.flat[0], b3.flat[4], b3.flat[8]]))
-            diag = np.where(diag == 0, 1e-6, diag)
+            diag = _box_diag(box)
             vec  = vec - diag * np.round(vec / diag)
     return vec
 
@@ -523,6 +540,21 @@ def _ensure_box_3x3(box) -> np.ndarray:
     raise ValueError(f"Unrecognised box shape: {b.shape}")
 
 
+def _box_diag(box) -> np.ndarray:
+    """Orthorhombic fallback box lengths as a safe (3,) diagonal.
+
+    Used when the full triclinic minimum-image transform fails (singular or
+    non-invertible cell). Extracts the diagonal from a (3,3) / flat (9,) matrix
+    or a (3,) vector, and replaces any zero length with 1e-6 to avoid a
+    divide-by-zero in the orthorhombic wrap.
+    """
+    b = np.asarray(box, dtype=float)
+    diag = (np.diag(b) if b.ndim == 2
+            else b if b.size == 3
+            else np.array([b.flat[0], b.flat[4], b.flat[8]]))
+    return np.where(diag == 0, 1e-6, diag)
+
+
 def mic_dists_2d(pos_a: np.ndarray, pos_b: np.ndarray, box) -> np.ndarray:
     """
     PBC-corrected pairwise distance matrix.
@@ -539,9 +571,7 @@ def mic_dists_2d(pos_a: np.ndarray, pos_b: np.ndarray, box) -> np.ndarray:
             frac -= np.round(frac)
             vecs  = (frac @ b3).reshape(vecs.shape)
         except (np.linalg.LinAlgError, AttributeError, ValueError):
-            b3   = np.asarray(box, dtype=float)
-            diag = np.diag(b3) if b3.ndim == 2 else (b3 if b3.size == 3 else np.array([b3.flat[0], b3.flat[4], b3.flat[8]]))
-            diag = np.where(diag == 0, 1e-6, diag)
+            diag = _box_diag(box)
             vecs = vecs - diag * np.round(vecs / diag)
     return np.linalg.norm(vecs, axis=2)
 
@@ -578,7 +608,10 @@ def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
     b0 = -get_mic_vector(p2, p1, box)
     b1 =  get_mic_vector(p3, p2, box)
     b2 =  get_mic_vector(p4, p3, box)
-    b1 /= np.linalg.norm(b1)
+    b1_len = np.linalg.norm(b1)
+    if b1_len < 1e-6:          # coincident central atoms (p2 ≡ p3) — dihedral undefined
+        return 0.0
+    b1 /= b1_len
     v = b0 - np.dot(b0, b1) * b1
     w = b2 - np.dot(b2, b1) * b1
     x = np.dot(v, w)
@@ -594,9 +627,18 @@ def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     """
     Out-of-plane improper dihedral at centre p1 — used to detect transition-state
     (Walden inversion) flattening of the sp3 electrophilic carbon.
+    Ref (Walden inversion): Walden, P. (1896) Ber. Dtsch. Chem. Ges. 29:133–138.
+    DOI: https://doi.org/10.1002/cber.18960290127
 
     Returns the angle between the p4 vector and the normal of the p2–p1–p3 plane
     (degrees from planarity).  Values near 0° indicate a near-planar TS geometry.
+
+    Note: the reference plane is built from (p1, p2, p3), so for an asymmetric
+    centre the returned angle has a mild dependence on which equatorial atom is
+    passed as p4. The variation is small relative to the Walden TS gate
+    (±WALDEN_IMPROPER_MAX) and does not change the planar/pyramidal verdict; it
+    is reported as a planarity heuristic, not an exact symmetric out-of-plane
+    distance.
     """
     v1 = get_mic_vector(p2, p1, box)
     v2 = get_mic_vector(p3, p1, box)
@@ -606,7 +648,10 @@ def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     if n_len < 1e-6:
         return 0.0
     n /= n_len
-    cos_theta = np.dot(v3, n) / np.linalg.norm(v3)
+    v3_len = np.linalg.norm(v3)
+    if v3_len < 1e-6:          # p4 coincides with the centre p1 — undefined out-of-plane angle
+        return 0.0
+    cos_theta = np.dot(v3, n) / v3_len
     return 90.0 - np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
 
 
@@ -669,7 +714,7 @@ def find_nucleophile_od_fallback(
         if no candidate satisfies the geometric criteria.
     """
     best: "tuple | None" = None
-    best_dist = float('inf')
+    best_dist = float("inf")
     vec_c_f   = np.asarray(f_pos, dtype=float) - np.asarray(ca_pos, dtype=float)
     norm_cf   = float(np.linalg.norm(vec_c_f))
     if norm_cf < 1e-6:
@@ -702,6 +747,8 @@ def find_nucleophile_od_fallback(
 def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     """
     Flippin–Lodge torsional pre-alignment angle in degrees.
+    Ref: Lodge, E. P. & Heathcock, C. H. (1987) J. Am. Chem. Soc. 109(11):3353–3361.
+    DOI: https://doi.org/10.1021/ja00245a028
 
     Measures the angle between the Nu–C vector projected onto the R1–C–R2 plane
     and the bisector of R1–C–R2.  Ideal value = 0° (eclipsed, minimises steric
@@ -718,7 +765,7 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     """
     try:
         def _arr(p):
-            if hasattr(p, 'x'):
+            if hasattr(p, "x"):
                 return np.array([float(p.x), float(p.y), float(p.z)])
             return np.array(p, dtype=float)
 
@@ -767,7 +814,7 @@ def standardise_dataframe_tiers(df, cfg):
         return df
 
     # 1. Fill missing/None with Decoy
-    df[col] = df[col].fillna(cfg.TIER_DECOY).replace('None', cfg.TIER_DECOY)
+    df[col] = df[col].fillna(cfg.TIER_DECOY).replace("None", cfg.TIER_DECOY)
 
     # 2. Enforce Categorical Type with Config Order
     df[col] = pd.Categorical(df[col], categories=cfg.TIER_ORDER, ordered=True)
@@ -779,9 +826,58 @@ def get_alignment_grade(identity_pct, cfg) -> str:
     Resolve a letter grade (A-I) for a given sequence identity percentage
     using bins defined in Project Config.
     """
+    # Left-open, right-closed intervals (lo, hi] to match the pd.cut(right=True)
+    # grading used for the CSV Alignment_Grade column, so a boundary value such as
+    # 90.0% receives the same letter from both code paths.
     for lo, hi, letter in cfg.ALIGN_GRADE_DEFS:
-        if lo <= identity_pct <= hi:
+        if lo < identity_pct <= hi:
             return letter
-    return 'I'  # Fallback for ultra-low identity
+    return "I"  # Fallback for ultra-low identity (incl. exactly 0.0%)
+
+
+# ===============================================================================
+# SECTION 7: LIGAND PHYSICO-CHEMICAL PROPERTIES (RDKit)
+# ===============================================================================
+
+def compute_ligand_properties(smiles_file) -> dict:
+    """
+    Compute per-ligand carbon count (nC), fluorine count (nF) and molecular
+    weight (g/mol) directly from a SMILES panel via RDKit.
+
+    The SMILES file is the single source — nothing is hardcoded, so swapping the
+    ligand set (or proteins) requires no code change. Each line is
+    "<SMILES>\\t<name>" (whitespace-separated); blank lines, comment lines (#)
+    and entries RDKit cannot parse are skipped silently.
+
+    Returns
+    -------
+    dict
+        {ligand_name: {"nC": int, "nF": int, "mw": float}}. Empty dict if the
+        file is absent or RDKit is unavailable (callers handle the empty case).
+    """
+    props: dict = {}
+    p = Path(smiles_file)
+    if not p.exists():
+        return props
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+    except Exception:
+        return props
+    for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        smiles, name = parts[0], parts[1]
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue
+        n_c = sum(1 for a in mol.GetAtoms() if a.GetSymbol() == "C")
+        n_f = sum(1 for a in mol.GetAtoms() if a.GetSymbol() == "F")
+        props[name] = {"nC": n_c, "nF": n_f, "mw": round(Descriptors.MolWt(mol), 1)}
+    return props
 
 

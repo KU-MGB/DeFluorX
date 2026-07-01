@@ -21,7 +21,7 @@ build an MSA (MAFFT / Clustal-Ω) and a maximum-likelihood or Bayesian tree
 tier classification produced here.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 June 2026 <─────────────────────────────────────────────────────────
+Date   : 30 June 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_FAcDs.py
@@ -39,7 +39,7 @@ Date   : 10 June 2026 <───────────────────
   Downstream    : None (terminal analysis step)
 ───────────────────────────────────────────────────────────────────────────────
 
-# ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
+── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Matrix Scaling: Distance matrix calculation scales O(N^2) in both time and
      memory; datasets exceeding 5k proteins may require HPC nodes with 64GB+ RAM.
   2. K-mer Sensitivity: Tree topology is derived from k-mer (k=3) frequencies;
@@ -54,6 +54,24 @@ Usage:
     conda activate PFAS
     python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
 ───────────────────────────────────────────────────────────────────────────────
+
+-------------------------------------------------------------------------------
+Scientific References:
+    1. Hierarchical clustering & pairwise distances (SciPy):
+       - Virtanen, P. et al. (2020) SciPy 1.0. Nature Methods 17:261–272.
+       - DOI: https://doi.org/10.1038/s41592-019-0686-2
+    2. UPGMA agglomerative clustering:
+       - Sokal, R.R. & Michener, C.D. (1958) A statistical method for evaluating
+         systematic relationships. Univ Kansas Sci Bull 38:1409–1438.
+    3. Sequence parsing (Biopython SeqIO):
+       - Cock, P.J.A. et al. (2009) Biopython. Bioinformatics 25:1422–1423.
+       - DOI: https://doi.org/10.1093/bioinformatics/btp163
+    4. Interactive visualisation (D3.js):
+       - Bostock, M., Ogievetsky, V. & Heer, J. (2011) D3: Data-Driven Documents.
+         IEEE Trans Vis Comput Graph 17:2301–2309. DOI: https://doi.org/10.1109/TVCG.2011.185
+    5. Numerics: Harris, C.R. et al. (2020) Array programming with NumPy. Nature 585:357–362.
+       - DOI: https://doi.org/10.1038/s41586-020-2649-2
+-------------------------------------------------------------------------------
 """
 
 # ===============================================================================
@@ -76,10 +94,12 @@ from collections import Counter
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
 # -------------------------------------------------------------------------------
-# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
-# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
-# MKL / OpenMP / NumExpr). Must precede numpy/scipy import to take effect;
-# setdefault() preserves any value exported by the caller or pipeline runner.
+"""
+CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+MKL / OpenMP / NumExpr). Must precede numpy/scipy import to take effect;
+setdefault() preserves any value exported by the caller or pipeline runner.
+"""
 import os as _os
 _CPU_CAP = str(max(1, (_os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
@@ -162,7 +182,7 @@ class ReportManager:
 def clean_id(name: str) -> str:
     """Normalises protein IDs for fuzzy matching between FASTA headers and CSV rows."""
     if not isinstance(name, str): return "UNKNOWN"
-    return re.sub(r'[^a-zA-Z0-9]', '', name).lower()
+    return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
 
 
 # ===============================================================================
@@ -173,15 +193,17 @@ def clean_id(name: str) -> str:
 # Step 3.1: K-mer Profiling
 # -------------------------------------------------------------------------------
 
-def get_kmer_counts(seq: str, k: int = 3) -> dict:
+def get_kmer_counts(seq: str, k: int = CFG.DENDRO_KMER_SIZE) -> dict:
     """Generates K-mer frequency profile for a given amino acid sequence."""
     seq = seq.upper()
     return dict(Counter(seq[i:i+k] for i in range(len(seq) - k + 1)))
 
 
-# NB: pairwise cosine distances are computed in bulk via scipy.spatial.distance.pdist
-# (metric='cosine') inside generate_upgma_newick — one vectorised BLAS call replaces
-# the former per-pair Python cosine_distance(), which is why no scalar helper remains.
+"""
+NB: pairwise cosine distances are computed in bulk via scipy.spatial.distance.pdist
+(metric='cosine') inside generate_upgma_newick — one vectorised BLAS call, so no
+scalar per-pair distance helper is needed.
+"""
 
 
 # -------------------------------------------------------------------------------
@@ -198,22 +220,27 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
 
     profiles = [get_kmer_counts(sequences[l]) for l in labels]
 
-    # Build dense k-mer matrix and compute all pairwise cosine distances in one
-    # vectorised BLAS call (pdist) instead of an O(N²) Python loop.
+    """
+    Build dense k-mer matrix and compute all pairwise cosine distances in one
+    vectorised BLAS call (pdist) instead of an O(N²) Python loop.
+    """
     all_kmers      = sorted(set(k for p in profiles for k in p))
     kmer_mat       = np.array([[p.get(k, 0) for k in all_kmers] for p in profiles],
                                dtype=np.float64)
-    condensed_dist = pdist(kmer_mat, metric='cosine')
+    condensed_dist = pdist(kmer_mat, metric=CFG.DENDRO_DISTANCE_METRIC)
     condensed_dist = np.nan_to_num(condensed_dist, nan=1.0)  # safety: zero-vector → max dist
-    Z              = linkage(condensed_dist, method='average')
+    Z              = linkage(condensed_dist, method=CFG.DENDRO_LINKAGE_METHOD)
     tree_node      = to_tree(Z, rd=False)
 
     def build_newick(node, parentdist):
+        # Clamp branch length at 0: a non-monotonic linkage can give node.dist >
+        # parentdist, which would emit a negative branch length (rejected by most
+        # tree parsers). max(0.0, …) keeps the Newick valid.
         if node.is_leaf():
-            return f"{labels[node.id]}:{(parentdist - node.dist):.4f}"
+            return f"{labels[node.id]}:{max(0.0, parentdist - node.dist):.4f}"
         left_str  = build_newick(node.left,  node.dist)
         right_str = build_newick(node.right, node.dist)
-        return f"({left_str},{right_str}):{(parentdist - node.dist):.4f}"
+        return f"({left_str},{right_str}):{max(0.0, parentdist - node.dist):.4f}"
 
     left      = build_newick(tree_node.left,  tree_node.dist)
     right     = build_newick(tree_node.right, tree_node.dist)
@@ -246,8 +273,10 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     csv_str = csv_df.to_csv(index=False)
     csv_path.write_text(csv_str)
 
-    # Deduplicate to one row per protein for the embedded HTML state.
-    # The full CSV (all ligand×protein rows) can be multi-MB and slow browsers.
+    """
+    Deduplicate to one row per protein for the embedded HTML state.
+    The full CSV (all ligand×protein rows) can be multi-MB and slow browsers.
+    """
     prot_col = next((c for c in ["protein", "Protein_Name"] if c in csv_df.columns), None)
     if prot_col and len(csv_df) > len(labels):
         embed_df = csv_df.drop_duplicates(subset=[prot_col], keep="first")
@@ -267,9 +296,9 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
         '<div id="upload-section">',
         '<div id="upload-section" style="display:none;">'
     )
-    html_path.write_text(html_content, encoding='utf-8')
+    html_path.write_text(html_content, encoding="utf-8")
 
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(nwk_path,  nwk_path.name)
         zf.write(csv_path,  csv_path.name)
         zf.write(html_path, html_path.name)
@@ -307,10 +336,26 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         reporter.log("  ! Critical Error: No FASTA file found in input directory. Skipping.")
         return
 
+    '''
+    The input directory can hold several FASTAs (e.g. the merged panel + a
+    single-sequence reference such as DeHa4_Ref.fasta). Selecting the first
+    glob hit is order-dependent and may pick the 1-sequence reference, leaving
+    nothing to match the CSV. Choose the full panel: a name flagged as the
+    merged input wins, otherwise the file with the most records.
+    '''
+    def _record_count(fp):
+        try:
+            with open(fp) as fh:
+                return sum(1 for ln in fh if ln.startswith(">"))
+        except OSError:
+            return 0
+    merged_hint = [f for f in fasta_files if any(t in f.name.lower() for t in ("merged", "_inp_", "inp_"))]
+    fasta_path = max(merged_hint or fasta_files, key=_record_count)
+
     fasta_dict = {}
-    for r in SeqIO.parse(str(fasta_files[0]), "fasta"):
+    for r in SeqIO.parse(str(fasta_path), "fasta"):
         raw_id    = r.id.split("|")[0].strip()
-        clean_key = re.sub(r'^\d+_', '', raw_id, count=1)
+        clean_key = re.sub(r"^\d+_", "", raw_id, count=1)
         fasta_dict[clean_key] = str(r.seq)
 
     # -------------------------------------------------------------------------------
@@ -374,7 +419,7 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
 
 def main():
     parser = argparse.ArgumentParser(description="Boltz-2 Phylogenetic Analysis Pipeline")
-    parser.add_argument("run", nargs='?', help="Name of the Run Folder (e.g., Boltz-2_Run_2026...)")
+    parser.add_argument("run", nargs="?", help="Name of the Run Folder (e.g., Boltz-2_Run_2026...)")
     args = parser.parse_args()
 
     root_dir = Path.cwd()
@@ -409,10 +454,13 @@ def main():
     logger = _setup_logging(out_dir / "00_Dendrogram_Log.txt", "04_Dendrogram")
 
     # Locate validated master CSV produced by 03_Validation_Figures_FAcDs.py
+    # (written under the 00_Analysis_Data subfolder; rglob covers legacy root too).
     csv_candidates = (
+        sorted(val_dir.glob("00_Analysis_Data/03_Final_Validated_Master.csv")) or
         sorted(val_dir.glob("03_Final_Validated_Master.csv")) or
+        sorted(val_dir.rglob("03_Final_Validated_Master.csv")) or
         sorted(val_dir.glob("*_Validated_Master*.csv")) or
-        sorted(val_dir.glob("*_Master_*.csv"))
+        sorted(val_dir.rglob("*_Master_*.csv"))
     )
     if not csv_candidates:
         print(f"Error: No validated master CSV found in {val_dir.resolve()}")
@@ -433,8 +481,8 @@ def main():
         sys.exit(1)
 
 
-
-# SECTION 7: HTML APPLICATION TEMPLATE (EMBEDDED D3.JS ENGINE)
+# ===============================================================================
+# SECTION 6: HTML APPLICATION TEMPLATE (EMBEDDED D3.JS ENGINE)
 # ===============================================================================
 
 HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
@@ -448,7 +496,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    
+
     <style>
         body { font-family: 'Inter', sans-serif; overflow: hidden; background-color: #f8fafc; }
         .node circle { cursor: pointer; stroke-width: 1.5px; transition: stroke-width 0.2s, stroke 0.2s; }
@@ -456,22 +504,22 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         .node text { font-size: 11px; font-family: sans-serif; pointer-events: none; }
         .link { fill: none; stroke-width: 1.5px; opacity: 0.9; cursor: pointer; transition: stroke-width 0.2s; }
         .link:hover { stroke-width: 3.5px; }
-        
+
         .dist-label-bg { font-size: 9px; fill: none; stroke: #f8fafc; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; font-family: monospace; }
         .dist-label-fg { font-size: 9px; fill: #64748b; pointer-events: none; font-family: monospace; }
-        
+
         .heatmap-cell-rect { cursor: pointer; transition: stroke 0.2s, opacity 0.3s, x 0.5s, y 0.5s, width 0.5s, height 0.5s; }
         .heatmap-cell-rect:hover { stroke: #1e293b; stroke-width: 2px; }
-        
+
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
+
         #sidebar-wrapper { transition: width 0.3s ease-in-out; }
         .sidebar-collapsed { width: 0 !important; border-right: none !important; }
         .sidebar-collapsed #sidebar-content { opacity: 0; pointer-events: none; }
-        
+
         .tooltip {
             position: absolute;
             text-align: left;
@@ -494,7 +542,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
     <!-- Smart Sliding Sidebar -->
     <div id="sidebar-wrapper" class="relative h-full z-30 w-80 shrink-0 bg-white/95 backdrop-blur shadow-[4px_0_24px_rgba(0,0,0,0.05)] border-r border-slate-200">
-        
+
         <div id="sidebar-content" class="w-80 h-full flex flex-col overflow-y-auto transition-opacity duration-300">
             <div class="p-6 border-b border-slate-200 bg-white shrink-0">
                 <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-700 whitespace-nowrap">
@@ -504,7 +552,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             </div>
 
             <div class="p-6 flex-1 flex flex-col gap-6">
-                
+
                 <div id="upload-section">
                     <div class="space-y-4 pt-2 border-slate-200">
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Load Data</h2>
@@ -607,7 +655,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             <div class="w-px bg-slate-200 mx-1 my-1"></div>
             <button id="btn-reset" class="p-2 hover:bg-slate-100 rounded text-slate-600 transition" title="Reset Zoom"><i class="ph ph-corners-out text-lg"></i></button>
         </div>
-        
+
         <div id="loading-overlay" class="absolute inset-0 bg-slate-50/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center hidden">
             <i class="ph ph-spinner-gap animate-spin text-4xl text-indigo-600 mb-4"></i>
             <p class="text-sm font-semibold text-slate-600" id="loading-text">Processing Data...</p>
@@ -662,7 +710,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
 
-        let contextNode = null; 
+        let contextNode = null;
 
         colorPalette.innerHTML = '';
         CLADE_COLORS.forEach(c => {
@@ -710,7 +758,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
         function getContrastColor(tier) {
             if (tier === TIER_RANKING[TIER_RANKING.length-1] || tier === "Unknown") return "#334155";
-            return "#ffffff"; 
+            return "#ffffff";
         }
 
         function saveToHistory() {
@@ -729,7 +777,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     const s = visState[d.data.uid];
                     if(s) {
                         d.data.offsetX = s.offsetX; d.data.offsetY = s.offsetY; d.data.cladeColor = s.cladeColor;
-                        if (s.collapsed && d.children) { d._children = d.children; d.children = null; } 
+                        if (s.collapsed && d.children) { d._children = d.children; d.children = null; }
                         else if (!s.collapsed && d._children) { d.children = d._children; d._children = null; }
                     }
                 });
@@ -749,7 +797,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const gNode = svgNode.querySelector("g");
                 const originalViewBox = svgNode.getAttribute("viewBox");
                 const originalTransform = gNode.getAttribute("transform");
-                
+
                 svgNode.setAttribute("xmlns", "http://www.w3.org/2000/svg");
                 const styleElement = document.createElementNS("http://www.w3.org/2000/svg", "style");
                 styleElement.textContent = `
@@ -763,7 +811,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     .c-t2-fg { font-size: 9px; }
                 `;
                 svgNode.insertBefore(styleElement, svgNode.firstChild);
-                
+
                 const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 let currentX = 0;
                 Array.from(state.activeTiers).sort((a,b) => TIER_RANKING.indexOf(a) - TIER_RANKING.indexOf(b)).forEach(tier => {
@@ -773,27 +821,27 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     text.setAttribute("x", currentX + 22); text.setAttribute("y", 11); text.setAttribute("font-size", "14px"); text.setAttribute("font-weight", "bold"); text.setAttribute("fill", "#334155"); text.textContent = tier.replace('_', ' ');
                     legendGroup.appendChild(text);
-                    currentX += 120; 
+                    currentX += 120;
                 });
                 gNode.appendChild(legendGroup);
 
                 const bbox = gNode.getBBox();
                 legendGroup.setAttribute("transform", `translate(${bbox.x}, ${bbox.y + bbox.height + 60})`);
                 const finalBbox = gNode.getBBox();
-                
+
                 const padding = 150;
                 const finalWidth = finalBbox.width + padding*2;
                 const finalHeight = finalBbox.height + padding*2;
-                
+
                 svgNode.setAttribute("viewBox", `${finalBbox.x - padding} ${finalBbox.y - padding} ${finalWidth} ${finalHeight}`);
                 const oldWidth = svgNode.getAttribute("width");
                 const oldHeight = svgNode.getAttribute("height");
                 svgNode.setAttribute("width", finalWidth);
                 svgNode.setAttribute("height", finalHeight);
-                gNode.removeAttribute("transform"); 
-                
+                gNode.removeAttribute("transform");
+
                 const svgData = new XMLSerializer().serializeToString(svgNode);
-                
+
                 gNode.removeChild(legendGroup);
                 svgNode.removeChild(styleElement);
                 if(oldWidth) svgNode.setAttribute("width", oldWidth); else svgNode.removeAttribute("width");
@@ -806,9 +854,9 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const img = new Image();
                 const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
                 const url = URL.createObjectURL(svgBlob);
-                
+
                 img.onload = function() {
-                    const scale = 3; 
+                    const scale = 3;
                     canvas.width = finalWidth * scale; canvas.height = finalHeight * scale;
                     ctx.scale(scale, scale); ctx.fillStyle = "#f8fafc"; ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url); resolve(canvas);
@@ -894,7 +942,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             const isV = state.orientation === 'vertical';
             const MATRIX_GAP = (state.alignLabelsRight && !isV) ? 190 : 60;
             const matrixDim = state.activeLigands.size * DIM_LIG;
-            
+
             const leaves = state.root.leaves();
             const maxDepthY = d3.max(leaves, d => d.finalY) || 0;
             const minLeafX = d3.min(leaves, d => d.finalX) || 0;
@@ -907,7 +955,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const cx = (minLeafX + maxLeafX) / 2;
                 const cy = totalHeight / 2;
                 const tx = container.clientWidth / 2 - cx * scale;
-                const ty = container.clientHeight / 2 - cy * scale + 50; 
+                const ty = container.clientHeight / 2 - cy * scale + 50;
                 svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
             } else {
                 const totalWidth = maxDepthY + MATRIX_GAP + matrixDim + 80;
@@ -933,7 +981,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
             if (!treeFile || !csvFile) { alert("Please upload both Tree and CSV."); return; }
             showLoading("Parsing Files...");
-            
+
             const readerT = new FileReader();
             readerT.onload = e => {
                 state.rawNwk = e.target.result; state.treeData = parseNewick(state.rawNwk);
@@ -957,11 +1005,11 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 const protRaw = row['Protein_Name'] || row.protein || row.protein_id || (row.job_name ? row.job_name.split('_')[1] : null);
                 const ligRaw = row['Ligand_Name'] || row.ligand || (row.job_name ? row.job_name.split('_')[2] : null);
                 const tier = row.Degrader_Tier || row.degrader_tier || row.Tier || TIER_RANKING[TIER_RANKING.length-1];
-                const score = row.ActiveSite_Conservation_Score || row.binding_likelihood_computed || row.Binding_Probability || 0;
-                
+                const score = row.ActiveSite_Conservation_Score || row.Binding_Probability_Score || 0;
+
                 if (!protRaw || !ligRaw) return;
                 const normProt = normalizeProtName(protRaw);
-                const lig = String(ligRaw).trim(); 
+                const lig = String(ligRaw).trim();
 
                 if (!state.csvData[normProt]) state.csvData[normProt] = {};
                 state.csvData[normProt][lig] = { tier, score, originalProtName: protRaw };
@@ -1038,15 +1086,15 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             updateTree(state.root);
 
             state.root.leaves().forEach(leaf => {
-                if (leaf.children || leaf._children) return; 
+                if (leaf.children || leaf._children) return;
                 const match = getBestActiveMatch(leaf.data.name);
                 if (match.ligand !== null || match.tier === "Unknown") visibleProteins++;
-                
+
                 const pData = state.csvData[normalizeProtName(leaf.data.name)];
                 if (pData) {
                     state.activeLigands.forEach(lig => {
                         if (pData[lig] && state.activeTiers.has(pData[lig].tier) && pData[lig].tier !== "Unknown" && pData[lig].tier !== TIER_RANKING[TIER_RANKING.length-1]) {
-                            tierCounts[pData[lig].tier] = (tierCounts[pData[lig].tier] || 0) + 1; 
+                            tierCounts[pData[lig].tier] = (tierCounts[pData[lig].tier] || 0) + 1;
                         }
                     });
                 }
@@ -1055,7 +1103,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             document.getElementById('stat-total-proteins').innerText = totalProteins;
             document.getElementById('stat-visible-proteins').innerText = visibleProteins;
             document.getElementById('stat-active-ligands').innerText = `${state.activeLigands.size} / ${state.ligands.size}`;
-            
+
             let breakdownHtml = `<div class="grid grid-cols-2 gap-1 mt-2 text-[10px]">`;
             TIER_RANKING.forEach(t => {
                 if(t === TIER_RANKING[TIER_RANKING.length-1]) return;
@@ -1413,7 +1461,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 if (!skipLayout) { if (d.manualY === undefined) d.manualY = d.y; else d.y = d.manualY; }
                 d.finalX = d.x + (d.data.offsetX || 0); d.finalY = d.y + (d.data.offsetY || 0);
             });
-            
+
             const maxDepthY = d3.max(leaves, d => d.finalY) || 0;
             const minLeafX = d3.min(leaves, d => d.finalX) || 0;
             const maxLeafX = d3.max(leaves, d => d.finalX) || 0;
@@ -1421,7 +1469,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
             // GRID LINES
             const colBgs = gLines.selectAll("rect.matrix-col-bg").data(visibleLigands, d => d);
-            colBgs.enter().append("rect").attr("class", "matrix-col-bg").style("fill", (d, i) => i % 2 === 0 ? "#00000000" : "#0f172a08") 
+            colBgs.enter().append("rect").attr("class", "matrix-col-bg").style("fill", (d, i) => i % 2 === 0 ? "#00000000" : "#0f172a08")
                 .merge(colBgs).transition().duration(transDuration)
                 .attr("x", (d, i) => isV ? minLeafX - NODE_SPACING : maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2)
                 .attr("y", (d, i) => isV ? maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2 : minLeafX - NODE_SPACING)
@@ -1437,9 +1485,9 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 .attr("y1", (d, i) => isV ? maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2 : minLeafX - NODE_SPACING)
                 .attr("x2", (d, i) => isV ? maxLeafX + NODE_SPACING : maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2)
                 .attr("y2", (d, i) => isV ? maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2 : maxLeafX + NODE_SPACING)
-                .style("stroke", (d, i) => LIGAND_COLORS[i % 10]); 
+                .style("stroke", (d, i) => LIGAND_COLORS[i % 10]);
             colLines.exit().remove();
-            
+
             // HEADERS
             const headers = gHeaders.selectAll("text.heatmap-header").data(visibleLigands, d => d);
             headers.enter().append("text").attr("class", "heatmap-header").style("font-size", "10px").style("font-family", "sans-serif").style("font-weight", "bold").style("cursor", "pointer")
@@ -1468,9 +1516,9 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 }).on("mousemove", (event) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px")).on("mouseout", () => tooltip.style("opacity", 0));
 
             nodeEnter.call(d3.drag().on("start", () => saveToHistory()).on("drag", (event, d) => {
-                if (isV) { d.data.offsetX = (d.data.offsetX || 0) + event.dx; d.data.offsetY = (d.data.offsetY || 0) + event.dy; } 
+                if (isV) { d.data.offsetX = (d.data.offsetX || 0) + event.dx; d.data.offsetY = (d.data.offsetY || 0) + event.dy; }
                 else { d.data.offsetY = (d.data.offsetY || 0) + event.dx; d.data.offsetX = (d.data.offsetX || 0) + event.dy; }
-                updateTree(state.root, true); 
+                updateTree(state.root, true);
             }));
 
             nodeEnter.append("circle").attr("class", "node-circle").attr("r", 1e-6)
@@ -1515,7 +1563,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
             // MATRIX CELLS
             const cellGroups = nodeUpdate.selection().selectAll("g.heatmap-cell-group").data(d => {
-                if (d.children || d._children) return []; 
+                if (d.children || d._children) return [];
                 const pData = state.csvData[normalizeProtName(d.data.name)] || {};
                 return visibleLigands.map(lig => {
                     const lData = pData[lig] || {tier: TIER_RANKING[TIER_RANKING.length-1], score: 0, originalProtName: d.data.name};
@@ -1565,7 +1613,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             distGroupEnter.append("text").attr("class", "dist-label-bg").attr("text-anchor", "middle").text(d => (d.target.data.length !== undefined && d.target.data.length !== null) ? d.target.data.length.toFixed(3) : "");
             distGroupEnter.append("text").attr("class", "dist-label-fg").attr("text-anchor", "middle").text(d => (d.target.data.length !== undefined && d.target.data.length !== null) ? d.target.data.length.toFixed(3) : "");
             distGroupEnter.merge(distGroup).transition().duration(transDuration)
-                .attr("transform", d => isV ? `translate(${(d.source.finalX + d.target.finalX)/2 + 4}, ${(d.source.finalY + d.target.finalY)/2}) rotate(90)` : `translate(${(d.source.finalY + d.target.finalY)/2}, ${(d.source.finalX + d.target.finalX)/2 - 5}) rotate(0)`) 
+                .attr("transform", d => isV ? `translate(${(d.source.finalX + d.target.finalX)/2 + 4}, ${(d.source.finalY + d.target.finalY)/2}) rotate(90)` : `translate(${(d.source.finalY + d.target.finalY)/2}, ${(d.source.finalX + d.target.finalX)/2 - 5}) rotate(0)`)
                 .style("opacity", d => (d.target.children || d.target._children || getBestActiveMatch(d.target.data.name).ligand !== null) ? 1 : 0.1);
             distGroup.exit().transition().duration(transDuration).style("opacity", 1e-6).remove();
             node.exit().transition().duration(transDuration).attr("transform", d => `translate(${isV ? source.finalX : source.finalY},${isV ? source.finalY : source.finalX})`).style("opacity", 1e-6).remove();
@@ -1581,7 +1629,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 document.getElementById('upload-section').style.display = 'none';
                 state.rawNwk = window.EMBEDDED_STATE.tree; state.treeData = parseNewick(state.rawNwk);
                 state.rawCsv = window.EMBEDDED_STATE.csv;
-                
+
                 Papa.parse(state.rawCsv, {
                     header: true, dynamicTyping: true, skipEmptyLines: true, transformHeader: h => h.trim(),
                     chunk: function(results) { processCsvChunk(results.data); results.data = []; },

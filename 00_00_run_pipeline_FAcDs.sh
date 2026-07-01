@@ -2,14 +2,14 @@
 # =============================================================================
 # FAcDs Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-# Date   : 10 June 2026
+# Date   : 30 June 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_FAcDs.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
 #
 # Usage (interactive — default):
 #   bash 00_00_run_pipeline_FAcDs.sh
-#   → prompted: Fresh or Resume?  (+ sudo password)
+#   → prompted: Fresh or Resume?  (+ optional sudo password — press Enter to skip)
 #   → runs fully unattended thereafter
 #
 # Run modes:
@@ -21,7 +21,7 @@
 # Fresh run:
 #   Step 01 merges sequences → C_INP_Merged_for_Boltz-2.fasta
 #   Step 02 creates a new Boltz-2_<timestamp>/ directory; its name is
-#   auto-captured and passed to all downstream steps (03–08).
+#   auto-captured and passed to all downstream steps (03–07).
 #
 # Monitor progress in a second terminal:
 #   tail -f <log file printed at start>
@@ -33,7 +33,7 @@
 #
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
 #   1. Sequential Execution: Steps are strictly ordered; if Step 02 fails,
-#      downstream analysis (03-08) cannot be launched until fixed.
+#      downstream analysis (03-07) cannot be launched until fixed.
 #   2. Log Interleaving: Concurrent runs in the same directory will interleave
 #      output in the same log file unless unique --run-id is provided.
 #   3. Environment: Assumes the 'PFAS' conda environment is correctly configured
@@ -175,16 +175,50 @@ if [[ "$_PIPELINE_MODE" == "fresh" && "$RESUME_FROM" -gt 0 ]]; then
     RESUME_FROM=0
 fi
 
-# ── Sudo credential cache ─────────────────────────────────────────────────────
+# ── Sudo credential cache (OPTIONAL) ──────────────────────────────────────────
+# systemd-oomd masking stops the Linux OOM-killer from terminating the
+# memory-heavy Steps 06-07. It needs sudo, which is OPTIONAL: not every user has
+# sudo on every machine. Enter the password to enable masking (recommended for
+# long unattended runs); press Enter to skip and run in NORMAL mode (no sudo).
+#
+# Scripts/operations that use sudo (only when enabled):
+#   06_SID_Prime-MMGBSA_FAcDs.py              → systemctl stop / mask systemd-oomd
+#   07_MD_Thermodynamics_QMMM_Engine_FAcDs.py → systemctl mask / unmask / start systemd-oomd
+SUDO_ENABLED=0
+_SUDO_KEEPALIVE_PID=""
 echo ""
-echo "  Steps 07-08 (SID + MD thermodynamics) requires sudo to mask systemd-oomd."
-echo "  Please authenticate now so the pipeline can run fully unattended:"
-echo "  (systemctl commands are also covered by NOPASSWD in sudoers for safety)"
+echo "  ── Optional sudo: systemd-oomd masking for Steps 06-07 ──"
+echo "    Sudo is used only by: 06_SID_Prime-MMGBSA_FAcDs.py and 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py"
+echo "    (systemctl stop/mask/unmask/start systemd-oomd around the OOM-prone phase)."
 echo ""
-sudo -v </dev/tty
-# Keepalive: refresh credential every 60 s for long-running pipelines
-( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
-_SUDO_KEEPALIVE_PID=$!
+# Pressing Enter (empty) skips silently → NORMAL mode. A NON-EMPTY entry is treated as a
+# password attempt: a wrong password is flagged and re-prompted (up to 3 attempts) so a typo
+# does not silently drop a long unattended run into NORMAL mode. Three failures (or no sudo
+# rights) fall back to NORMAL mode.
+_sudo_attempt=0
+while true; do
+    read -r -s -p "  Enter sudo password to enable oomd masking, or press Enter to skip (NORMAL mode): " _sudo_pw </dev/tty || _sudo_pw=""
+    echo ""
+    if [[ -z "$_sudo_pw" ]]; then
+        echo "  → No password entered — running in NORMAL mode (systemd-oomd NOT masked)."
+        break
+    elif echo "$_sudo_pw" | sudo -S -v 2>/dev/null; then
+        SUDO_ENABLED=1
+        echo "  → sudo enabled — systemd-oomd will be masked during Steps 06-07."
+        # Keepalive: refresh credential every 60 s for long-running pipelines
+        ( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
+        _SUDO_KEEPALIVE_PID=$!
+        break
+    else
+        _sudo_attempt=$(( _sudo_attempt + 1 ))
+        if (( _sudo_attempt >= 3 )); then
+            echo "  → Wrong password 3 times (or no sudo access) — running in NORMAL mode (systemd-oomd NOT masked)."
+            break
+        fi
+        echo "  → Wrong password. Try again, or press Enter to skip (NORMAL mode).  [attempt ${_sudo_attempt}/3]"
+    fi
+done
+unset _sudo_pw
 echo ""
 
 # ── Log directory setup ───────────────────────────────────────────────────────
@@ -197,10 +231,19 @@ fi
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/pipeline_$(date +%Y%m%d_%H%M%S).log"
 
+# Fresh runs stream to a staging log until Step 02 creates the real run directory;
+# _STAGING_SYNC_DEST is then set to the run-dir copy so it can be re-synced after
+# every downstream step (and on exit), keeping the run-dir log complete — not
+# truncated at Step 02. Resume runs already log straight into the run dir.
+_STAGING_SYNC_DEST=""
+_sync_staging_log() {
+    [[ -n "$_STAGING_SYNC_DEST" && -f "$LOG_FILE" ]] && cp "$LOG_FILE" "$_STAGING_SYNC_DEST" 2>/dev/null || true
+}
+
 # ── Background / foreground selection ─────────────────────────────────────────
 # Foreground (default): live output streamed to terminal + log via tee.
 # Background: detach the run, write to the log only, and return the shell so the
-#             terminal can be closed. Steps 07-08 sudo calls rely on the NOPASSWD
+#             terminal can be closed. Steps 06-07 sudo calls rely on the NOPASSWD
 #             sudoers entries, so the detached (tty-less) process still works.
 _BG_MODE=0
 echo ""
@@ -269,6 +312,7 @@ run_step() {
         elapsed=$(( SECONDS - t0 ))
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
         _tee "  [PASS] ${name}  ($(_fmt_elapsed $elapsed))"
+        _sync_staging_log   # keep the run-dir log copy current after each completed step
     else
         local exit_code=$?
         elapsed=$(( SECONDS - t0 ))
@@ -309,6 +353,12 @@ _print_timing_table() {
 }
 
 # ── Conda activation ──────────────────────────────────────────────────────────
+# If the caller already has the PFAS environment active, trust it and skip the
+# activation dance entirely — this avoids aborting on hosts where conda is not a
+# shell function or lives in a non-standard directory.
+if [[ "${CONDA_DEFAULT_ENV:-}" == "PFAS" ]]; then
+    _tee "  PFAS conda environment already active — activation bypassed."
+elif true; then
 
 if [[ -z "${CONDA_BASE:-}" ]]; then
     CONDA_BASE="$(conda info --base 2>/dev/null || true)"
@@ -320,19 +370,29 @@ fi
 if [[ -f "${CONDA_BASE}/etc/profile.d/conda.sh" ]]; then
     # shellcheck source=/dev/null
     source "${CONDA_BASE}/etc/profile.d/conda.sh"
-    conda activate PFAS
+    conda activate PFAS || { _tee "ERROR: failed to activate conda env 'PFAS'. Aborting (would otherwise fall back to system Python without gemmi/rdkit/boltz)."; exit 1; }
+    if [[ "${CONDA_DEFAULT_ENV:-}" != "PFAS" ]]; then
+        _tee "ERROR: 'PFAS' env is not active after activation (got '${CONDA_DEFAULT_ENV:-none}'). Aborting."
+        exit 1
+    fi
 else
-    _tee "WARNING: conda not found at ${CONDA_BASE}. Set CONDA_BASE env var or install miniconda."
+    _tee "ERROR: conda not found at ${CONDA_BASE}. Set CONDA_BASE env var or install miniconda. Aborting."
+    exit 1
 fi
+
+fi   # end conda activation (bypassed when PFAS already active)
 
 # ── Pipeline body ─────────────────────────────────────────────────────────────
 # Wrapped in a function so it can run either in the foreground (output tee'd to
 # terminal + log) or detached in the background (output to log only). The trap is
 # registered here so cleanup fires in whichever context actually runs the body.
 _run_all_steps() {
-trap 'kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
-      sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
-      sudo systemctl start systemd-oomd 2>/dev/null || true
+trap '_sync_staging_log
+      kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+      if [[ "$SUDO_ENABLED" == "1" ]]; then
+        sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
+        sudo systemctl start systemd-oomd 2>/dev/null || true
+      fi
       true' EXIT
 
 # ── Header ────────────────────────────────────────────────────────────────────
@@ -392,11 +452,15 @@ else
     # Move / copy the staging log into the real run directory
     _real_log_dir="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
     mkdir -p "$_real_log_dir"
-    cp "$LOG_FILE" "${_real_log_dir}/" 2>/dev/null || true
-    _tee "  Pipeline log copied to: ${_real_log_dir}/"
+    _STAGING_SYNC_DEST="${_real_log_dir}/$(basename "$LOG_FILE")"
+    # The EXIT trap (registered above) already calls _sync_staging_log on exit — do
+    # NOT register a second EXIT trap here, as it would override the oomd/keepalive
+    # cleanup. Per-step re-syncs run via run_step; sync once now for the run dir.
+    _sync_staging_log
+    _tee "  Pipeline log copied to: ${_real_log_dir}/ (re-synced after each step)"
 fi
 
-# ── Steps 03–08: downstream analysis (all modes use RUN_ID) ──────────────────
+# ── Steps 03–07: downstream analysis (all modes use RUN_ID) ──────────────────
 
 run_step "03  Validation figures" \
     python 03_Validation_Figures_FAcDs.py "$RUN_ID"
@@ -404,29 +468,30 @@ run_step "03  Validation figures" \
 run_step "04  Dendrogram" \
     python 04_Dendrogram_FAcDs.py "$RUN_ID"
 
-run_step "05  CIF/PDB preparation" \
-    python 05_CIF-PDB_Preparation_FAcDs.py "$RUN_ID"
+run_step "05  Top-N selection + CIF/PDB generation & preparation (MD-ready cohort)" \
+    python 05_TopN_and_PDB_Preparation_FAcDs.py "$RUN_ID"
 
-run_step "06  Top-N extraction" \
-    python 06_Top-N_Extraction_FAcDs.py "$RUN_ID"
-
-# Mask systemd-oomd before Steps 07 (SID) and 08 (MD), the OOM-prone phase.
+# Mask systemd-oomd before Steps 06 (SID) and 07 (MD), the OOM-prone phase.
 # The SID script is called with --pipeline-mode so it does NOT unmask on exit,
 # leaving the mask in place for the subsequent MD thermodynamics engine.
-# Guard on step 08 (the higher step number): mask whenever the MD engine runs.
-if [[ $DRY_RUN -eq 0 && 8 -ge $RESUME_FROM ]]; then
-    sudo systemctl stop systemd-oomd 2>/dev/null || true
-    sudo systemctl mask systemd-oomd.socket
+# Guard on step 07 (the higher step number): mask whenever the MD engine runs.
+if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
+    if [[ "$SUDO_ENABLED" == "1" ]]; then
+        sudo systemctl stop systemd-oomd 2>/dev/null || true
+        sudo systemctl mask systemd-oomd.socket
+    else
+        _tee "  [NORMAL MODE] systemd-oomd not masked (no sudo) — Steps 06-07 run unprotected from the OOM-killer."
+    fi
 fi
 
-run_step "07  SID Desmond post-processing (generates *_SID-out.eaf)" \
-    python 07_SID_Post_Processing_FAcDs.py "$RUN_ID" --pipeline-mode
+run_step "06  SID + Prime MM-GBSA post-processing (*_SID-out.eaf + MM-GBSA)" \
+    python 06_SID_Prime-MMGBSA_FAcDs.py "$RUN_ID" --pipeline-mode
 
-run_step "08  MD thermodynamics + QM/MM engine" \
-    python 08_MD_Thermodynamics_QMMM_Engine_FAcDs.py "$RUN_ID"
+run_step "07  MD thermodynamics + QM/MM engine" \
+    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py "$RUN_ID"
 
-# Restore systemd-oomd after both Steps 07 and 08 have completed.
-if [[ $DRY_RUN -eq 0 && 8 -ge $RESUME_FROM ]]; then
+# Restore systemd-oomd after both Steps 06 and 07 have completed (only if masked).
+if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then
     sudo systemctl unmask systemd-oomd.socket && sudo systemctl start systemd-oomd
 fi
 
@@ -454,6 +519,14 @@ if [[ "$_BG_MODE" -eq 1 ]]; then
     _BG_PID=$!
     set +m
     disown 2>/dev/null || true
+    # The original sudo keepalive monitors the parent shell ($$), which exits on
+    # detach below — re-anchor it to the detached run so credentials stay fresh for
+    # the whole background run (only relevant when sudo was enabled).
+    if [[ "$SUDO_ENABLED" == "1" ]]; then
+        kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        ( while kill -0 "$_BG_PID" 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
+        disown 2>/dev/null || true
+    fi
     echo ""
     echo "  Pipeline detached — PID ${_BG_PID}. Safe to close this terminal."
     echo "  Monitor:  tail -f ${LOG_FILE}"

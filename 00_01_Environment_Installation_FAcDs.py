@@ -9,7 +9,7 @@ for reproducibility. Provides an automated installation routine to
 re-synchronise environments across compute nodes.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 June 2026 <─────────────────────────────────────────────────────────
+Date   : 30 June 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 00_01_Environment_Installation_FAcDs.py
@@ -21,7 +21,7 @@ Date   : 10 June 2026 <───────────────────
   Downstream    : 00_00_run_pipeline_FAcDs.sh (Step 00).
 ───────────────────────────────────────────────────────────────────────────────
 
-# ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
+── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Conda Dependency: Assumes `conda` is available on the system PATH; will
      fail if using alternative package managers (mamba/micromamba) without alias.
   2. Internet Connectivity: Resyncing environments requires an active internet
@@ -43,19 +43,21 @@ from datetime import datetime
 from pathlib import Path
 
 
-# ConsoleColours is defined locally here because this script runs BEFORE the
-# PFAS conda environment is guaranteed to exist — importing 00_03_Project_Utils
-# is not safe at this point. If the canonical definition in 00_03 is updated,
-# this local copy must be synchronised manually.
+"""
+ConsoleColours is defined locally because this script runs BEFORE the PFAS
+conda environment is guaranteed to exist — importing 00_03_Project_Utils is not
+safe here. If the canonical definition in 00_03 changes, sync this copy manually
+(the drift assertion in main() guards the two key codes).
+"""
 class ConsoleColours:
-    OKGREEN = '\033[92m'  # Green text designating success
-    WARNING = '\033[93m'  # Yellow text designating caution
-    FAIL    = '\033[91m'  # Red text designating failure
-    OKBLUE  = '\033[94m'  # Blue text designating information
-    BOLD    = '\033[1m'   # Bold text designed for headers
-    ENDC    = '\033[0m'   # Reset colour formatting
+    OKGREEN = "\033[92m"  # Green text designating success
+    WARNING = "\033[93m"  # Yellow text designating caution
+    FAIL    = "\033[91m"  # Red text designating failure
+    OKBLUE  = "\033[94m"  # Blue text designating information
+    BOLD    = "\033[1m"   # Bold text designed for headers
+    ENDC    = "\033[0m"   # Reset colour formatting
 
-SEPARATOR_HEAVY = '═' * 80
+SEPARATOR_HEAVY = "═" * 80
 
 
 # ===============================================================================
@@ -72,14 +74,22 @@ def export_environment():
 
     print("Exporting Conda environment to PFAS.yml...")
     try:
-        # --no-builds ensures cross-platform compatibility by omitting
-        # OS-specific build hashes from the exported specification.
+        # --no-builds omits OS-specific build hashes for cross-platform portability.
         result = subprocess.run(
             ["conda", "env", "export", "--no-builds"],
             capture_output=True, text=True, check=True
         )
-        # Remove local environment prefix line if present
-        cleaned_lines = [line for line in result.stdout.splitlines() if not line.strip().startswith("prefix:")]
+        '''
+        Remove local environment prefix line if present
+        Drop the local prefix line and the obsolete `dataclasses` backport
+        (built into the Python 3.7+ stdlib; the pip 0.6 backport shadows it
+        and breaks imports). _is_dropped filters both yaml `- dataclasses==`
+        and bare `dataclasses==` forms.
+        '''
+        def _is_dropped(line: str) -> bool:
+            s = line.strip()
+            return s.startswith("prefix:") or s.lstrip("- ").startswith("dataclasses==")
+        cleaned_lines = [line for line in result.stdout.splitlines() if not _is_dropped(line)]
         cleaned_yaml = "\n".join(cleaned_lines) + "\n"
         header = (
             f"# PFAS Conda Environment\n"
@@ -106,8 +116,11 @@ def export_environment():
             f"# Script   : 00_01_Environment_Installation_FAcDs.py --export\n"
             f"#\n"
         )
+        # Filter the obsolete `dataclasses` backport (stdlib since Python 3.7).
+        _pip_lines = [ln for ln in result.stdout.splitlines()
+                      if not ln.strip().startswith("dataclasses==")]
         with open("requirements.txt", "w") as f:
-            f.write(header + result.stdout)
+            f.write(header + "\n".join(_pip_lines) + "\n")
         print(f"{ConsoleColours.OKGREEN}✔ Successfully created requirements.txt{ConsoleColours.ENDC}")
     except subprocess.CalledProcessError as e:
         print(f"{ConsoleColours.FAIL}✘ Error exporting pip requirements: {e}{ConsoleColours.ENDC}")
@@ -139,7 +152,12 @@ def install_environment(env_name: str):
     except subprocess.CalledProcessError as e:
         print(f"{ConsoleColours.FAIL}✘ Error creating environment. "
               f"Verify your Conda installation: {e}{ConsoleColours.ENDC}")
+        sys.exit(1)   # propagate failure so the pipeline runner halts instead of running on a broken env
 
+
+# -------------------------------------------------------------------------------
+# Step 2.3: Environment Verification
+# -------------------------------------------------------------------------------
 
 def verify_environment() -> None:
     """Verifies installed packages in the current environment and prints a checklist."""
@@ -184,7 +202,7 @@ def verify_environment() -> None:
         if p:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL            : Available (binary located)")
         else:
-            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PyMOL            : Missing (will be auto-installed in Step 06)")
+            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PyMOL            : Missing (will be auto-installed in Step 05)")
 
     # PLIP
     try:
@@ -197,7 +215,7 @@ def verify_environment() -> None:
         if p:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : Available (binary located)")
         else:
-            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PLIP             : Missing (will be auto-installed in Step 06)")
+            print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PLIP             : Missing (will be auto-installed in Step 05)")
 
 
 # ===============================================================================
@@ -227,11 +245,11 @@ def main():
     _now = _t.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  \033[95m\033[1m▶  00_01_Environment_Installation_FAcDs.py"
-        f"\033[0m  │  FAcDs Pipeline",
+        "  \033[95m\033[1m▶  00_01_Environment_Installation_FAcDs.py"
+        "\033[0m  │  FAcDs Pipeline",
         flush=True,
     )
-    print(f"  Conda Environment Export & Installation Manager", flush=True)
+    print("  Conda Environment Export & Installation Manager", flush=True)
     print(f"  Started : {_now}", flush=True)
     print(f"{SEPARATOR_HEAVY}\n", flush=True)
 
@@ -239,10 +257,12 @@ def main():
         import importlib.util as _ilu
         _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_03_Project_Utils_FAcDs.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
-        assert ConsoleColours.OKGREEN == _u.ConsoleColours.OKGREEN, \
-            "ConsoleColours.OKGREEN drift: update 00_01 to match 00_03"
-        assert ConsoleColours.FAIL == _u.ConsoleColours.FAIL, \
-            "ConsoleColours.FAIL drift: update 00_01 to match 00_03"
+        for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "BOLD", "ENDC"):
+            assert getattr(ConsoleColours, _code) == getattr(_u.ConsoleColours, _code), \
+                f"ConsoleColours.{_code} drift: update 00_01 to match 00_03"
+    except AssertionError as _drift:
+        # A drift is a real (but non-fatal) maintenance issue — warn, don't crash the installer.
+        print(f"{ConsoleColours.WARNING}⚠ {_drift}{ConsoleColours.ENDC}")
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         pass
 
