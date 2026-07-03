@@ -8,7 +8,7 @@ Large-scale, resume-safe Boltz-2 protein-ligand predictions with deep
 structural, geometric, and chemical scoring for FAcD SN2 degrader tiers.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 June 2026 <────────────────────────────────────────────────────────
+Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_FAcDs.py
@@ -628,6 +628,18 @@ def console_title(msg: str) -> None:
 
 def console_separator() -> None:
     _utils_mod.console_separator(logger, heavy=True)
+
+def atomic_to_csv(df, path, **kwargs) -> None:
+    """Crash-safe CSV write: serialise to a sibling .tmp then os.replace() onto the
+    target (atomic on a single filesystem). A process kill mid-write (e.g. the
+    OOM-killer during a long grid run) then leaves the prior good CSV intact
+    instead of a half-written file the resume path cannot detect. Mirrors the
+    tmp+replace pattern already used for MSA a3m downloads.
+    """
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_csv(tmp, **kwargs)
+    os.replace(tmp, path)
 
 _TTY_ANSI_RE = re.compile(r"\033\[[0-9;]*[mKABCDEFGHJSTfhilmnprsu]")
 
@@ -4407,7 +4419,7 @@ def append_rows_to_csv(rows: list, csv_path: Path):
         ordered = [c for c in CSV_COLUMN_ORDER if c in df_new.columns]
         remainder = [c for c in df_new.columns if c not in ordered]
         df_new = df_new[ordered + remainder]
-        df_new.to_csv(csv_path, index=False)
+        atomic_to_csv(df_new, csv_path, index=False)
     except Exception as e:
         if logger: logger.error(f"CSV checkpoint write failed: {e}")
 
@@ -4505,7 +4517,7 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
         ordered  = [c for c in CSV_COLUMN_ORDER if c in df.columns]
         remainder = [c for c in df.columns if c not in ordered]
         df = df[ordered + remainder]
-        df.to_csv(csv_path, index=False)
+        atomic_to_csv(df, csv_path, index=False)
 
     return len(rows)
 
@@ -4593,36 +4605,56 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             df_rank[_md_rnk] = pd.NA
             _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
             df_rank.loc[_sel_order, _md_rnk] = range(1, len(_sel_order) + 1)
-            _gate_desc = (f"per_ligand — single best complex per ligand within {CFG.MD_PER_LIGAND_TIER}"
+            _gate_desc = (f"single best complex per ligand within {CFG.MD_PER_LIGAND_TIER}"
                           if _mode == "per_ligand"
-                          else f"topN — Scientific_Rank ≤ {CFG.MD_TOP_N}" if _mode == "topN"
-                          else f"tier — degrader_tier in {list(CFG.MD_TIERS)}")
-            reporter_md = (f"  MD-ready selection: mode='{_mode}' ({_gate_desc}); "
+                          else f"Scientific_Rank ≤ {CFG.MD_TOP_N}" if _mode == "topN"
+                          else f"degrader_tier in {list(CFG.MD_TIERS)}")
+            reporter_md = (f"  MD-ready selection — mode='{_mode}'  ·  "
                            f"{int(_sel_mask.sum())} complexes flagged {_md_sel}=True")
             try:
                 console_info(reporter_md)
+                console_info(f"    Gate: {_gate_desc}")
             except Exception:
                 print(reporter_md, flush=True)
-            # Per-pick provenance: show WHICH complexes were flagged (ligand → tier →
-            # rank → protein → job), not just the count, so the shortlist is auditable.
+            # Per-pick provenance table: show WHICH complexes were flagged (ligand,
+            # tier, rank, protein, job) so the shortlist is auditable, styled to match
+            # the rest of the console output.
             try:
                 _prot_col = next((c for c in ("Protein_Name", "protein", "Protein")
                                   if c in df_rank.columns), None)
                 _sel_rows = df_rank.loc[_sel_mask].sort_values("Scientific_Rank")
-                for _i, (_, _r) in enumerate(_sel_rows.iterrows(), 1):
-                    _lg = str(_r.get(_lig_col, "?")) if _lig_col else "?"
-                    _pr = str(_r.get(_prot_col, "?")) if _prot_col else "?"
-                    console_info(f"      {_i:>2}. {_lg:<18} {str(_r.get('degrader_tier','?')):<9} "
-                                 f"rank#{int(_r.get('Scientific_Rank', 0)):<6} {_pr:<24} "
-                                 f"{str(_r.get('job_name','?'))}")
+                _rows_data = [
+                    (str(_i),
+                     str(_r.get(_lig_col, "?")) if _lig_col else "?",
+                     str(_r.get("degrader_tier", "?")),
+                     f"#{int(_r.get('Scientific_Rank', 0))}",
+                     str(_r.get(_prot_col, "?")) if _prot_col else "?",
+                     str(_r.get("job_name", "?")))
+                    for _i, (_, _r) in enumerate(_sel_rows.iterrows(), 1)
+                ]
+                _hdr = ("#", "Ligand", "Tier", "Rank", "Protein", "Job")
+                if _rows_data:
+                    _w = [max(len(_hdr[_c]), max(len(_rd[_c]) for _rd in _rows_data))
+                          for _c in range(6)]
+                    _w[5] = min(_w[5], 46)
+                    _algn = (str.center, str.ljust, str.ljust, str.center, str.ljust, str.ljust)
+                    def _cell(_c, _v): return _algn[_c](str(_v)[:_w[_c]], _w[_c])
+                    def _fmt(_cells):  return "    │ " + " │ ".join(_cell(_c, _cells[_c]) for _c in range(6)) + " │"
+                    def _rule(_l, _m, _r): return "    " + _l + _m.join("─" * (_w[_c] + 2) for _c in range(6)) + _r
+                    console_info(_rule("┌", "┬", "┐"))
+                    console_info(_fmt(_hdr))
+                    console_info(_rule("├", "┼", "┤"))
+                    for _rd in _rows_data:
+                        console_info(_fmt(_rd))
+                    console_info(_rule("└", "┴", "┘"))
                 if _mode == "per_ligand":
                     _got  = set(_lig_bare.loc[_sel_mask].astype(str))
                     _miss = [_lg for _lg in CFG.MD_PER_LIGAND if _lg not in _got]
                     if _miss:
-                        console_info(f"      No candidate in {CFG.MD_PER_LIGAND_TIER} for "
+                        console_info(f"    No candidate in {CFG.MD_PER_LIGAND_TIER} for "
                                      f"{len(_miss)} requested ligand(s) — dropped: {', '.join(_miss)}")
             except Exception as _md_e:
-                console_info(f"      (MD-ready provenance unavailable: {_md_e})")
+                console_info(f"    (MD-ready provenance unavailable: {_md_e})")
 
             df_rank["Ranking_Score_Calc"] = (
                 "Tier:"  + df_rank["degrader_tier"].astype(str)
@@ -4710,7 +4742,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     else:
                         df_rank[_col] = df_rank[_col].astype(object).fillna("N/A")
 
-            df_rank.to_csv(rank_csv_path, index=False)
+            atomic_to_csv(df_rank, rank_csv_path, index=False)
             rank_columns_count = len(df_rank.columns)
             console_info("Scientific Ranking Output CSV generated flawlessly.")
         else: console_info(" Operation actively bypassed (No structured data detected).")
@@ -6395,7 +6427,7 @@ def main():
                 if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
                     df_existing = pd.read_csv(CSV_PATH, low_memory=False)
                     df_temp = pd.concat([df_existing, df_temp], ignore_index=True)
-                df_temp.to_csv(CSV_PATH, index=False)
+                atomic_to_csv(df_temp, CSV_PATH, index=False)
                 master_rows.clear()
 
             df = pd.read_csv(CSV_PATH, low_memory=False)
@@ -6475,7 +6507,7 @@ def main():
                     include_lowest=True   # close first interval to [0,20] so 0.0 → 'I', not NaN/"nan"
                 ).astype(str)
 
-            df.to_csv(CSV_PATH, index=False)
+            atomic_to_csv(df, CSV_PATH, index=False)
             GLOBAL_STATS["created_csv_rows"] = len(df)
             df_columns_count = len(df.columns)
         except Exception as e: console_info(f" Warning generated during systematic CSV formatting execution logic: {e}")

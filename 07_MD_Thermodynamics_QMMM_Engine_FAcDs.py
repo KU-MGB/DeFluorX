@@ -11,7 +11,7 @@ integration, Desmond EAF ligand dynamics, and QSite automation for QM/MM
 SN2 reaction-coordinate scans.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 June 2026 <────────────────────────────────────────────────────────
+Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py

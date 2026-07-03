@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, pocket-fit / multi-model
 diagnostics, and the two-criteria active-site + feasibility set).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 June 2026 <────────────────────────────────────────────────────────
+Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py

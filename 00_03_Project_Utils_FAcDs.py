@@ -7,7 +7,7 @@ spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
 All downstream scripts import from here — never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 June 2026 <────────────────────────────────────────────────────────
+Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_03_Project_Utils_FAcDs.py
@@ -821,14 +821,20 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
         vec_r1  = r1  - c
         vec_r2  = r2  - c
 
-        normal = np.cross(vec_r1, vec_r2)
-        normal /= np.linalg.norm(normal)
+        # Normalise with an explicit zero-length guard. Bare `v /= norm(v)` on a
+        # degenerate vector (collinear R1–C–R2, coincident atoms) yields NaN with
+        # only a RuntimeWarning — NOT an exception — so it would slip past the
+        # try/except and poison the metric. Raise instead to reach the 999.0
+        # fallback. Mirrors the 1e-6 epsilon guard used by the sibling geometry fns.
+        def _unit(v):
+            n = np.linalg.norm(v)
+            if n < 1e-6:
+                raise ValueError("degenerate vector (zero length)")
+            return v / n
 
-        vec_nuc_proj  = vec_nuc - np.dot(vec_nuc, normal) * normal
-        vec_nuc_proj /= np.linalg.norm(vec_nuc_proj)
-
-        bisector  = vec_r1 / np.linalg.norm(vec_r1) + vec_r2 / np.linalg.norm(vec_r2)
-        bisector /= np.linalg.norm(bisector)
+        normal        = _unit(np.cross(vec_r1, vec_r2))
+        vec_nuc_proj  = _unit(vec_nuc - np.dot(vec_nuc, normal) * normal)
+        bisector      = _unit(_unit(vec_r1) + _unit(vec_r2))
 
         return float(
             np.degrees(np.arccos(np.clip(np.dot(vec_nuc_proj, bisector), -1.0, 1.0)))
