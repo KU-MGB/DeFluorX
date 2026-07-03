@@ -67,12 +67,12 @@ The pipeline assigns a "Degrader Tier" based on strictly tightened catalytic req
 derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mechanics.
 
     1. Tier_1A (Elite Catalysis - High Priority for MD)
-       • Mechanistic Score >= 0.90 (Complete anchor set + near-ideal SN2 angle — GATE; angle is folded into the score)
+       • Mechanistic Score >= 0.85 (ladder floor; angle folded into the score. Elite tier further refined by the coupled machinery gate: mech >= 0.90 OR mech >= 0.85 with a crystal-exact catalytic constellation.)
        • (Active Site Conservation is reported downstream for ranking; it is NOT a tier gate.)
        • Nucleophile (Asp110): <= 3.0 A (ligand α-carbon → Asp-Oδ; tight pre-reactive ground-state gate)
        • Nuc–Base relay:       <= 3.5 A (INTERNAL triad Asp110-Oδ → His277, dist_nuc_base — not a ligand contact)
        • Base–Acid relay:      <= 4.5 A (INTERNAL triad His277 → Asp134, dist_base_acid — not a ligand contact)
-       • Attack Angle:         >= 175°  (Near-Ideal Linear Trajectory; = TIER_ANGLE_MIN['Tier_1A'])
+       • Attack Angle:         >= 174°  (Near-Ideal Linear Trajectory; = TIER_ANGLE_MIN['Tier_1A'])
        • Stabilisation:        REQUIRED (Trp156/Tyr217 or Dynamic Polar Residue)
 
     2. Tier_1B (High Functional)
@@ -1939,7 +1939,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
             prot_coords = [[p["x"], p["y"], p["z"]] for p in prot]
             lig_coords  = [[l["x"], l["y"], l["z"]] for l in lig]
             tree = cKDTree(prot_coords)
-            indices_list = tree.query_ball_point(lig_coords, r=6.0)
+            indices_list = tree.query_ball_point(lig_coords, r=CFG.CATALYTIC_DIST_CUTOFF)
 
             for i, p_indices in enumerate(indices_list):
                 la = lig[i]
@@ -2475,7 +2475,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                     count += 1
 
                 # Validate exact spatial chemical identity requirements
-                if mapped_res and min_d < 4.0:
+                if mapped_res and min_d < CFG.QC_MIN_DIST_4:
                     res_name = mapped_res.name
                     total_checks += 1
                     ref_role = REF_ACTIVE_SITE_MAP[key]["role"]
@@ -2536,8 +2536,45 @@ def generate_rich_justification(tier: str, meaning: str, constraint: str, aligne
         if tier in CFG.TIER_HIGH_QUALITY:
             return f"Caution: Documented low Sequence Identity ({identity}%) but Excellent Active Site Geometry. Identifies a likely remote homologue."
         else:
-            return f"Failure: Overall sequence alignment proved unreliable (ID {identity}% < 25%). Structure is likely invalid."
+            return f"Failure: Overall sequence alignment proved unreliable (ID {identity}% < {CFG.ALIGN_MIN_SEQ_IDENTITY:.0f}%). Structure is likely invalid."
     return f"{meaning} ({constraint})"
+
+def _derive_burgi_dunitz(nuc_np, centres, neigh_fn, sym_fn, pos_fn):
+    """Bürgi–Dunitz angle on the electrophilic head centre (C/S/P bearing the
+    most O; a carboxylate carbon with ≥2 O ranked first), computed once for both
+    the RDKit-template and structure-only paths. `centres` are candidate node
+    handles; `neigh_fn`/`sym_fn`/`pos_fn` adapt neighbour lookup, element symbol
+    and 3-D position to the caller's data model. Returns a rounded angle or None.
+    """
+    def _rank(a):
+        n_o = sum(1 for n in neigh_fn(a) if sym_fn(n) == "O")
+        return (sym_fn(a) == "C" and n_o >= 2, n_o)
+    for _ctr in sorted(centres, key=_rank, reverse=True):
+        _cC = pos_fn(_ctr)
+        if _cC is None:
+            continue
+        _cO = next((pos_fn(n) for n in neigh_fn(_ctr)
+                    if sym_fn(n) == "O" and pos_fn(n) is not None), None)
+        if _cO is not None:
+            return round(calculate_burgi_dunitz(nuc_np, _cC, _cO), 1)
+    return None
+
+
+def _derive_flippin_lodge(nuc_np, c_node, c_pos, neigh_fn, sym_fn, pos_fn, is_leaving_fn):
+    """Flippin–Lodge offset at the attacked carbon: ≥2 spectators (heavy first,
+    then H), excluding the leaving halogen. Shared by the RDKit-template and
+    structure-only paths via the accessor callables. Returns rounded offset or
+    None.
+    """
+    _heavy = [n for n in neigh_fn(c_node) if sym_fn(n) != "H" and not is_leaving_fn(n)]
+    _hyd   = [n for n in neigh_fn(c_node) if sym_fn(n) == "H"]
+    _spect = [p for p in (pos_fn(n) for n in _heavy + _hyd) if p is not None]
+    if len(_spect) >= 2:
+        _fl = calculate_flippin_lodge(nuc_np, c_pos, _spect[0], _spect[1])
+        if _fl < 990.0:
+            return round(_fl, 1)
+    return None
+
 
 def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, preferred_c_names=None, cradle_coords=None) -> Tuple[float, float, int, Any, Any, Any]:
     """
@@ -2728,40 +2765,31 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
 
             _nuc = np.array([best_O.pos.x, best_O.pos.y, best_O.pos.z])
 
-            """
-            Bürgi–Dunitz: head-group centre = C/S/P with the most O neighbours,
-            carboxylate carbons (C with ≥2 O) ranked first.
-            """
+            # Bürgi–Dunitz on the RDKit-template head centre (shared derivation).
             _centres = [a for a in rd_mol.GetAtoms()
                         if a.GetSymbol() in ("C", "S", "P")
                         and any(n.GetSymbol() == "O" for n in a.GetNeighbors())]
-            def _bd_rank(a):
-                n_o = sum(1 for n in a.GetNeighbors() if n.GetSymbol() == "O")
-                return (a.GetSymbol() == "C" and n_o >= 2, n_o)
-            for _ctr in sorted(_centres, key=_bd_rank, reverse=True):
-                _cC = _pos(_ctr)
-                if _cC is None:
-                    continue
-                _cO = next((_pos(n) for n in _ctr.GetNeighbors()
-                            if n.GetSymbol() == "O" and _pos(n) is not None), None)
-                if _cO is not None:
-                    aux["burgi_dunitz_angle"] = round(
-                        calculate_burgi_dunitz(_nuc, _cC, _cO), 1)
-                    break
+            _bd = _derive_burgi_dunitz(
+                _nuc, _centres,
+                neigh_fn=lambda a: a.GetNeighbors(),
+                sym_fn=lambda a: a.GetSymbol(),
+                pos_fn=_pos)
+            if _bd is not None:
+                aux["burgi_dunitz_angle"] = _bd
 
-            # Flippin–Lodge: ≥2 spectators on the SN2 carbon (heavy first, then H).
+            # Flippin–Lodge on the SN2 carbon (shared derivation).
             _c_rd_idx = mm_map.get(best_C.name)
             if _c_rd_idx is not None:
-                _c_rd  = rd_mol.GetAtomWithIdx(_c_rd_idx)
-                _heavy = [n for n in _c_rd.GetNeighbors()
-                          if n.GetSymbol() != "H" and inv_map.get(n.GetIdx()) != best_X.name]
-                _hyd   = [n for n in _c_rd.GetNeighbors() if n.GetSymbol() == "H"]
-                _spect_pos = [p for p in (_pos(n) for n in _heavy + _hyd) if p is not None]
-                if len(_spect_pos) >= 2:
-                    _cpos = np.array([best_C.pos.x, best_C.pos.y, best_C.pos.z])
-                    _fl = calculate_flippin_lodge(_nuc, _cpos, _spect_pos[0], _spect_pos[1])
-                    if _fl < 990.0:
-                        aux["flippin_lodge_offset"] = round(_fl, 1)
+                _c_rd = rd_mol.GetAtomWithIdx(_c_rd_idx)
+                _cpos = np.array([best_C.pos.x, best_C.pos.y, best_C.pos.z])
+                _fl = _derive_flippin_lodge(
+                    _nuc, _c_rd, _cpos,
+                    neigh_fn=lambda a: a.GetNeighbors(),
+                    sym_fn=lambda a: a.GetSymbol(),
+                    pos_fn=_pos,
+                    is_leaving_fn=lambda n: inv_map.get(n.GetIdx()) == best_X.name)
+                if _fl is not None:
+                    aux["flippin_lodge_offset"] = _fl
         except Exception:
             pass
 
@@ -2785,36 +2813,27 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             def _np_of(a):
                 return np.array([a.pos.x, a.pos.y, a.pos.z])
 
-            """
-            Bürgi–Dunitz: electrophilic head centre = C/S/P with the most O
-            neighbours (carboxylate carbon with ≥2 O ranked first).
-            """
+            # Bürgi–Dunitz from structure ligand atoms (shared derivation).
             if aux.get("burgi_dunitz_angle", 999.0) >= 999.0:
                 _centres = [a for a in lig_atoms if a.element.name in ("C", "S", "P")]
-                def _rank(a):
-                    _no = sum(1 for n in _neigh(a) if n.element.name == "O")
-                    return (a.element.name == "C" and _no >= 2, _no)
-                for _ctr in sorted(_centres, key=_rank, reverse=True):
-                    _o = next((n for n in _neigh(_ctr) if n.element.name == "O"), None)
-                    if _o is not None:
-                        aux["burgi_dunitz_angle"] = round(
-                            calculate_burgi_dunitz(_nuc_np, _np_of(_ctr), _np_of(_o)), 1)
-                        break
+                _bd = _derive_burgi_dunitz(
+                    _nuc_np, _centres,
+                    neigh_fn=_neigh,
+                    sym_fn=lambda a: a.element.name,
+                    pos_fn=_np_of)
+                if _bd is not None:
+                    aux["burgi_dunitz_angle"] = _bd
 
-            """
-            Flippin–Lodge: ≥2 spectators on the attacked carbon (heavy first,
-            then any remaining neighbour), excluding the leaving halogen.
-            """
+            # Flippin–Lodge from structure ligand atoms (shared derivation).
             if aux.get("flippin_lodge_offset", 999.0) >= 999.0:
-                _spect = [n for n in _neigh(best_C)
-                          if n is not best_X and n.element.name != "H"]
-                if len(_spect) < 2:
-                    _spect += [n for n in _neigh(best_C) if n.element.name == "H"]
-                if len(_spect) >= 2:
-                    _fl = calculate_flippin_lodge(
-                        _nuc_np, _np_of(best_C), _np_of(_spect[0]), _np_of(_spect[1]))
-                    if _fl < 990.0:
-                        aux["flippin_lodge_offset"] = round(_fl, 1)
+                _fl = _derive_flippin_lodge(
+                    _nuc_np, best_C, _np_of(best_C),
+                    neigh_fn=_neigh,
+                    sym_fn=lambda a: a.element.name,
+                    pos_fn=_np_of,
+                    is_leaving_fn=lambda n: n is best_X)
+                if _fl is not None:
+                    aux["flippin_lodge_offset"] = _fl
     except Exception:
         pass
 
@@ -3166,9 +3185,9 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         # --- SOFT SCORING ENGINE ---
         # Uses sigmoid functions to avoid binary threshold "cliffs"
-        s_nuc = sigmoid(d_nuc, k=-4.0, x0=CFG.NAC_DIST_STRICT)   # High score for < NAC_DIST_STRICT (3.2 Å)
-        s_ang = sigmoid(angle, k=0.15, x0=CFG.NAC_ANGLE_STRICT)  # High score for > NAC_ANGLE_STRICT (155°)
-        s_int = sigmoid(dist_nuc_base, k=-2.0, x0=CFG.SOFT_NB_MIDPOINT) * sigmoid(dist_base_acid, k=-2.0, x0=CFG.SOFT_BA_MIDPOINT)
+        s_nuc = sigmoid(d_nuc, k=CFG.SOFT_K_NUC, x0=CFG.NAC_DIST_STRICT)   # High score for < NAC_DIST_STRICT (3.2 Å)
+        s_ang = sigmoid(angle, k=CFG.SOFT_K_ANG, x0=CFG.NAC_ANGLE_STRICT)  # High score for > NAC_ANGLE_STRICT (155°)
+        s_int = sigmoid(dist_nuc_base, k=CFG.SOFT_K_TRIAD, x0=CFG.SOFT_NB_MIDPOINT) * sigmoid(dist_base_acid, k=CFG.SOFT_K_TRIAD, x0=CFG.SOFT_BA_MIDPOINT)
         soft_score = (s_nuc * CFG.SOFT_W_NUC) + (s_ang * CFG.SOFT_W_ANG) + (s_int * CFG.SOFT_W_INT)
         results["soft_catalytic_score"] = round(soft_score, 3)
 
@@ -3291,8 +3310,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         '''
         BACKBONE-CLASH METRIC (size-fair; graded, not a size veto)
         Counts deep-pocket tail atoms physically interpenetrating the protein backbone.
-        Denominator is ALL ligand heavy atoms (size-fair): the reported ratio no longer
-        inflates for long chains, so length alone never decoys a pose. A genuine clash
+        Denominator is ALL ligand heavy atoms (size-fair): the reported ratio does not
+        inflate for long chains, so length alone never decoys a pose. A genuine clash
         is a real physical defect, applied below as a graded competence penalty (per
         clashing atom). The hard veto is the size-fair clash FRACTION (TAIL_CLASH_RATIO)
         gated by a minimum absolute count (CLASH_MIN_FLOOR), so a non-physical pose is
@@ -3306,7 +3325,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             target_rd_idx = mm_map.get(best_c_atom.name)
             if target_rd_idx is not None:
                 distances = Chem.rdmolops.GetDistanceMatrix(rd_mol)
-                tail_rd_indices = [i for i, d in enumerate(distances[target_rd_idx]) if d > 3]
+                tail_rd_indices = [i for i, d in enumerate(distances[target_rd_idx]) if d > CFG.TAIL_MIN_BOND_DISTANCE]
                 inv_map = {v: k for k, v in mm_map.items()}
                 tail_cif_names = {inv_map.get(idx) for idx in tail_rd_indices if inv_map.get(idx)}
                 tail_pos_list = [a.pos for a in lig_atoms_obj if a.name in tail_cif_names]
@@ -3949,10 +3968,10 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             conf = data.get("confidence_score") or 0.0
 
             score_v = (W_IPTM * float(iptm_v)) + (W_PLDDT * (plddt_v/100.0)) + \
-                      (W_INTERACTIONS * min(1.0, interaction_density / 2.0)) - \
-                      (W_CROSS_PAE * min(1.0, c_pae/50.0)) + (W_CONF * conf)
+                      (W_INTERACTIONS * min(1.0, interaction_density / CFG.BIND_INT_DENSITY_NORM)) - \
+                      (W_CROSS_PAE * min(1.0, c_pae/CFG.BIND_CROSS_PAE_NORM)) + (W_CONF * conf)
 
-            score_v = max(min(score_v, 50), -50)
+            score_v = max(min(score_v, CFG.BIND_LOGIT_CLAMP), -CFG.BIND_LOGIT_CLAMP)
             binding_prob = 1.0 / (1.0 + math.exp(-score_v))
             data["binding_likelihood_computed"] = binding_prob
             data["binding_likelihood_calc"] = (
@@ -4114,7 +4133,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 data["r3u_Active_Site_RMSD"]              = _r3u_rmsd
                 data["r3u_Halide_Stabilisation"]          = _r3u.get("Halide_Stabilisation", False)
                 data["r3u_Carboxylate_Clamp"]             = _r3u.get("Carboxylate_Clamp", False)
-                data["r3u_ActiveSite_Conservation_Score"]     = round(max(0.0, 0.25 * _r3u_ident + 0.75 * _r3u_geo), 2)
+                data["r3u_ActiveSite_Conservation_Score"]     = round(max(0.0, CFG.CONSERV_REF_W_IDENT * _r3u_ident + CFG.CONSERV_REF_W_GEO * _r3u_geo), 2)
             else:
                 data["r3u_Active_Site_RMSD"]              = 99.0
                 data["r3u_Halide_Stabilisation"]          = False
@@ -4493,6 +4512,212 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
 # ===============================================================================
 # SECTION 10: MAIN SYSTEM ENTRY POINT
 # ===============================================================================
+
+def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
+    """Build the mechanism-first Scientific Ranking CSV from the master CSV.
+    Extracted verbatim from main() (M1): tier-first sort, MD-ready selection,
+    positive-control validation, no-gaps fill. Returns (rank_csv_path,
+    rank_columns_count). `logger` is the module-global; console_info is used
+    for reporting exactly as in-line.
+    """
+    # Step 10.10: Scientific Ranking Matrix CSV Generation (MECHANISM-FIRST)
+    # -------------------------------------------------------------------------------
+    console_info("Executing the compilation of the strictly mechanistic Scientific Ranking CSV...")
+    rank_csv_path = None
+    rank_columns_count = 0
+    try:
+        rank_csv_name = f"7_Boltz2_FAcDs_Ranked_{ts_now}.csv"
+        rank_csv_path = PROD / rank_csv_name
+
+        if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
+            df_rank = pd.read_csv(CSV_PATH, low_memory=False)
+
+            for c in ["ActiveSite_Conservation_Score", "mechanistic_score", "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
+                if c not in df_rank.columns: df_rank[c] = 0.0
+            if "degrader_tier" not in df_rank.columns: df_rank["degrader_tier"] = CFG.TIER_DECOY
+
+            tier_map = CFG.TIER_SORT_WEIGHT
+            df_rank["tier_val"] = df_rank["degrader_tier"].map(tier_map).fillna(0)
+
+            """
+            Mechanism-first ranking. The degrader tier (hard chemistry gates + the Criterion-B
+            constellation cap) is the primary key. Within a tier candidates are ordered by the
+            gated continuous competence_score (CFG §5.5 — angle, nucleophile distance, carboxylate
+            clamp, trajectory deviation, triad relay and halide each once), then by the precise
+            catalytic_constellation_score (Criterion B — eight-residue geometric fidelity vs the
+            3R3U crystal), then active-site conservation, and finally by
+            model_degrader_consensus (the fraction of Boltz diffusion samples that independently
+            reach a degrader tier) as the LAST tiebreaker. Consensus is a tiebreaker ONLY — it
+            never crosses a tier or competence boundary, so a reproducible pose floats above a
+            single-frame fluke of equal geometry without a conformationally flexible true
+            substrate being demoted for its sampling spread, and nothing is filtered out.
+            Rank_Within_Ligand additionally ranks each protein among all proteins screened
+            against the same ligand — surfacing the strongest FAcD variant per ligand independent
+            of cross-ligand geometric bias. mechanistic_score and soft_catalytic_score are shown
+            for reference but not sorted on. mergesort keeps the order stable and reproducible.
+            """
+            df_rank = df_rank.sort_values(
+                by=["tier_val", "competence_score", "catalytic_constellation_score", "ActiveSite_Conservation_Score", "model_degrader_consensus"],
+                ascending=[False, False, False, False, False],
+                kind="mergesort",
+            )
+            df_rank.insert(0, "Scientific_Rank", range(1, len(df_rank) + 1))
+            _lig_col = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
+            if _lig_col:
+                df_rank.insert(1, "Rank_Within_Ligand", df_rank.groupby(_lig_col).cumcount() + 1)
+
+            '''
+            MD-ready selection (SECTION 18 SSOT). Flag the cohort that receives the
+            expensive downstream pipeline (CIF->PDB, PrepWizard, MM-GBSA, MD) so Steps
+            05-08 prepare/simulate only these rows, not all ~58k. Analysis/figures still
+            span the full population; only heavy compute is gated.
+            '''
+            _md_sel = CFG.MD_SELECTED_COL
+            _md_rnk = CFG.MD_RANK_COL
+            _mode = getattr(CFG, "MD_SELECTION_MODE", "tier")
+            if _mode == "topN":
+                _sel_mask = df_rank["Scientific_Rank"] <= CFG.MD_TOP_N
+            elif _mode == "per_ligand" and _lig_col:
+                _lig_bare = df_rank[_lig_col].astype(str).str.replace(r"^\d+_", "", regex=True)
+                _tier_ok  = df_rank["degrader_tier"] == CFG.MD_PER_LIGAND_TIER
+                _pick_idx = []
+                for _lg in CFG.MD_PER_LIGAND:
+                    _cand = df_rank.index[_tier_ok & (_lig_bare == _lg)]
+                    if len(_cand):
+                        # df_rank is already sorted by rank, so the first index is the best
+                        _pick_idx.append(_cand[0])
+                _sel_mask = df_rank.index.isin(_pick_idx)
+            else:   # "tier" (and fallback when no ligand column for per_ligand)
+                _sel_mask = df_rank["degrader_tier"].isin(CFG.MD_TIERS)
+            df_rank[_md_sel] = _sel_mask.astype(bool)
+            df_rank[_md_rnk] = pd.NA
+            _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
+            df_rank.loc[_sel_order, _md_rnk] = range(1, len(_sel_order) + 1)
+            _gate_desc = (f"per_ligand — single best complex per ligand within {CFG.MD_PER_LIGAND_TIER}"
+                          if _mode == "per_ligand"
+                          else f"topN — Scientific_Rank ≤ {CFG.MD_TOP_N}" if _mode == "topN"
+                          else f"tier — degrader_tier in {list(CFG.MD_TIERS)}")
+            reporter_md = (f"  MD-ready selection: mode='{_mode}' ({_gate_desc}); "
+                           f"{int(_sel_mask.sum())} complexes flagged {_md_sel}=True")
+            try:
+                console_info(reporter_md)
+            except Exception:
+                print(reporter_md, flush=True)
+            # Per-pick provenance: show WHICH complexes were flagged (ligand → tier →
+            # rank → protein → job), not just the count, so the shortlist is auditable.
+            try:
+                _prot_col = next((c for c in ("Protein_Name", "protein", "Protein")
+                                  if c in df_rank.columns), None)
+                _sel_rows = df_rank.loc[_sel_mask].sort_values("Scientific_Rank")
+                for _i, (_, _r) in enumerate(_sel_rows.iterrows(), 1):
+                    _lg = str(_r.get(_lig_col, "?")) if _lig_col else "?"
+                    _pr = str(_r.get(_prot_col, "?")) if _prot_col else "?"
+                    console_info(f"      {_i:>2}. {_lg:<18} {str(_r.get('degrader_tier','?')):<9} "
+                                 f"rank#{int(_r.get('Scientific_Rank', 0)):<6} {_pr:<24} "
+                                 f"{str(_r.get('job_name','?'))}")
+                if _mode == "per_ligand":
+                    _got  = set(_lig_bare.loc[_sel_mask].astype(str))
+                    _miss = [_lg for _lg in CFG.MD_PER_LIGAND if _lg not in _got]
+                    if _miss:
+                        console_info(f"      No candidate in {CFG.MD_PER_LIGAND_TIER} for "
+                                     f"{len(_miss)} requested ligand(s) — dropped: {', '.join(_miss)}")
+            except Exception as _md_e:
+                console_info(f"      (MD-ready provenance unavailable: {_md_e})")
+
+            df_rank["Ranking_Score_Calc"] = (
+                "Tier:"  + df_rank["degrader_tier"].astype(str)
+                + " | Competence:" + df_rank["competence_score"].map("{:.3f}".format)
+                + " | Consensus:" + df_rank["model_degrader_consensus"].map("{:.2f}".format)
+                + " | Cons:" + df_rank["ActiveSite_Conservation_Score"].map("{:.2f}".format)
+            )
+            '''
+            Honest-claim disclaimer (carried on every row). The tiers/is_degrader flag are
+            GEOMETRIC near-attack-conformation (NAC) pose-quality descriptors from a static
+            Boltz-2 structure — NOT a kinetic turnover guarantee. Chemical feasibility (C–F
+            BDE, β-fluorination, sn2_dead_end, feasibility_factor) is computed and REPORTED
+            here but deliberately not gated, so a recalcitrant substrate (e.g. TFA) can still
+            surface a structurally competent variant for discovery; the activation barrier is
+            decided downstream by Step-06 MM-GBSA and Step-07 QM/MM, which are the arbiters.
+            '''
+            df_rank["Classification_Basis"] = (
+                "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step08")
+
+            """
+            Control read-out + VALIDATION. The ranking is geometry-driven and applies
+            NO substrate-class penalty, so where the proven substrates (FA/DFA) and the SN2
+            dead-end (TFA) land is itself a result. Beyond reporting positions/feasibility, this
+            block asserts the positive-control expectation: the native substrates Fluoroacetate
+            and Difluoroacetate must each surface at least one degrader-tier pose (is_degrader). A
+            screen in which the proven substrate fails to register is mis-calibrated, so the failure
+            is raised as a prominent WARNING and recorded, flagging a mis-calibrated ranking rather
+            than shipping it silently. Non-fatal (results are still written); the operator decides.
+            """
+            control_validation = "PASS"
+            try:
+                _lc = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
+                if _lc:
+                    _top = df_rank[df_rank["degrader_tier"] == CFG.TIER_TOP][_lc]
+                    _top_set = sorted(set(_top.astype(str).str.replace(r"^\d+_", "", regex=True)))
+                    _fa_rank = df_rank.loc[df_rank[_lc].astype(str).str.contains("Fluoroacetate", case=False, na=False), "Scientific_Rank"]
+                    _fa_best = int(_fa_rank.min()) if len(_fa_rank) else -1
+                    _tfa_feas = pd.to_numeric(
+                        df_rank.loc[df_rank[_lc].astype(str).str.fullmatch(r"\d+_TFA", na=False), "feasibility_factor"],
+                        errors="coerce").mean() if "feasibility_factor" in df_rank.columns else float("nan")
+                    console_info(f"Control read-out — top-tier ({CFG.TIER_TOP}) ligands: {_top_set} | "
+                                 f"FA best Scientific_Rank: {_fa_best} | TFA mean reported feasibility: {_tfa_feas:.3f}")
+
+                    # Positive-control assertion: FA and DFA must each register as a degrader.
+                    _hq = set(CFG.TIER_HIGH_QUALITY)
+                    _failed = []
+                    for _cname in ("Fluoroacetate", "Difluoroacetate"):
+                        _crows = df_rank[df_rank[_lc].astype(str).str.contains(_cname, case=False, na=False)]
+                        _is_deg = _crows["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0")) \
+                            if "is_degrader" in _crows.columns else pd.Series([], dtype=bool)
+                        _in_hq = _crows["degrader_tier"].isin(_hq) if "degrader_tier" in _crows.columns else pd.Series([], dtype=bool)
+                        if not (bool(_is_deg.any()) or bool(_in_hq.any())):
+                            _failed.append(_cname)
+                    if _failed:
+                        control_validation = f"FAIL({','.join(_failed)})"
+                        _msg = (f"  ⚠ CONTROL VALIDATION FAILED — positive control(s) {_failed} produced NO "
+                                f"degrader-tier pose. The screen is likely mis-calibrated; inspect before trusting ranks.")
+                        if logger: logger.warning(_msg)
+                        console_info(_msg)
+                    else:
+                        console_info("  ✔ Control validation PASS — FA and DFA both register as degraders.")
+                    df_rank["control_validation"] = control_validation
+            except Exception as _ce:
+                console_info(f" Control read-out/validation skipped ({_ce}).")
+
+            # Drop only an EXACT duplicate column (ligand_iptm ≡ iptm in Boltz-2 output);
+            # near-duplicates (geometric_tier, identity_pct) are retained as distinct fields.
+            cols_to_drop = ["tier_val"]
+            if ("ligand_iptm" in df_rank.columns and "iptm" in df_rank.columns
+                    and df_rank["ligand_iptm"].equals(df_rank["iptm"])):
+                cols_to_drop.append("ligand_iptm")
+            df_rank = df_rank.drop(columns=[c for c in cols_to_drop if c in df_rank.columns])
+
+            """
+            Final no-gaps guarantee: the published ranked CSV must contain no
+            empty cells. Fill any residual NaN with type-appropriate values —
+            numeric columns → 0.0, everything else → "N/A" text. This is a
+            safety net over the upstream per-field defaults so that no future
+            column (or resume edge case) can leave a blank cell.
+            """
+            for _col in df_rank.columns:
+                if df_rank[_col].isna().any():
+                    if pd.api.types.is_numeric_dtype(df_rank[_col]):
+                        df_rank[_col] = df_rank[_col].fillna(0.0)
+                    else:
+                        df_rank[_col] = df_rank[_col].astype(object).fillna("N/A")
+
+            df_rank.to_csv(rank_csv_path, index=False)
+            rank_columns_count = len(df_rank.columns)
+            console_info("Scientific Ranking Output CSV generated flawlessly.")
+        else: console_info(" Operation actively bypassed (No structured data detected).")
+    except Exception as e: console_info(f" Mechanism ranking operation structurally failed ({e})")
+
+    return rank_csv_path, rank_columns_count
+
 
 def main():
     # -------------------------------------------------------------------------------
@@ -5088,7 +5313,7 @@ def main():
                     _rmsd = _deha4_recalc.get("Active_Site_RMSD", 99.0)
                     ctrl_results[_lig_name]["Active_Site_RMSD"] = _rmsd
                     _geo = 0.0 if _rmsd >= 99.0 else 100.0 / (1.0 + _rmsd)
-                    ctrl_results[_lig_name]["ActiveSite_Conservation_Score"] = round(25.0 + 0.75 * _geo, 2)
+                    ctrl_results[_lig_name]["ActiveSite_Conservation_Score"] = round(CFG.CONSERV_REF_W_IDENT * 100.0 + CFG.CONSERV_REF_W_GEO * _geo, 2)
             except Exception as _recalc_err:
                 console_info(f"  [Warning] DeHa4 control re-analysis failed for {_lig_name}: {_recalc_err}")
 
@@ -5288,7 +5513,7 @@ def main():
                 console_info(f"  │{row_content:<{_w}}│")
         console_info(f"  └{'─'*_w}┘")
         console_info(f"  {'Mech = holistic 0–1 score: anchors (nucleophile reach + relay distances + clamp + halide stabilisation) + graded SN2 angle; ×0.25 on an A+B SN2 dead-end.':^{_w+4}}")
-        console_info(f"  {'A = scissile C–F bond-dissociation energy (kcal/mol; >123 too strong); B = backside steric occlusion (Σ vdW Å; >2.0 blocked). Both → non-degradable CF3 attack carbon.':^{_w+4}}")
+        console_info(f"  {f'A = scissile C–F bond-dissociation energy (kcal/mol; >{CFG.SCISSILE_CF_BDE_MAX:.0f} too strong); B = backside steric occlusion (Σ vdW Å; >{CFG.SN2_BACKSIDE_OCCL_MAX:.1f} blocked). Both → non-degradable CF3 attack carbon.':^{_w+4}}")
         console_info(f"  {'─'*_tot}\n")
     else:
         console_info("  [Warning] Could not extract sequence from 3R3U PDB — skipping reference jobs.")
@@ -6257,176 +6482,7 @@ def main():
     console_info("Final structured CSV format written flawlessly.")
 
     # -------------------------------------------------------------------------------
-    # Step 10.10: Scientific Ranking Matrix CSV Generation (MECHANISM-FIRST)
-    # -------------------------------------------------------------------------------
-    console_info("Executing the compilation of the strictly mechanistic Scientific Ranking CSV...")
-    rank_csv_path = None
-    rank_columns_count = 0
-    try:
-        rank_csv_name = f"7_Boltz2_FAcDs_Ranked_{ts_now}.csv"
-        rank_csv_path = PROD / rank_csv_name
-
-        if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
-            df_rank = pd.read_csv(CSV_PATH, low_memory=False)
-
-            for c in ["ActiveSite_Conservation_Score", "mechanistic_score", "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
-                if c not in df_rank.columns: df_rank[c] = 0.0
-            if "degrader_tier" not in df_rank.columns: df_rank["degrader_tier"] = CFG.TIER_DECOY
-
-            tier_map = CFG.TIER_SORT_WEIGHT
-            df_rank["tier_val"] = df_rank["degrader_tier"].map(tier_map).fillna(0)
-
-            """
-            Mechanism-first ranking. The degrader tier (hard chemistry gates + the Criterion-B
-            constellation cap) is the primary key. Within a tier candidates are ordered by the
-            gated continuous competence_score (CFG §5.5 — angle, nucleophile distance, carboxylate
-            clamp, trajectory deviation, triad relay and halide each once), then by the precise
-            catalytic_constellation_score (Criterion B — eight-residue geometric fidelity vs the
-            3R3U crystal), then active-site conservation, and finally by
-            model_degrader_consensus (the fraction of Boltz diffusion samples that independently
-            reach a degrader tier) as the LAST tiebreaker. Consensus is a tiebreaker ONLY — it
-            never crosses a tier or competence boundary, so a reproducible pose floats above a
-            single-frame fluke of equal geometry without a conformationally flexible true
-            substrate being demoted for its sampling spread, and nothing is filtered out.
-            Rank_Within_Ligand additionally ranks each protein among all proteins screened
-            against the same ligand — surfacing the strongest FAcD variant per ligand independent
-            of cross-ligand geometric bias. mechanistic_score and soft_catalytic_score are shown
-            for reference but not sorted on. mergesort keeps the order stable and reproducible.
-            """
-            df_rank = df_rank.sort_values(
-                by=["tier_val", "competence_score", "catalytic_constellation_score", "ActiveSite_Conservation_Score", "model_degrader_consensus"],
-                ascending=[False, False, False, False, False],
-                kind="mergesort",
-            )
-            df_rank.insert(0, "Scientific_Rank", range(1, len(df_rank) + 1))
-            _lig_col = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
-            if _lig_col:
-                df_rank.insert(1, "Rank_Within_Ligand", df_rank.groupby(_lig_col).cumcount() + 1)
-
-            '''
-            MD-ready selection (SECTION 18 SSOT). Flag the cohort that receives the
-            expensive downstream pipeline (CIF->PDB, PrepWizard, MM-GBSA, MD) so Steps
-            05-08 prepare/simulate only these rows, not all ~58k. Analysis/figures still
-            span the full population; only heavy compute is gated.
-            '''
-            _md_sel = CFG.MD_SELECTED_COL
-            _md_rnk = CFG.MD_RANK_COL
-            _mode = getattr(CFG, "MD_SELECTION_MODE", "tier")
-            if _mode == "topN":
-                _sel_mask = df_rank["Scientific_Rank"] <= CFG.MD_TOP_N
-            elif _mode == "per_ligand" and _lig_col:
-                _lig_bare = df_rank[_lig_col].astype(str).str.replace(r"^\d+_", "", regex=True)
-                _tier_ok  = df_rank["degrader_tier"] == CFG.MD_PER_LIGAND_TIER
-                _pick_idx = []
-                for _lg in CFG.MD_PER_LIGAND:
-                    _cand = df_rank.index[_tier_ok & (_lig_bare == _lg)]
-                    if len(_cand):
-                        # df_rank is already sorted by rank, so the first index is the best
-                        _pick_idx.append(_cand[0])
-                _sel_mask = df_rank.index.isin(_pick_idx)
-            else:   # "tier" (and fallback when no ligand column for per_ligand)
-                _sel_mask = df_rank["degrader_tier"].isin(CFG.MD_TIERS)
-            df_rank[_md_sel] = _sel_mask.astype(bool)
-            df_rank[_md_rnk] = pd.NA
-            _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
-            df_rank.loc[_sel_order, _md_rnk] = range(1, len(_sel_order) + 1)
-            reporter_md = f"  MD-ready selection: mode='{_mode}', {int(_sel_mask.sum())} complexes flagged {_md_sel}=True"
-            try:
-                console_info(reporter_md)
-            except Exception:
-                print(reporter_md, flush=True)
-
-            df_rank["Ranking_Score_Calc"] = (
-                "Tier:"  + df_rank["degrader_tier"].astype(str)
-                + " | Competence:" + df_rank["competence_score"].map("{:.3f}".format)
-                + " | Consensus:" + df_rank["model_degrader_consensus"].map("{:.2f}".format)
-                + " | Cons:" + df_rank["ActiveSite_Conservation_Score"].map("{:.2f}".format)
-            )
-            '''
-            Honest-claim disclaimer (carried on every row). The tiers/is_degrader flag are
-            GEOMETRIC near-attack-conformation (NAC) pose-quality descriptors from a static
-            Boltz-2 structure — NOT a kinetic turnover guarantee. Chemical feasibility (C–F
-            BDE, β-fluorination, sn2_dead_end, feasibility_factor) is computed and REPORTED
-            here but deliberately not gated, so a recalcitrant substrate (e.g. TFA) can still
-            surface a structurally competent variant for discovery; the activation barrier is
-            decided downstream by Step-06 MM-GBSA and Step-07 QM/MM, which are the arbiters.
-            '''
-            df_rank["Classification_Basis"] = (
-                "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step08")
-
-            """
-            Control read-out + VALIDATION. The ranking is geometry-driven and applies
-            NO substrate-class penalty, so where the proven substrates (FA/DFA) and the SN2
-            dead-end (TFA) land is itself a result. Beyond reporting positions/feasibility, this
-            block asserts the positive-control expectation: the native substrates Fluoroacetate
-            and Difluoroacetate must each surface at least one degrader-tier pose (is_degrader). A
-            screen in which the proven substrate fails to register is mis-calibrated, so the failure
-            is raised as a prominent WARNING and recorded, flagging a mis-calibrated ranking rather
-            than shipping it silently. Non-fatal (results are still written); the operator decides.
-            """
-            control_validation = "PASS"
-            try:
-                _lc = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
-                if _lc:
-                    _top = df_rank[df_rank["degrader_tier"] == CFG.TIER_TOP][_lc]
-                    _top_set = sorted(set(_top.astype(str).str.replace(r"^\d+_", "", regex=True)))
-                    _fa_rank = df_rank.loc[df_rank[_lc].astype(str).str.contains("Fluoroacetate", case=False, na=False), "Scientific_Rank"]
-                    _fa_best = int(_fa_rank.min()) if len(_fa_rank) else -1
-                    _tfa_feas = pd.to_numeric(
-                        df_rank.loc[df_rank[_lc].astype(str).str.fullmatch(r"\d+_TFA", na=False), "feasibility_factor"],
-                        errors="coerce").mean() if "feasibility_factor" in df_rank.columns else float("nan")
-                    console_info(f"Control read-out — top-tier ({CFG.TIER_TOP}) ligands: {_top_set} | "
-                                 f"FA best Scientific_Rank: {_fa_best} | TFA mean reported feasibility: {_tfa_feas:.3f}")
-
-                    # Positive-control assertion: FA and DFA must each register as a degrader.
-                    _hq = set(CFG.TIER_HIGH_QUALITY)
-                    _failed = []
-                    for _cname in ("Fluoroacetate", "Difluoroacetate"):
-                        _crows = df_rank[df_rank[_lc].astype(str).str.contains(_cname, case=False, na=False)]
-                        _is_deg = _crows["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0")) \
-                            if "is_degrader" in _crows.columns else pd.Series([], dtype=bool)
-                        _in_hq = _crows["degrader_tier"].isin(_hq) if "degrader_tier" in _crows.columns else pd.Series([], dtype=bool)
-                        if not (bool(_is_deg.any()) or bool(_in_hq.any())):
-                            _failed.append(_cname)
-                    if _failed:
-                        control_validation = f"FAIL({','.join(_failed)})"
-                        _msg = (f"  ⚠ CONTROL VALIDATION FAILED — positive control(s) {_failed} produced NO "
-                                f"degrader-tier pose. The screen is likely mis-calibrated; inspect before trusting ranks.")
-                        if logger: logger.warning(_msg)
-                        console_info(_msg)
-                    else:
-                        console_info("  ✔ Control validation PASS — FA and DFA both register as degraders.")
-                    df_rank["control_validation"] = control_validation
-            except Exception as _ce:
-                console_info(f" Control read-out/validation skipped ({_ce}).")
-
-            # Drop only an EXACT duplicate column (ligand_iptm ≡ iptm in Boltz-2 output);
-            # near-duplicates (geometric_tier, identity_pct) are retained as distinct fields.
-            cols_to_drop = ["tier_val"]
-            if ("ligand_iptm" in df_rank.columns and "iptm" in df_rank.columns
-                    and df_rank["ligand_iptm"].equals(df_rank["iptm"])):
-                cols_to_drop.append("ligand_iptm")
-            df_rank = df_rank.drop(columns=[c for c in cols_to_drop if c in df_rank.columns])
-
-            """
-            Final no-gaps guarantee: the published ranked CSV must contain no
-            empty cells. Fill any residual NaN with type-appropriate values —
-            numeric columns → 0.0, everything else → "N/A" text. This is a
-            safety net over the upstream per-field defaults so that no future
-            column (or resume edge case) can leave a blank cell.
-            """
-            for _col in df_rank.columns:
-                if df_rank[_col].isna().any():
-                    if pd.api.types.is_numeric_dtype(df_rank[_col]):
-                        df_rank[_col] = df_rank[_col].fillna(0.0)
-                    else:
-                        df_rank[_col] = df_rank[_col].astype(object).fillna("N/A")
-
-            df_rank.to_csv(rank_csv_path, index=False)
-            rank_columns_count = len(df_rank.columns)
-            console_info("Scientific Ranking Output CSV generated flawlessly.")
-        else: console_info(" Operation actively bypassed (No structured data detected).")
-    except Exception as e: console_info(f" Mechanism ranking operation structurally failed ({e})")
+    rank_csv_path, rank_columns_count = generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now)
 
     save_alignment_cache_final(D_ALN / "Alignment_Stats.csv")
 

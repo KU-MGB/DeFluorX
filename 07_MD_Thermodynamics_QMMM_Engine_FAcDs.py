@@ -19,11 +19,11 @@ Date   : 10 June 2026 <───────────────────
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
                   00_03_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
-  Reads         : <Run>/6_Physics_Validation/MolecularDynamics/*Rank_N*/*-out.cms
-                                                               /*_trj/   (any dir name containing Rank_N)
+  Reads         : <Run>/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
+                                                               /*_trj/   (dir carrying the _R_N rank token; legacy *Rank_N* also matched)
                                                                /*.eaf
-                  <Run>/6_Physics_Validation/WaterMaps/*Rank_N*.csv  (Maestro WM export)
-                  <Run>/6_Physics_Validation/WaterMaps/*Rank_N*/*_wm.maegz
+                  <Run>/6_Physics_Validation/WaterMaps/watermap_R_N.csv  (Maestro WM export)
+                  <Run>/6_Physics_Validation/WaterMaps/watermap_R_N/*_wm.maegz
                   <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
@@ -192,6 +192,7 @@ for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from collections import defaultdict
 
 import matplotlib
 matplotlib.use('Agg')
@@ -422,6 +423,35 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     if not cf_pairs:
         console_info(f"    {ConsoleColours.FAIL}[!] No C-F bonds found in ligand.{ConsoleColours.ENDC}")
         return None, None, None, None, None
+
+    # Restrict the warhead to the scissile α-carbon — the carbon adjacent to the ligand
+    # carboxylate head — mirroring Step 02's reactive-centre gating. Only C–F bonds ON
+    # that α-carbon are candidate scissile bonds, so an internal CF2/CF3 of a polyfluoro
+    # decoy (e.g. PFOA) is not modelled as the reaction centre. TFA's α-CF3 is retained
+    # (its scissile carbon IS the α-carbon). Falls back to all C–F bonds, logged, when no
+    # carboxylate/α-carbon can be identified (e.g. a non-carboxylate chemotype).
+    def _carboxylate_alpha_carbon():
+        _lig_idx = {int(i) for i in lig_atoms}
+        for _i in lig_atoms:
+            _a = cms_model.atom[_i]
+            if _a.atomic_number != 6:
+                continue
+            _o_neigh = [b.atom2 for b in _a.bond if b.atom2.atomic_number == 8]
+            if len(_o_neigh) >= 2:                       # carboxylate carbon (C bonded to ≥2 O)
+                for b in _a.bond:
+                    if b.atom2.atomic_number == 6 and b.atom2.index in _lig_idx:
+                        return b.atom2.index             # the α-carbon
+        return None
+
+    _alpha_idx = _carboxylate_alpha_carbon()
+    if _alpha_idx is not None:
+        _alpha_cf = [(c, f) for (c, f) in cf_pairs if c == _alpha_idx]
+        if _alpha_cf:
+            cf_pairs = _alpha_cf
+        else:
+            console_info("    [i] α-carbon carries no C–F bond; retaining all ligand C–F bonds.")
+    else:
+        console_info("    [i] No ligand carboxylate/α-carbon identified; retaining all ligand C–F bonds.")
 
     # 2. Index all protein sidechain atoms by residue
     backbone_atoms = {'N', 'C', 'CA', 'O', 'H', 'HA'}
@@ -796,7 +826,7 @@ def load_eaf_scalar_series(eaf_path, keyword: str) -> np.ndarray:
 def format_job_label(job_name: str, rank: int) -> str:
     """Formats verbose job names to 'Rx_ProteinName_LigandName'."""
     clean = job_name.replace("desmond_md_job_", "").replace("_Prepared", "").replace("_CONTROL", "")
-    clean = re.sub(r"^Rank_\d+_", "", clean)
+    clean = re.sub(r"^R(?:ank)?_\d+_", "", clean)
     parts = [p for p in clean.split('_') if p]
     if len(parts) >= 5:
         prot = "_".join(parts[2:-2])
@@ -823,9 +853,18 @@ def load_triad_mapping(csv_path: Path) -> dict:
             return {}
 
         def get_col(keywords):
+            # Short keywords (<=4 chars) match only as a whole underscore/space token,
+            # so 'ang' cannot hit 'range', 'dist' cannot hit 'distribution', and 'prob'
+            # cannot hit 'problem'. Longer keywords keep substring matching.
+            import re as _re
             for k in keywords:
+                kl = k.lower()
                 for col in df.columns:
-                    if k.lower() in col.lower():
+                    cl = col.lower()
+                    if len(kl) <= 4:
+                        if kl in _re.split(r'[^a-z0-9]+', cl):
+                            return col
+                    elif kl in cl:
                         return col
             return None
 
@@ -1244,12 +1283,12 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         try:    dt_str   = str(int(float(dt or 0)))
         except (ValueError, TypeError): dt_str   = '–'
 
-        dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < 3.8)
+        dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < CFG.NAC_DIST_RELAXED)
                     else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 5.0)
                     else '#DC2626'))
-        
-        ang_col = ('#15803D' if (ang_str != 'N/A' and float(ang) > 145.0)
-                   else ('#EA580C' if (ang_str != 'N/A' and float(ang) > 120.0)
+
+        ang_col = ('#15803D' if (ang_str != 'N/A' and float(ang) > CFG.NAC_ANGLE_RELAXED)
+                   else ('#EA580C' if (ang_str != 'N/A' and float(ang) > CFG.SN2_ANGLE_MARGINAL_MIN)
                    else '#DC2626'))
 
         ax_ann.text(0.10, y, wm_str,   ha='center', va='center', fontsize=8,
@@ -1345,29 +1384,78 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 # SECTION 7: QSITE AUTOMATION
 # ===============================================================================
 
+# Solvation-droplet radius (Å) for the QSite .mae: only solvent within this
+# distance of the ligand is retained, trimming the full periodic box to a
+# tractable local MM region. Defined here — ahead of the other QSite constants
+# lower in the file — because it is a def-time default argument of
+# write_qsite_droplet(); a default evaluated at import needs the name to exist.
+_QSITE_DROPLET_RADIUS = float(getattr(CFG, "QSITE_DROPLET_RADIUS", 8.0))
+
+
+def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
+                        radius: float = _QSITE_DROPLET_RADIUS) -> str:
+    """Write an uncompressed QSite .mae trimmed to a solvation droplet: the full
+    protein + ligand + only solvent molecules with an atom within `radius` Å of
+    any ligand atom. Trims the full periodic water box to a tractable local MM
+    region for QM/MM. Falls back to writing the full structure on any error, so
+    QSite always receives a valid input. Returns a short status string for logs.
+    """
+    try:
+        st = cms_model.fsys_ct.copy()
+        lig_xyz = np.array([a.xyz for a in st.atom
+                            if a.pdbres.strip() == lig_resname])
+        if lig_xyz.size == 0:
+            st.write(str(path))
+            return "full (no ligand atoms found — not trimmed)"
+        _water_res = {r.strip().upper() for r in CFG.SOLVENT_RESTYPES}
+        _mol_atoms = defaultdict(list)
+        for a in st.atom:
+            if a.pdbres.strip().upper() in _water_res:
+                _mol_atoms[a.molecule_number].append(a.index)
+        _del = []
+        for _mol, _aidxs in _mol_atoms.items():
+            _coords = np.array([st.atom[i].xyz for i in _aidxs])
+            _dmin = np.min(np.linalg.norm(
+                _coords[:, None, :] - lig_xyz[None, :, :], axis=2))
+            if _dmin > radius:
+                _del.extend(_aidxs)
+        if _del:
+            st.deleteAtoms(_del)
+        st.write(str(path))
+        return f"droplet r={radius:.1f} Å (removed {len(_del)} solvent atoms)"
+    except Exception as exc:
+        cms_model.fsys_ct.write(str(path))
+        return f"full (droplet trim failed: {exc})"
+
+
 def generate_qsite_inputs(mae_path: Path, job_name: str,
                           nuc_num, stab_f_num, lig_c_idx, nuc_o_idx,
                           base_num=None, acid_num=None,
-                          lig_charge: int = None, lig_resname: str = "LIG") -> Path:
+                          lig_charge: int = None, lig_resname: str = "LIG",
+                          cradle_nums=None) -> Path:
     """
     Write a valid QSite/Jaguar QM/MM relaxed-scan .in for the SN2
     dehalogenation reaction coordinate (Nu_O···C_lig distance scan).
 
     The format follows the genuine Jaguar/QSite input specification — verified
     against `schrodinger.application.qsite.input.QSiteInput` and the Jaguar
-    `scan-relaxed` example — rather than the previous non-parsable pseudo-format:
+    `scan-relaxed` example:
       MAEFILE      — the structure (uncompressed .mae, same folder)
       &gen         — DFT functional / basis / QM charge / QM-MM mode / relaxed opt
       &qmregion    — ligand molecule (QM) + catalytic-sidechain QM/MM cuts
       &zvar/&coord — relaxed scan of the Nu_O–C_lig distance (start → product)
 
     QM region = LIG substrate + Asp110 (Nuc) + His277 (Base) + Asp134 (Acid)
-    + His155 (StabH) sidechains. Excluding Base/Acid from QM would push the
-    proton-transfer half of the mechanism onto the MM force field.
+    + His155 (StabH) sidechains + the fluoride-cradle aromatic/H-bond donors
+    (TRP/TYR/HIS, `cradle_nums`) + up to `_QM_WATER_MAX` coordinating waters
+    within `_QM_WATER_RADIUS` of the reaction centre. Excluding Base/Acid from QM
+    would push the proton-transfer half of the mechanism onto the MM force field;
+    excluding the cradle donors / first-shell waters would leave the F⁻ leaving
+    group under-stabilised and bias the QM/MM barrier upward.
 
     NOTE: no implicit-solvation keyword is written. The extracted frame retains
     its explicit TIP3P water box in the MM region, so adding an implicit model
-    (the old `SOLVATION_METHOD sgb`) would double-count solvation. Strip the box
+    (an implicit `SOLVATION_METHOD sgb`) would double-count solvation. Strip the box
     and re-add `isolv` only for an implicit-solvent QM/MM variant.
     """
     inp_path = mae_path.parent / f"{job_name}_QSite_SN2.in"
@@ -1394,8 +1482,8 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     #    homolog's own numbering. Reused for both the charge sum and the cut table.
     _resolved_cuts = []
     _seen = set()
-    for rn in (nuc_num, base_num, acid_num, stab_f_num):
-        if not rn or rn in _seen:        # de-dup: Base/Acid may map to one residue
+    for rn in (nuc_num, base_num, acid_num, stab_f_num, *(cradle_nums or [])):
+        if not rn or rn in _seen:        # de-dup: Base/Acid/cradle may share a residue
             continue
         _seen.add(rn)
         _r = _resolve_cut(rn)
@@ -1405,7 +1493,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     # ── QM region net charge — derived from the structure, not assumed ─────
     # QM atoms = full ligand + each catalytic residue's sidechain beyond the
     # Cα–Cβ cut (CA/backbone remain MM). Instead of assuming protonation states
-    # (the old `lig − 1` counted only the nucleophile and silently presumed a
+    # (a fixed `lig − 1` would count only the nucleophile and presume a
     # protonated acid and neutral His), sum the *actual* formal charges those
     # atoms carry in the prepared structure. This keeps `molchg` correct for
     # whatever PrepWizard assigned (deprotonated Asp −1, neutral His, protonated
@@ -1444,6 +1532,37 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         for rn, molid, chain in _resolved_cuts
     ]
 
+    # ── Coordinating catalytic waters → whole-molecule QM ──────────────────────
+    # First-shell waters within _QM_WATER_RADIUS of the reaction centre (scissile
+    # C, leaving F, nucleophile O) stabilise the departing fluoride; add the
+    # nearest few as full QM molecules so the leaving-group energy is not left to
+    # the MM force field. Self-contained on the structure's coordinates.
+    _qm_water_mols = []
+    try:
+        _centres = []
+        for _ai in (nuc_o_idx, lig_c_idx):
+            if _ai and 1 <= int(_ai) <= st.atom_total:
+                _centres.append(np.array(st.atom[int(_ai)].xyz))
+        for a in st.atom:
+            if a.pdbres.strip() == lig_resname and (a.element or "").strip() == "F":
+                _centres.append(np.array(a.xyz))
+        _water_res = {r.strip().upper() for r in CFG.SOLVENT_RESTYPES}
+        if _centres:
+            _cen_arr = np.asarray(_centres)
+            _cand = []
+            for a in st.atom:
+                if (a.element or "").strip() == "O" and a.pdbres.strip().upper() in _water_res:
+                    _d = float(np.min(np.linalg.norm(_cen_arr - np.array(a.xyz), axis=1)))
+                    if _d <= _QM_WATER_RADIUS:
+                        _cand.append((_d, a.molecule_number))
+            for _d, _mol in sorted(_cand):
+                if _mol != lig_mol and _mol not in _qm_water_mols:
+                    _qm_water_mols.append(_mol)
+                if len(_qm_water_mols) >= _QM_WATER_MAX:
+                    break
+    except Exception as _wexc:
+        _qm_water_mols = []
+
     # ── Relaxed scan: Nu_O–C_lig distance, NAC start → product ────────────
     _start = CFG.QSITE_SCAN_START
     _end   = CFG.QSITE_SCAN_START + CFG.QSITE_SCAN_STEP * (CFG.QSITE_SCAN_NSTEPS - 1)
@@ -1468,6 +1587,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         + ("\n".join(_cuts) + "\n" if _cuts else "")
         + " molid theory\n"
         + (f"     {lig_mol}     qm\n" if lig_mol else "")
+        + "".join(f"     {wm}     qm\n" for wm in _qm_water_mols)
         + "&\n"
         "&zvar\n"
         f"r = {_start:g} to {_end:g} in {CFG.QSITE_SCAN_NSTEPS}\n"
@@ -1566,15 +1686,32 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
 _N_PRELOAD_WORKERS = min(4, CFG.GLOBAL_MAX_WORKERS)
 
 # Solvent sphere radius (Å) around the nucleophile for water blockade.
-# Only solvent within this radius at frame 0 is tracked — reduces per-frame
-# work from ~10,000 solvent atoms to ~100-200 while covering the SN2 runway.
+# Solvent that enters this radius in ANY sampled frame is tracked — reduces
+# per-frame work from ~10,000 solvent atoms to ~100-200 while covering the SN2
+# runway across the whole trajectory (not just frame 0).
 _SOL_SPHERE_RADIUS = getattr(CFG, "SOLVENT_SPHERE_RADIUS", 20.0)
+
+# Number of evenly-spaced frames sampled to build the blockade solvent superset.
+# The frame-0-only sphere missed waters that diffuse into the runway later,
+# biasing the blockade metric low on long trajectories; the union over these
+# samples removes that bias while keeping a fixed pre-load set.
+_SOL_SPHERE_SAMPLE_FRAMES = max(1, int(getattr(CFG, "SOLVENT_SPHERE_SAMPLE_FRAMES", 12)))
 
 # QSite execution settings. Initialised from CFG and overridden per-run by main()
 # from the CLI. Kept as module globals (CFG is a frozen dataclass and cannot be
 # mutated). Read-only inside the worker threads.
 _QSITE_RUN = CFG.QSITE_RUN
 _QSITE_PROCS = CFG.QSITE_PROCS
+
+# QM-region coordinating waters: solvent O within this radius (Å) of the
+# scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
+# as a whole molecule (F⁻ leaving-group stabilisation). Capped to keep the QM
+# electron count tractable.
+_QM_WATER_RADIUS = float(getattr(CFG, "QSITE_QM_WATER_RADIUS", 3.5))
+_QM_WATER_MAX    = int(getattr(CFG, "QSITE_QM_WATER_MAX", 3))
+
+# _QSITE_DROPLET_RADIUS is defined earlier (just above write_qsite_droplet) so it
+# exists when that function's default argument is evaluated at import time.
 
 
 def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -> float:
@@ -1604,13 +1741,18 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # Flexible discovery: try every directory pattern Desmond/pipeline may produce
     _md_root   = work_dir / "MolecularDynamics"
     _candidates = [
+        _md_root / f"desmond_md_job_R_{rank}",
         _md_root / f"desmond_md_job_Rank_{rank}",
         _md_root / f"Results_MD_Simulation_Rank_{rank}",
         _md_root / f"desmond_md_Rank_{rank}",
         _md_root / f"md_job_Rank_{rank}",
     ]
-    # Also glob for any directory containing "Rank_{rank}" (covers custom names)
-    _candidates += sorted(_md_root.glob(f"*Rank_{rank}*")) if _md_root.exists() else []
+    # Also glob for any directory whose name ends in the rank token — covers both
+    # the current '_R_N' naming and the legacy '*Rank_N*' custom names. The exact
+    # '_R_{rank}' suffix avoids matching R_1 against R_10/R_11.
+    if _md_root.exists():
+        _candidates += sorted(_md_root.glob(f"*_R_{rank}"))
+        _candidates += sorted(_md_root.glob(f"*Rank_{rank}*"))
     job_folder = next((p for p in _candidates if p.is_dir()), None)
     if job_folder is None:
         console_info(f"    {ConsoleColours.FAIL}[!] Job folder missing for Rank {rank} in {_md_root}{ConsoleColours.ENDC}")
@@ -1671,9 +1813,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # ── WaterMap spatial sites (maegz) — flexible naming discovery ───────────
     _wm_root = work_dir / "WaterMaps"
-    # Find any subdirectory containing "Rank_{rank}" (any capitalisation/separator)
+    # Find any subdirectory carrying the rank token: current 'watermap_R_N'
+    # (exact '_R_{rank}' suffix so R_1 ≠ R_10) or legacy '*Rank_N*' custom names.
     _wm_dir_candidates = (
-        sorted(_wm_root.glob(f"*[Rr]ank*{rank}*")) if _wm_root.exists() else []
+        sorted(_wm_root.glob(f"*_R_{rank}")) + sorted(_wm_root.glob(f"*[Rr]ank*{rank}*"))
+        if _wm_root.exists() else []
     )
     wm_maegz = None
     for _wmd in _wm_dir_candidates:
@@ -1692,6 +1836,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     wm_csv_path = None
     if _wm_root.exists():
         _csv_hits = (
+            sorted(_wm_root.glob(f"*_R_{rank}.csv")) +
+            sorted(_wm_root.glob(f"*_R_{rank}_*.csv")) +
             sorted(_wm_root.glob(f"*[Rr]ank*{rank}*.csv")) +
             sorted(_wm_root.glob(f"*[Rr]ank_{rank}.csv"))
         )
@@ -1738,6 +1884,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # Base and Acid residue numbers from Smart-Lock — needed for QM region expansion.
     base_num  = cms_model.atom[idx_base[0]].resnum if idx_base else None
     acid_num  = cms_model.atom[idx_acid[0]].resnum if idx_acid else None
+    # Fluoride-cradle residue numbers (TRP/TYR/HIS donors) → QM region cuts.
+    cradle_nums = sorted({cms_model.atom[i].resnum for i in (idx_cradle or [])})
 
     # ── Mapping sanity check: Nuc–Base distance in frame 0 ─────────────────────
     # PrepWizard residue renumbering can silently mis-map the triad; catch it here
@@ -1769,6 +1917,16 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     n_mapped   = sum(1 for v in dt_indices.values() if v)
     console_info(f"    {ConsoleColours.OKGREEN}✔ {n_mapped}/{len(DREAM_TEAM_REF)} Dream Team residues mapped.{ConsoleColours.ENDC}")
 
+    # ── Reconcile the fluoride-stabiliser residue number ───────────────────────
+    # Nuc/Base/Acid each fall back to their Smart-Lock geometry resnum when the
+    # alignment map lacks an entry; stab_f_num was alignment-map-only and could
+    # arrive at the QSite QM region as None (dropping the His155-type stabiliser
+    # cut). Reconcile it here with the geometry-derived Dream Team mapping so its
+    # provenance matches the rest of the triad.
+    if not stab_f_num and dt_indices.get('Stab_H'):
+        stab_f_num = cms_model.atom[dt_indices['Stab_H'][0]].resnum
+        console_info(f"    [i] Stab_H resnum recovered from Smart-Lock geometry: {stab_f_num}")
+
     # Filter out ptypes with special characters (e.g. '/') that break ASL parsing.
     _safe_restypes = [r for r in _SOLVENT_RESTYPES if r.isalnum() or '_' in r]
     _sol_asl       = " OR ".join(f"res.ptype {r}" for r in _safe_restypes)
@@ -1781,12 +1939,25 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _t_pre = time.time()
 
     # 1. Filter solvent to a sphere around the active site (95%+ reduction).
+    #    UNION across evenly-spaced sampled frames (centred on the nucleophile in
+    #    each) rather than freezing the sphere at frame 0, so any water that ever
+    #    obstructs the SN2 runway is tracked — the frozen sphere biased the
+    #    blockade metric low on long trajectories.
     _nuc_cen_0 = (np.mean([tr[0].pos(i) for i in idx_nuc], axis=0)
                   if idx_nuc else None)
-    if _nuc_cen_0 is not None and sol_indices:
-        _sol_use = [s for s in sol_indices
-                    if np.linalg.norm(np.array(tr[0].pos(s)) - _nuc_cen_0)
-                       <= _SOL_SPHERE_RADIUS]
+    if idx_nuc and sol_indices:
+        _n_fr       = len(tr)
+        _sample_idx = (np.unique(np.linspace(0, _n_fr - 1,
+                                             min(_SOL_SPHERE_SAMPLE_FRAMES, _n_fr)).astype(int))
+                       if _n_fr > 1 else np.array([0]))
+        _sol_arr = np.asarray(sol_indices)
+        _keep    = np.zeros(len(_sol_arr), dtype=bool)
+        for _fi in _sample_idx:
+            _fr   = tr[int(_fi)]
+            _cen  = np.mean([_fr.pos(i) for i in idx_nuc], axis=0)
+            _spos = np.array([_fr.pos(s) for s in sol_indices])
+            _keep |= (np.linalg.norm(_spos - _cen, axis=1) <= _SOL_SPHERE_RADIUS)
+        _sol_use = _sol_arr[_keep].tolist()
     else:
         _sol_use = []
 
@@ -2034,6 +2205,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if triad_ok and min_nuc_dist <= THRESHOLD_STRICT_NAC_DIST and max_ang >= THRESHOLD_STRICT_NAC_ANGLE:
             n_strict += 1
         if score > best_score and _productive > 0.0:
+            # Single most pre-organised (highest-score) NAC frame. The QM/MM barrier
+            # computed from it is therefore a LOWER BOUND (best-case reactive geometry),
+            # not an ensemble-representative estimate.
             best_score = score; ideal_frame_idx = f_idx
             ideal_geom = {'nuc_o': best_nuc_idx, 'lig_c': best_ca_idx}
 
@@ -2164,7 +2338,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         # 3. Viewer-friendly full-system structure (.maegz).
         mae_path = job_out_dir / f"{job_name}_Ideal_Final.maegz"
         cms_model.fsys_ct.write(str(mae_path))
-        print(f"  [Rank {rank}] QM/MM frame extracted | best frame: {ideal_frame_idx} | score: {best_score:.2f}", flush=True)
+        print(f"  [Rank {rank}] QM/MM frame extracted | best frame: {ideal_frame_idx} | score: {best_score:.2f} (lower-bound: most pre-organised NAC frame)", flush=True)
 
         # 4. QSite QM/MM relaxed scan — folder-wise and idempotent: if the output
         #    folder already exists the whole step is skipped (mirrors the PDB-prep
@@ -2174,13 +2348,18 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             console_info(f"    [Rank {rank}] QSite folder exists — skipping: {qsite_dir.name}")
         else:
             qsite_dir.mkdir(parents=True, exist_ok=True)
-            # QSite/Jaguar reads uncompressed .mae (not .maegz).
+            # QSite/Jaguar reads uncompressed .mae (not .maegz). Trim the full
+            # periodic water box to a local solvation droplet so the QM/MM MM
+            # region stays tractable; the coordinating first-shell waters (added
+            # to the QM region below) sit well inside the droplet radius.
             qsite_mae = qsite_dir / f"{job_name}_Ideal_Final.mae"
-            cms_model.fsys_ct.write(str(qsite_mae))
+            _drop_status = write_qsite_droplet(cms_model, qsite_mae, lig_resname)
+            print(f"  [Rank {rank}] QSite .mae solvent: {_drop_status}", flush=True)
             inp_path = generate_qsite_inputs(
                 qsite_mae, job_name, nuc_num, stab_f_num,
                 ideal_geom['lig_c'], ideal_geom['nuc_o'],
-                base_num=base_num, acid_num=acid_num, lig_resname=lig_resname)
+                base_num=base_num, acid_num=acid_num, lig_resname=lig_resname,
+                cradle_nums=cradle_nums)
             for _artifact in (qsite_mae, inp_path):
                 if not _artifact.exists() or _artifact.stat().st_size == 0:
                     console_info(f"    [!] QSite input missing/empty for {job_name}: {_artifact.name}")
@@ -2530,7 +2709,15 @@ def main():
         console_title("Finalising Global MD Rankings")
 
         df_master = pd.DataFrame(master_stats)
-        df_master = df_master.sort_values(by="Catalytic_Viability_Pct", ascending=False)
+        # Stable (mergesort) sort with a deterministic secondary key so equal viability
+        # values yield a reproducible Dynamic_Rank across runs (default quicksort is
+        # unstable and would shuffle ties non-deterministically).
+        _tiebreak = next((c for c in ("Scientific_Rank", "Job", "Job_Name", "Label",
+                                      "Protein", "Ligand") if c in df_master.columns), None)
+        _sort_cols = ["Catalytic_Viability_Pct"] + ([_tiebreak] if _tiebreak else [])
+        _ascending = [False] + ([True] if _tiebreak else [])
+        df_master = df_master.sort_values(by=_sort_cols, ascending=_ascending,
+                                          kind="mergesort").reset_index(drop=True)
         df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
 
         # Merge Prime MM-GBSA ΔG_bind (Step 06) onto the master by Scientific_Rank so the

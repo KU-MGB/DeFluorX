@@ -160,23 +160,15 @@ def console_separator() -> None:
     _console_sep(logger, heavy=True)
 
 
-class ReportManager:
-    """Manages simultaneous logging to console and file."""
-    def __init__(self, out_dir: Path):
-        self.path = out_dir / "00_Dendrogram_Log.txt"
-        with open(self.path, "w") as f:
-            f.write("BOLTZ-2 PHYLOGENY PIPELINE REPORT\n")
-            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("=" * 79 + "\n\n")
+ReportManager = _utils_mod.ReportManager   # shared logger (00_03)
 
-    def log(self, text: str):
-        console_info(text)
-        with open(self.path, "a") as f: f.write(f"[LOG] {text}\n")
 
-    def section(self, title: str):
-        print(f"\n{ConsoleColours.BOLD}{title}{ConsoleColours.ENDC}", flush=True)
-        print(SEPARATOR, flush=True)
-        with open(self.path, "a") as f: f.write(f"\n--- {title} ---\n")
+def _make_reporter(out_dir: Path):
+    """Construct the shared ReportManager with this step's log path/header/logger."""
+    return ReportManager(
+        out_dir / "00_Dendrogram_Log.txt",
+        "BOLTZ-2 PHYLOGENY PIPELINE REPORT",
+        separator=SEPARATOR, rule_width=79, log_fn=console_info)
 
 
 def clean_id(name: str) -> str:
@@ -232,12 +224,17 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
     Z              = linkage(condensed_dist, method=CFG.DENDRO_LINKAGE_METHOD)
     tree_node      = to_tree(Z, rd=False)
 
+    def _nwk_safe(lbl) -> str:
+        # Newick metacharacters ( ) , : ; [ ] ' " and whitespace corrupt the tree
+        # string and break downstream parsers; collapse any run of them to '_'.
+        return re.sub(r"[\s(),:;\[\]'\"]+", "_", str(lbl))
+
     def build_newick(node, parentdist):
         # Clamp branch length at 0: a non-monotonic linkage can give node.dist >
         # parentdist, which would emit a negative branch length (rejected by most
         # tree parsers). max(0.0, …) keeps the Newick valid.
         if node.is_leaf():
-            return f"{labels[node.id]}:{max(0.0, parentdist - node.dist):.4f}"
+            return f"{_nwk_safe(labels[node.id])}:{max(0.0, parentdist - node.dist):.4f}"
         left_str  = build_newick(node.left,  node.dist)
         right_str = build_newick(node.right, node.dist)
         return f"({left_str},{right_str}):{max(0.0, parentdist - node.dist):.4f}"
@@ -303,7 +300,10 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
         zf.write(csv_path,  csv_path.name)
         zf.write(html_path, html_path.name)
 
-    reporter.log(f"  ✓ Suite Generated: {prefix} ({len(labels)} Proteins) -> {out_dir.resolve()}")
+    _lig_col = next((c for c in ["Ligand_Name", "ligand"] if c in csv_df.columns), None)
+    _n_lig = int(csv_df[_lig_col].nunique()) if _lig_col else 0
+    _lig_txt = f" × {_n_lig} ligands" if _n_lig else ""
+    reporter.log(f"  ✓ Suite Generated: {prefix} ({len(labels)} proteins{_lig_txt}) -> {out_dir.resolve()}")
 
 
 # -------------------------------------------------------------------------------
@@ -364,9 +364,12 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Master Dendrogram\n")
 
     valid_csv_prots = set(df[prot_col].astype(str).unique())
+    # Pre-compute the cleaned CSV ids once (O(M)) so the membership test below is O(1)
+    # per FASTA key rather than an O(N·M) regex recomputation.
+    _valid_clean_ids = {clean_id(p) for p in valid_csv_prots}
     global_seqs = {
         k: v for k, v in fasta_dict.items()
-        if any(clean_id(k) == clean_id(p) for p in valid_csv_prots)
+        if clean_id(k) in _valid_clean_ids
     }
 
     if not global_seqs:
@@ -396,9 +399,10 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
             if tier_df.empty: continue
 
             tier_prots = set(tier_df[prot_col].astype(str).unique())
+            _tier_clean_ids = {clean_id(p) for p in tier_prots}
             tier_seqs  = {
                 k: v for k, v in global_seqs.items()
-                if any(clean_id(k) == clean_id(p) for p in tier_prots)
+                if clean_id(k) in _tier_clean_ids
             }
 
             if len(tier_seqs) < 2:
@@ -471,7 +475,7 @@ def main():
     df = pd.read_csv(csv_path, low_memory=False)
     console_info(f"Loaded: {csv_path.name} ({len(df):,} rows)")
 
-    reporter = ReportManager(out_dir)
+    reporter = _make_reporter(out_dir)
 
     try:
         generate_phylogenies(df, prod_dir, out_dir, reporter)

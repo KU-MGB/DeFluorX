@@ -209,6 +209,11 @@ class CFG:
     BOLTZ_W_INTERACTIONS: float = 1.5   # density of physical interactions
     BOLTZ_W_CONF: float         = 1.0   # global structural confidence (ptm)
 
+    # Binding-probability logit normalisers (Step 02 binding_likelihood_computed).
+    BIND_INT_DENSITY_NORM: float = 2.0   # interaction-density saturation normaliser in the logit
+    BIND_CROSS_PAE_NORM: float   = 50.0  # cross-interface PAE normaliser in the logit
+    BIND_LOGIT_CLAMP: float      = 50.0  # ± clamp on the logit before the sigmoid
+
     # ===============================================================================
     # SECTION 2: INPUT & REFERENCE DATA
     # ===============================================================================
@@ -598,6 +603,7 @@ class CFG:
     # Step 3.8: General catalytic site
     # -------------------------------------------------------------------------------
     CATALYTIC_DIST_CUTOFF: float   = 6.0    # Å  residue included as "near active site"
+    TAIL_MIN_BOND_DISTANCE: int    = 3      # topological bond distance (> this) defining ligand "tail" atoms for the mainchain-clash metric (Step 02)
     PLIP_CONTACT_FALLBACK_DIST: float = 5.0 # Å  fallback distance when a PLIP bs_residue lacks min_dist
     LIG_COVALENT_BOND_DIST: float  = 1.85   # Å  max inter-atom distance drawn as a covalent bond (2D interaction diagram)
 
@@ -669,7 +675,7 @@ class CFG:
     graded SN2 attack angle, whereas §8 assigns the discrete tier. The Nuc–C gate
     reuses NAC_DIST_STRICT (§4.1) and the soft-score angle sigmoid reuses
     NAC_ANGLE_STRICT so the contact gates stay in lock-step. The mech_score angle
-    term is graded separately via MECH_W_ANGLE / MECH_ANGLE_FLOOR (below).
+    term is graded separately via MECH_W_ANGLE (below).
     """
     MECH_STAB_RADIUS: float  = 5.5   # Å  TRP/TYR (or dynamic polar) → F⁻ halide-stabilisation contact
     MECH_CLAMP_RADIUS: float = 5.0   # Å  ARG carboxylate clamp → ligand contact
@@ -689,10 +695,12 @@ class CFG:
     holistic: five binary anchor checks (weight 0.70 total) plus a graded SN2
     attack-angle term (weight 0.30), so a pose with intact catalytic machinery but a
     non-productive attack angle can no longer read a perfect 1.00 — the angle is
-    folded into mech, not scored separately. The angle term is LINEAR over the full
-    physical 0–180° range (MECH_ANGLE_FLOOR = 0 → no arbitrary cut-off, hence no bias
-    toward any angle band); the discrete §8 tier angle-gates (174/165/155/145°)
-    enforce SN2 linearity for tier entry. Each steric clash subtracts a small graded
+    folded into mech, not scored separately. The angle term is Šidák multiplicity-
+    corrected for the scissile C–F count: credit (1-p1)^n with p1=(1-cos δ)/2 and
+    δ=180-angle, so a clean anti-attack on a mono-F carbon outscores the same angle
+    reached as the best of two/three fluorines (CF2/CF3), which had more chances of
+    one C–F landing near the 180° anti-axis. The discrete §8 tier angle-gates
+    (174/165/155/145°) enforce SN2 linearity for tier entry. Each steric clash subtracts a small graded
     MECH_CLASH_PENALTY (capped via MECH_CLASH_PENALTY_MAX); the result is floored at 0.0.
     The penalty is deliberately small: a "teflon clash" is a ligand fluorine near the Asp
     oxygen, which is intrinsic to a fluorinated substrate sitting in the active site, so it
@@ -703,8 +711,7 @@ class CFG:
     MECH_W_BA: float         = 0.10   # Base–Acid relay         (≤ MECH_BA_GATE)
     MECH_W_CLAMP: float      = 0.10   # carboxylate clamp present
     MECH_W_STAB: float       = 0.25   # halide (F⁻) stabilisation present
-    MECH_W_ANGLE: float      = 0.30   # graded SN2 attack angle, linear over 0–180°
-    MECH_ANGLE_FLOOR: float  = 0.0    # °  angle credit = (angle − floor)/(180 − floor); 0 = full unbiased range
+    MECH_W_ANGLE: float      = 0.30   # graded SN2 attack angle, Šidák multiplicity-corrected (1-p1)^n for scissile C–F count
     MECH_CLASH_PENALTY: float = 0.03  # mech points subtracted per steric clash (small, graded)
     MECH_CLASH_PENALTY_MAX: float = 0.15  # cap on total clash penalty so clashes never dominate
     '''
@@ -882,7 +889,7 @@ class CFG:
         finally by Step-08 QM/MM, matching the diagnostic-only dead-end treatment in
         02_Production §7.2.3.
       graded terms (each 0–1, weights sum to 1.0):
-        • angle  — linear 0–180° (unbiased), the Walden backside trajectory
+        • angle  — Šidák multiplicity-corrected (1-p1)^n for scissile C–F count, the Walden backside trajectory
         • dist   — Asp-Oδ → α-carbon, closer within [COMP_DIST_MIN, COMP_DIST_MAX] = higher
         • clamp  — carboxylate_clamp_integrity (0 / 0.5 / 1.0)
         • traj   — SN2 trajectory deviation, smaller = higher
@@ -976,6 +983,10 @@ class CFG:
     SOFT_W_NUC: float        = 0.4   # weight on s_nuc (nucleophile NAC reach)
     SOFT_W_ANG: float        = 0.3   # weight on s_ang (SN2 attack angle)
     SOFT_W_INT: float        = 0.3   # weight on s_int (triad-integrity product)
+    # Sigmoid steepness (k) for the soft-score terms; sign sets direction (negative = higher score below x0).
+    SOFT_K_NUC: float        = -4.0  # s_nuc nucleophile-distance sigmoid steepness
+    SOFT_K_ANG: float        = 0.15  # s_ang SN2-angle sigmoid steepness
+    SOFT_K_TRIAD: float      = -2.0  # s_int triad-relay sigmoid steepness (Nuc–Base and Base–Acid)
     """
     Intentionally < THRESHOLD_TRIAD_BA (7.0 Å): sigmoid midpoint sets
     the steepest scoring gradient in the 4–6 Å pre-reactive range;
@@ -993,6 +1004,7 @@ class CFG:
     """
     WALDEN_IMPROPER_MAX: float = 15.0  # °  |improper dihedral| < this → TS-like (planar) geometry
     WALDEN_TS_FRAME_BONUS: float = 1.1  # MD frame-score multiplier for a TS-flat (Walden) frame (Step 07 frame selection)
+    SN2_ANGLE_MARGINAL_MIN: float = 120.0  # °  lower bound of the marginal SN2-angle band for figure colour-coding (Step 07); ≥ NAC_ANGLE_RELAXED is favourable
     MD_EAF_SMOOTH_WINDOW: int = 50      # frames — rolling-average window for EAF-MSA trajectory smoothing (Step 07; frame count, independent of stride)
 
     # ===============================================================================
@@ -1092,9 +1104,10 @@ class CFG:
     # -------------------------------------------------------------------------------
     """
     Calibrated against the six control jobs (DeHa4 / 3R3U × FA / DFA / TFA) under the
-    holistic mech_score (anchors 0.70 + linear SN2 angle 0.30·(angle/180), §5.1). A
-    full-machinery pose scores 0.70 + 0.30·(angle/180), so at each tier's angle floor
-    it reaches: Tier_1A(174°)≈0.99, Tier_1B(165°)≈0.975, Tier_2A(155°)≈0.958. The
+    holistic mech_score (anchors 0.70 + graded Šidák-corrected SN2 angle 0.30, §5.1).
+    A full-machinery mono-F pose scores 0.70 + 0.30·(1-p1), p1=(1-cos(180-angle))/2, so
+    at each tier's angle floor it reaches: Tier_1A(174°)≈0.99, Tier_1B(165°)≈0.975,
+    Tier_2A(155°)≈0.958. The
     minima below sit under those so the gate stays meaningful (binding only when an
     anchor is missing) while the control tiers are reproduced.
     """
@@ -1618,6 +1631,11 @@ class CFG:
     CONSERV_W_INTEGRITY: float = 0.60  # Criterion-A active-site integrity (8 catalytic residues correctly mapped)
     CONSERV_W_GEO: float       = 0.30  # active-site geometric fit to control (RMSD-derived)
     CONSERV_W_IDENT: float     = 0.10  # global sequence identity (light corroborating signal)
+    # Reference-structure conservation score (3R3U crystal + DeHa4 control): a 2-term
+    # identity/geometry blend, distinct from the 3-term candidate score above. Control
+    # rows pass identity = 100.0, so the identity term contributes CONSERV_REF_W_IDENT*100.
+    CONSERV_REF_W_IDENT: float = 0.25  # reference-structure conservation: sequence-identity weight
+    CONSERV_REF_W_GEO: float   = 0.75  # reference-structure conservation: active-site geometric-fit weight
 
     # -------------------------------------------------------------------------------
     # Step 14.1b: Alignment grade bins (Step 02)
@@ -1810,13 +1828,17 @@ class CFG:
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.
-    "boltzmann" = −RT ln⟨exp(−ΔGᵢ/RT)⟩ (default; thermodynamically exact, weights
-    stable low-energy frames); "mean" = arithmetic ⟨ΔGᵢ⟩; "median" = robust to
-    per-frame outliers/failed Prime frames. The summary CSV always reports all
-    three columns; this knob only selects which one drives the combined bar plot
-    and the headline value.
+    "mean" = arithmetic ⟨ΔGᵢ⟩ (default; the standard thermal MM-GBSA estimate — MD
+    frames are already Boltzmann-sampled, so an unweighted mean is the ensemble
+    average); "median" = robust to per-frame outliers/failed Prime frames;
+    "boltzmann" = −RT ln⟨exp(−ΔGᵢ/RT)⟩ — reserve for non-Boltzmann-sampled ensembles
+    only, as it re-weights an already-canonical ensemble and collapses toward the
+    single most negative frame. The summary CSV always reports all three columns;
+    this knob only selects which one drives the combined bar plot and the headline value.
     """
-    MMGBSA_AVERAGING: str   = "boltzmann"     # "boltzmann" | "mean" | "median"
+    MMGBSA_AVERAGING: str   = "mean"          # "mean" | "median" | "boltzmann"
+    GAS_CONSTANT_KCAL: float = 1.9872036e-3   # kcal/mol/K — R for the boltzmann estimator
+    MMGBSA_TEMPERATURE_K: float = 298.15      # K — ensemble temperature for the boltzmann estimator
 
     # ===============================================================================
     # SECTION 18: MD-READY SELECTION  (gates heavy downstream compute — Steps 05→07)
@@ -1848,3 +1870,25 @@ class CFG:
     ])
     MD_SELECTED_COL: str = "MD_Selected"          # bool column written to the ranked CSV
     MD_RANK_COL: str     = "MD_Rank"              # int (1..N over selected), NaN otherwise
+
+    def __post_init__(self):
+        """
+        Internal-consistency guards (read-only; frozen-dataclass safe). Several constants
+        are intentionally equal to another CFG value or must sum to 1.0. A field default
+        edit that breaks one of these couplings fails loudly at import rather than silently
+        drifting apart. Assertions only — no mutation.
+        """
+        import math as _math
+        _isclose = lambda a, b: _math.isclose(float(a), float(b), abs_tol=1e-9)
+        # Re-typed literals that must track their documented source value.
+        assert _isclose(self.SOFT_NB_MIDPOINT, self.THRESHOLD_TRIAD_NB), "SOFT_NB_MIDPOINT must equal THRESHOLD_TRIAD_NB"
+        assert _isclose(self.TIER_NUC_DIST["Tier_2A"], self.NAC_DIST_STRICT), "TIER_NUC_DIST['Tier_2A'] must equal NAC_DIST_STRICT"
+        assert _isclose(self.TIER_NUC_DIST["Tier_2B"], self.NAC_DIST_RELAXED), "TIER_NUC_DIST['Tier_2B'] must equal NAC_DIST_RELAXED"
+        assert _isclose(self.SUBSTRATE_ANGLE_MIN, self.TIER_ANGLE_MIN["Tier_1B"]), "SUBSTRATE_ANGLE_MIN must equal TIER_ANGLE_MIN['Tier_1B']"
+        assert _isclose(self.INHIBITOR_ANGLE_MAX, self.NAC_ANGLE_RELAXED), "INHIBITOR_ANGLE_MAX must equal NAC_ANGLE_RELAXED"
+        # Component-weight sets that must sum to 1.0.
+        assert _isclose(self.MECH_W_NUC + self.MECH_W_NB + self.MECH_W_BA + self.MECH_W_CLAMP + self.MECH_W_STAB + self.MECH_W_ANGLE, 1.0), "mechanistic_score weights must sum to 1.0"
+        assert _isclose(self.COMP_W_ANGLE + self.COMP_W_DIST + self.COMP_W_CLAMP + self.COMP_W_TRAJ + self.COMP_W_TRIAD + self.COMP_W_HALIDE, 1.0), "competence_score weights must sum to 1.0"
+        assert _isclose(self.SOFT_W_NUC + self.SOFT_W_ANG + self.SOFT_W_INT, 1.0), "soft_catalytic_score weights must sum to 1.0"
+        assert _isclose(self.CONSERV_W_INTEGRITY + self.CONSERV_W_GEO + self.CONSERV_W_IDENT, 1.0), "candidate conservation weights must sum to 1.0"
+        assert _isclose(self.CONSERV_REF_W_IDENT + self.CONSERV_REF_W_GEO, 1.0), "reference conservation weights must sum to 1.0"

@@ -35,10 +35,10 @@ Dependency Map
                   Produces EAF interaction files for the Step 07 MD engine.
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — project metadata)
                   00_03_Project_Utils_FAcDs.py   (ConsoleColours, logging, banners)
-  Reads         : Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_Rank_N/*-out.cms
-                  Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_Rank_N/*_trj
-  Writes        : .../desmond_md_job_Rank_N/*_SID-in.eaf, *_SID-out.eaf, *.log
-                  .../desmond_md_job_Rank_N/*-prime-mmgbsa.csv  (per-frame ΔG_bind)
+  Reads         : Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
+                  Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*_trj
+  Writes        : .../desmond_md_job_R_N/*_SID-in.eaf, *_SID-out.eaf, *.log
+                  .../desmond_md_job_R_N/*-prime-mmgbsa.csv  (per-frame ΔG_bind)
                   .../MolecularDynamics/Prime_MMGBSA/00_MMGBSA_Summary.csv
                   .../MolecularDynamics/Prime_MMGBSA/01_MMGBSA_Combined_AllRanks.png
                   .../MolecularDynamics/Prime_MMGBSA/Rank_NN_MMGBSA_Profile_*.png
@@ -137,6 +137,12 @@ SCHROD_RUN = os.path.join(SCHRODINGER, "run")
 _SEP = "============================================================================="
 _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length is unreadable
 
+# Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
+# completion gate (is_eaf_complete): threshold = EAF_TOKENS_PER_FRAME · traj_frames.
+# 1 is the standard per-frame scalar series; set to the measured ratio once read
+# off a known-good, fully-analysed EAF so a partial high-k EAF cannot pass.
+EAF_TOKENS_PER_FRAME = getattr(CFG, "EAF_TOKENS_PER_FRAME", 1)
+
 
 # ===============================================================================
 # SECTION 2: SMALL HELPERS
@@ -187,26 +193,41 @@ def traj_frame_count(trj_dir: Path) -> int:
         return 0
 
 
-def is_eaf_complete(out_frames: int, traj_frames: int) -> bool:
-    """A SID-out.eaf is complete when it holds at least as many frames as the
-    trajectory. If the trajectory count cannot be read (traj_frames == 0), an
-    existing non-empty EAF is treated as complete — never destructively re-run
-    on doubt.
+def is_eaf_complete(out_frames: int, traj_frames: int,
+                    tokens_per_frame: int = EAF_TOKENS_PER_FRAME) -> bool:
+    """A SID-out.eaf is complete when its ``Result=[…]`` vector holds one full
+    token per trajectory frame, scaled by ``tokens_per_frame``.
+
+    The completion threshold is ``tokens_per_frame · traj_frames``. With the
+    default ratio of 1 this reduces to the plain per-frame test. If a SID
+    analysis writes k>1 tokens per frame, a partial EAF at <100 % progress can
+    still reach ``traj_frames`` tokens and be misjudged complete under a bare
+    ``>=`` test; scaling the denominator by the true k closes that gap.
+
+    Set ``EAF_TOKENS_PER_FRAME`` (module constant) to the measured ratio once it
+    has been read off a known-good, fully-analysed EAF; until then it is 1.
+
+    If the trajectory count cannot be read (traj_frames == 0), an existing
+    non-empty EAF is treated as complete — never destructively re-run on doubt.
     """
     if traj_frames > 0:
-        return out_frames >= traj_frames
+        return out_frames >= max(1, tokens_per_frame) * traj_frames
     return out_frames > 0
 
 
 def _natural_rank(job_dir: Path) -> int:
-    """Sort key for desmond_md_job_Rank_N directories (numeric, -V style)."""
-    m = re.search(r"_Rank_(\d+)", job_dir.name)
+    """Sort key for desmond_md_job_R_N directories (numeric, -V style).
+
+    Tolerates both the current '_R_N' naming and the legacy '_Rank_N' form.
+    """
+    m = re.search(r"_R(?:ank)?_(\d+)", job_dir.name)
     return int(m.group(1)) if m else 0
 
 
 def _rank_of(job_name: str) -> str:
-    """Extract the Rank token after '_md_job_Rank_' (matches bash ${JOBNAME##*_md_job_Rank_})."""
-    return job_name.split("_md_job_Rank_")[-1]
+    """Extract the rank token after the '_md_job_R_' (or legacy '_md_job_Rank_') prefix."""
+    m = re.search(r"_md_job_R(?:ank)?_(.+)$", job_name)
+    return m.group(1) if m else job_name.split("_md_job_")[-1]
 
 
 def _proc_alive(pattern: str) -> bool:
@@ -374,7 +395,7 @@ def resolve_run_dir(run_arg: str | None) -> str:
 # SECTION 6: SCAN PHASE
 # ===============================================================================
 def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
-    """Classify every desmond_md_job_Rank_* directory and return the subset
+    """Classify every desmond_md_job_R_* directory and return the subset
     that still needs SID analysis (READY or INCOMPLETE).
     """
     _echo("Scanning job directories...")
@@ -542,7 +563,7 @@ def process_jobs(to_run: list[Path]) -> None:
 # ===============================================================================
 """
 Mirrors the manual workflow:
-    cd <desmond_md_job_Rank_N> ; $SCHRODINGER/run thermal_mmgbsa.py <job>-out.cms
+    cd <desmond_md_job_R_N> ; $SCHRODINGER/run thermal_mmgbsa.py <job>-out.cms
 run folder-wise and idempotent (skip when a valid results CSV already exists),
 then plots per-job + combined ΔG_bind. MM-GBSA is complementary to the QSite
 QM/MM reaction barrier (Step 07), not a replacement: it scores binding, not
@@ -557,7 +578,7 @@ def _mmgbsa_csv(job_dir: Path, job_name: str):
                 "*prime*mmgbsa*.csv", "*mmgbsa*.csv"):
         hits += list(job_dir.glob(pat))
     hits = [h for h in dict.fromkeys(hits) if h.is_file() and h.stat().st_size > 0]
-    return sorted(hits, key=lambda p: -p.stat().st_mtime)[0] if hits else None
+    return sorted(hits, key=lambda p: (-p.stat().st_mtime, p.name))[0] if hits else None
 
 
 def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
@@ -611,6 +632,10 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
                         except subprocess.TimeoutExpired:
                             if (time.time() - _t0) > _timeout:
                                 proc.kill()
+                                try:
+                                    proc.wait(timeout=10)   # reap the killed child (no zombie)
+                                except Exception:
+                                    pass
                                 _echo(f"  [Rank {rank}] MM-GBSA timed out — skipped (see {log.name}).")
                                 return None
                 else:
@@ -640,20 +665,22 @@ def _mmgbsa_dg_series(csv_path: Path) -> "pd.Series":
     return pd.to_numeric(df[col], errors="coerce").dropna()
 
 
-def _boltzmann_mean_dg(dg, T: float = 298.15) -> float:
-    """Boltzmann-weighted ensemble mean binding free energy over MD frames.
+def _boltzmann_mean_dg(dg, T: float = CFG.MMGBSA_TEMPERATURE_K) -> float:
+    """Log-sum-exp ("Boltzmann") ensemble mean binding free energy over frames.
 
-    Binding free energy is a logarithmic quantity (ΔG = −RT ln Kₐ), so the
-    thermodynamically meaningful ensemble average is
-        ⟨ΔG⟩ = −RT ln( (1/N) Σ exp(−ΔGᵢ / RT) ),
-    not the arithmetic mean (which corresponds to a geometric mean of the
-    association constants and under-weights the stable, low-energy frames).
-    Evaluated via a max-shifted log-sum-exp for numerical stability.
+        ⟨ΔG⟩ = −RT ln( (1/N) Σ exp(−ΔGᵢ / RT) ),  via a max-shifted log-sum-exp.
+
+    Reserve this for a NON-Boltzmann-sampled ensemble. MD frames are already drawn
+    from the canonical (Boltzmann) distribution, so re-weighting them by exp(−ΔGᵢ/RT)
+    double-counts the Boltzmann factor and collapses the estimate toward the single
+    most negative frame; for a standard thermal MM-GBSA ensemble the arithmetic mean
+    (CFG.MMGBSA_AVERAGING="mean") is the correct ensemble average. R and T come from
+    CFG (GAS_CONSTANT_KCAL, MMGBSA_TEMPERATURE_K).
     """
     vals = [float(x) for x in dg if x == x]   # drop NaN
     if not vals:
         return float("nan")
-    RT  = 1.9872036e-3 * T                     # kcal mol⁻¹
+    RT  = CFG.GAS_CONSTANT_KCAL * T            # kcal mol⁻¹
     xs  = [-v / RT for v in vals]              # Boltzmann exponents
     m   = max(xs)
     lse = m + math.log(sum(math.exp(x - m) for x in xs))
@@ -663,16 +690,17 @@ def _boltzmann_mean_dg(dg, T: float = 298.15) -> float:
 def _avg_dg(dg) -> float:
     """Headline per-job ΔG_bind estimator selected by CFG.MMGBSA_AVERAGING.
 
-    "boltzmann" (default) defers to the thermodynamically exact log-sum-exp mean;
-    "mean" is the arithmetic average; "median" is robust to per-frame outliers
-    (e.g. failed Prime frames). Falls back to Boltzmann on an unknown value.
+    "mean" (default) is the arithmetic ensemble average — the standard thermal
+    MM-GBSA estimate for an already-Boltzmann-sampled MD trajectory; "median" is
+    robust to per-frame outliers (e.g. failed Prime frames); "boltzmann" is the
+    log-sum-exp mean, reserved for non-canonical ensembles. Unknown value → mean.
     """
-    mode = str(getattr(CFG, "MMGBSA_AVERAGING", "boltzmann")).lower()
-    if mode == "mean":
-        return float(pd.to_numeric(pd.Series(list(dg)), errors="coerce").mean())
+    mode = str(getattr(CFG, "MMGBSA_AVERAGING", "mean")).lower()
     if mode == "median":
         return float(pd.to_numeric(pd.Series(list(dg)), errors="coerce").median())
-    return _boltzmann_mean_dg(dg)
+    if mode == "boltzmann":
+        return _boltzmann_mean_dg(dg)
+    return float(pd.to_numeric(pd.Series(list(dg)), errors="coerce").mean())
 
 
 def _lookup_tiers(run_root: Path) -> dict:
@@ -698,14 +726,18 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     ax1.plot(range(len(dg)), dg.values, color="#0072B2", linewidth=1.0, alpha=0.5)
     ax1.plot(range(len(dg)), dg.rolling(max(1, len(dg) // 20), min_periods=1).mean().values,
              color="#222222", linewidth=2.2)
-    ax1.axhline(dg.mean(), color="#D55E00", linestyle="--", linewidth=1.5,
-                label=f"mean = {dg.mean():.1f} kcal/mol")
+    # Central line uses the configured headline estimator (CFG.MMGBSA_AVERAGING),
+    # so this figure, the violin and the combined bar all report the same value.
+    _central = _avg_dg(dg)
+    _est_label = str(getattr(CFG, "MMGBSA_AVERAGING", "mean")).lower()
+    ax1.axhline(_central, color="#D55E00", linestyle="--", linewidth=1.5,
+                label=f"{_est_label} = {_central:.1f} kcal/mol")
     ax1.set_xlabel("MM-GBSA frame", fontweight="bold")
     ax1.set_ylabel("ΔG_bind (kcal/mol)", fontweight="bold")
     ax1.set_title(f"MM-GBSA binding free energy — Rank {rank}", fontsize=12, fontweight="bold")
     ax1.legend(frameon=True, fontsize=9)
     ax2.hist(dg.values, bins=25, color="#1B9E77", alpha=0.85, orientation="horizontal")
-    ax2.axhline(dg.mean(), color="#D55E00", linestyle="--", linewidth=1.5)
+    ax2.axhline(_central, color="#D55E00", linestyle="--", linewidth=1.5)
     ax2.set_xlabel("Frames", fontweight="bold")
     ax2.set_title("Distribution", fontsize=11, fontweight="bold")
     _rk = f"{int(rank):02d}" if str(rank).isdigit() else str(rank)
@@ -726,12 +758,17 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list, tiers: dict) -> None:
     labels = [f"#{r}" for r, _ in per_job]
     data = [dg.values for _, dg in per_job]
     means = [_avg_dg(dg) for _, dg in per_job]
-    _avg_label = {"mean": "Arithmetic-mean", "median": "Median"}.get(
-        str(getattr(CFG, "MMGBSA_AVERAGING", "boltzmann")).lower(), "Boltzmann-weighted")
+    _mode = str(getattr(CFG, "MMGBSA_AVERAGING", "mean")).lower()
+    _avg_label = {"mean": "Arithmetic-mean", "median": "Median"}.get(_mode, "Boltzmann-weighted")
     cols = [CFG.TIER_COLOUR.get(tiers.get(int(r), ""), "#888888") for r, _ in per_job]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(17, 6.5), gridspec_kw={"wspace": 0.18})
-    parts = ax1.violinplot(data, showmeans=True, showextrema=False)
+    # showmeans draws the arithmetic mean tick; only correct when that IS the configured
+    # estimator. For median/boltzmann, overlay the configured central value instead.
+    parts = ax1.violinplot(data, showmeans=(_mode == "mean"), showextrema=False)
+    if _mode != "mean":
+        ax1.scatter(range(1, len(means) + 1), means, marker="_", s=400,
+                    color="#111111", zorder=5, label=f"{_avg_label} ΔG")
     for i, b in enumerate(parts["bodies"]):
         b.set_facecolor(cols[i]); b.set_alpha(0.75)
     ax1.set_xticks(range(1, len(labels) + 1)); ax1.set_xticklabels(labels)
@@ -757,7 +794,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> None:
         return
     job_dirs = sorted(
         (d for d in md_dir.iterdir()
-         if d.is_dir() and d.name.startswith("desmond_md_job_Rank_")
+         if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)
          and (d / f"{d.name}-out.cms").is_file()),
         key=_natural_rank,
     )
@@ -850,11 +887,12 @@ def main() -> int:
 
     job_dirs = sorted(
         (d for d in md_dir.iterdir()
-         if d.is_dir() and d.name.startswith("desmond_md_job_Rank_")),
+         if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
         key=_natural_rank,
     )
     if not job_dirs:
-        _echo("No job directories found matching pattern: desmond_md_job_Rank_*")
+        _echo("SKIP — no desmond_md_job_R_* directories in MolecularDynamics yet; "
+              "MD not run for this cohort. Nothing to post-process (SID + MM-GBSA skipped).")
         return 0
 
     to_run = scan_jobs(job_dirs, md_dir)

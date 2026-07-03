@@ -447,14 +447,13 @@ The script activates the environment, runs all steps in sequence, writes a times
   00  Environment check                        12s  PASS
   01  Merge sequences                          45s  PASS
   02  Production (Boltz-2 scoring)           4h23m  PASS
-  03  Validation figures                      8m12s  PASS
-  04  Dendrogram                               3m47s  PASS
-  05  CIF/PDB preparation                    52m18s  PASS
-  06  Top-N extraction                        19m47s  PASS
-  07  SID Desmond post-processing              4m35s  PASS
-  08  MD thermodynamics + QM/MM engine        6h36m  PASS
+  03  Validation figures                     8m12s  PASS
+  04  Dendrogram                             3m47s  PASS
+  05  Top-N selection + CIF/PDB prep         1h12m  PASS
+  06  SID + Prime MM-GBSA                    24m22s  PASS
+  07  MD thermodynamics + QM/MM engine       6h36m  PASS
   ──────────────────────────────────  ──────────
-  TOTAL WALL TIME                           12h10m
+  TOTAL WALL TIME                           12h48m
 ```
 
 > [!NOTE]
@@ -507,7 +506,6 @@ Each script after step 02 accepts the run directory as its sole argument:
 python 03_Validation_Figures_FAcDs.py  Boltz-2_Run_20260309T085406Z
 python 04_Dendrogram_FAcDs.py           Boltz-2_Run_20260309T085406Z
 python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 05_TopN_and_PDB_Preparation_FAcDs.py    Boltz-2_Run_20260309T085406Z
 python 06_SID_Prime-MMGBSA_FAcDs.py Boltz-2_Run_20260309T085406Z
 python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
@@ -691,7 +689,7 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 
 **Usage:** Loaded by numbered pipeline scripts through `importlib.util.spec_from_file_location`, because the filename begins with digits.
 
-**Typical downstream consumers:** `01_Merge_FAcDs.py`, `02_Production_FAcDs.py`, `03_Validation_Figures_FAcDs.py`, `04_Dendrogram_FAcDs.py`, `05_TopN_and_PDB_Preparation_FAcDs.py`, `05_TopN_and_PDB_Preparation_FAcDs.py`, and `07_MD_Thermodynamics_QMMM_Engine_FAcDs.py`.
+**Typical downstream consumers:** `01_Merge_FAcDs.py`, `02_Production_FAcDs.py`, `03_Validation_Figures_FAcDs.py`, `04_Dendrogram_FAcDs.py`, `05_TopN_and_PDB_Preparation_FAcDs.py`, `06_SID_Prime-MMGBSA_FAcDs.py`, and `07_MD_Thermodynamics_QMMM_Engine_FAcDs.py`.
 </details>
 
 <details>
@@ -1074,7 +1072,7 @@ The pipeline was developed and validated on a single Linux workstation, not an H
 
 | Stage | Minimum | Reference workstation (tested) |
 |-------|---------|--------------------------------|
-| Steps 01, 03–06 | 8-core CPU, 16 GB RAM | AMD Ryzen 9 9950X3D (16C/32T), 64 GB RAM |
+| Steps 01, 03–05 | 8-core CPU, 16 GB RAM | AMD Ryzen 9 9950X3D (16C/32T), 64 GB RAM |
 | Step 02 (Boltz-2) | 1× NVIDIA GPU, ≥12 GB VRAM | 1× NVIDIA GeForce RTX 5090, 32 GB VRAM |
 | Step 07 (MD/QM-MM) | 1× NVIDIA GPU + 8-core CPU | RTX 5090 + Ryzen 9 9950X3D (16C/32T) |
 
@@ -1088,8 +1086,8 @@ The pipeline was developed and validated on a single Linux workstation, not an H
 | 02 | 4–24 h | GPU (Boltz-2 inference) |
 | 03 | 5–15 min | matplotlib rendering |
 | 04 | 2–5 min | tree construction |
-| 05 | 30–90 min | PrepWizard (parallel) |
-| 06 | 15–45 min | PyMOL ray tracing |
+| 05 | 30–90 min | PrepWizard (parallel) + PyMOL/PLIP figures |
+| 06 | 20–60 min | Prime MM-GBSA + Desmond SID post-processing |
 | 07 | 6–48 h | Desmond MD |
 
 #### GPU memory
@@ -1156,7 +1154,7 @@ export SCHRODINGER=/opt/schrodinger
 python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
-> Steps 01, 03–06 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism.
+> Steps 01, 03–05 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism. Steps 06 (Prime MM-GBSA) and 07 (Desmond MD + QM/MM) require the Schrödinger Suite and GPU.
 
 ---
 

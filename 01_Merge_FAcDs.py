@@ -192,6 +192,8 @@ def clean_sequence_str(seq_obj) -> str:
     """
     seq = str(seq_obj).upper()
     seq = seq.replace("-", "")
+    # Strip a single trailing stop only; a double stop ("**") intentionally leaves an
+    # internal "*" so is_valid_protein rejects the sequence as an internal stop codon.
     if seq.endswith("*"):
         seq = seq[:-1]
     return seq
@@ -219,7 +221,7 @@ def clean_header(description: str) -> str:
     Extracts the primary accession ID and standardises the format.
     Removes parentheticals like '(2)'.
     """
-    if not description:
+    if not description or not description.strip():
         return "Unknown_Seq"
 
     # 1. Splitting by space isolates the primary ID from the trailing metadata
@@ -343,7 +345,14 @@ def process_and_write(
         # -------------------------------------------------------------------------------
         # Step 4.7: Write to Stream (Single line per sequence)
         # -------------------------------------------------------------------------------
-        seq_to_write = str(rec.seq) if keep_gaps else clean_seq
+        if keep_gaps:
+            # Preserve gap characters, but still upper-case and strip a single trailing
+            # stop so the emitted record matches the QC that ran on clean_seq.
+            seq_to_write = str(rec.seq).upper()
+            if seq_to_write.endswith("*"):
+                seq_to_write = seq_to_write[:-1]
+        else:
+            seq_to_write = clean_seq
 
         # Generate the sequential ID based on the current number of retained sequences
         seq_number = len(seen_ids)
@@ -669,7 +678,8 @@ def main():
     logger.info("\n[FINAL DATASET]")
     logger.info(f"  Total Sequences       : {total_kept}")
     logger.info(f"  Unique Sequences      : {len(seen_sequences)}")
-    logger.info(f"  Length Range          : {min_l} - {max_l}")
+    _len_note = "  (master length-exempt)" if min_l < args.min_len else ""
+    logger.info(f"  Length Range          : {min_l} - {max_l}{_len_note}")
     logger.info(f"  Mean Length           : {final_mean}")
     logger.info("\nFiles Saved:")
     logger.info(f"  1. FASTA : {out_path.resolve()}")

@@ -70,6 +70,14 @@ if [[ -n "$RUN_ID" && ! "$RUN_ID" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     exit 1
 fi
 
+# Validate --resume-from is a non-negative integer at parse time; otherwise the later
+# integer comparisons ([[ 7 -ge $RESUME_FROM ]]) throw "integer expression expected"
+# and abort under set -e.
+if [[ ! "$RESUME_FROM" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: --resume-from must be a non-negative integer." >&2
+    exit 1
+fi
+
 # ── Canonical filenames ───────────────────────────────────────────────────────
 _FRESH_FASTA="C_INP_Merged_for_Boltz-2.fasta"
 _FRESH_SMI="D_INP_PFAS-27_Ligands.smi"
@@ -418,8 +426,11 @@ echo ""
 
 # ── Pipeline steps ────────────────────────────────────────────────────────────
 
+# Verify the environment only — do NOT pass --export here: --export rewrites the
+# version-pinned PFAS.yml / requirements.txt with the current host's exact versions
+# on every run. Reserve --export for a deliberate, manual environment-archiving step.
 run_step "00  Environment check" \
-    python 00_01_Environment_Installation_FAcDs.py --export
+    python 00_01_Environment_Installation_FAcDs.py
 
 run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \
@@ -437,9 +448,12 @@ else
             --fasta "${_FRESH_FASTA}" \
             --smi   "${_FRESH_SMI}"
 
-    # Auto-detect the run directory just created by Step 02
-    _new_run=$(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' 2>/dev/null \
-               | sort | tail -1)
+    # Auto-detect the run directory just created by Step 02 — pick the most-recently
+    # MODIFIED Boltz-2_* dir (not the lexically last), so a pre-existing dir that sorts
+    # later by name is not mistaken for the one Step 02 just made. Still best-effort:
+    # a concurrent run in the same folder can race this.
+    _new_run=$(find "${SCRIPT_DIR}" -maxdepth 1 -type d -name 'Boltz-2_*' -printf '%T@ %p\n' 2>/dev/null \
+               | sort -n | tail -1 | cut -d' ' -f2-)
     if [[ -z "$_new_run" ]]; then
         _tee ""
         _tee "  ERROR: Step 02 did not create a Boltz-2_* run directory."
@@ -478,7 +492,7 @@ run_step "05  Top-N selection + CIF/PDB generation & preparation (MD-ready cohor
 if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
     if [[ "$SUDO_ENABLED" == "1" ]]; then
         sudo systemctl stop systemd-oomd 2>/dev/null || true
-        sudo systemctl mask systemd-oomd.socket
+        sudo systemctl mask systemd-oomd.socket 2>/dev/null || true
     else
         _tee "  [NORMAL MODE] systemd-oomd not masked (no sudo) — Steps 06-07 run unprotected from the OOM-killer."
     fi

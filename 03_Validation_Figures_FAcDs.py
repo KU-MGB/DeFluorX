@@ -131,7 +131,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 10_Sankey_Workflow.png                       <-- Sankey: nuc-dist → SN2 angle → final tier
     • 11_PFAS_Size_Hexbin_Landscape.png            <-- Chain-length hexbin + tier scatter + rolling median
     • 12_PFAS_Size_Composition_Merged.png          <-- Per bin: outcome + degrader-tier stacked bars
-    • 13_PFAS_Carbon_Confidence_MW.png             <-- Catalytic competence vs MW per carbon group
+    • 13_PFAS_Carbon_Confidence.png             <-- Catalytic competence vs MW per carbon group
 
     ── 07_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
     • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
@@ -186,6 +186,7 @@ import shutil
 import argparse
 import warnings
 from pathlib import Path
+import contextlib
 from datetime import datetime
 
 # -------------------------------------------------------------------------------
@@ -262,15 +263,32 @@ Local overrides: CFG.TIER_DECOY uses a softer grey for unlabelled entries;
 "Error" is a 03-specific indicator for analytics failures (not in CFG).
 """
 TIER_PALETTE = {
-    **CFG.TIER_COLOUR,
-    CFG.TIER_DECOY:  "#999999",
-    "Error": "#FF6B6B",
+    **CFG.TIER_COLOUR,                 # decoy colour comes from CFG.TIER_COLOUR (single source)
+    "Error": "#FF6B6B",                # 03-specific analytics-failure indicator (not in CFG)
 }
 
 # Specific order for tiers to ensure logical plotting (Tier_1A to Tier_5_Decoy)
 TIER_ORDER_LOGIC = list(CFG.TIER_ORDER)
 
 CONFLICT_PALETTE = dict(CFG.CONFLICT_COLOUR)   # sourced from CFG § 8.7
+
+
+def _auto_label_colour(bg, threshold: float = 0.5) -> str:
+    """Single source for every auto-contrast label colour in this module.
+
+    Returns CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0] (near-black) on light fills and
+    CFG.VIS_BAR_LABEL_COLOURS_ON_DARK[0] (white) on dark fills, chosen from the WCAG
+    relative luminance of `bg` (a hex string or any Matplotlib colour). Replaces the
+    previously divergent per-figure helpers (different coefficients/cutoffs).
+    """
+    import matplotlib.colors as _mc
+    try:
+        r, g, b = _mc.to_rgb(bg)
+    except Exception:
+        return CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0]
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0] if lum > threshold
+            else CFG.VIS_BAR_LABEL_COLOURS_ON_DARK[0])
 
 # Modern Plotting Theme (Publication Quality)
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.3)
@@ -311,25 +329,17 @@ def _aux_dir(out_dir: Path) -> Path:
     return d
 
 
-class ReportManager:
-    """Manages writing simultaneous logs to console and file."""
-    def __init__(self, out_dir: Path):
-        self.path = _aux_dir(out_dir) / "06_Analysis_Log.txt"
-        with open(self.path, "w") as f:
-            f.write("BOLTZ-2 VALIDATION & PHYLOGENY REPORT \n")
-            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("=" * 80 + "\n\n")
+ReportManager = _utils_mod.ReportManager   # shared logger (00_03)
 
-    def log(self, text: str):
-        console_info(text)
-        with open(self.path, "a") as f: f.write(f"[LOG] {text}\n")
 
-    def section(self, title: str):
-        print(f"\n{ConsoleColours.BOLD}{title}{ConsoleColours.ENDC}", flush=True)
-        print(SEPARATOR_LIGHT, flush=True)
-        with open(self.path, "a") as f: f.write(f"\n--- {title} ---\n")
+def _make_reporter(out_dir: Path):
+    """Construct the shared ReportManager with this step's log path/header/logger."""
+    return ReportManager(
+        _aux_dir(out_dir) / "06_Analysis_Log.txt",
+        "BOLTZ-2 VALIDATION & PHYLOGENY REPORT ",
+        separator=SEPARATOR_LIGHT, rule_width=80, log_fn=console_info)
 
-# (Dead code calculate_alignment_grade removed; use _utils_mod.get_alignment_grade instead)
+# Alignment grade is provided by _utils_mod.get_alignment_grade(val, CFG).
 
 
 # ===============================================================================
@@ -480,7 +490,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
     """
-    reporter.section("Step 1: Multi-Objective Ranking (PCA & Pareto)")
+    reporter.section("Step 1/6 — Multi-Objective Ranking (PCA & Pareto)  [analysis, no figure folder]")
 
     x = df[features].dropna()
     '''
@@ -535,9 +545,9 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     for col, w in WEIGHTS.items():
         if col in df.columns:
             _cv = pd.to_numeric(df.loc[x.index, col], errors="coerce").to_numpy(dtype=float)
-            # Percentile-robust min-max (1st-99th): a single extreme value no longer
-            # compresses the rest of the column into a narrow band, as the plain
-            # MinMaxScaler did (outlier-sensitive), while keeping the [0,1] scale.
+            # Percentile-robust min-max (1st-99th): a single extreme value does not
+            # compress the rest of the column into a narrow band (unlike a plain
+            # outlier-sensitive MinMaxScaler), while keeping the [0,1] scale.
             _lo, _hi = np.nanpercentile(_cv, 1), np.nanpercentile(_cv, 99)
             norm_col = (np.clip((_cv - _lo) / (_hi - _lo), 0.0, 1.0)
                         if _hi > _lo else np.zeros_like(_cv))
@@ -553,9 +563,12 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     else:
         df["Pareto_Rank"] = 0
 
+    # Ensemble_Score is exploratory only (PCA/weighted blend for colouring and
+    # chemical-space maps). The authoritative rank downstream is the ranked CSV's
+    # Scientific_Rank / competence_score from Step 02; Ensemble_Score is never used
+    # as a sort or rank key.
     df.loc[x.index, "Ensemble_Score"] = (0.5 * score_pca) + (0.5 * score_weighted)
     df["Ensemble_Score"] = df["Ensemble_Score"].fillna(0)
-    df["Ensemble_Data_Rank"] = df["Ensemble_Score"].rank(ascending=False, method="min")
 
     # UMAP
     if len(x) >= 5:
@@ -582,7 +595,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     low confidence; decoys = high confidence but poor mechanism), logs the
     per-class counts, and saves the final validated master table to out_dir.
     """
-    reporter.section("Step 2: Conflict & Opportunity Analysis")
+    reporter.section("Step 2/6 — Conflict & Opportunity Analysis  [analysis, no figure folder]")
 
     def classify(row):
         tier = row.get("degrader_tier", CFG.TIER_DECOY)
@@ -1057,29 +1070,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         plt.close("all")   # release the figure left open by the failed savefig
 
 
-def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
-    """Render the full publication figure suite (folders 02–08).
-
-    Temporarily monkeypatches plt.savefig to route each "Figure_NN_*.png" to its
-    numbered folder via fig_mapping, then builds the dataset/confidence/geometry/
-    interaction/scope figures (02–06), the diagnostic trends (07) and the two-
-    criteria active-site/feasibility figures (08). Restores the original savefig
-    on exit. Side-effecting (writes PNGs); returns None.
-    """
-    reporter.section("Step 4: Main Validation Figure Suite — folders 02–06 (Publication Quality)")
-    import matplotlib
-    original_plt_savefig = plt.savefig
-    original_fig_savefig = matplotlib.figure.Figure.savefig
-
-    '''
-    Folder-by-folder routing (content-matched taxonomy). Figure blocks run in
-    the order below, contiguous per destination folder, so the per-folder
-    numbering (NN_) is sequential and matches the code flow.
-    NB: this map routes folders 02–06 and 08. Folders 01_Ramachandran and
-    07_Diagnostic_and_MultiModel_Trends are written directly by their own
-    routines (not via this rename map), so they do not appear here by design.
-    '''
-    fig_mapping = {
+_FIG_MAPPING = {
         # ── 02_Dataset_and_Alignment_Overview ──
         "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "02_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
         "Figure_02_Tier_Distribution.png": "02_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
@@ -1121,7 +1112,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         "Figure_25_Sankey_Workflow.png": "06_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
         "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "06_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
         "Figure_26b_PFAS_Size_Composition_Merged.png": "06_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence_MW.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence_MW.png",
+        "Figure_26c_PFAS_Carbon_Confidence.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
         # ── 08_Two_Criteria_ActiveSite_and_Feasibility ── Criterion B, local pLDDT,
         #    demotion provenance, chemical feasibility, size-fair clash
         "Figure_30_A_vs_B_ActiveSite_Map.png": "08_Two_Criteria_ActiveSite_and_Feasibility/01_A_vs_B_ActiveSite_Map.png",
@@ -1131,33 +1122,56 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         "Figure_34_Tier_Demotion_Provenance.png": "08_Two_Criteria_ActiveSite_and_Feasibility/05_Tier_Demotion_Provenance.png",
         "Figure_35_ActiveSite_vs_Global_Confidence.png": "08_Two_Criteria_ActiveSite_and_Feasibility/06_ActiveSite_vs_Global_Confidence.png",
         "Figure_36_SizeFair_Clash_Veto.png": "08_Two_Criteria_ActiveSite_and_Feasibility/07_SizeFair_Clash_Veto.png",
-    }
+}
 
-    # Ensure all target directories exist
-    for rel_path in fig_mapping.values():
-        (out_dir / rel_path).parent.mkdir(parents=True, exist_ok=True)
 
-    def redirect_path(fname):
-        if isinstance(fname, Path):
-            name = fname.name
-        else:
-            name = Path(fname).name
-        if name in fig_mapping:
-            redirected = out_dir / fig_mapping[name]
-            reporter.log(f"  ✔ Saved: {fig_mapping[name]}")
-            return redirected
+@contextlib.contextmanager
+def _redirect_savefig(out_dir: Path, reporter):
+    """Route each Figure_NN_*.png save to its numbered folder (per _FIG_MAPPING)
+    for the duration of the block, restoring the original savefig on exit — even
+    on exception, so a failure mid-suite can never leak the patched savefig into
+    later routines or the rest of the process. Target folders are created on entry.
+    """
+    import matplotlib
+    for _rel in _FIG_MAPPING.values():
+        (out_dir / _rel).parent.mkdir(parents=True, exist_ok=True)
+    _orig_plt = plt.savefig
+    _orig_fig = matplotlib.figure.Figure.savefig
+    def _redirect(fname):
+        name = fname.name if isinstance(fname, Path) else Path(fname).name
+        if name in _FIG_MAPPING:
+            reporter.log(f'  \u2714 Saved: {_FIG_MAPPING[name]}')
+            return out_dir / _FIG_MAPPING[name]
         return fname
+    plt.savefig = lambda fname, *a, **k: _orig_plt(_redirect(fname), *a, **k)
+    matplotlib.figure.Figure.savefig = (
+        lambda self, fname, *a, **k: _orig_fig(self, _redirect(fname), *a, **k))
+    try:
+        yield
+    finally:
+        plt.savefig = _orig_plt
+        matplotlib.figure.Figure.savefig = _orig_fig
 
-    def custom_plt_savefig(fname, *args, **kwargs):
-        new_name = redirect_path(fname)
-        return original_plt_savefig(new_name, *args, **kwargs)
+def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
+    """Render the full figure suite. The _redirect_savefig context manager routes
+    plt.savefig / Figure.savefig to the numbered folders and always restores them
+    on exit, so an exception mid-suite can never leak the patched savefig into
+    later routines or the rest of the process.
+    """
+    with _redirect_savefig(out_dir, reporter):
+        return _generate_comprehensive_figures_impl(df, features, out_dir, reporter)
 
-    def custom_fig_savefig(self, fname, *args, **kwargs):
-        new_name = redirect_path(fname)
-        return original_fig_savefig(self, new_name, *args, **kwargs)
 
-    plt.savefig = custom_plt_savefig
-    matplotlib.figure.Figure.savefig = custom_fig_savefig
+def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
+    """Render the full publication figure suite (folders 02–08).
+
+    Builds the dataset/confidence/geometry/interaction/scope figures (02–06), the
+    diagnostic trends (07) and the two-criteria active-site/feasibility figures
+    (08). Each "Figure_NN_*.png" save is routed to its numbered folder by the
+    _redirect_savefig context manager wrapping this call (see
+    generate_comprehensive_figures). Side-effecting (writes PNGs); returns None.
+    """
+    reporter.section("Step 4/6 — Main Validation Figure Suite (Publication Quality)  [writes folders 02–06]")
 
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
 
@@ -1173,16 +1187,9 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         "grid.color": "#EBEBEB", "grid.linewidth": 0.6,
     })
 
-    def _text_color(hex_bg: str, threshold: float = 0.45) -> str:
-        """Return 'white' for dark backgrounds, near-black for light backgrounds."""
-        try:
-            r = int(hex_bg[1:3], 16) / 255
-            g = int(hex_bg[3:5], 16) / 255
-            b = int(hex_bg[5:7], 16) / 255
-            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            return "white" if luminance < threshold else "#1a1a1a"
-        except Exception:
-            return "white"
+    def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
+        """Auto-contrast label colour for hex_bg (delegates to _auto_label_colour)."""
+        return _auto_label_colour(hex_bg, threshold)
 
     reporter.section("  Folder 02_Dataset_and_Alignment_Overview — coverage, tiers, alignment grades")
     # --- Figure 01: Active-site residue mapping coverage across all variants ---
@@ -1891,7 +1898,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 ax.text(0.01, 0.98, f"High confidence (≥{CFG.CONF_BAND_HIGH:.2f})", color="#007A50",
                         fontsize=8, ha="left", va="top", fontweight="bold",
                         style="italic", transform=ax.transAxes, zorder=6,
-                        bbox=dict(boxstyle="round,pad=0.15", fc="#D6F5EB", ec="#009E73",
+                        bbox=dict(boxstyle="round,pad=0.15", fc="#D6F5EB", ec=CFG.CONF_BAND_COLOURS["high"],
                                   alpha=0.85, linewidth=0.6))
             # Acceptable zone: 0.80–0.90
             _acc_vis_lo10 = max(0.80, y_lo_f10)
@@ -1901,7 +1908,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 ax.text(0.01, _acc_mid10, f"Acceptable ({CFG.CONF_BAND_ACCEPTABLE:.2f}–{CFG.CONF_BAND_HIGH:.2f})", color="#8A6000",
                         fontsize=8, ha="left", va="center", fontweight="bold",
                         style="italic", transform=_yt10, zorder=6,
-                        bbox=dict(boxstyle="round,pad=0.15", fc="#FFF3CC", ec="#E69F00",
+                        bbox=dict(boxstyle="round,pad=0.15", fc="#FFF3CC", ec=CFG.CONF_BAND_COLOURS["acceptable"],
                                   alpha=0.85, linewidth=0.6))
             # Below threshold zone: y_lo–0.80
             _bel_vis_hi10 = min(0.80, _y_top10)
@@ -1910,7 +1917,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                 ax.text(0.01, _bel_mid10, f"Below threshold (<{CFG.CONF_BAND_ACCEPTABLE:.2f})", color="#A03000",
                         fontsize=8, ha="left", va="center", fontweight="bold",
                         style="italic", transform=_yt10, zorder=6,
-                        bbox=dict(boxstyle="round,pad=0.15", fc="#FDECEA", ec="#D55E00",
+                        bbox=dict(boxstyle="round,pad=0.15", fc="#FDECEA", ec=CFG.CONF_BAND_COLOURS["below"],
                                   alpha=0.85, linewidth=0.6))
 
             ax.set_xticks(range(len(existing_tiers)))
@@ -2978,17 +2985,17 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         ax.text(0.99, 0.942, f"Strong zone  (≥{_mfs:.2f})", color="#007A50",
                 fontsize=8, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.15", fc="#D6F5EB", ec="#009E73",
+                bbox=dict(boxstyle="round,pad=0.15", fc="#D6F5EB", ec=CFG.CONF_BAND_COLOURS["high"],
                           alpha=0.85, linewidth=0.6))
         ax.text(0.99, 0.798, f"Moderate zone  ({_mfm:.2f}–{_mfs:.2f})", color="#8A6000",
                 fontsize=8, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.15", fc="#FFF3CC", ec="#E69F00",
+                bbox=dict(boxstyle="round,pad=0.15", fc="#FFF3CC", ec=CFG.CONF_BAND_COLOURS["acceptable"],
                           alpha=0.85, linewidth=0.6))
         ax.text(0.99, 0.435, f"Weak zone  (<{_mfm:.2f})", color="#A03000",
                 fontsize=8, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.15", fc="#FDECEA", ec="#D55E00",
+                bbox=dict(boxstyle="round,pad=0.15", fc="#FDECEA", ec=CFG.CONF_BAND_COLOURS["below"],
                           alpha=0.85, linewidth=0.6))
         ax.axhline(y=_mfs, color=_cbc["high"], linestyle="--", linewidth=1.2, alpha=0.7)
         ax.axhline(y=_mfm, color=_cbc["below"], linestyle=":", linewidth=1.0, alpha=0.7)
@@ -3021,17 +3028,17 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
             if pct_strong > 0:
                 ax.text(i, (_mfs + 1.0) / 2, f"{pct_strong:.0f}%", ha="center", va="center",
                         fontsize=7, color="#007A50", fontweight="bold", zorder=10,
-                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="#009E73",
+                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["high"],
                                   alpha=0.75, linewidth=0.5))
             if pct_moderate > 0:
                 ax.text(i, (_mfm + _mfs) / 2, f"{pct_moderate:.0f}%", ha="center", va="center",
                         fontsize=7, color="#8A6000", fontweight="bold", zorder=10,
-                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="#E69F00",
+                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["acceptable"],
                                   alpha=0.75, linewidth=0.5))
             if pct_weak > 0:
                 ax.text(i, _mfm / 2, f"{pct_weak:.0f}%", ha="center", va="center",
                         fontsize=7, color="#A03000", fontweight="bold", zorder=10,
-                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="#D55E00",
+                        bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["below"],
                                   alpha=0.75, linewidth=0.5))
         ax.set_ylim(-0.02, 1.06)
         ax.set_yticks(sorted({0.0, 0.2, 0.4, 0.6, 0.8, 1.0, round(_mfm, 2), round(_mfs, 2)}))
@@ -3539,7 +3546,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                                                         lw=0.5, mutation_scale=6,
                                                         shrinkA=0, shrinkB=2),
                                         bbox=dict(boxstyle="round,pad=0.09", fc="white",
-                                                  ec="#E69F00", alpha=0.94, linewidth=0.5))
+                                                  ec=CFG.CONF_BAND_COLOURS["acceptable"], alpha=0.94, linewidth=0.5))
                 ax_r15.set_ylim(0, 1.30)
                 ax_r15.set_yticks([0, 0.25, 0.50, 0.75, 1.00])
                 ax_r15.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
@@ -3554,7 +3561,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                             ha="center", va="center", rotation=90,
                             fontsize=7.5, color="#D55E00", style="italic", fontweight="bold",
                             transform=ax_r15.transAxes,
-                            bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="#D55E00",
+                            bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["below"],
                                       alpha=0.80, linewidth=0.5))
                 ax_r15.text(0.99, 0.481, "50% engagement",
                             ha="center", va="center", rotation=90,
@@ -3566,7 +3573,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                             ha="center", va="center", rotation=90,
                             fontsize=7.5, color="#009E73", style="italic", fontweight="bold",
                             transform=ax_r15.transAxes,
-                            bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="#009E73",
+                            bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["high"],
                                       alpha=0.80, linewidth=0.5))
 
             """
@@ -4604,13 +4611,13 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                        ha="center", va="bottom", fontsize=9.5,
                        color="#009E73", fontweight="bold",
                        transform=ax_f2.get_xaxis_transform(),
-                       bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="#009E73",
+                       bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=CFG.CONF_BAND_COLOURS["high"],
                                  alpha=0.80, linewidth=0.5))
             ax_f2.text(mid_con, 1.015, "Concerning ◀",
                        ha="center", va="bottom", fontsize=9.5,
                        color="#D55E00", fontweight="bold",
                        transform=ax_f2.get_xaxis_transform(),
-                       bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="#D55E00",
+                       bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=CFG.CONF_BAND_COLOURS["below"],
                                  alpha=0.80, linewidth=0.5))
 
         # Arrow annotations for small segments (< 4%) that couldn't fit inline text
@@ -4981,10 +4988,10 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
                       bbox=dict(boxstyle="round,pad=0.40", fc="#D6EAF8", ec="#0072B2",
                                 alpha=0.95, linewidth=1.8))
             ax22.text(7.45, 7.25, "AI-Strong", color="#D55E00", **_main_lbl_kw22,
-                      bbox=dict(boxstyle="round,pad=0.40", fc="#FCE4D0", ec="#D55E00",
+                      bbox=dict(boxstyle="round,pad=0.40", fc="#FCE4D0", ec=CFG.CONF_BAND_COLOURS["below"],
                                 alpha=0.95, linewidth=1.8))
             ax22.text(5.00, 1.55, "Tier-Strong", color="#009E73", **_main_lbl_kw22,
-                      bbox=dict(boxstyle="round,pad=0.40", fc="#D4EFDF", ec="#009E73",
+                      bbox=dict(boxstyle="round,pad=0.40", fc="#D4EFDF", ec=CFG.CONF_BAND_COLOURS["high"],
                                 alpha=0.95, linewidth=1.8))
 
             _region_data22 = [
@@ -5087,7 +5094,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     '''
     _diag_dir = out_dir / "07_Diagnostic_and_MultiModel_Trends"
     _diag_dir.mkdir(parents=True, exist_ok=True)
-    generate_additional_figures(df, None, _diag_dir, reporter)
+    generate_additional_figures(df, _diag_dir, reporter)
 
     # ===========================================================================
     # Folder 08 figures: Two-criteria active site, chemical feasibility & provenance
@@ -5097,7 +5104,7 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
     # veto. Column names match the Step-02 output. Each block is column-guarded: a
     # metric absent from the loaded CSV skips its figure rather than failing.
     # ===========================================================================
-    reporter.section("Step 6: Two-criteria active-site, feasibility & provenance (folder 08)")
+    reporter.section("Step 6/6 — Two-Criteria Active-Site, Feasibility & Provenance  [writes folder 08]")
     _deg_tiers = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
 
     def _tier_c(t):
@@ -5476,8 +5483,8 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         reporter.log(f"  ! Fig 36 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    plt.savefig = original_plt_savefig
-    matplotlib.figure.Figure.savefig = original_fig_savefig
+    # savefig routing is installed/restored by the _redirect_savefig context
+    # manager around this call, so no manual restore is needed here.
 
 
 # ===============================================================================
@@ -5501,9 +5508,22 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             d.get("Ensemble_Score", 0), errors="coerce"
         ).fillna(0)
 
+        # Within-tier tiebreak on the authoritative Step-02 ranking (Scientific_Rank →
+        # competence_score), NOT the figure-layer Ensemble_Score, so the representative
+        # complex here matches the pipeline's chosen pose.
+        if "Scientific_Rank" in d.columns:
+            d["_best_key"] = pd.to_numeric(d["Scientific_Rank"], errors="coerce").fillna(1e9)
+            _key_asc = True
+        elif "competence_score" in d.columns:
+            d["_best_key"] = pd.to_numeric(d["competence_score"], errors="coerce").fillna(0)
+            _key_asc = False
+        else:
+            d["_best_key"] = pd.to_numeric(d.get("Ensemble_Score", 0), errors="coerce").fillna(0)
+            _key_asc = False
+
         best_pairs = (
-            d.sort_values(["prot", "lig", "tier_rank", "Ensemble_Score"],
-                          ascending=[True, True, False, False])
+            d.sort_values(["prot", "lig", "tier_rank", "_best_key"],
+                          ascending=[True, True, False, _key_asc])
              .groupby(["prot", "lig"], as_index=False)
              .first()
         )
@@ -5626,8 +5646,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
         regardless of the ligand colour beneath it.
         """
         def _label_col(c):
-            r, g, b = _mpl.colors.to_rgb(c)
-            return "#111111" if (0.299 * r + 0.587 * g + 0.114 * b) > 0.6 else "white"
+            return _auto_label_colour(c)
 
         """
         Rank proteins: broadest PFAS coverage first (number degraded), then best
@@ -5839,9 +5858,6 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 return TIER_PALETTE.get(lbl, _tier_clr_24.get(lbl, "#CCC"))
             return _colmap_24.get(cat_col, {}).get(lbl, "#CCC")
 
-        def _dark_24(cat_col, lbl):   # text colour auto-picked by luminance
-            return False
-
         # ── Layout ────────────────────────────────────────────────────────────
         _BY0_24  = 0.07
         _BH_24   = 0.78
@@ -5922,7 +5938,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                           bbox=dict(boxstyle="round,pad=0.05", fc=color, ec="none", alpha=0.70))
 
         # ── Node box ──────────────────────────────────────────────────────────
-        def _dbox_24(x, bw, y0, y1, label, count, box_color, lbl_dark=False):
+        def _dbox_24(x, bw, y0, y1, label, count, box_color):
             _h = max(y1 - y0, 0.001)
             # Slightly blunt corners (pad=0 → no halo; small rounding softens edges)
             ax24.add_patch(_mp.FancyBboxPatch(
@@ -5936,9 +5952,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             Auto-contrast: white text on dark boxes, dark text on light boxes,
             chosen from the box's own luminance (fixes dark text on dark fills).
             """
-            _rr, _gg, _bb = _mcol24.to_rgb(box_color)
-            _lum = 0.299 * _rr + 0.587 * _gg + 0.114 * _bb
-            lbl_col = "white" if _lum < 0.6 else "#111111"
+            lbl_col = _auto_label_colour(box_color)
             """
             Show the actual COUNT (not %) — a rare class like Tier_1A (n=8) must
             read "8", never a rounded "0.0%".
@@ -5975,7 +5989,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             for lbl, (y0, y1) in _cpos_24.get(_cc24, {}).items():
                 _dbox_24(_xs_24[_ci24], _bw_24, y0, y1, lbl,
                          int(_ccnt_24.get(_cc24, {}).get(lbl, 0)),
-                         _clr_24(_cc24, lbl), _dark_24(_cc24, lbl))
+                         _clr_24(_cc24, lbl))
 
         # ── Column header banners — extra gap so they clear the node content ──
         _hdr_gap_24 = 0.078   # wider gap → more separation between content and headers
@@ -6184,12 +6198,15 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                  transform=axA.transAxes, ha="right", va="bottom", fontsize=9.5,
                  color="#C04000", fontweight="bold",
                  bbox=dict(facecolor="white", alpha=0.75, edgecolor="none"))
-        for _fb25 in [8, 13, 18, 24]:
+        _bins25 = list(CFG.VIS_PFAS_FCOUNT_BINS)          # [0, 8, 13, 18, 24, inf]
+        for _fb25 in _bins25[1:-1]:
             axA.axvline(_fb25, color="#444", lw=0.8, ls=":", alpha=0.5, zorder=2)
-        _bin_xmids25   = [4, 10.5, 15.5, 21, 28]
-        _bin_toplbls25 = ["Very Short", "Short chain", "PFOA/PFOS", "Long chain", "Ultra-long"]
+        _bin_toplbls25 = list(CFG.VIS_PFAS_SIZE_LABELS_SHORT)
         axA.set_ylim(85, 186)
         _fc_max25 = int(_d25["total_fluorine_count"].max()) + 2
+        # Label midpoints derived from the CFG bin edges; the open-ended final bin uses the axis max.
+        _edges25 = _bins25[:-1] + [max(_fc_max25, _bins25[-2] + 4)]
+        _bin_xmids25 = [0.5 * (_edges25[i] + _edges25[i + 1]) for i in range(len(_edges25) - 1)]
         axA.set_xticks(range(0, _fc_max25 + 1, 2))
         for _bx25, _bl25 in zip(_bin_xmids25, _bin_toplbls25):
             axA.text(_bx25, 184, _bl25, ha="center", va="top",
@@ -6414,11 +6431,9 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 return [_d25c[_d25c["_nC"] == g][col].dropna().values for g in _groups25]
 
             fig25c, axL = plt.subplots(figsize=(15, 6))
-            axR = axL.twinx()
             _SOFT_C, _SOFT_F = "#238B45", "#A1D99B"   # soft catalytic score (green)
             _DEG_C           = "#6A51A3"              # degrader fraction (purple)
             _CTRL_C          = "#9E9E9E"              # confidence control (grey)
-            _MW_C            = "#D55E00"              # molecular weight (orange)
 
             _handles25 = []
             # LEFT axis: soft_catalytic_score distribution per carbon group
@@ -6450,10 +6465,9 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                                  label="Boltz confidence (control — prediction artefact, not catalytic)")
                 _handles25.append(_cln)
 
-            # Molecular-weight trend removed: MW rises monotonically with carbon number,
-            # so it is redundant with the x-axis and added no information about size
-            # preference. Competence + degrader fraction now carry the size story.
-            axR.set_visible(False)
+            # Competence + degrader fraction carry the size story; molecular weight is not
+            # plotted (it rises monotonically with carbon number, so it would be redundant
+            # with the x-axis).
 
             # Per-group molecule count (unique ligands), inside each container bar near the top
             for _xi, g in zip(_pos25, _groups25):
@@ -6483,8 +6497,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                         linewidth=0.7, zorder=0)
 
             """
-            Distinct grid colours per axis so the two scales never read as one:
-            LEFT (competence) = green solid, RIGHT (molecular weight) = orange dashed.
+            Competence grid: green solid horizontal lines, faint grey vertical lines.
             """
             axL.yaxis.grid(True, color="#4CAF50", alpha=0.30, linewidth=0.7, zorder=0)
             axL.xaxis.grid(True, color="#EEEEEE", linewidth=0.5, zorder=0)
@@ -6493,7 +6506,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                        ncol=len(_handles25), fontsize=7.5, framealpha=0.95,
                        columnspacing=1.0, handletextpad=0.5, borderaxespad=0.0)
             plt.tight_layout()
-            _out25c = out_dir / "Figure_26c_PFAS_Carbon_Confidence_MW.png"
+            _out25c = out_dir / "Figure_26c_PFAS_Carbon_Confidence.png"
             fig25c.savefig(_out25c, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close(fig25c)
 
@@ -6506,7 +6519,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 # SECTION 4D: DIAGNOSTIC & MULTI-MODEL TREND FIGURES  (folder 07)
 # ===============================================================================
 
-def generate_additional_figures(df: pd.DataFrame, prod_dir: Path, out_dir: Path,
+def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                 reporter: ReportManager) -> None:
     """
     Pocket-fit and multi-model diagnostic figures written to
@@ -6525,7 +6538,7 @@ def generate_additional_figures(df: pd.DataFrame, prod_dir: Path, out_dir: Path,
     skips only that figure, never the whole folder.
     """
     from scipy import stats as _sc_stats
-    reporter.section("Step 5: Diagnostic & Multi-Model Trend Figures (folder 07)")
+    reporter.section("Step 5/6 — Diagnostic & Multi-Model Trend Figures  [writes folder 07]")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # CFG-sourced colours (single source of truth — config §8).
@@ -7020,7 +7033,7 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
     input folder produced by 02_Production; nothing is downloaded here.
     """
     import gemmi
-    reporter.section("Step 3: Ramachandran Backbone-Geometry Validation (folder 01)")
+    reporter.section("Step 3/6 — Ramachandran Backbone-Geometry Validation  [writes folder 01]")
     # `out_dir` is already the 01_Ramachandran folder (created in main); use it directly.
     rama_dir = out_dir
     rama_dir.mkdir(parents=True, exist_ok=True)
@@ -7518,7 +7531,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Substrate % peaks at short/medium chains; inhibition risk rises with chain length.",
         "",
         "-" * 80,
-        "Figure 26c — Figure_26c_PFAS_Carbon_Confidence_MW.png",
+        "Figure 26c — Figure_26c_PFAS_Carbon_Confidence.png",
         "  Title   : Catalytic competence vs molecular weight by PFAS carbon number",
         "  Type    : Dual-axis per carbon-number group — LEFT (0–1): soft_catalytic_score box + degrader fraction line; RIGHT: median MW",
         "  X-axis  : Carbon number C2…Cn; fluorine counts present per group in parentheses (e.g. C2 (1F, 2F, 3F))",
@@ -7743,7 +7756,7 @@ def write_figure_descriptions(out_dir: Path):
         "Figure_25_Sankey_Workflow.png": "06_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
         "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "06_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
         "Figure_26b_PFAS_Size_Composition_Merged.png": "06_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence_MW.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence_MW.png",
+        "Figure_26c_PFAS_Carbon_Confidence.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
         "02_Pocket_Occupancy_by_Ligand.png": "02_Pocket_Occupancy_by_Carbon_Number.png",
     }
     _txt = "\n".join(lines)
@@ -7791,7 +7804,7 @@ def main():
 
     np.random.seed(42)
 
-    reporter = ReportManager(out_dir)
+    reporter = _make_reporter(out_dir)
 
     try:
         # -------------------------------------------------------------------------------

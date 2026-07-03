@@ -1197,6 +1197,9 @@ def _parse_plip_xml(xml_path, lig, pro):
                       hp.find("reschain").text, dist, "hydrophobic", protcoo, ligcoo)
 
         # bs_residues with contact="True" and no typed interaction → "contact"
+        # Index protein residues by (chain, resnum) once so the lookup below is O(1)
+        # rather than a linear scan of `pro` per contact residue.
+        _pro_by_cr = {(k[0], k[1]): k for k in pro}
         for bsr in bs.findall("./bs_residues/bs_residue"):
             if bsr.get("contact", "False") != "True":
                 continue
@@ -1207,7 +1210,7 @@ def _parse_plip_xml(xml_path, lig, pro):
             key    = (chain, int(resnr), restype)
             if key not in contacts_by_key:
                 # No typed interaction — approximate position from PDB
-                pkey = next((k for k in pro if k[0] == chain and k[1] == int(resnr)), None)
+                pkey = _pro_by_cr.get((chain, int(resnr)))
                 if pkey:
                     protcoo = pro[pkey]["center"]
                     la, _ = _closest_lig_atom(protcoo)
@@ -1667,9 +1670,16 @@ def _im_find_contacts(lig, pro, lig_hb=None):
             if ah is not None:
                 itype, disp = "arom_hbond", ah
 
-        # 3) Salt bridge (charged heavy groups within CFG cutoff)
+        # 3) Salt bridge (formally charged groups within CFG cutoff). Residue-aware:
+        # only ASP/GLU carboxylate O and ARG/LYS/HIS(+) cationic N count — atom-name
+        # prefix alone would mislabel neutral ASN/GLN amide (ND2/OD1, NE2/OE1) and
+        # backbone atoms as ionic. Ligand partner must be an O/N (elem-gated).
         if itype is None:
-            charged = pname[:2] in {"NH", "NZ", "NE", "ND", "OD", "OE"}
+            _rn = str(res.get("resname", "")).upper()
+            _anion  = _rn in {"ASP", "GLU"} and pname in {"OD1", "OD2", "OE1", "OE2"}
+            _cation = _rn in {"ARG", "LYS", "HIS", "HIP", "HIE", "HID"} and \
+                      pname in {"NH1", "NH2", "NE", "NZ", "ND1", "NE2"}
+            charged = _anion or _cation
             if mind <= _IM_SALT_DIST and la["elem"] in {"O", "N"} and charged:
                 itype, disp = "salt", mind
 
@@ -2123,7 +2133,10 @@ def prep_and_convert_phase(args):
     )
     console_info(f"  Run Name : {args.run_folder_name}")
     if _md_jobs:
-        console_info(f"MD-ready gate: preparing {len(jobs)} of {_n_all_cifs} Best Complex CIFs (MD_Selected)")
+        _n_ctrl = sum(1 for (jn, _c) in jobs if jn.startswith("0000000"))
+        _n_sel  = len(jobs) - _n_ctrl
+        console_info(f"MD-ready gate: preparing {len(jobs)} of {_n_all_cifs} Best Complex CIFs "
+                     f"= {_n_sel} MD_Selected + {_n_ctrl} control(s)")
     else:
         console_info(f"Found {len(jobs)} Best Complex CIFs in 2_Best_Complexes_CIFs")
     if args.quick:
@@ -2420,9 +2433,13 @@ def topn_extraction_phase(args):
     # Dynamically count actual files on disk
     actual_raw_count  = len(list(raw_pdb_dir.glob("*.pdb")))  if raw_pdb_dir.exists()  else 0
     actual_prep_count = len(list(prep_pdb_dir.glob("*.pdb"))) if prep_pdb_dir.exists() else 0
-    console_info(f"\n  Total Raw Structures Available      : {actual_raw_count}")
-    console_info(f"  Total Prepared Structures Available : {actual_prep_count}")
-    console_info(f"  Total Candidate Jobs                : {len(df_candidates)}")
+    _raw_ctrl  = len([p for p in raw_pdb_dir.glob("*.pdb")  if "Control" in p.name]) if raw_pdb_dir.exists()  else 0
+    _prep_ctrl = len([p for p in prep_pdb_dir.glob("*.pdb") if "Control" in p.name]) if prep_pdb_dir.exists() else 0
+    console_info(f"\n  Total Raw Structures Available      : {actual_raw_count}  "
+                 f"({actual_raw_count - _raw_ctrl} MD_Selected + {_raw_ctrl} control)")
+    console_info(f"  Total Prepared Structures Available : {actual_prep_count}  "
+                 f"({actual_prep_count - _prep_ctrl} MD_Selected + {_prep_ctrl} control)")
+    console_info(f"  Total Candidate Jobs (full library) : {len(df_candidates)}")
     console_info(f"  Control Jobs (auto-extracted)       : {len(df_controls)}")
     console_separator()
 

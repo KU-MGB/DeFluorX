@@ -211,6 +211,38 @@ def print_elapsed(t0: float, script_name: str) -> None:
     print(f"{SEPARATOR_HEAVY}\n", flush=True)
 
 
+class ReportManager:
+    """Simultaneous console + file logger shared by the pipeline steps.
+
+    The log path, banner header, section separator and rule width are supplied
+    per step, and ``log_fn`` lets each caller route console output through its
+    own logger-bound ``console_info`` so file logging is preserved. ``section``
+    prints a bold title + separator and appends a divider to the log file.
+    """
+    def __init__(self, log_path, header, separator=SEPARATOR_LIGHT,
+                 rule_width=80, log_fn=None):
+        from pathlib import Path as _Path
+        from datetime import datetime as _dt
+        self.path = _Path(log_path)
+        self.separator = separator
+        self._log_fn = log_fn if log_fn is not None else console_info
+        with open(self.path, "w") as f:
+            f.write(header + "\n")
+            f.write(f"Date: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("=" * rule_width + "\n\n")
+
+    def log(self, text: str):
+        self._log_fn(text)
+        with open(self.path, "a") as f:
+            f.write(f"[LOG] {text}\n")
+
+    def section(self, title: str):
+        print(f"\n{ConsoleColours.BOLD}{title}{ConsoleColours.ENDC}", flush=True)
+        print(self.separator, flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"\n--- {title} ---\n")
+
+
 # ===============================================================================
 # SECTION 4: MATPLOTLIB UTILITIES
 # ===============================================================================
@@ -239,30 +271,41 @@ def _rama_get_atom_pos(res, name: str):
 
 
 def compute_ramachandran_angles(st) -> list[tuple[str, int, float, float]]:
-    """Extract (resname, resnum, phi, psi) for every residue that has both angles."""
+    """Extract (resname, resnum, phi, psi) for every residue that has both angles.
+
+    Backbone dihedrals are computed only across genuine peptide bonds: the i-1→i and
+    i→i+1 neighbours must be sequential in seqid AND covalently bonded (C–N ≤ 1.5 Å),
+    so a modelled chain break, gap or insertion does not emit a spurious dihedral. All
+    polymer chains in the model are processed.
+    """
     import math
     import gemmi
+    _PEPTIDE_CN_MAX = 1.5   # Å  C(i-1)–N(i) upper bound for a real peptide bond
     angles = []
-    chain = st[0][0]
-    residues = [r for r in chain if r.entity_type != gemmi.EntityType.NonPolymer
-                and r.entity_type != gemmi.EntityType.Water]
-    for i, res in enumerate(residues):
-        N  = _rama_get_atom_pos(res, "N")
-        CA = _rama_get_atom_pos(res, "CA")
-        C  = _rama_get_atom_pos(res, "C")
-        if not (N and CA and C):
-            continue
-        phi = psi = None
-        if i > 0:
-            C_prev = _rama_get_atom_pos(residues[i - 1], "C")
-            if C_prev:
-                phi = math.degrees(gemmi.calculate_dihedral(C_prev, N, CA, C))
-        if i < len(residues) - 1:
-            N_next = _rama_get_atom_pos(residues[i + 1], "N")
-            if N_next:
-                psi = math.degrees(gemmi.calculate_dihedral(N, CA, C, N_next))
-        if phi is not None and psi is not None:
-            angles.append((res.name, int(res.seqid.num), phi, psi))
+    for chain in st[0]:
+        residues = [r for r in chain if r.entity_type != gemmi.EntityType.NonPolymer
+                    and r.entity_type != gemmi.EntityType.Water]
+        for i, res in enumerate(residues):
+            N  = _rama_get_atom_pos(res, "N")
+            CA = _rama_get_atom_pos(res, "CA")
+            C  = _rama_get_atom_pos(res, "C")
+            if not (N and CA and C):
+                continue
+            phi = psi = None
+            if i > 0:
+                prev = residues[i - 1]
+                C_prev = _rama_get_atom_pos(prev, "C")
+                if C_prev and (int(res.seqid.num) - int(prev.seqid.num) == 1) \
+                        and C_prev.dist(N) <= _PEPTIDE_CN_MAX:
+                    phi = math.degrees(gemmi.calculate_dihedral(C_prev, N, CA, C))
+            if i < len(residues) - 1:
+                nxt = residues[i + 1]
+                N_next = _rama_get_atom_pos(nxt, "N")
+                if N_next and (int(nxt.seqid.num) - int(res.seqid.num) == 1) \
+                        and C.dist(N_next) <= _PEPTIDE_CN_MAX:
+                    psi = math.degrees(gemmi.calculate_dihedral(N, CA, C, N_next))
+            if phi is not None and psi is not None:
+                angles.append((res.name, int(res.seqid.num), phi, psi))
     return angles
 
 
@@ -436,10 +479,10 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
     if angles:
         phis = [a[2] for a in angles]
         psis = [a[3] for a in angles]
-        colours = ["#1b5e20" if _rama_classify(p, s) == "Favored"
-                   else ("#f9a825" if _rama_classify(p, s) == "Allowed"
-                         else "#c62828")
-                   for p, s in zip(phis, psis)]
+        _rama_cls = [_rama_classify(p, s) for p, s in zip(phis, psis)]
+        colours = ["#1b5e20" if c == "Favored"
+                   else ("#f9a825" if c == "Allowed" else "#c62828")
+                   for c in _rama_cls]
         ax.scatter(phis, psis, c=colours, s=14, alpha=0.75, linewidths=0, zorder=3)
     stats = _rama_stats(angles)
     legend_txt = (f"Favored  {stats['pct']['Favored']:.1f}%  ({stats['counts']['Favored']})\n"
