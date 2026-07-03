@@ -20,7 +20,7 @@ Date   : 05 July 2026 <───────────────────
   Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
                   00_03_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
   Reads         : <Run>/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
-                                                               /*_trj/   (dir carrying the _R_N rank token; legacy *Rank_N* also matched)
+                                                               /*_trj/   (dir carrying the _R_N rank token; *Rank_N* also matched)
                                                                /*.eaf
                   <Run>/6_Physics_Validation/WaterMaps/watermap_R_N.csv  (Maestro WM export)
                   <Run>/6_Physics_Validation/WaterMaps/watermap_R_N/*_wm.maegz
@@ -1386,9 +1386,8 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 
 # Solvation-droplet radius (Å) for the QSite .mae: only solvent within this
 # distance of the ligand is retained, trimming the full periodic box to a
-# tractable local MM region. Defined here — ahead of the other QSite constants
-# lower in the file — because it is a def-time default argument of
-# write_qsite_droplet(); a default evaluated at import needs the name to exist.
+# tractable local MM region. Defined here because write_qsite_droplet() takes it
+# as a default argument, evaluated when the function is defined below.
 _QSITE_DROPLET_RADIUS = float(getattr(CFG, "QSITE_DROPLET_RADIUS", 8.0))
 
 
@@ -1710,9 +1709,6 @@ _QSITE_PROCS = CFG.QSITE_PROCS
 _QM_WATER_RADIUS = float(getattr(CFG, "QSITE_QM_WATER_RADIUS", 3.5))
 _QM_WATER_MAX    = int(getattr(CFG, "QSITE_QM_WATER_MAX", 3))
 
-# _QSITE_DROPLET_RADIUS is defined earlier (just above write_qsite_droplet) so it
-# exists when that function's default argument is evaluated at import time.
-
 
 def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -> float:
     """Return EAF scalar value at the MD frame time, interpolated by index."""
@@ -1747,9 +1743,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _md_root / f"desmond_md_Rank_{rank}",
         _md_root / f"md_job_Rank_{rank}",
     ]
-    # Also glob for any directory whose name ends in the rank token — covers both
-    # the current '_R_N' naming and the legacy '*Rank_N*' custom names. The exact
-    # '_R_{rank}' suffix avoids matching R_1 against R_10/R_11.
+    # Also glob for any directory carrying the rank token: an exact '_R_{rank}'
+    # suffix (avoids matching R_1 against R_10/R_11) or a '*Rank_{rank}*' name.
     if _md_root.exists():
         _candidates += sorted(_md_root.glob(f"*_R_{rank}"))
         _candidates += sorted(_md_root.glob(f"*Rank_{rank}*"))
@@ -1813,8 +1808,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # ── WaterMap spatial sites (maegz) — flexible naming discovery ───────────
     _wm_root = work_dir / "WaterMaps"
-    # Find any subdirectory carrying the rank token: current 'watermap_R_N'
-    # (exact '_R_{rank}' suffix so R_1 ≠ R_10) or legacy '*Rank_N*' custom names.
+    # Find any subdirectory carrying the rank token: 'watermap_R_N'
+    # (exact '_R_{rank}' suffix so R_1 ≠ R_10) or a '*Rank_N*' name.
     _wm_dir_candidates = (
         sorted(_wm_root.glob(f"*_R_{rank}")) + sorted(_wm_root.glob(f"*[Rr]ank*{rank}*"))
         if _wm_root.exists() else []

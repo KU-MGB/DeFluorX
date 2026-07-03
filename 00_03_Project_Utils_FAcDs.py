@@ -821,11 +821,9 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
         vec_r1  = r1  - c
         vec_r2  = r2  - c
 
-        # Normalise with an explicit zero-length guard. Bare `v /= norm(v)` on a
-        # degenerate vector (collinear R1–C–R2, coincident atoms) yields NaN with
-        # only a RuntimeWarning — NOT an exception — so it would slip past the
-        # try/except and poison the metric. Raise instead to reach the 999.0
-        # fallback. Mirrors the 1e-6 epsilon guard used by the sibling geometry fns.
+        # Unit-normalise with a 1e-6 zero-length guard. Degenerate geometry
+        # (collinear R1–C–R2 or coincident atoms) gives a zero-length vector; raising
+        # here routes such cases to the 999.0 fallback rather than emitting NaN.
         def _unit(v):
             n = np.linalg.norm(v)
             if n < 1e-6:

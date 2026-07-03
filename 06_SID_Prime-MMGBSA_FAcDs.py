@@ -218,14 +218,14 @@ def is_eaf_complete(out_frames: int, traj_frames: int,
 def _natural_rank(job_dir: Path) -> int:
     """Sort key for desmond_md_job_R_N directories (numeric, -V style).
 
-    Tolerates both the current '_R_N' naming and the legacy '_Rank_N' form.
+    Matches the '_R_N' rank token; the '_Rank_N' spelling is also accepted.
     """
     m = re.search(r"_R(?:ank)?_(\d+)", job_dir.name)
     return int(m.group(1)) if m else 0
 
 
 def _rank_of(job_name: str) -> str:
-    """Extract the rank token after the '_md_job_R_' (or legacy '_md_job_Rank_') prefix."""
+    """Extract the rank token after the '_md_job_R_' (or '_md_job_Rank_') prefix."""
     m = re.search(r"_md_job_R(?:ank)?_(.+)$", job_name)
     return m.group(1) if m else job_name.split("_md_job_")[-1]
 

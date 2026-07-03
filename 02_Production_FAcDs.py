@@ -632,9 +632,8 @@ def console_separator() -> None:
 def atomic_to_csv(df, path, **kwargs) -> None:
     """Crash-safe CSV write: serialise to a sibling .tmp then os.replace() onto the
     target (atomic on a single filesystem). A process kill mid-write (e.g. the
-    OOM-killer during a long grid run) then leaves the prior good CSV intact
-    instead of a half-written file the resume path cannot detect. Mirrors the
-    tmp+replace pattern already used for MSA a3m downloads.
+    OOM-killer during a long grid run) leaves the prior good CSV intact rather than
+    a half-written file the resume path cannot detect.
     """
     path = Path(path)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -4592,8 +4591,14 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             elif _mode == "per_ligand" and _lig_col:
                 _lig_bare = df_rank[_lig_col].astype(str).str.replace(r"^\d+_", "", regex=True)
                 _tier_ok  = df_rank["degrader_tier"] == CFG.MD_PER_LIGAND_TIER
+                # Roster: data-driven (every unique ligand that reached the tier) when
+                # MD_PER_LIGAND_AUTO, else the explicit curated MD_PER_LIGAND panel.
+                if getattr(CFG, "MD_PER_LIGAND_AUTO", True):
+                    _md_roster = sorted(_lig_bare[_tier_ok].unique())
+                else:
+                    _md_roster = list(CFG.MD_PER_LIGAND)
                 _pick_idx = []
-                for _lg in CFG.MD_PER_LIGAND:
+                for _lg in _md_roster:
                     _cand = df_rank.index[_tier_ok & (_lig_bare == _lg)]
                     if len(_cand):
                         # df_rank is already sorted by rank, so the first index is the best
@@ -4605,7 +4610,10 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             df_rank[_md_rnk] = pd.NA
             _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
             df_rank.loc[_sel_order, _md_rnk] = range(1, len(_sel_order) + 1)
-            _gate_desc = (f"single best complex per ligand within {CFG.MD_PER_LIGAND_TIER}"
+            _pl_roster_src = ("all unique ligands in tier (data-driven)"
+                              if getattr(CFG, "MD_PER_LIGAND_AUTO", True)
+                              else f"curated panel of {len(CFG.MD_PER_LIGAND)}")
+            _gate_desc = (f"single best complex per ligand within {CFG.MD_PER_LIGAND_TIER} — {_pl_roster_src}"
                           if _mode == "per_ligand"
                           else f"Scientific_Rank ≤ {CFG.MD_TOP_N}" if _mode == "topN"
                           else f"degrader_tier in {list(CFG.MD_TIERS)}")
@@ -4649,7 +4657,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     console_info(_rule("└", "┴", "┘"))
                 if _mode == "per_ligand":
                     _got  = set(_lig_bare.loc[_sel_mask].astype(str))
-                    _miss = [_lg for _lg in CFG.MD_PER_LIGAND if _lg not in _got]
+                    _miss = [_lg for _lg in _md_roster if _lg not in _got]
                     if _miss:
                         console_info(f"    No candidate in {CFG.MD_PER_LIGAND_TIER} for "
                                      f"{len(_miss)} requested ligand(s) — dropped: {', '.join(_miss)}")
@@ -4690,7 +4698,9 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 if _lc:
                     _top = df_rank[df_rank["degrader_tier"] == CFG.TIER_TOP][_lc]
                     _top_set = sorted(set(_top.astype(str).str.replace(r"^\d+_", "", regex=True)))
-                    _fa_rank = df_rank.loc[df_rank[_lc].astype(str).str.contains("Fluoroacetate", case=False, na=False), "Scientific_Rank"]
+                    # Anchored to the exact bare "<idx>_Fluoroacetate" name so FA and DFA
+                    # stay distinct — "Fluoroacetate" is a substring of "Difluoroacetate".
+                    _fa_rank = df_rank.loc[df_rank[_lc].astype(str).str.fullmatch(r"\d+_Fluoroacetate", na=False), "Scientific_Rank"]
                     _fa_best = int(_fa_rank.min()) if len(_fa_rank) else -1
                     _tfa_feas = pd.to_numeric(
                         df_rank.loc[df_rank[_lc].astype(str).str.fullmatch(r"\d+_TFA", na=False), "feasibility_factor"],
@@ -4702,7 +4712,9 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     _hq = set(CFG.TIER_HIGH_QUALITY)
                     _failed = []
                     for _cname in ("Fluoroacetate", "Difluoroacetate"):
-                        _crows = df_rank[df_rank[_lc].astype(str).str.contains(_cname, case=False, na=False)]
+                        # Anchored fullmatch so "Fluoroacetate" does not also capture
+                        # "Difluoroacetate" (substring) — each control asserted on its own poses.
+                        _crows = df_rank[df_rank[_lc].astype(str).str.fullmatch(rf"\d+_{_cname}", na=False)]
                         _is_deg = _crows["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0")) \
                             if "is_degrader" in _crows.columns else pd.Series([], dtype=bool)
                         _in_hq = _crows["degrader_tier"].isin(_hq) if "degrader_tier" in _crows.columns else pd.Series([], dtype=bool)

@@ -332,9 +332,10 @@ class CFG:
     family — the Asp nucleophile (Asp110), Asp acid (Asp134), His base (His277)
     and Arg carboxylate clamp (Arg111/Arg114) — keep a narrow class (the
     canonical identity plus its protonation variants only). The halide-pocket
-    positions tolerate the documented chemical alternatives: an aromatic π-system
-    for the Trp156/Tyr217 cradle, and an H-bond donor / cationic group for the
-    His155 fluoride stabiliser (PHE excluded — it offers no polar donor to F⁻).
+    positions tolerate the documented chemical alternatives: an H-bond-capable
+    aromatic (Trp/Tyr/His) for the Trp156/Tyr217 cradle, and an H-bond donor /
+    cationic group for the His155 fluoride stabiliser. PHE is excluded from both —
+    its π-system offers no polar donor to stabilise the leaving F⁻.
     """
     RESIDUE_SEARCH_WINDOW: int = 5
     """
@@ -348,7 +349,7 @@ class CFG:
         "Acid_Catalyst":     {"ASP", "ASH"},   # Asp134 — strictly conserved carboxylate dyad partner; no Glu drift (matches the Asp nucleophile)
         "Base_Catalyst":     {"HIS", "HID", "HIE", "HIP", "HSE", "HSD", "HSP"},
         "Carboxylate_Clamp": {"ARG"},   # Arg111/Arg114 — strictly conserved guanidinium clamp on the substrate carboxylate
-        "Fluoride_Cradle":   {"TRP", "TYR", "TYM", "PHE", "HIS", "HID", "HIE", "HIP", "HSE", "HSD", "HSP"},
+        "Fluoride_Cradle":   {"TRP", "TYR", "TYM", "HIS", "HID", "HIE", "HIP", "HSE", "HSD", "HSP"},   # H-bond-capable aromatics only; PHE offers no polar donor to the leaving F⁻
         "Fluorine_Stabiliser": {"TRP", "TYR", "TYM", "HIS", "HID", "HIE", "HIP", "HSE", "HSD", "HSP", "ARG", "LYS", "LYN"},   # His155 stabilises leaving F⁻; PHE excluded — no polar H-bond donor
     })
 
@@ -1854,15 +1855,20 @@ class CFG:
     Modes:
       • "tier"       — every complex whose degrader_tier is in MD_TIERS.
       • "topN"       — the top MD_TOP_N complexes by Scientific_Rank.
-      • "per_ligand" — the single best (lowest Scientific_Rank) complex per ligand in
-                       MD_PER_LIGAND, restricted to tier ≥ MD_PER_LIGAND_TIER. Gives
-                       a chemotype-stratified shortlist (substrate ladder + PFAS chain
-                       gradient + branched ether) rather than a competence-only top-N.
+      • "per_ligand" — the single best (lowest Scientific_Rank) complex per ligand,
+                       restricted to tier ≥ MD_PER_LIGAND_TIER. When MD_PER_LIGAND_AUTO
+                       is True the ligand roster is DATA-DRIVEN: every unique ligand that
+                       reached the tier is represented (no hardcoded selection). When
+                       False the explicit MD_PER_LIGAND panel is used instead.
     """
     MD_SELECTION_MODE: str  = "per_ligand"        # "tier" | "topN" | "per_ligand"
     MD_TIERS: list          = field(default_factory=lambda: ["Tier_1A"])
     MD_TOP_N: int           = 10                   # used when MD_SELECTION_MODE == "topN"
     MD_PER_LIGAND_TIER: str = "Tier_1A"            # per_ligand reps drawn from this tier only
+    # Data-driven roster (default): one best complex per UNIQUE ligand that reached
+    # MD_PER_LIGAND_TIER — no hardcoded ligand list. Set False to use the explicit
+    # MD_PER_LIGAND panel below (curated chemotype-stratified subset).
+    MD_PER_LIGAND_AUTO: bool = True
     MD_PER_LIGAND: list     = field(default_factory=lambda: [
         "Fluoroacetate", "Difluoroacetate", "TFA",        # α-fluorination ladder (mono/di/tri)
         "PFBA", "PFHxA", "PFOA", "PFDA", "PFTrDA",         # PFCA chain-length gradient (C4→C13)

@@ -146,8 +146,8 @@ All mechanistic geometry is benchmarked against the **3R3U crystal structure** (
 | Carboxylate clamp 2 | Carb2 | Arg | 114 | Anchors substrate –COO⁻ |
 | Acid catalyst | Acid | Asp | 134 | Orients/polarises the His base (Asp–His catalytic dyad); the departing F⁻ leaves as a stabilised anion, it is **not** protonated |
 | Fluoride stabiliser | Stab_H | His | 155 | H-bond to F⁻ |
-| Fluoride cradle | Stab_W | Trp | 156 | Aromatic + electrostatic stabilisation of F⁻ |
-| Fluoride cradle | Stab_Y | Tyr | 217 | Aromatic + electrostatic stabilisation of F⁻ |
+| Fluoride cradle | Stab_W | Trp | 156 | H-bond donor (indole N–H) + aromatic stabilisation of F⁻ |
+| Fluoride cradle | Stab_Y | Tyr | 217 | H-bond donor (phenolic O–H) + aromatic stabilisation of F⁻ |
 | Base catalyst | Base | His | 277 | General base — activates the hydrolytic water that cleaves the Asp110 glycolyl-ester intermediate (Asp110 attacks Cα directly by SN2, without base activation) |
 
 > [!NOTE]
@@ -610,7 +610,10 @@ SCORE_DIST_WEIGHT:  float = 100.0    # per Å below the relaxed NAC distance
 SCORE_ANGLE_WEIGHT: float =   5.0    # per degree above the relaxed NAC angle
 
 # ── MD-ready selection (§18) — which complexes get the heavy Step 05–07 compute
-MD_SELECTION_MODE: str = "per_ligand"  # "per_ligand" (chemotype reps) | "tier" | "topN"
+MD_SELECTION_MODE: str = "per_ligand"  # "per_ligand" (best per ligand) | "tier" | "topN"
+MD_PER_LIGAND_TIER: str = "Tier_1A"    # per_ligand reps drawn from this tier only
+MD_PER_LIGAND_AUTO: bool = True        # True = data-driven roster (every unique ligand
+                                       #        reaching the tier); False = curated MD_PER_LIGAND panel
 MD_TIERS   = ["Tier_1A"]               # tiers used when MD_SELECTION_MODE == "tier"
 MD_TOP_N   = 10                        # N used when MD_SELECTION_MODE == "topN"
 # Step 02 writes MD_Selected/MD_Rank into the ranked CSV; Steps 05/06/07 gate on it,
