@@ -624,8 +624,9 @@ def load_watermap_csv(wm_csv_path: Path) -> list:
     Expected columns: Site, Occupancy, dH, -TdS, dG, #HB(WW), #HB(PW), #HB(LW).
     Returns list of dicts without spatial coordinates — use for statistics only.
     """
-    if not wm_csv_path.exists():
-        console_info(f"    {ConsoleColours.WARNING}[!] WaterMap CSV not found: {wm_csv_path.name}{ConsoleColours.ENDC}")
+    if wm_csv_path is None or not wm_csv_path.exists():
+        _name = wm_csv_path.name if wm_csv_path is not None else "(none found)"
+        console_info(f"    {ConsoleColours.WARNING}[!] WaterMap CSV not found: {_name}{ConsoleColours.ENDC}")
         return []
     sites = []
     try:
@@ -718,8 +719,9 @@ def load_watermap_sites(wm_path: Path) -> list:
     Used for per-frame spatial scoring (blockade and dG weighting).
     """
     sites = []
-    if not wm_path.exists():
-        console_info(f"    {ConsoleColours.WARNING}[!] WaterMap .maegz not found: {wm_path.name}{ConsoleColours.ENDC}")
+    if wm_path is None or not wm_path.exists():
+        _name = wm_path.name if wm_path is not None else "(none found)"
+        console_info(f"    {ConsoleColours.WARNING}[!] WaterMap .maegz not found: {_name}{ConsoleColours.ENDC}")
         return sites
     try:
         with structure.StructureReader(str(wm_path)) as reader:
@@ -2460,7 +2462,7 @@ def main():
             if _scan_root.exists():
                 for _d in _scan_root.iterdir():
                     if _d.is_dir():
-                        _m = re.search(r'[Rr]ank[_\s]?(\d+)', _d.name)
+                        _m = re.search(r'(?:_R_|[Rr]ank[_\s]?)(\d+)', _d.name)
                         if _m:
                             _found_ranks.add(int(_m.group(1)))
         if _found_ranks:

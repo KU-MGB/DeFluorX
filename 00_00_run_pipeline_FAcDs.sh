@@ -352,6 +352,9 @@ _print_timing_table() {
         local name="${STEP_NAMES[$i]}"
         name="${name//—/-}"
         name="${name//–/-}"
+        # Cap to the column width (58) so a long step label cannot overflow and
+        # push the box borders out of alignment.
+        (( ${#name} > 58 )) && name="${name:0:55}..."
         _tee "  │ $(printf '%-58s │ %10s │ %-8s' "$name" "$(_fmt_elapsed $t)" "$st") │"
         total=$(( total + t ))
     done
