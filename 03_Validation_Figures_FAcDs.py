@@ -3329,7 +3329,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
         # Vertical threshold lines
         # Threshold lines sourced from CFG so they always match the tier gates
-        # (e.g. Tier_1A = 174°, not a stale hardcoded 175°).
+        # (e.g. Tier_1A = 170°, not a stale hardcoded literal).
         _ecdf_tiers = [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]
         _ecdf_angles = [CFG.TIER_ANGLE_MIN[t] for t in _ecdf_tiers]
         for angle, tier_key in zip(_ecdf_angles, _ecdf_tiers):
@@ -5673,7 +5673,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             "clamp_cat": dict(CFG.SANKEY_CLAMP_COLOUR),
             "stab_cat":  dict(CFG.SANKEY_STAB_COLOUR),
             "triad_cat": dict(CFG.SANKEY_TRIAD_COLOUR),
-            # angle labels ascend (<… → ≥…); colour worst→best so ≥174° is green
+            # angle labels ascend (<… → ≥…); colour worst→best so the top ≥ band is green
             "ang_cat":   dict(zip(_ang_ord_24, list(reversed(CFG.SANKEY_GRAD5)))),
             "mech_cat":  dict(zip(_mech_lbls_24, CFG.SANKEY_MECH_GRAD)),
         }
@@ -5712,7 +5712,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             total_c = max(sum(nz.values()), 1)
             """
             Stack TOP-DOWN so the first label in `order` sits at the top of the
-            column (best category on top — Tier_1A, ≤3.0Å, ≥174°, …).
+            column (best category on top — Tier_1A, ≤3.0Å, ≥170°, …).
             """
             pos = {}
             y = _BY0_24 + _BH_24
@@ -7362,7 +7362,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Title   : SN2 Attack Angle — Empirical Cumulative Distribution (ECDF) by Tier",
         "  Type    : ECDF step plot per tier",
         "  X-axis  : SN2 attack angle (degrees); 180 deg = ideal linear nucleophilic back-attack",
-        "            Vertical dashed lines = tier-specific angle thresholds (145, 155, 165, 175 deg)",
+        f"            Vertical dashed lines = tier-specific angle thresholds ({', '.join(f'{v:.0f}' for v in sorted(CFG.TIER_ANGLE_MIN.values()))} deg)",
         "  Y-axis  : Cumulative fraction of complexes in each tier with angle <= X (read as %)",
         "  Dots    : Median angle per tier",
         "  How to read: Y% of complexes in this tier have SN2 angle <= X degrees",
@@ -7595,12 +7595,12 @@ def write_figure_descriptions(out_dir: Path):
         "  Columns : Nuc Distance (CFG cuts) · Carboxylate Clamp (Arg/Lys) ·",
         "            Halide Stabilisation · Triad Geometry (Nuc–Base · Base–Acid) ·",
         "            SN2 Angle · Mechanistic Score · Final Tier",
-        f"  Order   : best category on top in every column ({CFG.TIER_TOP}, ≤3.0 Å, ≥174°, ≥0.9)",
+        f"  Order   : best category on top in every column ({CFG.TIER_TOP}, ≤{CFG.TIER_NUC_DIST['Tier_1A']:.1f} Å, ≥{CFG.TIER_ANGLE_MIN['Tier_1A']:.0f}°, ≥{CFG.MECH_ELITE_HI:.2f})",
         "  Bins    : all cut points sourced from CFG (TIER_NUC_DIST / TIER_ANGLE_MIN /",
         "            TIER_NB_MAX / TIER_BA_MAX / TIER_MECH_MIN) — match 02_Production gates",
         "  Ribbons : Width proportional to complex count; coloured by destination tier",
         f"  Look for: {CFG.TIER_TOP} requires ALL rules to pass (tight nuc + clamp + stabilisation",
-        "            + tight triad + ≥174° + mech ≥0.9); the narrowing chain shows the attrition.",
+        f"            + tight triad + ≥{CFG.TIER_ANGLE_MIN['Tier_1A']:.0f}° + mech ≥{CFG.MECH_ELITE_HI:.2f}); the narrowing chain shows the attrition.",
         "",
         "-" * 80,
         "Figure 26a — Figure_26a_PFAS_Size_Hexbin_Landscape.png",

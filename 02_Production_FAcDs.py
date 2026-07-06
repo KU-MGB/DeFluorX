@@ -72,7 +72,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
        • Nucleophile (Asp110): <= 3.0 A (ligand α-carbon → Asp-Oδ; tight pre-reactive ground-state gate)
        • Nuc–Base relay:       <= 3.5 A (INTERNAL triad Asp110-Oδ → His277, dist_nuc_base — not a ligand contact)
        • Base–Acid relay:      <= 4.5 A (INTERNAL triad His277 → Asp134, dist_base_acid — not a ligand contact)
-       • Attack Angle:         >= 174°  (Near-Ideal Linear Trajectory; = TIER_ANGLE_MIN['Tier_1A'])
+       • Attack Angle:         >= 170°  (Near-Ideal Linear Trajectory; = TIER_ANGLE_MIN['Tier_1A'])
        • Stabilisation:        REQUIRED (Trp156/Tyr217 or Dynamic Polar Residue)
 
     2. Tier_1B (High Functional)
