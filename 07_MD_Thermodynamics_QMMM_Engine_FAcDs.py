@@ -1472,9 +1472,12 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     # which also disambiguates the catalytic residue from any water that happens
     # to share the same residue number. Returns (molid, chain) or None.
     def _resolve_cut(resnum):
+        # Match on the residue's Cα (pdbname == "CA"), which already disambiguates the
+        # catalytic residue from any water sharing the residue number. The chain id is
+        # returned but not required to be non-blank — a single-chain MD frame carries a
+        # blank chain, and requiring one would drop every catalytic residue from the QM cut.
         a = next((a for a in st.atom
-                  if a.resnum == resnum and a.pdbname.strip() == "CA"
-                  and a.chain.strip()), None)
+                  if a.resnum == resnum and a.pdbname.strip() == "CA"), None)
         return (a.molecule_number, a.chain) if a is not None else None
 
     # ── Resolve every catalytic cut once → (resnum, molid, chain). The residue
@@ -1959,10 +1962,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _sol_use = []
 
     # 2. Walden substituents for all warhead carbons (needed for dihedral).
+    # For SN2 TS flattening, the 3 non-leaving substituents on the sp3 carbon
+    # become coplanar. We must include all bonded atoms (including H and F).
     _walden_subs = sorted(set(
         b.atom2.index for c_idx in warhead_c
         for b in cms_model.atom[c_idx].bond
-        if b.atom2.atomic_number not in (1, 9)   # exclude H and F
     ))
 
     # 3. Build the master atom list to pre-load.
@@ -2165,12 +2169,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         walden_flat = False
         walden = 1.0
         if best_f_idx and best_ca_idx:
-            _wsub_li = _li_wsubs.get(_a2l[best_ca_idx], [])
-            if len(_wsub_li) >= 2 and _calc_improper_dihedral is not None:
+            # The 3 equatorial substituents are all atoms bonded to Cα, except the leaving F
+            _wsub_li = [li for li in _li_wsubs.get(_a2l[best_ca_idx], []) if li != _a2l[best_f_idx]]
+            if len(_wsub_li) >= 3 and _calc_improper_dihedral is not None:
                 try:
                     angle = _calc_improper_dihedral(
-                        _p[_a2l[best_ca_idx]], _p[_a2l[best_f_idx]],
-                        _p[_wsub_li[0]], _p[_wsub_li[1]], box)
+                        _p[_a2l[best_ca_idx]], _p[_wsub_li[0]],
+                        _p[_wsub_li[1]], _p[_wsub_li[2]], box)
                     if abs(angle) < _WALDEN_IMPROPER_MAX:
                         walden = 1.1; walden_flat = True
                 except Exception:

@@ -72,6 +72,8 @@ Scientific References:
     3. FAcD crystal structure & catalytic mechanism (PDB 3R3U):
        - Chan, P.W.Y., Yakunin, A.F., Edwards, E.A. & Pai, E.F. (2011) JACS 133:7461–7468.
        - DOI: https://doi.org/10.1021/ja200277d
+       - FAcD small-substrate scope + TFA recalcitrance (graded chemistry/containment penalties):
+         Wackett, L.P. (2022) Microb Biotechnol 15(3):773–792. DOI: https://doi.org/10.1111/1751-7915.13928
     4. DEHA4 experimental defluorination (Delftia acidovorans D4B):
        - Farajollahi, S. et al. (2024) ACS Omega 9(26):28546–28555.
        - DOI: https://doi.org/10.1021/acsomega.4c02517
@@ -184,6 +186,7 @@ class CFG:
     # -------------------------------------------------------------------------------
     BOLTZ_RETRY_MAX: int     = 2   # max retries after GPU failure before abandoning job
     BOLTZ_RETRY_SLEEP: int   = 6   # seconds to wait between retry attempts
+    BOLTZ_PREDICT_TIMEOUT_S: int = 3600  # per-prediction wall-clock ceiling; a single co-fold never approaches this, so a breach means a frozen GPU/CUDA driver → kill and retry rather than stall the pipeline
     BOLTZ_POLL_INTERVAL: int = 5   # seconds between job-status poll cycles
 
     # -------------------------------------------------------------------------------
@@ -715,14 +718,11 @@ class CFG:
     MECH_W_ANGLE: float      = 0.30   # graded SN2 attack angle, Šidák multiplicity-corrected (1-p1)^n for scissile C–F count
     MECH_CLASH_PENALTY: float = 0.03  # mech points subtracted per steric clash (small, graded)
     MECH_CLASH_PENALTY_MAX: float = 0.15  # cap on total clash penalty so clashes never dominate
-    '''
-    Backside steric-occlusion penalty (geometric SN2 determinant, Bento & Bickelhaupt 2008):
-    the nucleophile needs an open backside anti to the leaving F. Graded mech penalty on the
-    measured Σ-vdW occlusion of that trajectory — pose-conditional geometry, NOT a substrate
-    class label (FA = 0.00 untouched; gem-/per-fluoro carbons crowd the backside → demoted).
-    '''
-    MECH_W_OCCL: float       = 0.15   # max mech points subtracted for a fully occluded backside
-    MECH_OCCL_MAX: float     = 3.0    # Å (Σ vdW) at/above which the occlusion penalty saturates
+    # Backside steric-occlusion (geometric SN2 determinant, Bento & Bickelhaupt 2008: the
+    # nucleophile needs an open backside anti to the leaving F) is a single-source feasibility
+    # penalty applied ONCE, in the graded angle-faded chemistry term (§5.2b, CHEM_PEN_W_OCCL),
+    # which feeds mechanistic_score_effective. It is deliberately NOT also subtracted inside the
+    # raw mechanistic_score below — that would double-penalise an occluded trajectory.
 
     # -------------------------------------------------------------------------------
     # Step 5.2: SN2 dead-end consensus check (scissile C–F energy + backside sterics)
@@ -753,7 +753,46 @@ class CFG:
     FEAS_BDE_LO: float           = 120.0   # kcal/mol; scissile C–F BDE ≤ this → no BDE penalty (FA 109.9, DFA 119.5 pass)
     FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. TFA (127.5) lands graded (~0.38), not the floor, so a strong-binding variant can still surface it
     FEAS_BETA_PER_F: float       = 0.35    # per-β-fluorine penalty: f_beta = 1/(1 + this·β_F) (FA/DFA β=0; PFAS β≥2)
-    MECH_DEADEND_FACTOR: float   = 0.25    # mech_score multiplier for the A+B dead-end — NOT applied currently (dead-end is diagnostic-only); retained for later re-enable
+
+    # -------------------------------------------------------------------------------
+    # Step 5.2b: Graded feasibility + pocket-fit penalties folded into the tier-gate mech
+    # -------------------------------------------------------------------------------
+    """
+    Continuous penalties subtracted from the geometric mechanistic_score to form the
+    feasibility-weighted score that gates the degrader tier (competence/ranking keep the
+    raw geometry). Both engage only past a chemistry/steric threshold, so genuine
+    substrates are unpenalised and the demotion is graded, never a hard class veto.
+
+      Chemistry  : penalty = CHEM_PEN_W_BDE·max(0, BDE − SCISSILE_CF_BDE_MAX)
+                           + CHEM_PEN_W_OCCL·max(0, occlusion − SN2_BACKSIDE_OCCL_MAX)
+                   TFA (BDE 127.5, occl 2.94) carries ~0.24 at a poor SN2 angle → Tier_2B;
+                   the penalty fades only for a near-linear angle (CHEM_PEN_ANGLE_* below), so
+                   only a ≥175° TFA pose clears the tier gate, with competence setting its
+                   within-tier rank; a poor-angle pose (e.g. the DeHa4 control, ~159°) keeps the
+                   full penalty. A substrate below the BDE/occlusion cutoffs receives no term.
+      Containment: penalty = CONTAIN_PEN_W·max(0, CONTAIN_PEN_TARGET − pocket_containment)
+                   FAcD is a small-substrate (haloacetate) hydrolase (Wackett 2022; Chan
+                   2011): the pocket fully holds ≤C4 (containment ≈ 1.0); longer PFAS spill
+                   out and are demoted in proportion. Per-pose, catalytic-anchored geometry,
+                   so a genuine wide-pocket homolog that truly contains a longer chain is
+                   spared. Long-PFAS hydrolytic-SN2 hits remain EXPLORATORY, not degraders.
+    """
+    CHEM_PEN_W_BDE: float    = 0.025   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
+    CHEM_PEN_W_OCCL: float   = 0.13    # penalty per Å of backside occlusion above SN2_BACKSIDE_OCCL_MAX
+    CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-fluorine on the attack-carbon chain: β-fluorination inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-fluorine (β_F=0) receives no β term and is governed by the α-BDE/occlusion penalty above
+    # The α-chemistry penalty (BDE + backside occlusion) FADES with a near-ideal SN2 angle:
+    # full at/below CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. A
+    # substrate the enzyme organises into a near-perfect near-attack conformation (angle → 180°)
+    # is surfaced as a discovery lead even if its intrinsic C–F is hard — a CF3 substrate such as
+    # TFA clears the tier gate only from a ≥175° pose, with competence setting its within-tier
+    # rank, while a mediocre-angle pose (e.g. the DeHa4 control, ~159°) keeps the full penalty.
+    # The β-fluorination and containment penalties do NOT fade (a perfluoro chain / oversized
+    # ligand is not rescued by a single-frame angle). Step-07 QM/MM remains the final arbiter.
+    CHEM_PEN_ANGLE_FULL: float = 175.0   # ° SN2 angle at/below which the α-chemistry penalty applies in full
+    CHEM_PEN_ANGLE_NONE: float = 180.0   # ° SN2 angle at/above which the α-chemistry penalty is fully waived
+    CONTAINMENT_RADIUS: float = 5.0    # Å; ligand heavy atoms within this of the carboxylate anchor count as pocket-contained
+    CONTAIN_PEN_TARGET: float = 0.85   # containment at/above this → no penalty (FA/DFA/PFBA ≈ 1.0)
+    CONTAIN_PEN_W: float      = 1.00   # penalty per unit of containment shortfall below the target
 
     # -------------------------------------------------------------------------------
     # Step 5.3: Reactive-centre gating — α-carbon attack + bidentate carboxylate clamp
@@ -819,21 +858,23 @@ class CFG:
                           beta_f_count: int = 0,
                           scissile_f_count: int = 1) -> float:
         """
-        Single source of truth for the holistic mechanistic score (0–1) — the tier-gate key
-        (TIER_MECH_MIN). Five binary anchor checks (weights total 0.70) plus a graded SN2
-        attack-angle term (MECH_W_ANGLE), less MECH_CLASH_PENALTY per steric clash and a
-        graded backside-occlusion penalty (MECH_W_OCCL). GEOMETRY + active-site-machinery
-        only: NO chemical-feasibility (C–F BDE, β-fluorination) — tiering stays geometric,
-        no ligand excluded a priori; chemistry rides in competence/diagnostics + Step-08 QMMM.
+        Single source of truth for the holistic mechanistic score (0–1) — the raw geometry
+        term behind the tier-gate key (TIER_MECH_MIN, via mechanistic_score_effective). Five
+        binary anchor checks (weights total 0.70) plus a graded SN2 attack-angle term
+        (MECH_W_ANGLE), less MECH_CLASH_PENALTY per steric clash. GEOMETRY + active-site-
+        machinery only: NO chemical-feasibility (C–F BDE, backside occlusion, β-fluorination)
+        — those are the graded penalties in mechanistic_score_effective (§5.2b), applied once
+        each. Tiering stays geometric here, no ligand excluded a priori; chemistry rides in
+        the effective score, competence/diagnostics and Step-08 QMMM.
 
         The angle term is Šidák multiplicity-corrected for the scissile C–F count
         (scissile_f_count): a CF2/CF3 attack carbon presents more equivalent C–F bonds, so
         more chances of one landing near the 180° anti-axis. The credit (1-p1)^n, with
         p1=(1-cos δ)/2 and δ=180-angle, removes that best-of-N inflation from tiering — the
         same statistic used in competence_score, applied here so the tier gate is not gamed
-        by fluorine multiplicity. The backside-occlusion penalty is the geometric SN2
-        determinant (open backside required for the nucleophile): pose-conditional, not a
-        substrate-class label. Floored at 0, rounded to 2 dp.
+        by fluorine multiplicity. Backside occlusion is NOT applied here — it is a single-
+        source feasibility penalty in mechanistic_score_effective (§5.2b). Floored at 0,
+        rounded to 2 dp.
         """
         import math
         s = 0.0
@@ -850,9 +891,9 @@ class CFG:
         s += self.MECH_W_ANGLE * _q
         if steric_clashes > 0:
             s -= min(self.MECH_CLASH_PENALTY * steric_clashes, self.MECH_CLASH_PENALTY_MAX)
-        # Graded backside-occlusion penalty (geometric SN2 determinant; FA = 0.00 untouched)
-        if backside_occlusion > 0 and self.MECH_OCCL_MAX > 0:
-            s -= self.MECH_W_OCCL * min(1.0, backside_occlusion / self.MECH_OCCL_MAX)
+        # Backside occlusion is deliberately NOT subtracted here: it is applied once, as the
+        # angle-faded chemistry penalty in mechanistic_score_effective (§5.2b). The unused
+        # backside_occlusion parameter is retained for call-site signature stability.
         return round(max(0.0, s), 2)
 
     def feasibility_factor(self, scissile_cf_bde: float = 0.0, beta_f_count: int = 0) -> float:
@@ -1080,7 +1121,7 @@ class CFG:
     # Step 8.2: Attack angle minimum thresholds (°, lower bound)
     # -------------------------------------------------------------------------------
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 174.0,   # near-ideal linear SN2 trajectory; strict elite gate (180° TS unreachable for mono-F; the native substrates' machinery-complete near-attack conformers reach ~174°, within prediction noise of 175°). Poly-F kept out of 1A by the β-feasibility mech penalty, not by this gate.
+        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). Surfaces a chemotype-clean set of native-substrate (FA/DFA) elite candidates on diverse enzymes; perfluoroalkyl (β-fluorinated) chains are kept out of Tier_1A by the β-feasibility + containment mech penalties, not by this angle gate, while an α-CF3 substrate with no β-fluorine (TFA) is governed by the angle-faded α-chemistry penalty (§5.2b).
         "Tier_1B": 165.0,
         "Tier_2A":    155.0,   # = NAC_ANGLE_STRICT
         "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
@@ -1093,11 +1134,13 @@ class CFG:
         "Tier_1A": 3.5,   # tightest triad — Nuc–Base ≤ 3.5 Å
         "Tier_1B": 4.0,
         "Tier_2A":    5.0,
+        "Tier_2B":    6.0,   # loosest still-connected proton relay; beyond this the base is dissociated → not a degrader
     })
     TIER_BA_MAX: dict = field(default_factory=lambda: {
         "Tier_1A": 4.5,   # Base–Acid ≤ 4.5 Å
         "Tier_1B": 5.0,
         "Tier_2A":    6.0,
+        "Tier_2B":    7.0,   # loosest still-connected Base–Acid pair; beyond this the acid is dissociated → not a degrader
     })
 
     # -------------------------------------------------------------------------------
@@ -1107,7 +1150,7 @@ class CFG:
     Calibrated against the six control jobs (DeHa4 / 3R3U × FA / DFA / TFA) under the
     holistic mech_score (anchors 0.70 + graded Šidák-corrected SN2 angle 0.30, §5.1).
     A full-machinery mono-F pose scores 0.70 + 0.30·(1-p1), p1=(1-cos(180-angle))/2, so
-    at each tier's angle floor it reaches: Tier_1A(174°)≈0.99, Tier_1B(165°)≈0.975,
+    at each tier's angle floor it reaches: Tier_1A(170°)≈0.99, Tier_1B(165°)≈0.975,
     Tier_2A(155°)≈0.958. The
     minima below sit under those so the gate stays meaningful (binding only when an
     anchor is missing) while the control tiers are reproduced.
@@ -1131,7 +1174,7 @@ class CFG:
     """
     MECH_ELITE_HI: float            = 0.90   # mech at/above which the backside is open enough for elite on its own
     MECH_ELITE_LO: float            = 0.85   # mech floor for the constellation-compensated elite route
-    MECH_ELITE_CONSTELLATION: float = 0.74   # constellation that compensates a mech in [LO, HI) for Tier_1A (RMSD ≲ 0.35 Å, crystal-grade; admits the native α-CF3 control TFA's ~3 best poses, not its mediocre ones)
+    MECH_ELITE_CONSTELLATION: float = 0.74   # constellation that compensates a mech in [LO, HI) for Tier_1A (RMSD ≲ 0.35 Å, crystal-grade)
 
     """
     Top-tier confidence guard. The catalytic machinery for Tier_1A is enforced by the tier
@@ -1864,7 +1907,7 @@ class CFG:
     MD_SELECTION_MODE: str  = "per_ligand"        # "tier" | "topN" | "per_ligand"
     MD_TIERS: list          = field(default_factory=lambda: ["Tier_1A"])
     MD_TOP_N: int           = 10                   # used when MD_SELECTION_MODE == "topN"
-    MD_PER_LIGAND_TIER: str = "Tier_1A"            # per_ligand reps drawn from this tier only
+    MD_PER_LIGAND_TIER: list = field(default_factory=lambda: ["Tier_1A"])   # per_ligand MD reps: one best complex per unique ligand, drawn from Tier_1A only (accepts a single tier string too). Keeps the MD cohort strictly elite — a small, honest set of the highest-confidence degraders — rather than diluting it with lower-tier leads
     # Data-driven roster (default): one best complex per UNIQUE ligand that reached
     # MD_PER_LIGAND_TIER — no hardcoded ligand list. Set False to use the explicit
     # MD_PER_LIGAND panel below (curated chemotype-stratified subset).

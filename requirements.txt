@@ -1,12 +1,6 @@
 # PFAS pip Requirements
-# Exported : 01 July 2026, 12:12
+# Exported : 05 July 2026, 22:02
 # Script   : 00_01_Environment_Installation_FAcDs.py --export
-#
-# NOTE: This is a FULL environment AUDIT MANIFEST, not a standalone `pip install`
-# target. It lists conda/bioconda-only packages (e.g. pymol, openbabel, freesasa)
-# that either have no PyPI wheel or resolve to a DIFFERENT PyPI package — a plain
-# `pip install -r requirements.txt` will fail or install the wrong package.
-# Reproduce the environment with:   conda env create -f PFAS.yml
 #
 accelerate==1.13.0
 aiobotocore==3.3.0

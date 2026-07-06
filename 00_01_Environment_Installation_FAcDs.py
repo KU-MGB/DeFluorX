@@ -69,10 +69,15 @@ SEPARATOR_HEAVY = "═" * 80
 # -------------------------------------------------------------------------------
 
 def export_environment():
-    """Exports the current active Conda environment to .yml and .txt files."""
-    timestamp = datetime.now().strftime("%d %B %Y, %H:%M")
+    """Exports the current active Conda environment to PFAS.yml and requirements.txt.
 
-    print("Exporting Conda environment to PFAS.yml...")
+    Overwrites the canonical files with the current host's exact versions; the export
+    timestamp is written into each file's header.
+    """
+    timestamp = datetime.now().strftime("%d %B %Y, %H:%M")
+    _yml_path, _req_path, _mode = Path("PFAS.yml"), Path("requirements.txt"), "--export"
+
+    print(f"Exporting Conda environment to {_yml_path}...")
     try:
         # --no-builds omits OS-specific build hashes for cross-platform portability.
         result = subprocess.run(
@@ -94,17 +99,17 @@ def export_environment():
         header = (
             f"# PFAS Conda Environment\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_01_Environment_Installation_FAcDs.py --export\n"
+            f"# Script   : 00_01_Environment_Installation_FAcDs.py {_mode}\n"
             f"#\n"
         )
-        with open("PFAS.yml", "w") as f:
+        with open(_yml_path, "w") as f:
             f.write(header + cleaned_yaml)
-        print(f"{ConsoleColours.OKGREEN}✔ Successfully created PFAS.yml{ConsoleColours.ENDC}")
+        print(f"{ConsoleColours.OKGREEN}✔ Successfully created {_yml_path}{ConsoleColours.ENDC}")
     except subprocess.CalledProcessError as e:
         print(f"{ConsoleColours.FAIL}✘ Error exporting Conda environment: {e}{ConsoleColours.ENDC}")
         sys.exit(1)
 
-    print("\nExporting pip requirements to requirements.txt...")
+    print(f"\nExporting pip requirements to {_req_path}...")
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pip", "list", "--format=freeze"],
@@ -113,15 +118,15 @@ def export_environment():
         header = (
             f"# PFAS pip Requirements\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_01_Environment_Installation_FAcDs.py --export\n"
+            f"# Script   : 00_01_Environment_Installation_FAcDs.py {_mode}\n"
             f"#\n"
         )
         # Filter the obsolete `dataclasses` backport (stdlib since Python 3.7).
         _pip_lines = [ln for ln in result.stdout.splitlines()
                       if not ln.strip().startswith("dataclasses==")]
-        with open("requirements.txt", "w") as f:
+        with open(_req_path, "w") as f:
             f.write(header + "\n".join(_pip_lines) + "\n")
-        print(f"{ConsoleColours.OKGREEN}✔ Successfully created requirements.txt{ConsoleColours.ENDC}")
+        print(f"{ConsoleColours.OKGREEN}✔ Successfully created {_req_path}{ConsoleColours.ENDC}")
     except subprocess.CalledProcessError as e:
         print(f"{ConsoleColours.FAIL}✘ Error exporting pip requirements: {e}{ConsoleColours.ENDC}")
         sys.exit(1)
@@ -168,7 +173,7 @@ def verify_environment() -> None:
     print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} Python           : {py_ver}")
 
     # Helper to check package
-    def check_pkg(name: str, import_name: str = None) -> None:
+    def check_pkg(name: str, import_name: str | None = None) -> None:
         import_name = import_name or name
         try:
             mod = __import__(import_name)
@@ -228,7 +233,7 @@ def main():
     )
     parser.add_argument(
         "--export",  action="store_true",
-        help="Export the current environment to PFAS.yml and requirements.txt"
+        help="Export the current environment to PFAS.yml and requirements.txt (overwrite)"
     )
     parser.add_argument(
         "--install", action="store_true",

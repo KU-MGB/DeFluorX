@@ -429,11 +429,14 @@ echo ""
 
 # ── Pipeline steps ────────────────────────────────────────────────────────────
 
-# Verify the environment only — do NOT pass --export here: --export rewrites the
-# version-pinned PFAS.yml / requirements.txt with the current host's exact versions
-# on every run. Reserve --export for a deliberate, manual environment-archiving step.
+# Verify the environment is complete.
 run_step "00  Environment check" \
     python 00_01_Environment_Installation_FAcDs.py
+
+# Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
+# export timestamp in the header) so they are always present and up to date.
+run_step "00  Environment export" \
+    python 00_01_Environment_Installation_FAcDs.py --export || true
 
 run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \

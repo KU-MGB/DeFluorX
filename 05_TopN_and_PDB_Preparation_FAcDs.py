@@ -934,17 +934,14 @@ def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
         proc = subprocess.Popen(cmd_list, cwd=cwd, env=run_env,
                                 stdout=out_dest, stderr=err_dest)
         proc.communicate(timeout=timeout)
-        rc = proc.returncode
-        if f_handle:
-            f_handle.close()
-        return rc == 0
+        return proc.returncode == 0
     except subprocess.TimeoutExpired:
         if proc:
             proc.kill()
             proc.communicate()
         if f_handle:
-            f_handle.write(f"\n[TIMEOUT after {timeout}s]\n")
-            f_handle.close()
+            try: f_handle.write(f"\n[TIMEOUT after {timeout}s]\n")
+            except Exception: pass
         return False
     except Exception as e:
         if proc:
@@ -953,8 +950,8 @@ def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
                 proc.wait()          # reap the killed child so it does not linger as a zombie
             except Exception: pass
         if f_handle:
-            f_handle.write(f"\n[ERROR]: {e}\n")
-            f_handle.close()
+            try: f_handle.write(f"\n[ERROR]: {e}\n")
+            except Exception: pass
         return False
     except BaseException:
         # KeyboardInterrupt / SIGTERM: reap the PyMOL/PLIP child before the
@@ -963,10 +960,13 @@ def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
             try:
                 proc.kill(); proc.wait()
             except Exception: pass
+        raise
+    finally:
+        # Guarantee the log handle is released on every path, so a failing write in a
+        # handler above cannot leak the descriptor under parallel execution.
         if f_handle:
             try: f_handle.close()
             except Exception: pass
-        raise
 
 # -------------------------------------------------------------------------------
 # --- Figure engine: visualisation engines (PyMOL / PLIP) ---
