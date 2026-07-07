@@ -344,16 +344,49 @@ class Heartbeat:
                 best = max(best, int(m[-1]))
         return best
 
+    # thermal_mmgbsa hands the read frames to a separate Prime MM-GBSA job whose
+    # progress is written elsewhere; the main log falls silent. Detect that hand-off
+    # so the heartbeat reports the Prime scoring phase instead of a frozen frame count.
+    _PRIME_HANDOFF = re.compile(r"Passing\s+\d+\s+structures\s+to\s+Prime|Running Prime MMGBSA", re.IGNORECASE)
+
+    def _prime_progress(self) -> "tuple[int, int] | None":
+        """Best-effort (done, total) for the Prime phase from a ``*-prime*.log`` in
+        the job directory, if the job server wrote one there; otherwise ``None``."""
+        try:
+            for _plog in sorted(self.log_file.parent.glob("*-prime*.log")):
+                _t = _plog.read_text(errors="ignore")
+                m = re.findall(r"(\d+)\s*(?:/|of)\s*(\d+)\s*(?:sub)?jobs?", _t, re.IGNORECASE)
+                if m:
+                    _d, _tot = m[-1]
+                    return int(_d), int(_tot)
+        except Exception:
+            pass
+        return None
+
     def _run(self):
         while not self._stop.wait(self.interval):
             elapsed_min = int((time.time() - self._start) // 60)
-            frame = 0
             try:
-                frame = self._latest_frame(self.log_file.read_text(errors="ignore"))
+                text = self.log_file.read_text(errors="ignore")
             except Exception:
-                frame = 0
+                text = ""
+            # Prime MM-GBSA scoring phase: trajectory read is complete and the main
+            # log is silent while Prime minimises every frame in a separate job.
+            if self._PRIME_HANDOFF.search(text):
+                prog = self._prime_progress()
+                if prog is not None:
+                    _done, _tot = prog
+                    _pct = min(100, _done * 100 // max(_tot, 1))
+                    _echo(f"    [PROGRESS] {self.label}: ⚙ Prime MM-GBSA scoring "
+                          f"{_done}/{_tot} subjobs ({_pct}%, {elapsed_min}m elapsed)")
+                else:
+                    _echo(f"    [PROGRESS] {self.label}: ⚙ Prime MM-GBSA scoring all "
+                          f"{self.total:,} frames — minimisation phase, no per-frame log "
+                          f"(working, {elapsed_min}m elapsed)")
+                continue
+            frame = self._latest_frame(text)
             pct = min(100, frame * 100 // self.total)
-            _echo(f"    [PROGRESS] {self.label}: frame {frame}/{self.total} "
+            _echo(f"    [PROGRESS] {self.label}: frame {frame:,}/{self.total:,} "
                   f"({pct}%, {elapsed_min}m elapsed)")
 
     def __enter__(self):
