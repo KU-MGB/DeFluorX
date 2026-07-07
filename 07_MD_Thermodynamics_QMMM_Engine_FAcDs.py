@@ -147,9 +147,9 @@ Scientific references
 import sys
 import os
 
-# ===============================================================================
+# =============================================================================
 # SCHRÖDINGER BOOTSTRAP
-# ===============================================================================
+# =============================================================================
 # Auto-sets SCHRODINGER=/opt/schrodinger if the env var is absent.
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
@@ -171,7 +171,7 @@ except ImportError:
     print(f"CRITICAL: Schrödinger suite not found at {os.environ['SCHRODINGER']}.\n"
           f"Set the SCHRODINGER environment variable to your installation path.")
     sys.exit(1)
-# ===============================================================================
+# =============================================================================
 
 import re
 import time
@@ -277,9 +277,9 @@ find_nucleophile_od_fallback = _utils_mod.find_nucleophile_od_fallback
 PLOT_LOCK = threading.Lock()
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 1: GLOBAL CONSTANTS & CONFIGURATION
-# ===============================================================================
+# =============================================================================
 # All thresholds sourced from 00_02_Project_Config_FAcDs.py (CFG).
 # Fallback literals are numerically identical — activate only when CFG is
 # unavailable (e.g., standalone testing outside the repository).
@@ -314,9 +314,9 @@ SEPARATOR = "-" * 80
 logger    = None  # Initialised in main()
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: CONSOLE WRAPPER FUNCTIONS
-# ===============================================================================
+# =============================================================================
 
 import threading
 thread_logger = threading.local()
@@ -372,9 +372,9 @@ def console_qmm_ready(msg: str) -> None:
     _print_labeled("QM/MM READY", "\033[94m", msg)
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: GEOMETRY & MATHEMATICAL UTILITIES
-# ===============================================================================
+# =============================================================================
 
 # NOTE: This function is NOT equivalent to 00_03_Project_Utils.calculate_min_distance.
 # It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
@@ -595,9 +595,9 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     return idx_nuc, idx_base, idx_acid, idx_cradle, cf_pairs
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: DATA HANDLING & LOADING FUNCTIONS
-# ===============================================================================
+# =============================================================================
 
 def parse_mapping(map_str: str) -> dict:
     """Parses 'ASP110:ASP112 | HIS277:HIS280' alignment string into {ref_num: tgt_num}."""
@@ -921,9 +921,9 @@ def load_triad_mapping(csv_path: Path) -> dict:
         return {}
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: VISUALISATION ENGINES
-# ===============================================================================
+# =============================================================================
 
 def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                                   output_path: Path, stats: dict) -> None:
@@ -1325,9 +1325,9 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     console_info(f"    Viability Bar Chart Saved   : {out_path.resolve()}")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 6: PHYSICAL CHEMISTRY MODULES
-# ===============================================================================
+# =============================================================================
 
 def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
                   sol_positions: np.ndarray, box, wm_sites,
@@ -1382,9 +1382,9 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 7: QSITE AUTOMATION
-# ===============================================================================
+# =============================================================================
 
 # Solvation-droplet radius (Å) for the QSite .mae: only solvent within this
 # distance of the ligand is retained, trimming the full periodic box to a
@@ -1680,9 +1680,9 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     return True
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 8: CORE ANALYSIS ENGINE
-# ===============================================================================
+# =============================================================================
 
 # Number of threads used for parallel DTR frame pre-loading.
 # Each thread opens its own read_traj instance (thread-safe).
@@ -2307,8 +2307,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         "EAF_N_Frames":     int(len(eaf_msa)),
         "EAF_File":         eaf_path.name if eaf_path else "Not found",
     }
-    for k in ['degrader_tier', 'Dist_Nucleophile_ASP110', 'SN2_Attack_Angle',
-              'Boltz_Model_Confidence']:
+    for k in [CFG.COL_TIER, CFG.COL_NUC_DIST, CFG.COL_SN2, CFG.COL_CONF]:
         if k in row: stats[k] = row[k]
 
     _n_mapped_log = stats.get('Dream_Team_Mapped', 0)
@@ -2377,9 +2376,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     return stats
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 9: MAIN EXECUTION
-# ===============================================================================
+# =============================================================================
 
 def _resolve_work_dir(raw: str) -> Path:
     """
@@ -2728,7 +2727,7 @@ def main():
         # partial summary (Step 06 not run) is non-fatal — the ΔG columns are left absent.
         _mmgbsa_csv = (work_dir / "MolecularDynamics"
                        / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
-                       / "00_MMGBSA_Summary.csv")
+                       / CFG.FILE_MMGBSA_SUMMARY)
         if _mmgbsa_csv.exists() and "Scientific_Rank" in df_master.columns:
             try:
                 _mdf = pd.read_csv(_mmgbsa_csv)

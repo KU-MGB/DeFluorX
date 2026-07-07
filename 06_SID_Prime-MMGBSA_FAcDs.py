@@ -144,9 +144,9 @@ _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length
 EAF_TOKENS_PER_FRAME = getattr(CFG, "EAF_TOKENS_PER_FRAME", 1)
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: SMALL HELPERS
-# ===============================================================================
+# =============================================================================
 def _echo(msg: str = "") -> None:
     """Print to terminal immediately (flush) — keeps live progress visible."""
     print(msg, flush=True)
@@ -244,9 +244,9 @@ def _proc_alive(pattern: str) -> bool:
     return any(pid.strip() and pid.strip() != me for pid in res.stdout.split())
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: SYSTEMD-OOMD MANAGEMENT (standalone mode only)
-# ===============================================================================
+# =============================================================================
 class OomdGuard:
     """Optionally mask systemd-oomd to prevent Out-Of-Memory kills during long SID runs.
 
@@ -310,9 +310,9 @@ class OomdGuard:
         return False
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: HEARTBEAT (progress of a long-running analyze_simulation step)
-# ===============================================================================
+# =============================================================================
 class Heartbeat:
     """Periodically report a long Schrödinger step's progress by tailing its log.
 
@@ -369,9 +369,9 @@ class Heartbeat:
         return False
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: RUN-DIRECTORY RESOLUTION
-# ===============================================================================
+# =============================================================================
 def resolve_run_dir(run_arg: str | None) -> str:
     """Return the Boltz-2_Run_* directory name, auto-detecting the latest if
     none was supplied. Mirrors the shell auto-detect (sort | tail -1).
@@ -391,9 +391,9 @@ def resolve_run_dir(run_arg: str | None) -> str:
     sys.exit(1)
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 6: SCAN PHASE
-# ===============================================================================
+# =============================================================================
 def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
     """Classify every desmond_md_job_R_* directory and return the subset
     that still needs SID analysis (READY or INCOMPLETE).
@@ -450,9 +450,9 @@ def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
     return to_run
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 7: SID ANALYSIS PER JOB
-# ===============================================================================
+# =============================================================================
 def run_event_analysis(job_dir: Path, job_name: str, cms_file: Path, in_eaf: Path) -> None:
     """Step 1: event_analysis.py — generates the SID-in.eaf descriptor."""
     if in_eaf.is_file():
@@ -558,9 +558,9 @@ def process_jobs(to_run: list[Path]) -> None:
         _echo("  Step 07 will process only the ranks that completed.")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 8: PRIME MM-GBSA (end-state binding free energy over the MD ensemble)
-# ===============================================================================
+# =============================================================================
 """
 Mirrors the manual workflow:
     cd <desmond_md_job_R_N> ; $SCHRODINGER/run thermal_mmgbsa.py <job>-out.cms
@@ -841,7 +841,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> None:
         if "Scientific_Rank" in _sdf.columns:
             _sdf = _sdf.sort_values("Scientific_Rank",
                                     key=lambda s: pd.to_numeric(s, errors="coerce"))
-        _csv_out = out_dir / "00_MMGBSA_Summary.csv"
+        _csv_out = out_dir / CFG.FILE_MMGBSA_SUMMARY
         _sdf.to_csv(_csv_out, index=False)
         _echo(f"  MM-GBSA summary table saved : {_csv_out.resolve()}")
     try:
@@ -850,9 +850,9 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> None:
         _echo(f"  [!] MM-GBSA combined plot failed ({e}) — skipped.")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 9: MAIN
-# ===============================================================================
+# =============================================================================
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=f"{CFG.PROJECT_NAME} Step 06 — Desmond SID + Prime MM-GBSA Post-Processing")

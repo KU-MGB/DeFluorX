@@ -225,9 +225,9 @@ Scientific References:
 ===============================================================================
 """
 
-# ===============================================================================
+# =============================================================================
 # SECTION 1: SYSTEM CONFIGURATION & IMPORTS
-# ===============================================================================
+# =============================================================================
 from __future__ import annotations
 
 # -------------------------------------------------------------------------------
@@ -366,9 +366,9 @@ distance = _utils_mod.distance
 calculate_angle = _utils_mod.calculate_angle
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: PHYSICAL CONSTANTS & PARAMETERS (MAESTRO STANDARDS)
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 2.1: Path & Model Configuration
@@ -483,7 +483,6 @@ REF_SEQUENCE_STR = DEHA4_CONTROL_SEQ
 
 # Fluoroacetate SMILES used for reference construction operations.
 REF_LIGAND_SMILES = CFG.FLUOROACETATE_SMILES
-DEHA4_CONTROL_SMI = REF_LIGAND_SMILES
 
 # The three fluoroacetate control substrates used for DEHA4 and 3R3U calibration runs.
 CTRL_LIGANDS = CFG.CTRL_LIGANDS
@@ -617,9 +616,9 @@ GLOBAL_STATS = {
 }
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: UTILITY FUNCTIONS (LOGGING & DISPLAY)
-# ===============================================================================
+# =============================================================================
 
 def setup_logging(log_file_path: Path) -> Path:
     global logger
@@ -787,9 +786,9 @@ def reconcile_resume_job_names(prod_dir: Path, expected_job_stems: Dict[Tuple[st
                      f"{GLOBAL_STATS.get('renamed_dirs', 0):,} folder(s) renamed).")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: REFERENCE & SELF-HEALING SYSTEM (DATA RECOVERY)
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 4.1: Geometric Truth Initialisation
@@ -813,7 +812,7 @@ def setup_reference_data(target_dir: Path):
         shutil.rmtree(_legacy_ref, ignore_errors=True)
 
     pdb_path   = target_dir / f"{CFG.REFERENCE_PDB_ID}.pdb"
-    fasta_path = target_dir / "DeHa4_Ref.fasta"
+    fasta_path = target_dir / CFG.DEHA4_REF_FASTA
     smi_path   = target_dir / "Control_Ligands_TFA_FA_DFA_Ref.smi"
 
     console_info(f"\n{SEPARATOR_LIGHT}")
@@ -1137,9 +1136,9 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
     return run_count
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: BIOINFORMATICS (ALIGNMENT & SUPERIMPOSITION)
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 5.1: Caching Framework
@@ -1517,9 +1516,9 @@ def format_full_role_map(resname_map: Dict[str, str]) -> Dict[str, str]:
     return {col: resname_map.get(role, "MISSING") for role, col in _ROLE_TO_COL.items()}
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 6: CHEMINFORMATICS & PHYSICS ENGINE
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 6.1: Spatial Mathematical Utilities
@@ -2005,9 +2004,9 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
         return {}
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 7: GEOMETRIC ANALYSIS (CATALYSIS) & CALIBRATION
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 7.1: Reference Data Handling (Calibration Logic)
@@ -3703,9 +3702,9 @@ def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smile
     return best_model, best_meta
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 8: METRICS & GPU MANAGEMENT
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 8.1: Metric Computation
@@ -3769,9 +3768,9 @@ def cpu_usage_summary():
     except Exception: return 0.0, 1
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 9: JOB PROCESSING LOGIC (CORE WORKER)
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 9.1: Status Validation Operations
@@ -3864,7 +3863,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     # each variant has exactly one .txt, not one per protein×ligand job.
     _safe_protein = re.sub(r"[^A-Za-z0-9._-]", "_", str(job["protein"]))
     aln_path = aln_dir / f"{_safe_protein}_alignment.txt"
-    stats_csv_path = aln_dir / "Alignment_Stats.csv"
+    stats_csv_path = aln_dir / CFG.FILE_ALIGNMENT_STATS
 
     cached_aln = get_cached_alignment_for_protein(job["protein"])
     aln_inject = {
@@ -4667,9 +4666,9 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
 
     return len(rows)
 
-# ===============================================================================
+# =============================================================================
 # SECTION 10: MAIN SYSTEM ENTRY POINT
-# ===============================================================================
+# =============================================================================
 
 def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
     """Build the mechanism-first Scientific Ranking CSV from the master CSV.
@@ -5027,7 +5026,7 @@ def main():
         try:
             # Skip the reference files (now co-located in the input folder) when
             # picking the user input FASTA/SMI on resume.
-            _ref_files = {"DeHa4_Ref.fasta", "Control_Ligands_TFA_FA_DFA_Ref.smi", "Fluoroacetate_Ref.smi"}
+            _ref_files = {CFG.DEHA4_REF_FASTA, "Control_Ligands_TFA_FA_DFA_Ref.smi", "Fluoroacetate_Ref.smi"}
             f_path = next(p for p in sorted(D_IN.glob("*.fasta")) if p.name not in _ref_files)
             s_path = next(p for p in sorted(D_IN.glob("*.smi"))   if p.name not in _ref_files)
         except StopIteration:
@@ -5170,7 +5169,7 @@ def main():
         reconcile_resume_job_names(PROD, expected_job_stems)
 
     console_info("  Loading alignment cache...")
-    load_cached_alignments(D_ALN / "Alignment_Stats.csv")
+    load_cached_alignments(D_ALN / CFG.FILE_ALIGNMENT_STATS)
     console_separator()
 
     # -------------------------------------------------------------------------------
@@ -6685,7 +6684,7 @@ def main():
     # -------------------------------------------------------------------------------
     rank_csv_path, rank_columns_count = generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now)
 
-    save_alignment_cache_final(D_ALN / "Alignment_Stats.csv")
+    save_alignment_cache_final(D_ALN / CFG.FILE_ALIGNMENT_STATS)
 
     console_separator()
 

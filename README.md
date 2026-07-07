@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
         ENV["🛠 &nbsp; 00_01 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~298 lines &nbsp; "]
-        CFG["📋 &nbsp; 00_02 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~1,943 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_02 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~1,967 lines &nbsp; "]
         UTL["🔧 &nbsp; 00_03 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~930 lines &nbsp; "]
         ENV --- CFG --- UTL
     end
@@ -199,8 +199,8 @@ flowchart TD
     M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~699 lines &nbsp; "] --> M2
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
-        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,846 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 46 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~7,880 lines &nbsp; "]
+        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,845 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 46 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~7,869 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,655 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -217,7 +217,7 @@ flowchart TD
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
         M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~922 lines &nbsp; "]
-        M7["07 · &nbsp; MD/QMMM Engine &nbsp; \n &nbsp; Traj analysis & scoring &nbsp; \n &nbsp; QSite defluorination + WaterMap figs &nbsp; \n &nbsp; 📄 ~2,792 lines &nbsp; "]
+        M7["07 · &nbsp; MD/QMMM Engine &nbsp; \n &nbsp; Traj analysis & scoring &nbsp; \n &nbsp; QSite defluorination + WaterMap figs &nbsp; \n &nbsp; 📄 ~2,791 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 

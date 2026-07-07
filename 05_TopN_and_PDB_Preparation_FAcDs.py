@@ -85,9 +85,9 @@ Scientific References:
 -------------------------------------------------------------------------------
 """
 
-# ===============================================================================
+# =============================================================================
 # SECTION 1: SYSTEM CONFIGURATION & IMPORTS
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
@@ -198,9 +198,9 @@ STANDARD_AA        = CFG.PREP_STANDARD_AA
 PROTEIN_ASSOCIATED = CFG.PREP_PROTEIN_ASSOCIATED
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: LOGGING INFRASTRUCTURE
-# ===============================================================================
+# =============================================================================
 
 """
 Logging and console functions are provided by 00_03_Project_Utils.
@@ -226,9 +226,9 @@ def console_separator() -> None:
     _utils_mod.console_separator(logger, heavy=True)
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: CORE LOGIC & HELPERS
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 3.1: File Indexing & Metadata
@@ -509,9 +509,9 @@ def run_prepwizard(raw_pdb: Path, final_dest: Path):
     return False
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: TASK EXECUTION & VALIDATION LOGIC
-# ===============================================================================
+# =============================================================================
 
 def generate_raw_step(job_name: str, best_cif: Path, dir_raw: Path, rank: str, raw_index: dict):
     """
@@ -628,9 +628,9 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
     return {"job": job_name, "status": status, "rank": rank}
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: MAIN EXECUTION
-# ===============================================================================
+# =============================================================================
 
 def load_catalytic_anchor_map(prod_dir: Path) -> dict:
     """Per-job catalytic residue numbers taken from 02's dynamic global alignment
@@ -821,9 +821,9 @@ def extract_chain_l_mol(pdb_path: Path):
         return None
 
 
-# ===============================================================================
-# SECTION 5: MAIN EXECUTION LOGIC
-# ===============================================================================
+# =============================================================================
+# SECTION 6: MAIN EXECUTION LOGIC
+# =============================================================================
 
 
 def _fig_constants():
@@ -1017,8 +1017,10 @@ def _run_pymol(pdb_path, fig_root, log_dir, base_name, lig_name, lig_num, has_f,
         f"select ligand, {lig_sel}",
         f"select interacting, byres polymer.protein within {C['DIST_F_CONTACT']} of ligand",
         "hide all",
-        # Full protein surface — grey, 50% transparent so ligand sticks show through
-        "show surface, polymer.protein",
+        # Pocket-local surface — grey, 50% transparent so ligand sticks show through.
+        # Restricted to residues near the ligand: the far protein is off-frame after
+        # the zoom/clip below, so rendering its surface is wasted ray time.
+        f"show surface, byres (polymer.protein within {CFG.VIS_PYMOL_SURFACE_RADIUS} of ligand)",
         "color gray65, polymer.protein",
         f"set transparency, {CFG.VIS_PYMOL_SURFACE_TRANSPARENCY}",
         # Protein cartoon underneath surface
@@ -2006,31 +2008,31 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
     )
 
     results    = {}
-    completed  = 0
 
-    def _collect(fut_map, pool_label):
-        nonlocal completed
+    def _collect(fut_map, pool_label, total):
+        # Per-pool progress: PLIP and PyMOL each report against their own task
+        # count (not the combined subprocess total), so the denominator is not inflated.
+        done = 0
         for f in as_completed(fut_map):
             engine, cname = fut_map[f]
             status = f.result()
             if cname not in results:
                 results[cname] = {}
             results[cname][engine] = status
-            completed += 1
-            total_sub = len(subprocess_tasks)
-            if completed % 5 == 0 or completed == total_sub:
+            done += 1
+            if done % 5 == 0 or done == total:
                 if sys.stdout.isatty():
-                    print(f"\r  [{pool_label}] {completed}/{total_sub} tasks ...", end="", flush=True)
-                elif completed == total_sub:
-                    print(f"  [{pool_label}] {completed}/{total_sub} tasks finished.", flush=True)
+                    print(f"\r  [{pool_label}] {done}/{total} tasks ...", end="", flush=True)
+                elif done == total:
+                    print(f"  [{pool_label}] {done}/{total} tasks finished.", flush=True)
 
     # Phase A1: PLIP — I/O-bound, run at full worker count
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        _collect({executor.submit(t[1], *t[2]): (t[0], t[2][3]) for t in _plip_tasks}, "PLIP")
+        _collect({executor.submit(t[1], *t[2]): (t[0], t[2][3]) for t in _plip_tasks}, "PLIP", len(_plip_tasks))
 
     # Phase A2: PyMOL — CPU-bound ray-tracing, limited to 2 concurrent processes
     with ThreadPoolExecutor(max_workers=_pymol_workers) as executor:
-        _collect({executor.submit(t[1], *t[2]): (t[0], t[2][3]) for t in _pymol_tasks}, "PyMOL")
+        _collect({executor.submit(t[1], *t[2]): (t[0], t[2][3]) for t in _pymol_tasks}, "PyMOL", len(_pymol_tasks))
 
     if sys.stdout.isatty():
         print("\n")
@@ -2517,7 +2519,6 @@ def topn_extraction_phase(args):
     # Initialise SDF Writer
     sdf_path = out_handover / f"{folder_tag}_Ligands.sdf"
     sdf_writer = Chem.SDWriter(str(sdf_path))
-    count_sdf = 0
     try:
 
         # -------------------------------------------------------------------------------
@@ -2579,8 +2580,8 @@ def topn_extraction_phase(args):
         protein_data  = {}                # Key: sequence,  Value: protein_name
 
         for idx, (i, row) in enumerate(subset.iterrows()):
-            rel_rank = idx + 1
-            # Metadata
+            # Metadata — handover naming keys on the true Scientific_Rank
+            # (not selection order) so R_N matches every downstream MD/WaterMap artifact.
             rank = row.get("Scientific_Rank", i+1)
             name = row["job_name"]
 
@@ -2678,13 +2679,13 @@ def topn_extraction_phase(args):
             src_prep = prep_pdb_dir / fname_prep
             if src_prep.exists():
                 try:
-                    title_line = f"TITLE     R{rel_rank}_{name}\n"
+                    title_line = f"TITLE     R{rank}_{name}\n"
                     with open(src_prep, "r") as f:
                         pdb_lines = f.readlines()
                     pdb_lines = [line for line in pdb_lines if not line.startswith("TITLE")]
                     pdb_lines.insert(0, title_line)
                     
-                    dest_pdb = out_handover / f"R{rel_rank}_{name}.pdb"
+                    dest_pdb = out_handover / f"R{rank}_{name}.pdb"
                     with open(dest_pdb, "w") as f:
                         f.writelines(pdb_lines)
                 except Exception as e:
@@ -2718,7 +2719,6 @@ def topn_extraction_phase(args):
                 mol.SetProp("Ranks", rank_str)
                 mol.SetProp("Ligand_Name", l_name)
                 sdf_writer.write(mol)
-                count_sdf += 1
 
         # -------------------------------------------------------------------------------
         # Step 5.10: Save data & summary
@@ -2803,9 +2803,9 @@ def topn_extraction_phase(args):
     run_figure_generation(run_dir, final_dir)
 
 
-# ===============================================================================
-# SECTION 6: PHASE 2 — FIGURE GENERATION (PyMOL / PLIP)
-# ===============================================================================
+# =============================================================================
+# SECTION 7: PHASE 2 — FIGURE GENERATION (PyMOL / PLIP)
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # --- Figure engine: constants (sourced from CFG) ---

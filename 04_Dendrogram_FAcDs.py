@@ -74,9 +74,9 @@ Scientific References:
 -------------------------------------------------------------------------------
 """
 
-# ===============================================================================
+# =============================================================================
 # SECTION 1: IMPORTS & CONFIGURATION
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
@@ -144,9 +144,9 @@ SEPARATOR = "-" * 80
 COL_MAP = CFG.VIS_PHYLO_COLUMN_MAP
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: LOGGING & UTILITIES
-# ===============================================================================
+# =============================================================================
 
 logger = None  # Initialised in main()
 
@@ -177,9 +177,9 @@ def clean_id(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: BIO-MATHEMATICS
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 3.1: K-mer Profiling
@@ -246,9 +246,9 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
     return newick_str, labels
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: PHYLOGENY DEPLOYMENT
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 4.1: Suite Packaging
@@ -417,9 +417,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     with open(reporter.path, "a") as f: f.write("\n[LOG] ✔ Dendrogram Pipeline Completed Successfully\n")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: MAIN EXECUTION
-# ===============================================================================
+# =============================================================================
 
 def main():
     parser = argparse.ArgumentParser(description="Boltz-2 Phylogenetic Analysis Pipeline")
@@ -460,9 +460,9 @@ def main():
     # Locate validated master CSV produced by 03_Validation_Figures_FAcDs.py
     # (written under the 00_Analysis_Data subfolder; rglob covers legacy root too).
     csv_candidates = (
-        sorted(val_dir.glob("00_Analysis_Data/03_Final_Validated_Master.csv")) or
-        sorted(val_dir.glob("03_Final_Validated_Master.csv")) or
-        sorted(val_dir.rglob("03_Final_Validated_Master.csv")) or
+        sorted(val_dir.glob(f"00_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
+        sorted(val_dir.glob(CFG.FILE_VALIDATED_MASTER)) or
+        sorted(val_dir.rglob(CFG.FILE_VALIDATED_MASTER)) or
         sorted(val_dir.glob("*_Validated_Master*.csv")) or
         sorted(val_dir.rglob("*_Master_*.csv"))
     )
@@ -485,9 +485,9 @@ def main():
         sys.exit(1)
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 6: HTML APPLICATION TEMPLATE (EMBEDDED D3.JS ENGINE)
-# ===============================================================================
+# =============================================================================
 
 HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">

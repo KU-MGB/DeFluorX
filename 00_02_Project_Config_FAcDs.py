@@ -242,6 +242,7 @@ class CFG:
         "QPAPLPERLIEADPAAYVREIMGRRSAGLAPFDPRALAEYQRCLALPGSAHGMCEDYRASAGIDLDHDREDRQLGRRLSM"
         "PLLVLWGEEGWHRCFDPLREWQLVADDVRGRPLACGHYIAEEAPDALLDAALPFLLQAG"
     )
+    DEHA4_REF_FASTA: str = "DeHa4_Ref.fasta"       # per-run reference FASTA filename (SSOT: 02 writes)
 
     # -------------------------------------------------------------------------------
     # Step 2.3: Crystal structure reference — PDB 3R3U
@@ -253,6 +254,7 @@ class CFG:
     """
     REFERENCE_PDB_ID: str    = "3R3U"
     REFERENCE_PDB_URL: str   = "https://files.rcsb.org/download/3R3U.pdb"
+    REFERENCE_PDB_FILE: str  = "3R3U.pdb"          # local copy filename (SSOT: 03 crystal read)
     REFERENCE_DIR_NAME: str  = "0_Reference_Crystal_3R3U"
 
     # -------------------------------------------------------------------------------
@@ -1548,6 +1550,7 @@ class CFG:
     VIS_PYMOL_SURFACE_TRANSPARENCY: float = 0.50
     VIS_PYMOL_CARTOON_TRANSPARENCY: float = 0.35
     VIS_PYMOL_LABEL_COLOR: str         = "white"
+    VIS_PYMOL_SURFACE_RADIUS: float    = 18.0  # Å  render surface only within this radius of the ligand; the far protein is off-frame after zoom/clip, so this cuts ray time with no visible change
 
     # -------------------------------------------------------------------------------
     # Step 13.1b: Boltz confidence quality bands (figure shading — Step 03)
@@ -1587,7 +1590,7 @@ class CFG:
     # -------------------------------------------------------------------------------
     # Step 13.2: Per-structure rendering timeouts — seconds (Step 07)
     # -------------------------------------------------------------------------------
-    VIS_TIMEOUT_PYMOL: int    = 600   # PyMOL render timeout (2× 2400-px ray traces ~5 min on CPU)
+    VIS_TIMEOUT_PYMOL: int    = 600   # PyMOL render timeout (2× 2400-px ray traces, pocket-local surface — a few min on CPU)
     VIS_TIMEOUT_CHIMERAX: int = 180   # ChimeraX render timeout
     VIS_TIMEOUT_MAESTRO: int  = 300   # Maestro render timeout
     VIS_TIMEOUT_PLIP: int     =  90   # PLIP interaction analysis timeout
@@ -1615,6 +1618,7 @@ class CFG:
     VIS_TT_PAD: int          =  28    # px  inter-panel padding
     VIS_TT_FONT_SIZE: int    =  44    # pt  annotation font size
     VIS_TT_AX_WIDTH: float   =   0.12 # fraction of figure width for axis panel
+    VIS_TT_ZOOM_BUFFER: float =  1.0  # Å  PyMOL zoom padding around the pocket (lower = more zoomed-in)
 
     # -------------------------------------------------------------------------------
     # Step 13.5: Maximum display ranks (Step 03)
@@ -1849,6 +1853,15 @@ class CFG:
         "Control": "Reference Control"
     })
 
+    # -------------------------------------------------------------------------------
+    # Step 16.5: Canonical pipeline artefact filenames (cross-script SSOT)
+    # -------------------------------------------------------------------------------
+    # Written by one stage, read by another — centralised so the producer and
+    # consumer filename cannot drift apart.
+    FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
+    FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes → 07 reads
+    FILE_VALIDATED_MASTER: str = "03_Final_Validated_Master.csv" # 03 writes → 04 reads
+
     # ===============================================================================
     # SECTION 17: PRIME MM-GBSA  (Step 06 — end-state binding free energy)
     # ===============================================================================
@@ -1919,6 +1932,17 @@ class CFG:
     ])
     MD_SELECTED_COL: str = "MD_Selected"          # bool column written to the ranked CSV
     MD_RANK_COL: str     = "MD_Rank"              # int (1..N over selected), NaN otherwise
+
+    # ===============================================================================
+    # SECTION 14: SSOT File Naming Extensions
+    # ===============================================================================
+    """
+    Standard suffixes appended to file basenames for downstream tasks.
+    Centralized here to ensure uniformity across the Preparation and MD stages.
+    """
+    EXT_QMMM_READY: str  = "_QMMM_Ready.pdb"
+    EXT_LIGAND_SDF: str  = "_Ligand.sdf"
+    EXT_COMPLEX_PDB: str = "_Complex.pdb"
 
     def __post_init__(self):
         """

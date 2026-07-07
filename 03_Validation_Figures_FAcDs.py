@@ -167,9 +167,9 @@ Scientific References:
 ===============================================================================
 """
 
-# ===============================================================================
+# =============================================================================
 # SECTION 1: SYSTEM CONFIGURATION & IMPORTS
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
@@ -330,9 +330,9 @@ plt.rcParams.update({
 SEPARATOR = "-" * 80
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 2: LOGGING & UTILITIES
-# ===============================================================================
+# =============================================================================
 
 logger = None
 
@@ -366,9 +366,9 @@ def _make_reporter(out_dir: Path):
 # Alignment grade is provided by _utils_mod.get_alignment_grade(val, CFG).
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 3: ANALYSIS ALGORITHMS (PARETO OPTIMISATION)
-# ===============================================================================
+# =============================================================================
 
 # -------------------------------------------------------------------------------
 # Step 3.1: Pareto Optimisation
@@ -437,9 +437,9 @@ def calculate_pareto_fronts(df: pd.DataFrame, objectives: list, maximize: list) 
 
     return pd.Series(pareto_ranks, index=df.index)
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4: DATA PROCESSING & FIGURES (PIPELINE)
-# ===============================================================================
+# =============================================================================
 
 def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.DataFrame, list[str]]:
     """
@@ -514,7 +514,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
     """
-    reporter.section("Step 1/6 — Multi-Objective Ranking (PCA & Pareto)  [analysis, no figure folder]")
+    reporter.section("Step 1/5 — Multi-Objective Ranking (PCA & Pareto)  [analysis, no figure folder]")
 
     x = df[features].dropna()
     '''
@@ -642,7 +642,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     low confidence; decoys = high confidence but poor mechanism), logs the
     per-class counts, and saves the final validated master table to out_dir.
     """
-    reporter.section("Step 2/6 — Conflict & Opportunity Analysis  [analysis, no figure folder]")
+    reporter.section("Step 2/5 — Conflict & Opportunity Analysis  [analysis, no figure folder]")
 
     def classify(row):
         tier = row.get("degrader_tier", CFG.TIER_DECOY)
@@ -667,10 +667,10 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
 
     return df
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4B: Tier_1A Landscape Companion Figures (the *b variants: 05b, 11b, 13b,
 #             14b, 17b, 18b, 19b, 20b, 24b, 26b)
-# ===============================================================================
+# =============================================================================
 
 """
 Companion figures overlaying Tier_1A structural thumbnails onto the same
@@ -758,7 +758,7 @@ def _tt_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, heig
         cmd.set("label_size",    -0.45)
         cmd.set("label_font_id", 7)
         cmd.orient("pocket")
-        cmd.zoom("pocket", buffer=5)
+        cmd.zoom("pocket", buffer=CFG.VIS_TT_ZOOM_BUFFER)
         cmd.bg_color("black")
         cmd.viewport(width, height)
         cmd.set("ray_shadows",           "off")
@@ -773,7 +773,6 @@ def _tt_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, heig
 def _tt_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter) -> list:
     thumb_dir.mkdir(exist_ok=True)
     imgs = []
-    n_rendered = n_cached = n_failed = 0
     # Render at most CFG.VIS_MAX_THUMBNAILS thumbnails (top-N rows of the
     # rank-sorted Pareto frame) so a populous Tier_1A cannot flood the panel.
     for local_i, (_, row) in enumerate(pa.head(CFG.VIS_MAX_THUMBNAILS).iterrows()):
@@ -782,15 +781,7 @@ def _tt_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter)
             cif = _tt_find_cif(pred_jobs, str(row.get("job_name", "")))
             if cif:
                 col = _TT_STRUCT_COLS[local_i % len(_TT_STRUCT_COLS)]
-                ok = _tt_render_one(cif, png, col)
-                if ok:
-                    n_rendered += 1
-                else:
-                    n_failed += 1
-            else:
-                n_failed += 1
-        else:
-            n_cached += 1
+                _tt_render_one(cif, png, col)
         imgs.append(np.array(Image.open(png).convert("RGBA")) if png.exists() else None)
     return imgs
 
@@ -1221,7 +1212,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _redirect_savefig context manager wrapping this call (see
     generate_comprehensive_figures). Side-effecting (writes PNGs); returns None.
     """
-    reporter.section("Step 4/6 — Main Validation Figure Suite (Publication Quality)  [writes folders 02–06]")
+    reporter.section("Step 4/5 — Main Validation Figure Suite (Publication Quality)  [writes folders 02–06]")
 
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
 
@@ -1252,7 +1243,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     """
     import json as _json01
     from collections import Counter as _Counter01
-    _aln_csv = out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data" / "Active_Site_Alignments" / "Alignment_Stats.csv"
+    _aln_csv = out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data" / "Active_Site_Alignments" / CFG.FILE_ALIGNMENT_STATS
     if _aln_csv.exists():
         _aa3 = {"ASP": "Asp", "ARG": "Arg", "HIS": "His", "TRP": "Trp", "TYR": "Tyr"}
         _ref = CFG.REF_ACTIVE_SITE_MAP
@@ -1827,7 +1818,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _has_ptm   = "ptm" in df.columns and "iptm" in df.columns and "degrader_tier" in df.columns
     if _has_conf or _has_ptm:
         try:
-            from scipy import stats as _sc_stats10
             fig, ax = plt.subplots(figsize=(13, 7))
 
             # Quality zone bands — edges/colours from CFG (single source)
@@ -3441,7 +3431,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         ax.set_xlim(0, 5.0)
         ax.set_ylim(0, 195)
         ax.set_yticks(range(0, 196, 20))
-        ax.set_xlabel("ASP110 Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry",
+        _nuc_lbl = CFG.REF_ACTIVE_SITE_MAP["Nuc"]
+        ax.set_xlabel(f'{_nuc_lbl["res"]}{_nuc_lbl["id"]} Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry',
                       fontsize=10)
         ax.set_ylabel("SN2 Attack Angle (°)  — 180° = perfect linear back-attack", fontsize=10)
         ax.text(0.01, 0.01,
@@ -3494,6 +3485,144 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             present_int_cols[key] = alias1
         elif alias2 in df.columns:
             present_int_cols[key] = alias2
+
+    # ===========================================================================
+    # Two-criteria tier logic + dead-end feasibility — one 3-panel figure written
+    # to the catalytic folder (04). Panel a: Criterion A (active-site integrity,
+    # active_site_residues_correct) gates Criterion B (catalytic constellation).
+    # Panel b: Criterion-B ECDF separates the tiers (per-tier mean diamonds).
+    # Panel c: the SN2 dead-end chemistry gate (scissile C–F BDE × backside
+    # occlusion) for the ligands that actually carry the penalty, plus the FA/DFA
+    # controls. Column-guarded: an absent column skips the figure rather than failing.
+    # ===========================================================================
+    try:
+        from matplotlib.lines import Line2D as _L2Dtc
+        _need_tc = ["active_site_residues_correct", "catalytic_constellation_score",
+                    "degrader_tier", "scissile_cf_bde", "sn2_backside_occlusion",
+                    "sn2_dead_end", "Ligand_Name"]
+        if not all(_c in df.columns for _c in _need_tc):
+            reporter.log("  ! Two-criteria figure skipped: required columns absent")
+        else:
+            _BF = CFG.TIER_CONSTELLATION_MIN["Tier_1A"]
+            _BDE_MAX = CFG.SCISSILE_CF_BDE_MAX
+            _OCC_MAX = CFG.SN2_BACKSIDE_OCCL_MAX
+            _tord = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
+            _figtc = plt.figure(figsize=(21, 6.4))
+            _gstc = _figtc.add_gridspec(1, 3, width_ratios=[1.2, 1.05, 1.05], wspace=0.145)
+
+            # ── panel a : Criterion A (integrity) gates Criterion B (constellation) ──
+            _axa = _figtc.add_subplot(_gstc[0, 0])
+            _A = pd.to_numeric(df["active_site_residues_correct"], errors="coerce") / 8.0
+            _B = pd.to_numeric(df["catalytic_constellation_score"], errors="coerce")
+            _sa = pd.DataFrame({"A": _A, "B": _B}).dropna()
+            _abins = sorted(_sa["A"].round(3).unique())
+            _adata = [_sa.loc[_sa["A"].round(3).eq(b), "B"].values for b in _abins]
+            _ans = [len(v) for v in _adata]
+            _parts = _axa.violinplot(_adata, positions=range(len(_abins)), widths=0.85, showextrema=False)
+            for _pc, _col in zip(_parts["bodies"], plt.cm.RdYlGn(np.linspace(0.1, 0.9, len(_abins)))):
+                _pc.set(facecolor=_col, alpha=0.7, edgecolor="#555", linewidth=0.5)
+            _amed = [float(np.median(v)) if len(v) else np.nan for v in _adata]
+            _axa.plot(range(len(_abins)), _amed, "-D", color="#C0392B", lw=2, ms=6, zorder=6, label="Median B per bin")
+            _axa.axhline(_BF, ls="--", color="#C0392B", lw=1.6, label=f"Criterion-B floor for Tier_1A ({_BF:g})")
+            for _i, _b in enumerate(_abins):
+                _pct = 100.0 * (_sa.loc[_sa["A"].round(3).eq(_b), "B"] >= _BF).mean()
+                _axa.text(_i, 1.03, f"{_pct:.0f}%", ha="center", va="bottom", fontsize=8.5, fontweight="bold", color="#2C6FAC")
+            _axa.text(0.015, 0.965, f"Top % = share with B ≥ {_BF:g}", transform=_axa.transAxes,
+                      fontsize=8, color="#2C6FAC", va="top", ha="left", fontweight="bold")
+            _axa.set_xticks(range(len(_abins)))
+            _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=8)
+            _axa.set_ylim(0, 1.18)
+            _axa.set_xlabel("Criterion A — active-site integrity\n(fraction of the 8 catalytic residues correctly placed)", fontsize=10)
+            _axa.set_ylabel(f"Criterion B — catalytic constellation score\n(reactive-geometry match vs {CFG.REFERENCE_PDB_ID} crystal, 0–1)", fontsize=10)
+            _axa.legend(loc="upper right", fontsize=7, ncol=2, framealpha=0.95, columnspacing=0.9, handletextpad=0.4)
+            _axa.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axa.set_axisbelow(True)
+            _axa.text(-0.13, 1.02, "a", transform=_axa.transAxes, fontsize=17, fontweight="bold")
+
+            # ── panel b : Criterion-B ECDF by tier + arrowed per-tier mean values ──
+            _axb = _figtc.add_subplot(_gstc[0, 1])
+            _means = []
+            for _t in _tord:
+                _v = pd.to_numeric(df.loc[df["degrader_tier"].eq(_t), "catalytic_constellation_score"],
+                                   errors="coerce").dropna().sort_values()
+                if len(_v) < 5:
+                    continue
+                _axb.plot(_v.values, np.linspace(0, 1, len(_v)), color=TIER_PALETTE.get(_t, "#999"), lw=2, label=_t, zorder=3)
+                _m = float(_v.mean()); _fr = float((_v <= _m).mean())
+                _axb.scatter([_m], [_fr], s=90, color=TIER_PALETTE.get(_t, "#999"), edgecolor="black", lw=0.8, marker="D", zorder=6)
+                _means.append((_t, _m, _fr))
+            _placetc = {"Tier_5_Decoy": (0.20, 0.90), "Tier_4": (0.20, 0.63), "Tier_3": (0.50, 0.11),
+                        "Tier_2B": (0.66, 0.04), "Tier_1A": (0.90, 0.28), "Tier_2A": (0.90, 0.42), "Tier_1B": (0.90, 0.56)}
+            for _t, _m, _fr in _means:
+                _lx, _ly = _placetc.get(_t, (min(_m + 0.10, 0.94), min(_fr + 0.06, 0.96)))
+                _axb.annotate(f"{_t.replace('Tier_', 'T')} = {_m:.2f}", xy=(_m, _fr), xycoords="data",
+                              xytext=(_lx, _ly), textcoords=_axb.transAxes, fontsize=8, fontweight="bold",
+                              color=TIER_PALETTE.get(_t, "#999"), va="center", ha="center", zorder=8,
+                              arrowprops=dict(arrowstyle="->", color=TIER_PALETTE.get(_t, "#999"), lw=1.0, alpha=0.85))
+            # MD-ready overlay: super-best MD-selected complexes on their tier's B-ECDF curve.
+            _mdb = _md_ready_df(df)
+            for _, _mr in _mdb.iterrows():
+                _bx = pd.to_numeric(pd.Series([_mr.get("catalytic_constellation_score")]), errors="coerce").iloc[0]
+                _bt = _mr.get("degrader_tier")
+                if pd.isna(_bx):
+                    continue
+                _bv = pd.to_numeric(df.loc[df["degrader_tier"].eq(_bt), "catalytic_constellation_score"],
+                                    errors="coerce").dropna().sort_values().values
+                if len(_bv) == 0:
+                    continue
+                _axb.scatter([_bx], [float(np.interp(_bx, _bv, np.linspace(0, 1, len(_bv))))], **_MD_STAR_KW)
+            if len(_mdb):
+                _axb.scatter([], [], marker="*", s=140, facecolor="#FFD400", edgecolor="black",
+                             linewidths=0.9, label=f"MD-ready (n={len(_mdb)})")
+            _axb.axvline(_BF, ls="--", color="#C0392B", lw=1.4, alpha=0.7)
+            _axb.set_xlabel("Criterion B — catalytic constellation score", fontsize=10)
+            _axb.set_ylabel("Cumulative fraction", fontsize=10)
+            _axb.legend(loc="upper left", ncol=max(len(_means) + (1 if len(_mdb) else 0), 1),
+                        fontsize=5.6, handlelength=0.9,
+                        handletextpad=0.25, columnspacing=0.5, framealpha=0.92, borderpad=0.3)
+            _axb.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axb.set_axisbelow(True)
+            _axb.text(-0.13, 1.02, "b", transform=_axb.transAxes, fontsize=17, fontweight="bold")
+
+            # ── panel c : SN2 dead-end chemistry gate (penalised ligands + FA/DFA) ──
+            _axc = _figtc.add_subplot(_gstc[0, 2])
+            _DEAD, _FEAS = "#D62728", "#1F77B4"
+            _dd = df.dropna(subset=["scissile_cf_bde", "sn2_backside_occlusion"])
+            _gg = _dd.groupby("Ligand_Name").agg(
+                bde=("scissile_cf_bde", "median"), occ=("sn2_backside_occlusion", "median"),
+                dead=("sn2_dead_end", lambda s: pd.to_numeric(s, errors="coerce").fillna(0).max())).reset_index()
+            _gg["pen"] = (_gg["dead"] > 0) | (_gg["bde"] > _BDE_MAX) | (_gg["occ"] > _OCC_MAX)
+            _keep = _gg[_gg["pen"] | _gg["Ligand_Name"].isin(["26_Fluoroacetate", "27_Difluoroacetate"])].copy()
+            if len(_keep) >= 2:
+                _keep["lig"] = _keep["Ligand_Name"].str.replace(r"^\d+_", "", regex=True)
+                _keep["isdead"] = _keep["dead"] > 0
+                _axc.axhspan(_BDE_MAX, _keep.bde.max() + 3, color=_DEAD, alpha=0.05)
+                _axc.axvspan(_OCC_MAX, _keep.occ.max() + 0.4, color=_DEAD, alpha=0.05)
+                _keep["_gx"] = _keep["occ"].round(1); _keep["_gy"] = _keep["bde"].round(0)
+                for _gk, _grp in _keep.groupby(["_gx", "_gy"]):
+                    _yo = 10.0
+                    for _, _r in _grp.sort_values("lig").iterrows():
+                        _cc = _DEAD if _r["isdead"] else _FEAS
+                        _axc.scatter(_r["occ"], _r["bde"], s=85, color=_cc, edgecolor="w", lw=0.5, zorder=3)
+                        _axc.annotate(_r["lig"], (_r["occ"], _r["bde"]), xytext=(0, _yo), textcoords="offset points",
+                                      rotation=90, ha="center", va="bottom", fontsize=7, color=_cc, fontweight="bold")
+                        _yo += len(_r["lig"]) * 4.4 + 7
+                _axc.set_ylim(107.0, _keep.bde.max() + 12)
+            _axc.axhline(_BDE_MAX, ls="--", color=_DEAD, lw=1.3); _axc.axvline(_OCC_MAX, ls="--", color=_DEAD, lw=1.3)
+            _axc.set_xlabel("SN2 backside steric occlusion (Σ vdW, Å)", fontsize=10)
+            _axc.set_ylabel("Scissile C–F bond-dissociation energy (kcal/mol)", fontsize=10)
+            _axc.legend(handles=[_L2Dtc([], [], marker="o", ls="", color=_DEAD, label="SN2 dead-end (flagged)"),
+                                 _L2Dtc([], [], marker="o", ls="", color=_FEAS, label="feasible α-attack (control)"),
+                                 _L2Dtc([], [], ls="--", color=_DEAD, label=f"BDE×occ gate ({_BDE_MAX:g} · {_OCC_MAX:g})")],
+                        loc="lower center", ncol=3, fontsize=6.3, framealpha=0.95, columnspacing=0.7,
+                        handlelength=1.1, handletextpad=0.3, borderpad=0.3)
+            _axc.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axc.set_axisbelow(True)
+            _axc.text(-0.13, 1.02, "c", transform=_axc.transAxes, fontsize=17, fontweight="bold")
+
+            plt.savefig(out_dir / "Figure_30_TwoCriteria_Tier_Logic.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.close(_figtc)
+    except Exception as e:
+        reporter.log(f"  ! Two-criteria figure skipped: {e}")
+        plt.close("all")   # release the figure left open by the failed savefig
+
     reporter.section("  Folder 05_Ligand_Interactions_and_Chemical_Space — interaction profile + chemical space")
     # --- Figure 14: Molecular Interaction Profile — Stacked bars (bond types) + F-engagement line ---
     """
@@ -3507,7 +3636,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                   "total_fluorine_count" in df.columns and "degrader_tier" in df.columns)
     if _has_int or _has_f16:
         try:
-            from scipy import stats as _sc_stats15
             # Pre-compute tier count for dynamic figure height
             n_tiers_f13 = len([t for t in existing_tiers if t in df["degrader_tier"].values]) if "degrader_tier" in df.columns else 6
             fig, (ax, ax_hm) = plt.subplots(1, 2, figsize=(20, max(5.5, n_tiers_f13 * 0.95 + 2.5)),
@@ -5174,153 +5302,15 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _diag_dir.mkdir(parents=True, exist_ok=True)
     generate_additional_figures(df, _diag_dir, reporter)
 
-    # ===========================================================================
-    # Two-criteria tier logic + dead-end feasibility — one 3-panel figure written
-    # to the catalytic folder (04). Panel a: Criterion A (active-site integrity,
-    # active_site_residues_correct) gates Criterion B (catalytic constellation).
-    # Panel b: Criterion-B ECDF separates the tiers (per-tier mean diamonds).
-    # Panel c: the SN2 dead-end chemistry gate (scissile C–F BDE × backside
-    # occlusion) for the ligands that actually carry the penalty, plus the FA/DFA
-    # controls. Column-guarded: an absent column skips the figure rather than failing.
-    # ===========================================================================
-    reporter.section("Step 6/6 — Two-criteria tier logic + dead-end feasibility figure")
-    try:
-        from matplotlib.lines import Line2D as _L2Dtc
-        _need_tc = ["active_site_residues_correct", "catalytic_constellation_score",
-                    "degrader_tier", "scissile_cf_bde", "sn2_backside_occlusion",
-                    "sn2_dead_end", "Ligand_Name"]
-        if not all(_c in df.columns for _c in _need_tc):
-            reporter.log("  ! Two-criteria figure skipped: required columns absent")
-        else:
-            _BF = CFG.TIER_CONSTELLATION_MIN["Tier_1A"]
-            _BDE_MAX = CFG.SCISSILE_CF_BDE_MAX
-            _OCC_MAX = CFG.SN2_BACKSIDE_OCCL_MAX
-            _tord = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
-            _figtc = plt.figure(figsize=(21, 6.4))
-            _gstc = _figtc.add_gridspec(1, 3, width_ratios=[1.2, 1.05, 1.05], wspace=0.145)
-
-            # ── panel a : Criterion A (integrity) gates Criterion B (constellation) ──
-            _axa = _figtc.add_subplot(_gstc[0, 0])
-            _A = pd.to_numeric(df["active_site_residues_correct"], errors="coerce") / 8.0
-            _B = pd.to_numeric(df["catalytic_constellation_score"], errors="coerce")
-            _sa = pd.DataFrame({"A": _A, "B": _B}).dropna()
-            _abins = sorted(_sa["A"].round(3).unique())
-            _adata = [_sa.loc[_sa["A"].round(3).eq(b), "B"].values for b in _abins]
-            _ans = [len(v) for v in _adata]
-            _parts = _axa.violinplot(_adata, positions=range(len(_abins)), widths=0.85, showextrema=False)
-            for _pc, _col in zip(_parts["bodies"], plt.cm.RdYlGn(np.linspace(0.1, 0.9, len(_abins)))):
-                _pc.set(facecolor=_col, alpha=0.7, edgecolor="#555", linewidth=0.5)
-            _amed = [float(np.median(v)) if len(v) else np.nan for v in _adata]
-            _axa.plot(range(len(_abins)), _amed, "-D", color="#C0392B", lw=2, ms=6, zorder=6, label="Median B per bin")
-            _axa.axhline(_BF, ls="--", color="#C0392B", lw=1.6, label=f"Criterion-B floor for Tier_1A ({_BF:g})")
-            for _i, _b in enumerate(_abins):
-                _pct = 100.0 * (_sa.loc[_sa["A"].round(3).eq(_b), "B"] >= _BF).mean()
-                _axa.text(_i, 1.03, f"{_pct:.0f}%", ha="center", va="bottom", fontsize=8.5, fontweight="bold", color="#2C6FAC")
-            _axa.text(0.015, 0.965, f"Top % = share with B ≥ {_BF:g}", transform=_axa.transAxes,
-                      fontsize=8, color="#2C6FAC", va="top", ha="left", fontweight="bold")
-            _axa.set_xticks(range(len(_abins)))
-            _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=8)
-            _axa.set_ylim(0, 1.18)
-            _axa.set_xlabel("Criterion A — active-site integrity\n(fraction of the 8 catalytic residues correctly placed)", fontsize=10)
-            _axa.set_ylabel("Criterion B — catalytic constellation score\n(reactive-geometry match vs 3R3U crystal, 0–1)", fontsize=10)
-            _axa.legend(loc="upper right", fontsize=7, ncol=2, framealpha=0.95, columnspacing=0.9, handletextpad=0.4)
-            _axa.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axa.set_axisbelow(True)
-            _axa.text(-0.13, 1.02, "a", transform=_axa.transAxes, fontsize=17, fontweight="bold")
-
-            # ── panel b : Criterion-B ECDF by tier + arrowed per-tier mean values ──
-            _axb = _figtc.add_subplot(_gstc[0, 1])
-            _means = []
-            for _t in _tord:
-                _v = pd.to_numeric(df.loc[df["degrader_tier"].eq(_t), "catalytic_constellation_score"],
-                                   errors="coerce").dropna().sort_values()
-                if len(_v) < 5:
-                    continue
-                _axb.plot(_v.values, np.linspace(0, 1, len(_v)), color=TIER_PALETTE.get(_t, "#999"), lw=2, label=_t, zorder=3)
-                _m = float(_v.mean()); _fr = float((_v <= _m).mean())
-                _axb.scatter([_m], [_fr], s=90, color=TIER_PALETTE.get(_t, "#999"), edgecolor="black", lw=0.8, marker="D", zorder=6)
-                _means.append((_t, _m, _fr))
-            _placetc = {"Tier_5_Decoy": (0.20, 0.90), "Tier_4": (0.20, 0.63), "Tier_3": (0.50, 0.11),
-                        "Tier_2B": (0.66, 0.04), "Tier_1A": (0.90, 0.28), "Tier_2A": (0.90, 0.42), "Tier_1B": (0.90, 0.56)}
-            for _t, _m, _fr in _means:
-                _lx, _ly = _placetc.get(_t, (min(_m + 0.10, 0.94), min(_fr + 0.06, 0.96)))
-                _axb.annotate(f"{_t.replace('Tier_', 'T')} = {_m:.2f}", xy=(_m, _fr), xycoords="data",
-                              xytext=(_lx, _ly), textcoords=_axb.transAxes, fontsize=8, fontweight="bold",
-                              color=TIER_PALETTE.get(_t, "#999"), va="center", ha="center", zorder=8,
-                              arrowprops=dict(arrowstyle="->", color=TIER_PALETTE.get(_t, "#999"), lw=1.0, alpha=0.85))
-            # MD-ready overlay: super-best MD-selected complexes on their tier's B-ECDF curve.
-            _mdb = _md_ready_df(df)
-            for _, _mr in _mdb.iterrows():
-                _bx = pd.to_numeric(pd.Series([_mr.get("catalytic_constellation_score")]), errors="coerce").iloc[0]
-                _bt = _mr.get("degrader_tier")
-                if pd.isna(_bx):
-                    continue
-                _bv = pd.to_numeric(df.loc[df["degrader_tier"].eq(_bt), "catalytic_constellation_score"],
-                                    errors="coerce").dropna().sort_values().values
-                if len(_bv) == 0:
-                    continue
-                _axb.scatter([_bx], [float(np.interp(_bx, _bv, np.linspace(0, 1, len(_bv))))], **_MD_STAR_KW)
-            if len(_mdb):
-                _axb.scatter([], [], marker="*", s=140, facecolor="#FFD400", edgecolor="black",
-                             linewidths=0.9, label=f"MD-ready (n={len(_mdb)})")
-            _axb.axvline(_BF, ls="--", color="#C0392B", lw=1.4, alpha=0.7)
-            _axb.set_xlabel("Criterion B — catalytic constellation score", fontsize=10)
-            _axb.set_ylabel("Cumulative fraction", fontsize=10)
-            _axb.legend(loc="upper left", ncol=max(len(_means) + (1 if len(_mdb) else 0), 1),
-                        fontsize=5.6, handlelength=0.9,
-                        handletextpad=0.25, columnspacing=0.5, framealpha=0.92, borderpad=0.3)
-            _axb.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axb.set_axisbelow(True)
-            _axb.text(-0.13, 1.02, "b", transform=_axb.transAxes, fontsize=17, fontweight="bold")
-
-            # ── panel c : SN2 dead-end chemistry gate (penalised ligands + FA/DFA) ──
-            _axc = _figtc.add_subplot(_gstc[0, 2])
-            _DEAD, _FEAS = "#D62728", "#1F77B4"
-            _dd = df.dropna(subset=["scissile_cf_bde", "sn2_backside_occlusion"])
-            _gg = _dd.groupby("Ligand_Name").agg(
-                bde=("scissile_cf_bde", "median"), occ=("sn2_backside_occlusion", "median"),
-                dead=("sn2_dead_end", lambda s: pd.to_numeric(s, errors="coerce").fillna(0).max())).reset_index()
-            _gg["pen"] = (_gg["dead"] > 0) | (_gg["bde"] > _BDE_MAX) | (_gg["occ"] > _OCC_MAX)
-            _keep = _gg[_gg["pen"] | _gg["Ligand_Name"].isin(["26_Fluoroacetate", "27_Difluoroacetate"])].copy()
-            if len(_keep) >= 2:
-                _keep["lig"] = _keep["Ligand_Name"].str.replace(r"^\d+_", "", regex=True)
-                _keep["isdead"] = _keep["dead"] > 0
-                _axc.axhspan(_BDE_MAX, _keep.bde.max() + 3, color=_DEAD, alpha=0.05)
-                _axc.axvspan(_OCC_MAX, _keep.occ.max() + 0.4, color=_DEAD, alpha=0.05)
-                _keep["_gx"] = _keep["occ"].round(1); _keep["_gy"] = _keep["bde"].round(0)
-                for _gk, _grp in _keep.groupby(["_gx", "_gy"]):
-                    _yo = 10.0
-                    for _, _r in _grp.sort_values("lig").iterrows():
-                        _cc = _DEAD if _r["isdead"] else _FEAS
-                        _axc.scatter(_r["occ"], _r["bde"], s=85, color=_cc, edgecolor="w", lw=0.5, zorder=3)
-                        _axc.annotate(_r["lig"], (_r["occ"], _r["bde"]), xytext=(0, _yo), textcoords="offset points",
-                                      rotation=90, ha="center", va="bottom", fontsize=7, color=_cc, fontweight="bold")
-                        _yo += len(_r["lig"]) * 4.4 + 7
-                _axc.set_ylim(107.0, _keep.bde.max() + 12)
-            _axc.axhline(_BDE_MAX, ls="--", color=_DEAD, lw=1.3); _axc.axvline(_OCC_MAX, ls="--", color=_DEAD, lw=1.3)
-            _axc.set_xlabel("SN2 backside steric occlusion (Σ vdW, Å)", fontsize=10)
-            _axc.set_ylabel("Scissile C–F bond-dissociation energy (kcal/mol)", fontsize=10)
-            _axc.legend(handles=[_L2Dtc([], [], marker="o", ls="", color=_DEAD, label="SN2 dead-end (flagged)"),
-                                 _L2Dtc([], [], marker="o", ls="", color=_FEAS, label="feasible α-attack (control)"),
-                                 _L2Dtc([], [], ls="--", color=_DEAD, label=f"BDE×occ gate ({_BDE_MAX:g} · {_OCC_MAX:g})")],
-                        loc="lower center", ncol=3, fontsize=6.3, framealpha=0.95, columnspacing=0.7,
-                        handlelength=1.1, handletextpad=0.3, borderpad=0.3)
-            _axc.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axc.set_axisbelow(True)
-            _axc.text(-0.13, 1.02, "c", transform=_axc.transAxes, fontsize=17, fontweight="bold")
-
-            plt.savefig(out_dir / "Figure_30_TwoCriteria_Tier_Logic.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            plt.close(_figtc)
-            reporter.log("  ✔ Saved: 04_Catalytic_Geometry_and_Mechanism/10_TwoCriteria_Tier_Logic.png")
-    except Exception as e:
-        reporter.log(f"  ! Two-criteria figure skipped: {e}")
-        plt.close("all")   # release the figure left open by the failed savefig
 
     # savefig routing is installed/restored by the _redirect_savefig context
     # manager around this call, so no manual restore is needed here.
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4C: Publication Assembly Figures (23–26: multitarget, top-tier breakdown,
 #             Sankey workflow, PFAS-size composites)
-# ===============================================================================
+# =============================================================================
 
 def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Figure 24: Top 25 multi-target proteins (stacked bar)."""
@@ -5566,7 +5556,6 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         from matplotlib.path import Path as _MplPath
         from matplotlib.patches import PathPatch as _PathPatch
         import matplotlib.patches as _mp
-        import matplotlib.colors as _mcol24
         import textwrap as _tw24
 
         d = _utils_mod.standardise_dataframe_tiers(df.copy(), CFG)
@@ -6361,9 +6350,9 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close("all")   # release the figure left open by the failed savefig
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 4D: DIAGNOSTIC & MULTI-MODEL TREND FIGURES  (folder 07)
-# ===============================================================================
+# =============================================================================
 
 def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                 reporter: ReportManager) -> None:
@@ -6384,7 +6373,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     skips only that figure, never the whole folder.
     """
     from scipy import stats as _sc_stats
-    reporter.section("Step 5/6 — Diagnostic & Multi-Model Trend Figures  [writes folder 07]")
+    reporter.section("Step 5/5 — Diagnostic & Multi-Model Trend Figures  [writes folder 07]")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # CFG-sourced colours (single source of truth — config §8).
@@ -7124,12 +7113,12 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
     input folder produced by 02_Production; nothing is downloaded here.
     """
     import gemmi
-    reporter.section("Step 3/6 — Ramachandran Backbone-Geometry Validation  [writes folder 01]")
+    reporter.section("Step 3/5 — Ramachandran Backbone-Geometry Validation  [writes folder 01]")
     # `out_dir` is already the 01_Ramachandran folder (created in main); use it directly.
     rama_dir = out_dir
     rama_dir.mkdir(parents=True, exist_ok=True)
 
-    crystal = prod_dir / "1_Input_Data" / "3R3U.pdb"
+    crystal = prod_dir / "1_Input_Data" / CFG.REFERENCE_PDB_FILE
     if not crystal.exists():
         reporter.log(f"  ! Skipped Ramachandran: 3R3U crystal not found at {crystal}")
         return
@@ -7173,9 +7162,9 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
         reporter.log(f"  ✔ Saved: Ramachandran_{label}_Control.png + comparison")
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 5: FIGURE DESCRIPTIONS & REPORTING
-# ===============================================================================
+# =============================================================================
 
 def write_figure_descriptions(out_dir: Path):
     """
@@ -7799,9 +7788,9 @@ def write_figure_descriptions(out_dir: Path):
     return desc_path
 
 
-# ===============================================================================
+# =============================================================================
 # SECTION 6: MAIN EXECUTION
-# ===============================================================================
+# =============================================================================
 
 def main():
     parser = argparse.ArgumentParser(
@@ -7846,7 +7835,7 @@ def main():
         df = perform_advanced_ranking(df, features, out_dir, reporter)
         df = analyse_conflicts(df, out_dir, reporter)
 
-        final_csv = _aux_dir(out_dir) / "03_Final_Validated_Master.csv"
+        final_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
         df.to_csv(final_csv, index=False)
         reporter.log(f"Final Validated Dataset Saved: {final_csv.resolve()}")
 
