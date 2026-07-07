@@ -1882,6 +1882,8 @@ class CFG:
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
     MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/MolecularDynamics/ (path derived, not hardcoded)
+    SCHRODINGER_SCRATCH_SUBDIR: str = "_Schrodinger_Scratch"  # job scratch dir under the run's MolecularDynamics working folder (large disk); keeps Prime's hundreds-of-GB per-subjob staging off /tmp on the OS disk
+    SCHRODINGER_SCRATCH_COOLDOWN_SEC: int = 5  # settle pause after all jobs finish (let the job server flush/copy outputs back to the working folders) before the scratch dir is deleted
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.

@@ -146,6 +146,7 @@ Scientific references
 
 import sys
 import os
+import shutil
 
 # =============================================================================
 # SCHRÖDINGER BOOTSTRAP
@@ -380,18 +381,18 @@ def console_qmm_ready(msg: str) -> None:
 # It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
 # The API divergence is intentional — required for Schrödinger/Maestro integration.
 def calculate_min_distance(frame, indices_A: list, indices_B: list) -> float:
-    """Minimum PBC-corrected distance between two atom index sets."""
+    """Minimum PBC-corrected distance between two atom index sets (vectorised).
+
+    The O(N×M) pairwise MIC distances are computed in one numpy call via
+    _mic_dists_2d instead of a Python double loop — the per-atom frame.pos()
+    gather is unavoidable, but the distance maths is fully vectorised.
+    """
     if not indices_A or not indices_B:
         return np.nan
     box = frame.box if hasattr(frame, 'box') else None
-    min_d = float('inf')
-    for a in indices_A:
-        pos_a = frame.pos(a)
-        for b in indices_B:
-            d = np.linalg.norm(get_mic_vector(pos_a, frame.pos(b), box))
-            if d < min_d:
-                min_d = d
-    return min_d
+    pos_a = np.asarray([frame.pos(a) for a in indices_A], dtype=float)   # (nA, 3)
+    pos_b = np.asarray([frame.pos(b) for b in indices_B], dtype=float)   # (nB, 3)
+    return float(_mic_dists_2d(pos_a, pos_b, box).min())
 
 
 def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
@@ -983,14 +984,14 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax2.plot(df["Frame"], df["NAC_Distance_A"],   color='#D55E00', linewidth=1.0, alpha=0.15)
         ax2.plot(df["Frame"], df['Warhead_Smooth'],   color='#D55E00', linewidth=2.5, alpha=0.95,
                  label='Warhead Anchor (Nuc – LigC)')
-        ax2.axhline(4.5, color='#D55E00', linestyle=':', linewidth=1.5, alpha=0.7)
+        ax2.axhline(CFG.NAC_DIST_RELAXED, color='#D55E00', linestyle=':', linewidth=1.5, alpha=0.7)
 
         if "Tail_Cradle_Dist_A" in df.columns and not df["Tail_Cradle_Dist_A"].isna().all():
             df['Tail_Smooth'] = df["Tail_Cradle_Dist_A"].rolling(window=window, min_periods=1).mean()
             ax2.plot(df["Frame"], df["Tail_Cradle_Dist_A"], color='#0072B2', linewidth=1.0, alpha=0.15)
             ax2.plot(df["Frame"], df['Tail_Smooth'],        color='#0072B2', linewidth=2.5, alpha=0.95,
                      label='Tail Anchor (Cradle – LigF)')
-            ax2.axhline(6.0, color='#0072B2', linestyle=':', linewidth=1.5, alpha=0.7)
+            ax2.axhline(CFG.MECH_CRADLE_RADIUS, color='#0072B2', linestyle=':', linewidth=1.5, alpha=0.7)
 
         data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
         ax2.set_ylim(1.5, max(12.0, data_max * 1.4))
@@ -1329,6 +1330,8 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 # SECTION 6: PHYSICAL CHEMISTRY MODULES
 # =============================================================================
 
+_MIC_WARNED = False   # one-shot guard: warn (not silently pass) if a blockade MIC correction fails
+
 def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
                   sol_positions: np.ndarray, box, wm_sites,
                   block_r: float, match_r: float) -> float:
@@ -1350,8 +1353,19 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
             frac  = vecs @ inv_b
             frac -= np.round(frac)
             vecs  = frac @ b3
-        except Exception:
-            pass
+        except Exception as _e:
+            # Discard this frame rather than continue with uncorrected (non-PBC)
+            # vectors, which would corrupt the blockade metric near box edges. The
+            # NaN score never wins `score > best_score`, so the frame is dropped
+            # from QM/MM selection; if the whole box is malformed every frame is
+            # dropped and the rank skips gracefully (ideal_frame_idx stays -1).
+            global _MIC_WARNED
+            if not _MIC_WARNED:
+                console_info(f"    {ConsoleColours.WARNING}[!] Water-blockade MIC correction "
+                             f"failed ({_e}); discarding affected frame(s) — check the "
+                             f"trajectory box tensor.{ConsoleColours.ENDC}")
+                _MIC_WARNED = True
+            return float("nan")
 
     projs = vecs @ unit_r                                        # (n_sol,)
     mask  = (projs > 0.5) & (projs < runway_len - 0.5)
@@ -2330,10 +2344,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         #    wrapped into the box, so the solute sits at the box edge with all
         #    water piled to one side — the "protein outside / broken water box"
         #    artifact. make_whole_cms reconnects molecules; center_cms re-centres
-        #    the box on the protein+ligand and wraps solvent symmetrically around
-        #    it before writing.
+        #    the box on the LIGAND (the reactive centre) — not the whole protein —
+        #    so a surface-exposed active site sits at the box middle and every
+        #    first-shell water stays in the primary cell. Centering on the whole
+        #    protein pushes a surface active site to the box edge, wrapping its
+        #    waters to the far side where the droplet trim misses them (vacuum
+        #    artifact → QSite SCF divergence / warped barriers).
         topo.make_whole_cms(msys_model, cms_model)
-        _solute_gids = topo.asl2gids(cms_model, f"protein OR res.ptype {lig_resname}")
+        _solute_gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
         topo.center_cms(msys_model, _solute_gids, cms_model)
 
         # 3. Viewer-friendly full-system structure (.maegz).
@@ -2452,6 +2470,14 @@ def main():
 
     raw_dir  = args.run_dir or args.dir or "."
     work_dir = _resolve_work_dir(raw_dir)
+
+    # Keep Schrödinger (QSite/Jaguar/Desmond) job scratch on the run's own working
+    # disk, never /tmp on the OS disk. Set once here; every Schrödinger child
+    # process in this step inherits it.
+    _scratch = work_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
+    _scratch.mkdir(parents=True, exist_ok=True)
+    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
+    os.environ["TMPDIR"] = str(_scratch)
 
     # Auto-detect all available MD rank indices — scan MD, WaterMaps, and
     # 7_MD_Thermodynamics_Results so that any previously processed rank is included.
@@ -2782,6 +2808,13 @@ def main():
                 fn(master_out_dir, df_master)
             except Exception as e:
                 console_info(f"  [!] {label.split('(')[0].strip()} failed: {e}")
+
+    # Remove Schrödinger scratch now that QSite/analysis jobs are done and outputs
+    # are in the working folders (mirrors the temp-thumbnail cleanup in 03). Guarded
+    # on the dir name so only the dedicated scratch folder can ever be removed.
+    if _scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch") and _scratch.exists():
+        time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 5))  # let outputs settle first
+        shutil.rmtree(_scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":

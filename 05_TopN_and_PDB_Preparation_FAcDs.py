@@ -2104,6 +2104,14 @@ def prep_and_convert_phase(args):
     run_path = root / args.run_folder_name
     if not run_path.exists(): sys.exit(f"Run path missing: {run_path}")
 
+    # Keep Schrödinger (PrepWizard) job scratch on the run's own working disk,
+    # never /tmp on the OS disk. Set once here; every Schrödinger child process
+    # in this step inherits it (both phases run in the same process).
+    _scratch = run_path / "5_TopN_and_Preparation" / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
+    _scratch.mkdir(parents=True, exist_ok=True)
+    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
+    os.environ["TMPDIR"] = str(_scratch)
+
     # Paths — one consolidated Step-05 folder for both phases (prep + extraction)
     analysis_dir   = run_path / "5_TopN_and_Preparation"
     dir_raw        = analysis_dir / "1_Converted_Raw_PDB"
@@ -2729,6 +2737,12 @@ def topn_extraction_phase(args):
         _ctrl_df = pd.DataFrame(ctrl_csv_rows) if ctrl_csv_rows else pd.DataFrame()
         if not _ctrl_df.empty:
             _ctrl_df = _ctrl_df.reindex(columns=subset.columns)
+        # Provenance flag so controls stay distinguishable from candidate hits in the
+        # merged CSV (the reindex above drops any control marker carried in the rows).
+        subset = subset.copy()
+        subset["is_control"] = False
+        if not _ctrl_df.empty:
+            _ctrl_df["is_control"] = True
         _combined = pd.concat([subset, _ctrl_df], ignore_index=True)
         _combined.to_csv(subset_csv_path, index=False)
 
@@ -2826,6 +2840,14 @@ def main():
     args = parser.parse_args()
     prep_and_convert_phase(args)
     topn_extraction_phase(args)
+    # Remove Schrödinger scratch now the prep/extraction jobs are done and outputs
+    # are in the working folders (mirrors the temp-thumbnail cleanup in 03). Guarded
+    # on the dir name so only the dedicated scratch folder can ever be removed.
+    _scratch = (Path.cwd() / args.run_folder_name / "5_TopN_and_Preparation"
+                / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch"))
+    if _scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch") and _scratch.exists():
+        time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 5))  # let outputs settle first
+        shutil.rmtree(_scratch, ignore_errors=True)
     _utils_mod.print_elapsed(_t0, "05_TopN_and_PDB_Preparation_FAcDs.py")
 
 

@@ -86,6 +86,7 @@ import argparse
 import importlib.util as _ilu
 import math
 import os
+import shutil
 import re
 import subprocess
 import sys
@@ -912,10 +913,23 @@ def main() -> int:
         _echo(f"ERROR: MolecularDynamics directory not found: {md_dir}")
         return 1
 
+    """
+    Keep ALL Schrödinger job scratch on the run's own (large) working disk, never
+    /tmp on the OS disk. Prime MM-GBSA replicates the multi-GB complexes file into
+    every subjob's scratch dir — hundreds of GB on a 100k-frame trajectory — which
+    exhausts a small /tmp mid-job (the cause of a silent Prime rc=1 after hours).
+    Set here before any Schrödinger subprocess launches; all of them inherit it.
+    """
+    _scratch = md_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
+    _scratch.mkdir(parents=True, exist_ok=True)
+    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
+    os.environ["TMPDIR"] = str(_scratch)
+
     _echo(_SEP)
     _echo("Starting Desmond SID Analysis Post-processing")
     _echo(f"Run Directory      : {run_dir}")
     _echo(f"Molecular Dynamics : {md_dir}")
+    _echo(f"Schrödinger scratch : {_scratch}  (on the run's working disk, not /tmp)")
     _echo(_SEP)
 
     job_dirs = sorted(
@@ -944,6 +958,12 @@ def main() -> int:
         run_mmgbsa_phase(md_dir, run_root)
 
     _echo("")
+    # Remove Schrödinger scratch now that all jobs finished and outputs are in the
+    # working folders (mirrors the temp-thumbnail cleanup in 03). Guarded on the dir
+    # name so only the dedicated scratch folder can ever be removed.
+    if _scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch") and _scratch.exists():
+        time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 5))  # let outputs settle first
+        shutil.rmtree(_scratch, ignore_errors=True)
     _echo(_SEP)
     _echo("All available Desmond SID + MM-GBSA post-processing jobs completed successfully.")
     _echo(_SEP)

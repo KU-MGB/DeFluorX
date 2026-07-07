@@ -684,7 +684,6 @@ _TT_STAR_FILL  = "#2ECC71"
 _TT_STAR_S     = CFG.VIS_TT_STAR_SIZE
 _TT_TIER_S     = CFG.VIS_TIER_SIZES
 _TT_TIER_A     = CFG.VIS_TIER_ALPHAS
-_TT_STRUCT_COLS= ["tv_red","teal","forest","purple","tv_orange"]
 _TT_SHRINK_B   = CFG.VIS_TT_SHRINK_BORDER
 _TT_IMG_PX     = CFG.VIS_TT_IMG_PX
 _TT_TEXT_PX    = CFG.VIS_TT_TEXT_PX
@@ -718,7 +717,7 @@ def _tt_find_cif(pred_jobs: Path, job_name: str):
     return cifs[0] if cifs else None
 
 
-def _tt_render_one(cif_path: Path, out_png: Path, prot_col: str, width=800, height=800) -> bool:
+def _tt_render_one(cif_path: Path, out_png: Path, width=800, height=800) -> bool:
     try:
         import pymol
         pymol.finish_launching(["pymol", "-cq"])
@@ -780,8 +779,7 @@ def _tt_render_all(pa: pd.DataFrame, pred_jobs: Path, thumb_dir: Path, reporter)
         if not png.exists():
             cif = _tt_find_cif(pred_jobs, str(row.get("job_name", "")))
             if cif:
-                col = _TT_STRUCT_COLS[local_i % len(_TT_STRUCT_COLS)]
-                _tt_render_one(cif, png, col)
+                _tt_render_one(cif, png)
         imgs.append(np.array(Image.open(png).convert("RGBA")) if png.exists() else None)
     return imgs
 
@@ -2478,20 +2476,28 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         deletion uses each pair's jointly observed rows instead.
         """
         sub_f3 = df[corr_cols].apply(lambda s: pd.to_numeric(s, errors="coerce"))
-        corr_raw = sub_f3.corr(method="spearman", min_periods=20)
+        _min_n   = 20   # min jointly-observed rows for a correlation / p-value (shared floor)
+        corr_raw = sub_f3.corr(method="spearman", min_periods=_min_n)
         _n_f3 = int(len(sub_f3))   # total complexes available (pairwise n ≤ this)
 
-        # Per-pair p-values on jointly observed rows (nan_policy='omit').
-        p_mat = np.ones((len(corr_cols), len(corr_cols)))
+        # Per-pair p-values on jointly observed rows (nan_policy='omit'). The p-value
+        # matrix honours the SAME _min_n sample-size floor as corr_raw: pairs below it
+        # stay NaN so Benjamini–Hochberg excludes them rather than counting them as
+        # p=1.0 (which would inflate the hypothesis count m and over-correct the real
+        # tests). p_mat is therefore NaN-initialised, not ones-initialised.
+        p_mat = np.full((len(corr_cols), len(corr_cols)), np.nan)
         for _ii, _c1 in enumerate(corr_cols):
             for _jj, _c2 in enumerate(corr_cols):
                 if _ii != _jj:
+                    _joint_n = int((sub_f3[_c1].notna() & sub_f3[_c2].notna()).sum())
+                    if _joint_n < _min_n:
+                        continue   # underpowered → leave NaN (excluded from BH)
                     try:
                         _, _pv = _sp_stats.spearmanr(sub_f3[_c1], sub_f3[_c2],
                                                      nan_policy="omit")
-                        p_mat[_ii, _jj] = _pv if np.isfinite(_pv) else 1.0
+                        p_mat[_ii, _jj] = _pv if np.isfinite(_pv) else np.nan
                     except Exception:
-                        p_mat[_ii, _jj] = 1.0
+                        p_mat[_ii, _jj] = np.nan
         p_df_f3 = pd.DataFrame(p_mat, index=corr_raw.index, columns=corr_raw.columns)
 
         # Benjamini-Hochberg FDR on the UNIQUE upper-triangular pairs only
