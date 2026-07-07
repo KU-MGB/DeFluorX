@@ -2817,6 +2817,7 @@ available; they are module-level names for clarity.
 
 
 def main():
+    _t0 = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Merged Top-N selection + CIF->PDB generation/preparation (MD-ready cohort only)")
     parser.add_argument("run_folder_name", help="Run Folder Name (e.g. Boltz-2_Run_...)")
@@ -2825,6 +2826,7 @@ def main():
     args = parser.parse_args()
     prep_and_convert_phase(args)
     topn_extraction_phase(args)
+    _utils_mod.print_elapsed(_t0, "05_TopN_and_PDB_Preparation_FAcDs.py")
 
 
 if __name__ == "__main__":
