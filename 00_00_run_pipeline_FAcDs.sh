@@ -56,6 +56,11 @@ cd "$SCRIPT_DIR"
 DRY_RUN=0
 RESUME_FROM=0
 RUN_ID=""
+# Exit code a step may return to mean "completed, but a complementary part was
+# deferred/failed" (e.g. 06 when MM-GBSA is skipped or a Prime job fails). The
+# runner renders this as WARN and continues rather than a false PASS or a hard
+# abort. Keep in sync with EXIT_WARN in 06_SID_Prime-MMGBSA_FAcDs.py.
+readonly WARN_EXIT_CODE=3
 
 for _arg in "$@"; do
     case "$_arg" in
@@ -316,14 +321,23 @@ run_step() {
     local t0=$SECONDS
     local elapsed=0
     local status="PASS"
-    if "$@"; then
-        elapsed=$(( SECONDS - t0 ))
+    # Capture the exit code without tripping `set -e` (the `||` guards it). A step
+    # may return 0 (PASS), WARN_EXIT_CODE (completed with a deferred/failed
+    # complementary part → WARN, continue), or any other non-zero (hard FAIL → halt).
+    local exit_code=0
+    "$@" || exit_code=$?
+    elapsed=$(( SECONDS - t0 ))
+    if (( exit_code == 0 )); then
+        status="PASS"
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
         _tee "  [PASS] ${name}  ($(_fmt_elapsed $elapsed))"
         _sync_staging_log   # keep the run-dir log copy current after each completed step
+    elif (( exit_code == WARN_EXIT_CODE )); then
+        status="WARN"
+        STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
+        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) — completed with warnings (exit ${exit_code}); pipeline continues."
+        _sync_staging_log
     else
-        local exit_code=$?
-        elapsed=$(( SECONDS - t0 ))
         status="FAIL"
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
         _tee "  [FAIL] ${name}  (exit ${exit_code})"
@@ -361,6 +375,11 @@ _print_timing_table() {
     _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
     _tee "  │ $(printf '%-58s │ %10s │ %-8s' 'TOTAL WALL TIME' "$(_fmt_elapsed $total)" "") │"
     _tee "  └${line_c1}┴${line_c2}┴${line_c3}┘"
+    # Legend only when a step is anything other than a plain PASS, so a clean run
+    # stays uncluttered.
+    if printf '%s\n' "${STEP_STATUS[@]}" | grep -qvx 'PASS'; then
+        _tee "    PASS = completed · WARN = completed, a complementary part deferred/failed (e.g. MM-GBSA) · SKIP = --resume-from · FAIL = halted"
+    fi
 }
 
 # ── Conda activation ──────────────────────────────────────────────────────────
@@ -430,12 +449,12 @@ echo ""
 # ── Pipeline steps ────────────────────────────────────────────────────────────
 
 # Verify the environment is complete.
-run_step "00  Environment check" \
+run_step "00a  Environment check" \
     python 00_01_Environment_Installation_FAcDs.py
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
-run_step "00  Environment export" \
+run_step "00b  Environment export" \
     python 00_01_Environment_Installation_FAcDs.py --export || true
 
 run_step "01  Merge sequences" \

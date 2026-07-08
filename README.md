@@ -216,7 +216,7 @@ flowchart TD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,029 lines &nbsp; "]
+        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,063 lines &nbsp; "]
         M7["07 · &nbsp; MD/QMMM Engine &nbsp; \n &nbsp; Traj analysis & scoring &nbsp; \n &nbsp; QSite defluorination + WaterMap figs &nbsp; \n &nbsp; 📄 ~2,828 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end

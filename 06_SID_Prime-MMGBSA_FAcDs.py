@@ -137,6 +137,7 @@ SCHROD_RUN = os.path.join(SCHRODINGER, "run")
 
 _SEP = "============================================================================="
 _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length is unreadable
+EXIT_WARN = 3   # step completed but a complementary part (MM-GBSA) was deferred/failed; the pipeline runner renders WARN and continues (0=PASS, 1=hard error, 3=warn)
 
 # Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
 # completion gate (is_eaf_complete): threshold = EAF_TOKENS_PER_FRAME · traj_frames.
@@ -855,11 +856,20 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list, tiers: dict) -> None:
     _echo(f"  MM-GBSA combined figure saved: {out_path.resolve()}")
 
 
-def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> None:
-    """Run + plot MM-GBSA for every completed MD job (idempotent)."""
+def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> str:
+    """Run + plot MM-GBSA for every completed MD job (idempotent).
+
+    Returns a status the caller maps to the pipeline step result:
+      • "ok"       — every eligible job produced a ΔG_bind CSV (or none eligible);
+      • "deferred" — the phase was skipped because scratch could not be guaranteed
+                     off /tmp (a live job blocked relocation) — nothing computed;
+      • "warn"     — the phase ran but ≥1 job's MM-GBSA failed (e.g. Prime rc=1).
+    "deferred"/"warn" let the pipeline report WARN (not a false PASS) without
+    hard-aborting: MM-GBSA is complementary to the QSite barrier, so Step 07 still
+    runs. "disabled" (CFG.MMGBSA_RUN=False) is an intentional no-op → "ok"."""
     if not getattr(CFG, "MMGBSA_RUN", False):
         _echo("  MM-GBSA disabled (CFG.MMGBSA_RUN = False) — skipped.")
-        return
+        return "ok"
     if not scratch_ok:
         # The job-server scratch dir is still on the OS disk (relocation deferred —
         # typically because another job is running). A 100k-frame Prime run would
@@ -869,7 +879,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> N
         _echo("  MM-GBSA SKIPPED — Schrödinger job-server scratch is not on the "
               "working disk (see the [job-server] note above). Re-run 06 once the "
               "server dir is relocated and no other job is running.")
-        return
+        return "deferred"
     job_dirs = sorted(
         (d for d in md_dir.iterdir()
          if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)
@@ -878,7 +888,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> N
     )
     if not job_dirs:
         _echo("  No completed MD jobs (-out.cms) for MM-GBSA. Skipping.")
-        return
+        return "ok"
     _echo(_SEP)
     _echo(f"Prime MM-GBSA — {len(job_dirs)} completed MD job(s)")
     _echo(_SEP)
@@ -887,11 +897,13 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> N
     tiers = _lookup_tiers(run_root)
     per_job = []
     summary_rows = []
+    _failed = 0
     for d in job_dirs:
         job_name = d.name
         rank = _rank_of(job_name)
         csv = run_mmgbsa(d, job_name, rank)
         if csv is None:
+            _failed += 1
             continue
         dg = _mmgbsa_dg_series(csv)
         try:
@@ -926,6 +938,11 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> N
         plot_mmgbsa_combined(out_dir, per_job, tiers)
     except Exception as e:
         _echo(f"  [!] MM-GBSA combined plot failed ({e}) — skipped.")
+    if _failed:
+        _echo(f"  [!] MM-GBSA: {_failed} of {len(job_dirs)} job(s) failed "
+              f"(see per-rank rc/cause above) — step will report WARN, not PASS.")
+        return "warn"
+    return "ok"
 
 
 # =============================================================================
@@ -1009,7 +1026,7 @@ def main() -> int:
             process_jobs(to_run)
         else:
             _echo("No jobs ready for SID analysis (all complete or pending).")
-        run_mmgbsa_phase(md_dir, run_root, scratch_ok=_scratch_ok)
+        _mmgbsa_status = run_mmgbsa_phase(md_dir, run_root, scratch_ok=_scratch_ok)
 
     _echo("")
     # Remove Schrödinger scratch now that all jobs finished and outputs are in the
@@ -1019,6 +1036,23 @@ def main() -> int:
         time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 5))  # let outputs settle first
         shutil.rmtree(_scratch, ignore_errors=True)
     _echo(_SEP)
+    # Report the true outcome. SID always ran; MM-GBSA is complementary, so a
+    # deferred/failed MM-GBSA is a WARNING (distinct exit EXIT_WARN), not a hard
+    # error — the pipeline runner renders WARN and continues to Step 07 rather than
+    # printing a false PASS or aborting.
+    if _mmgbsa_status == "deferred":
+        _echo("Desmond SID post-processing complete; MM-GBSA DEFERRED (scratch not on "
+              "the working disk — re-run once no job is running and the server dir is "
+              "relocated).")
+        _echo(_SEP)
+        print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
+        return EXIT_WARN
+    if _mmgbsa_status == "warn":
+        _echo("Desmond SID post-processing complete; MM-GBSA completed with FAILURES "
+              "(see the per-rank cause above).")
+        _echo(_SEP)
+        print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
+        return EXIT_WARN
     _echo("All available Desmond SID + MM-GBSA post-processing jobs completed successfully.")
     _echo(_SEP)
     print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
