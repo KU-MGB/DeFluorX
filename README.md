@@ -191,7 +191,7 @@ flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
         ENV["🛠 &nbsp; 00_01 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~298 lines &nbsp; "]
         CFG["📋 &nbsp; 00_02 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~1,969 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_03 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~930 lines &nbsp; "]
+        UTL["🔧 &nbsp; 00_03 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,045 lines &nbsp; "]
         ENV --- CFG --- UTL
     end
 
@@ -209,15 +209,15 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~2,855 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~2,859 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~975 lines &nbsp; "]
-        M7["07 · &nbsp; MD/QMMM Engine &nbsp; \n &nbsp; Traj analysis & scoring &nbsp; \n &nbsp; QSite defluorination + WaterMap figs &nbsp; \n &nbsp; 📄 ~2,824 lines &nbsp; "]
+        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,029 lines &nbsp; "]
+        M7["07 · &nbsp; MD/QMMM Engine &nbsp; \n &nbsp; Traj analysis & scoring &nbsp; \n &nbsp; QSite defluorination + WaterMap figs &nbsp; \n &nbsp; 📄 ~2,828 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 

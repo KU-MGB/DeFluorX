@@ -335,6 +335,7 @@ class Heartbeat:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._start = 0.0
+        self._prime_announced = False   # print the Prime-phase transition banner once
 
     def _latest_frame(self, text: str) -> int:
         """Largest last-match across all configured patterns (phase-tolerant)."""
@@ -374,16 +375,21 @@ class Heartbeat:
             # Prime MM-GBSA scoring phase: trajectory read is complete and the main
             # log is silent while Prime minimises every frame in a separate job.
             if self._PRIME_HANDOFF.search(text):
+                if not self._prime_announced:
+                    self._prime_announced = True
+                    _echo(f"    [PHASE 2/2] {self.label}: trajectory read complete — "
+                          f"Prime MM-GBSA minimisation started on {self.total:,} frames "
+                          f"(the long phase; Prime writes no per-frame log, so progress "
+                          f"below is by subjob or elapsed time).")
                 prog = self._prime_progress()
                 if prog is not None:
                     _done, _tot = prog
                     _pct = min(100, _done * 100 // max(_tot, 1))
-                    _echo(f"    [PROGRESS] {self.label}: ⚙ Prime MM-GBSA scoring "
-                          f"{_done}/{_tot} subjobs ({_pct}%, {elapsed_min}m elapsed)")
+                    _echo(f"    [PROGRESS] {self.label}: Prime scoring "
+                          f"{_done}/{_tot} subjobs done ({_pct}%, {elapsed_min}m elapsed)")
                 else:
-                    _echo(f"    [PROGRESS] {self.label}: ⚙ Prime MM-GBSA scoring all "
-                          f"{self.total:,} frames — minimisation phase, no per-frame log "
-                          f"(working, {elapsed_min}m elapsed)")
+                    _echo(f"    [PROGRESS] {self.label}: Prime minimising "
+                          f"{self.total:,} frames — working, {elapsed_min}m elapsed")
                 continue
             frame = self._latest_frame(text)
             pct = min(100, frame * 100 // self.total)
@@ -615,6 +621,29 @@ def _mmgbsa_csv(job_dir: Path, job_name: str):
     return sorted(hits, key=lambda p: (-p.stat().st_mtime, p.name))[0] if hits else None
 
 
+def _diagnose_mmgbsa_failure(job_dir: Path, job_name: str) -> "str | None":
+    """Best-effort human-readable cause when MM-GBSA exits non-zero, read from the
+    thermal_mmgbsa log and any Prime subjob logs. Turns a bare 'rc=1' into an
+    actionable line (the disk-full case is silent in the summary otherwise)."""
+    blob = []
+    for cand in (job_dir / f"{job_name}_mmgbsa.log", *sorted(job_dir.glob("*-prime*.log"))):
+        try:
+            blob.append(cand.read_text(errors="ignore"))
+        except Exception:
+            pass
+    text = "\n".join(blob)
+    if re.search(r"no space left on device|copy_file_range.*no space", text, re.I):
+        return ("DISK FULL — the Schrödinger job server ran out of space staging "
+                "per-subjob scratch (each Prime subjob copies the multi-GB complexes "
+                "file). This is the job-SERVER directory filling up, not SCHRODINGER_TMPDIR; "
+                "relocate it onto the working disk with "
+                "`jsc local-server-dir --set <working-disk>` (server stopped), then retry.")
+    if re.search(r"licen[sc]e", text, re.I) and re.search(r"error|fail|not available|checkout", text, re.I):
+        return "LICENSE — a Prime/PLOP (PSP_PLOP) license was unavailable; check FlexLM."
+    m = re.search(r"^ERROR:.*$", text, re.M)
+    return m.group(0).strip() if m else None
+
+
 def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     """Run thermal_mmgbsa.py on <job>-out.cms inside its MD folder. Idempotent:
     returns the existing CSV when already computed. Returns the results CSV path
@@ -638,6 +667,8 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     if getattr(CFG, "MMGBSA_STEP_SIZE", 0) and CFG.MMGBSA_STEP_SIZE > 0:
         cmd += ["-step_size", str(CFG.MMGBSA_STEP_SIZE)]
     _echo(f"  [Rank {rank}] Running MM-GBSA on {_ncpu} cores: {' '.join(cmd[1:])}")
+    _echo(f"  [Rank {rank}] [PHASE 1/2] reading trajectory frames "
+          f"(thermal_mmgbsa), then hands off to a {_ncpu}-subjob Prime minimisation.")
     log = job_dir / f"{job_name}_mmgbsa.log"
     _timeout = getattr(CFG, "MMGBSA_TIMEOUT_SEC", 0) or None
     _interval = max(5, int(getattr(CFG, "MMGBSA_PROGRESS_INTERVAL_SEC", 30)))
@@ -676,6 +707,9 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
                     proc.wait()
         if proc.returncode != 0:
             _echo(f"  [Rank {rank}] MM-GBSA exited rc={proc.returncode} — see {log.name}.")
+            _diag = _diagnose_mmgbsa_failure(job_dir, job_name)
+            if _diag:
+                _echo(f"  [Rank {rank}] ↳ cause: {_diag}")
             return None
     except Exception as e:
         _echo(f"  [Rank {rank}] MM-GBSA failed ({e}) — see {log.name}.")
@@ -821,10 +855,20 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list, tiers: dict) -> None:
     _echo(f"  MM-GBSA combined figure saved: {out_path.resolve()}")
 
 
-def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> None:
+def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> None:
     """Run + plot MM-GBSA for every completed MD job (idempotent)."""
     if not getattr(CFG, "MMGBSA_RUN", False):
         _echo("  MM-GBSA disabled (CFG.MMGBSA_RUN = False) — skipped.")
+        return
+    if not scratch_ok:
+        # The job-server scratch dir is still on the OS disk (relocation deferred —
+        # typically because another job is running). A 100k-frame Prime run would
+        # copy hundreds of GB there and die after hours; skip it rather than burn
+        # the time. SID above has already run. Re-run this step once the disk is
+        # relocated (no live jobs) to compute MM-GBSA.
+        _echo("  MM-GBSA SKIPPED — Schrödinger job-server scratch is not on the "
+              "working disk (see the [job-server] note above). Re-run 06 once the "
+              "server dir is relocated and no other job is running.")
         return
     job_dirs = sorted(
         (d for d in md_dir.iterdir()
@@ -918,8 +962,18 @@ def main() -> int:
     /tmp on the OS disk. Prime MM-GBSA replicates the multi-GB complexes file into
     every subjob's scratch dir — hundreds of GB on a 100k-frame trajectory — which
     exhausts a small /tmp mid-job (the cause of a silent Prime rc=1 after hours).
-    Set here before any Schrödinger subprocess launches; all of them inherit it.
+    TWO mechanisms are needed because the modern jobserverd ignores env vars for
+    its subjob scratch:
+      1. The authoritative one — relocate the local job-server directory onto the
+         working disk (jsc local-server-dir --set), where jobserverd stages every
+         subjob's complexes copy. This is what actually prevents the /tmp overflow.
+      2. Belt-and-braces — point SCHRODINGER_TMPDIR/TMPDIR at the working disk for
+         any tool that still honours them (driver-side temp, non-server steps).
     """
+    _scratch_ok = _utils_mod.ensure_jobserver_on_working_disk(
+        SCHRODINGER, _SCRIPT_DIR,
+        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"),
+        echo=lambda m="": _echo(f"  {m}"))
     _scratch = md_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
     _scratch.mkdir(parents=True, exist_ok=True)
     os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
@@ -955,7 +1009,7 @@ def main() -> int:
             process_jobs(to_run)
         else:
             _echo("No jobs ready for SID analysis (all complete or pending).")
-        run_mmgbsa_phase(md_dir, run_root)
+        run_mmgbsa_phase(md_dir, run_root, scratch_ok=_scratch_ok)
 
     _echo("")
     # Remove Schrödinger scratch now that all jobs finished and outputs are in the

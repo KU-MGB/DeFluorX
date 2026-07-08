@@ -2472,8 +2472,12 @@ def main():
     work_dir = _resolve_work_dir(raw_dir)
 
     # Keep Schrödinger (QSite/Jaguar/Desmond) job scratch on the run's own working
-    # disk, never /tmp on the OS disk. Set once here; every Schrödinger child
-    # process in this step inherits it.
+    # disk, never /tmp on the OS disk. The modern jobserverd stages subjob scratch
+    # under its own server directory (not SCHRODINGER_TMPDIR), so relocate that too;
+    # the env vars remain as belt-and-braces for tools that still honour them.
+    _utils_mod.ensure_jobserver_on_working_disk(
+        os.environ["SCHRODINGER"], _REPO_DIR,
+        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"))
     _scratch = work_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
     _scratch.mkdir(parents=True, exist_ok=True)
     os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)

@@ -1884,6 +1884,7 @@ class CFG:
     MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/MolecularDynamics/ (path derived, not hardcoded)
     SCHRODINGER_SCRATCH_SUBDIR: str = "_Schrodinger_Scratch"  # job scratch dir under the run's MolecularDynamics working folder (large disk); keeps Prime's hundreds-of-GB per-subjob staging off /tmp on the OS disk
     SCHRODINGER_SCRATCH_COOLDOWN_SEC: int = 5  # settle pause after all jobs finish (let the job server flush/copy outputs back to the working folders) before the scratch dir is deleted
+    SCHRODINGER_JOBSERVER_SUBDIR: str = "_Schrodinger_JobServer"  # persistent local job-server directory, relocated onto the project's working disk (large disk) at the project root; the modern jobserverd stages ALL per-subjob scratch under its OWN server directory, whose default lives on /tmp (OS disk) — that is what overflows on a 100k-frame Prime MM-GBSA run. Env vars (SCHRODINGER_TMPDIR/TMPDIR) cannot move an already-running server; only `jsc local-server-dir --set <dir>` (server stopped) relocates it. See _ensure_jobserver_on_working_disk in 06.
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.

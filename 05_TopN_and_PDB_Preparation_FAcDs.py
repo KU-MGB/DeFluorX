@@ -2105,8 +2105,12 @@ def prep_and_convert_phase(args):
     if not run_path.exists(): sys.exit(f"Run path missing: {run_path}")
 
     # Keep Schrödinger (PrepWizard) job scratch on the run's own working disk,
-    # never /tmp on the OS disk. Set once here; every Schrödinger child process
-    # in this step inherits it (both phases run in the same process).
+    # never /tmp on the OS disk. The modern jobserverd stages subjob scratch under
+    # its own server directory (not SCHRODINGER_TMPDIR), so relocate that too; the
+    # env vars remain as belt-and-braces for tools that still honour them.
+    _utils_mod.ensure_jobserver_on_working_disk(
+        str(SCHRODINGER_PATH), _REPO_DIR,
+        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"))
     _scratch = run_path / "5_TopN_and_Preparation" / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
     _scratch.mkdir(parents=True, exist_ok=True)
     os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
