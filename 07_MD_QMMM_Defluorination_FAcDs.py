@@ -961,6 +961,11 @@ def load_triad_mapping(csv_path: Path) -> dict:
 # SECTION 5: VISUALISATION ENGINES
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# SECTION 5a: PER-RANK & COMPARATIVE DASHBOARDS
+# The standard MD-validation figures — per-rank NAC dashboard, the global
+# comparative dashboard, and the viability/retention bar chart.
+# -----------------------------------------------------------------------------
 def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                                   output_path: Path, stats: dict) -> None:
     """2-panel per-job dashboard: SN2 scatter and dual-trace anchoring time series."""
@@ -2073,7 +2078,7 @@ def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -
 
 
 # -----------------------------------------------------------------------------
-# SECTION 8b: NAC PERSISTENCE (continuous strict-NAC dwell → nanoseconds)
+# SECTION 8a: NAC PERSISTENCE (continuous strict-NAC dwell → nanoseconds)
 # The real "time in position": longest/mean uninterrupted strict-NAC run, not the
 # frame-count fraction a flickering ligand can inflate.
 # -----------------------------------------------------------------------------
@@ -2106,7 +2111,7 @@ def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
 
 
 # -----------------------------------------------------------------------------
-# SECTION 8c: PER-JOB TRAJECTORY ANALYSIS ENGINE
+# SECTION 8b: PER-JOB TRAJECTORY ANALYSIS ENGINE
 # NAC geometry + Dream-Team tracking + WaterMap/EAF/MM-GBSA integration + QM/MM
 # frame selection, producing the per-rank NAC_Data.csv, dashboards, and stats row.
 # -----------------------------------------------------------------------------
