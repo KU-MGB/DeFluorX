@@ -1,6 +1,6 @@
 """
 ===============================================================================
-FAcDs Pipeline  |  MODULE 00_03  |  Shared Utilities
+FAcDs Pipeline  |  MODULE 00_02  |  Shared Utilities
 ===============================================================================
 Canonical source for console styling, logging infrastructure, matplotlib
 spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
@@ -10,7 +10,7 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Module        : 00_03_Project_Utils_FAcDs.py
+  Module        : 00_02_Project_Utils_FAcDs.py
   Role          : Shared utility library; no executable entry point.
   Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
@@ -34,7 +34,7 @@ Scientific References:
        - pandas: McKinney, W. (2010) Data Structures for Statistical Computing in Python. Proc 9th Python in Science Conf 56–61. DOI: https://doi.org/10.25080/Majora-92bf1922-00a
        - RDKit: Landrum, G. (2006) RDKit: Open-source cheminformatics. https://www.rdkit.org
     Note: the angle/dihedral helpers implement standard vector geometry; metric
-    definitions and their primary literature live in 00_02_Project_Config_FAcDs.py.
+    definitions and their primary literature live in 00_01_Project_Config_FAcDs.py.
 -------------------------------------------------------------------------------
 """
 

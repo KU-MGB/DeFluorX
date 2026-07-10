@@ -17,8 +17,8 @@ Date   : 05 July 2026 <───────────────────
   Script        : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
-  Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
-                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
+                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
   Reads         : <Run>/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
                                                                /*_trj/   (dir carrying the _R_N rank token; *Rank_N* also matched)
                                                                /*.eaf
@@ -276,16 +276,16 @@ def _load_module(name: str, path: Path):
 
 
 _REPO_DIR  = Path(__file__).resolve().parent
-_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
-# ConsoleColours sourced from 00_03_Project_Utils (single canonical definition).
+# ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
 
-# Console helpers and logging setup sourced from 00_03_Project_Utils.
+# Console helpers and logging setup sourced from 00_02_Project_Utils.
 _console_title          = _utils_mod.console_title
 _console_info           = _utils_mod.console_info
 _console_sep            = _utils_mod.console_separator
@@ -303,7 +303,7 @@ PLOT_LOCK = threading.Lock()
 # =============================================================================
 # SECTION 1: GLOBAL CONSTANTS & CONFIGURATION
 # =============================================================================
-# All thresholds sourced from 00_02_Project_Config_FAcDs.py (CFG).
+# All thresholds sourced from 00_01_Project_Config_FAcDs.py (CFG).
 # Fallback literals are numerically identical — activate only when CFG is
 # unavailable (e.g., standalone testing outside the repository).
 
@@ -399,7 +399,7 @@ def console_qmm_ready(msg: str) -> None:
 # SECTION 3: GEOMETRY & MATHEMATICAL UTILITIES
 # =============================================================================
 
-# NOTE: This function is NOT equivalent to 00_03_Project_Utils.calculate_min_distance.
+# NOTE: This function is NOT equivalent to 00_02_Project_Utils.calculate_min_distance.
 # It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
 # The API divergence is intentional — required for Schrödinger/Maestro integration.
 def calculate_min_distance(frame, indices_A: list, indices_B: list) -> float:
@@ -511,7 +511,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     if not best_nuc_key or actual_dist > CFG.SMART_LOCK_NUC_MAX_DIST:
         # ── Oδ Orientation Fallback ────────────────────────────────────────────
         # Primary geometry search exhausted.  Delegate to shared utility
-        # find_nucleophile_od_fallback() (00_03_Project_Utils_FAcDs.py).
+        # find_nucleophile_od_fallback() (00_02_Project_Utils_FAcDs.py).
         # The function accepts plain NumPy arrays only; extract positions here
         # before calling so CMS atom-group objects never enter the utility.
         # Threshold aligns with CFG.NAC_ANGLE_RELAXED (BRAIN.md §7).

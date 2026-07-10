@@ -1,6 +1,6 @@
 """
 ===============================================================================
-FAcDs Pipeline  |  Module 00_02  |  Central Configuration (CFG)
+FAcDs Pipeline  |  Module 00_01  |  Central Configuration (CFG)
 ===============================================================================
 Single source of truth for every threshold, constant, weight, and parameter
 used across the pipeline. Edit values here only — no other file should contain
@@ -10,7 +10,7 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Module        : 00_02_Project_Config_FAcDs.py
+  Module        : 00_01_Project_Config_FAcDs.py
   Role          : "Blueprint" — pipeline-wide configuration repository.
   Imported by   : All pipeline scripts (00_02 through 07).
   Reads         : Nothing (pure Python dataclass; no file I/O).
@@ -33,7 +33,7 @@ Date   : 05 July 2026 <───────────────────
 
 Usage:
     import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("ProjectConfig", path / "00_02_Project_Config_FAcDs.py")
+    _spec = _ilu.spec_from_file_location("ProjectConfig", path / "00_01_Project_Config_FAcDs.py")
     _mod  = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
     CFG   = _mod.CFG()   # instantiate once at module level
 

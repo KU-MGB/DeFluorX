@@ -18,8 +18,8 @@ Date   : 05 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py
   Role          : Scoring, ranking, and visual reporting of Boltz-2 predictions.
-  Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — tier colours, vis params)
-                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — tier colours, vis params)
+                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                                  console_info, console_separator)
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
                   (Master CSV written by 02_Production_FAcDs.py; latest file selected)
@@ -162,7 +162,7 @@ Scientific References:
     5. Molecular rendering (optional structure figures):
        - The PyMOL Molecular Graphics System, Schrödinger, LLC. https://pymol.org
     6. All scientific thresholds/criteria plotted here are defined in
-       00_02_Project_Config_FAcDs.py — see that module's Scientific References
+       00_01_Project_Config_FAcDs.py — see that module's Scientific References
        for the underlying primary literature (NAC, Maestro criteria, mech score, etc.).
 ===============================================================================
 """
@@ -216,7 +216,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 # -------------------------------------------------------------------------------
-# Step 1.3: Pipeline modules (00_02) via importlib
+# Step 1.3: Pipeline modules (00_01) via importlib
 # -------------------------------------------------------------------------------
 import importlib.util as _ilu
 
@@ -228,8 +228,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_cfg_mod   = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_03_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
@@ -353,7 +353,7 @@ def _aux_dir(out_dir: Path) -> Path:
     return d
 
 
-ReportManager = _utils_mod.ReportManager   # shared logger (00_03)
+ReportManager = _utils_mod.ReportManager   # shared logger (00_02)
 
 
 def _make_reporter(out_dir: Path):

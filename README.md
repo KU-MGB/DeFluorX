@@ -189,10 +189,10 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        ENV["🛠 &nbsp; 00_01 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~298 lines &nbsp; "]
-        CFG["📋 &nbsp; 00_02 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~1,988 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_03 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,045 lines &nbsp; "]
-        ENV --- CFG --- UTL
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~1,988 lines &nbsp; "]
+        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,045 lines &nbsp; "]
+        ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~298 lines &nbsp; "]
+        CFG --- UTL --- ENV
     end
 
     START([🧬 &nbsp; Input FASTA + SMILES &nbsp;]) --> M1
@@ -267,9 +267,9 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 FAcDs_PFAS-27_Defluorination/
 │
 ├── 00_00_run_pipeline_FAcDs.sh              ← One-command full pipeline runner
-├── 00_01_Environment_Installation_FAcDs.py  ← Environment check, conda/pip export
-├── 00_02_Project_Config_FAcDs.py            ← ★ Central configuration (all parameters)
-├── 00_03_Project_Utils_FAcDs.py             ← Shared utilities (logging, geometry, colours)
+├── 00_03_Environment_FAcDs.py  ← Environment check, conda/pip export
+├── 00_01_Project_Config_FAcDs.py            ← ★ Central configuration (all parameters)
+├── 00_02_Project_Utils_FAcDs.py             ← Shared utilities (logging, geometry, colours)
 │
 ├── 01_Merge_FAcDs.py                        ← FASTA merge, deduplication, QC
 ├── 02_Production_FAcDs.py                   ← Boltz-2 prediction + scoring (MAIN ENGINE)
@@ -340,9 +340,9 @@ FAcDs_PFAS-27_Defluorination/
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
 | [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
-| [`00_01_Environment_Installation_FAcDs.py`](./00_01_Environment_Installation_FAcDs.py) | Environment check, conda/pip export | — | `PFAS.yml`, `requirements.txt` |
-| [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py) | **Single source of truth** — all thresholds, weights, paths | — | `CFG` dataclass instance |
-| [`00_03_Project_Utils_FAcDs.py`](./00_03_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
+| [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check, conda/pip export | — | `PFAS.yml`, `requirements.txt` |
+| [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** — all thresholds, weights, paths | — | `CFG` dataclass instance |
+| [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
 | [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
 | [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** — MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
 | [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 51 figure panels + 5 Ramachandran controls in 8 content-matched folders — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics/two-criteria+feasibility | ranked CSV | PNG figures + validated master CSV |
@@ -380,9 +380,9 @@ cd FAcDs_PFAS-27_Defluorination
 Use the automated installer (recommended):
 
 ```bash
-python 00_01_Environment_Installation_FAcDs.py --install
+python 00_03_Environment_FAcDs.py --install
 conda activate PFAS
-python 00_01_Environment_Installation_FAcDs.py
+python 00_03_Environment_FAcDs.py
 ```
 
 <details>
@@ -400,7 +400,7 @@ conda activate PFAS
 ### Step 3 — Verify the environment
 
 ```bash
-python 00_01_Environment_Installation_FAcDs.py
+python 00_03_Environment_FAcDs.py
 ```
 
 Expected output:
@@ -465,12 +465,12 @@ The script activates the environment, runs all steps in sequence, writes a times
 
 Before committing to a full 12-hour run, verify that Boltz-2, Schrödinger, and all path dependencies are correctly configured:
 
-1. Create a minimal FASTA containing the reference sequence (for example, the DeHa4 control sequence available in `CFG.DEHA4_CONTROL_SEQ` in `00_02_Project_Config_FAcDs.py`):
+1. Create a minimal FASTA containing the reference sequence (for example, the DeHa4 control sequence available in `CFG.DEHA4_CONTROL_SEQ` in `00_01_Project_Config_FAcDs.py`):
 
 ```bash
 python -c "
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location('cfg', '00_02_Project_Config_FAcDs.py')
+spec = importlib.util.spec_from_file_location('cfg', '00_01_Project_Config_FAcDs.py')
 mod  = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 with open('smoke_test.fasta', 'w') as f:
     f.write('>DeHa4_reference\n' + mod.CFG().DEHA4_CONTROL_SEQ + '\n')
@@ -534,17 +534,17 @@ The runner prompts for the run mode (Fresh/Resume) and then for foreground or ba
 </details>
 
 <details>
-<summary><b>00_01_Environment_Installation_FAcDs.py — Environment Setup</b></summary>
+<summary><b>00_03_Environment_FAcDs.py — Environment Setup</b></summary>
 
 **Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
 
 **Usage:**
 ```bash
 # Check environment only
-python 00_01_Environment_Installation_FAcDs.py
+python 00_03_Environment_FAcDs.py
 
 # Export current environment to PFAS.yml and requirements.txt (overwrite)
-python 00_01_Environment_Installation_FAcDs.py --export
+python 00_03_Environment_FAcDs.py --export
 ```
 
 The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, so `PFAS.yml` and `requirements.txt` are always refreshed to the current host versions (export timestamp in each file's header).
@@ -561,7 +561,7 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 </details>
 
 <details>
-<summary><b>00_02_Project_Config_FAcDs.py — Central Configuration</b></summary>
+<summary><b>00_01_Project_Config_FAcDs.py — Central Configuration</b></summary>
 
 **Purpose:** Single-source-of-truth `@dataclass` holding every numerical parameter, threshold, weight, and constant used across the entire pipeline. Editing this file propagates changes to all downstream scripts — no code modification required elsewhere.
 
@@ -592,7 +592,7 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 **Usage:**
 ```python
 from importlib.util import spec_from_file_location, module_from_spec
-spec = spec_from_file_location("cfg", "00_02_Project_Config_FAcDs.py")
+spec = spec_from_file_location("cfg", "00_01_Project_Config_FAcDs.py")
 mod  = module_from_spec(spec); spec.loader.exec_module(mod)
 cfg  = mod.CFG()
 print(cfg.NAC_DIST_STRICT)    # 3.2 Å
@@ -600,7 +600,7 @@ print(cfg.TIER_MECH_MIN)      # dict: per-tier minimum mechanistic score
 ```
 
 **Frequently Tuned Parameters:**
-To change any parameter, edit only `00_02_Project_Config_FAcDs.py`. Examples of frequently tuned attributes:
+To change any parameter, edit only `00_01_Project_Config_FAcDs.py`. Examples of frequently tuned attributes:
 ```python
 # ── Tier thresholds (§8) — relax or tighten the scoring tiers (dicts keyed by tier)
 TIER_NUC_DIST  = {"Tier_1A": 3.0, ...}   # Å, Nuc–C upper bound per tier
@@ -691,7 +691,7 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 
 
 <details>
-<summary><b>00_03_Project_Utils_FAcDs.py — Shared Utilities</b></summary>
+<summary><b>00_02_Project_Utils_FAcDs.py — Shared Utilities</b></summary>
 
 **Purpose:** Central utility module for console formatting, logging helpers, geometry calculations, and reusable plotting helpers imported by downstream pipeline scripts.
 
@@ -807,7 +807,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 > and a Tier_1A hit with Boltz confidence < `TIER_ELITE_CONF_MIN` (0.85) is demoted one notch.
 > The tier gate is **size-agnostic** — `ligand_max_extent` is reported but never excludes a tier.
 > All threshold values are defined once in
-> [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py) §8–§9
+> [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) §8–§9
 > (`TIER_NUC_DIST`, `TIER_ANGLE_MIN`, `TIER_NB_MAX`, `TIER_BA_MAX`, `TIER_MECH_MIN`,
 > `TIER_CONSTELLATION_MIN`, `TIER_ELITE_CONF_MIN`).
 >
@@ -1053,7 +1053,7 @@ As the final computational analysis step, the following design architectures are
 conda env create -f PFAS.yml
 
 # Export current environment for archiving
-python 00_01_Environment_Installation_FAcDs.py --export
+python 00_03_Environment_FAcDs.py --export
 # ↳ writes PFAS.yml + requirements.txt with current exact versions
 ```
 
@@ -1174,7 +1174,7 @@ python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
 RuntimeError: CUDA out of memory
 ```
 
-Reduce `BOLTZ_MAX_PROTEINS_PER_BATCH` in [`00_02_Project_Config_FAcDs.py`](./00_02_Project_Config_FAcDs.py):
+Reduce `BOLTZ_MAX_PROTEINS_PER_BATCH` in [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py):
 ```python
 BOLTZ_MAX_PROTEINS_PER_BATCH: int = 10  # reduce from 20 to 10
 ```
@@ -1217,7 +1217,7 @@ Step 05 will fall back to raw Gemmi-converted PDB files without PrepWizard prepa
 <summary><b>Config module not found</b></summary>
 
 ```
-FileNotFoundError: Required module not found: .../00_02_Project_Config_FAcDs.py
+FileNotFoundError: Required module not found: .../00_01_Project_Config_FAcDs.py
 ```
 
 All scripts must be run from the repository root directory. Do not move scripts to subdirectories.

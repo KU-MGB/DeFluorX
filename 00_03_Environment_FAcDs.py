@@ -12,7 +12,7 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 05 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 00_01_Environment_Installation_FAcDs.py
+  Script        : 00_03_Environment_FAcDs.py
   Role          : Infrastructure — environment export and sync.
   Imports from  : None (standalone sys/os/subprocess).
   Reads         : Active conda environment.
@@ -45,7 +45,7 @@ from pathlib import Path
 
 """
 ConsoleColours is defined locally because this script runs BEFORE the PFAS
-conda environment is guaranteed to exist — importing 00_03_Project_Utils is not
+conda environment is guaranteed to exist — importing 00_02_Project_Utils is not
 safe here. If the canonical definition in 00_03 changes, sync this copy manually
 (the drift assertion in main() guards the two key codes).
 """
@@ -99,7 +99,7 @@ def export_environment():
         header = (
             f"# PFAS Conda Environment\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_01_Environment_Installation_FAcDs.py {_mode}\n"
+            f"# Script   : 00_03_Environment_FAcDs.py {_mode}\n"
             f"#\n"
         )
         with open(_yml_path, "w") as f:
@@ -118,7 +118,7 @@ def export_environment():
         header = (
             f"# PFAS pip Requirements\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_01_Environment_Installation_FAcDs.py {_mode}\n"
+            f"# Script   : 00_03_Environment_FAcDs.py {_mode}\n"
             f"#\n"
         )
         # Filter the obsolete `dataclasses` backport (stdlib since Python 3.7).
@@ -250,7 +250,7 @@ def main():
     _now = _t.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        "  \033[95m\033[1m▶  00_01_Environment_Installation_FAcDs.py"
+        "  \033[95m\033[1m▶  00_03_Environment_FAcDs.py"
         "\033[0m  │  FAcDs Pipeline",
         flush=True,
     )
@@ -260,7 +260,7 @@ def main():
 
     try:
         import importlib.util as _ilu
-        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_03_Project_Utils_FAcDs.py")
+        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_FAcDs.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
         for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "BOLD", "ENDC"):
             assert getattr(ConsoleColours, _code) == getattr(_u.ConsoleColours, _code), \
@@ -291,7 +291,7 @@ if __name__ == "__main__":
             f"{_s}s")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  {ConsoleColours.OKGREEN}✔  00_01_Environment_Installation_FAcDs.py  —  Pipeline Phase Complete"
+        f"  {ConsoleColours.OKGREEN}✔  00_03_Environment_FAcDs.py  —  Pipeline Phase Complete"
         f"  │  Total Elapsed: {_fmt}{ConsoleColours.ENDC}",
         flush=True,
     )

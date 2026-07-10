@@ -19,8 +19,8 @@ Date   : 05 July 2026 <───────────────────
   Role          : "Builder + Selector" — gates on the MD-ready cohort (MD_Selected),
                   converts CIF outputs to analysis-ready PDB, prepares them with
                   PrepWizard, then extracts and renders that cohort for handover.
-  Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — pH values, MD-selection §18)
-                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — pH values, MD-selection §18)
+                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                             console helpers, Ramachandran helpers)
   Reads         : <Run>/2_Best_Complexes_CIFs/*.cif
                   <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv  (MD_Selected)
@@ -140,7 +140,7 @@ DEFAULT_BASE_PATH = Path.cwd()
 import gemmi
 
 # -------------------------------------------------------------------------------
-# Step 1.3: Pipeline modules (00_02 (config & utils)) via importlib
+# Step 1.3: Pipeline modules (00_01 config, 00_02 utils) via importlib
 # -------------------------------------------------------------------------------
 """
 Filenames begin with digits and cannot be imported with standard `import`.
@@ -156,8 +156,8 @@ def _load_module(name: str, path: Path):
     return mod
 
 _REPO_DIR   = Path(__file__).resolve().parent
-_cfg_mod    = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
+_cfg_mod    = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
+_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
 
 CFG             = _cfg_mod.CFG()
 ConsoleColours     = _utils_mod.ConsoleColours
@@ -203,7 +203,7 @@ PROTEIN_ASSOCIATED = CFG.PREP_PROTEIN_ASSOCIATED
 # =============================================================================
 
 """
-Logging and console functions are provided by 00_03_Project_Utils.
+Logging and console functions are provided by 00_02_Project_Utils.
 Script-level wrappers capture the module-global `logger` so existing call
 sites require no modification.
 """

@@ -26,7 +26,7 @@ Date   : 05 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
-  Imports from  : 00_03_Project_Utils_FAcDs.py  (ConsoleColours)
+  Imports from  : 00_02_Project_Utils_FAcDs.py  (ConsoleColours)
   Reads         : <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
                   <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
@@ -113,7 +113,7 @@ from scipy.cluster.hierarchy import linkage, to_tree
 from Bio import SeqIO
 
 # -------------------------------------------------------------------------------
-# Step 1.3: Pipeline modules (00_02) via importlib
+# Step 1.3: Pipeline modules (00_01) via importlib
 # -------------------------------------------------------------------------------
 import importlib.util as _ilu
 
@@ -125,8 +125,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_03_Project_Utils_FAcDs.py")
-_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_02_Project_Config_FAcDs.py")
+_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
 CFG             = _cfg_mod.CFG()
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
@@ -160,7 +160,7 @@ def console_separator() -> None:
     _console_sep(logger, heavy=True)
 
 
-ReportManager = _utils_mod.ReportManager   # shared logger (00_03)
+ReportManager = _utils_mod.ReportManager   # shared logger (00_02)
 
 
 def _make_reporter(out_dir: Path):

@@ -13,8 +13,8 @@ Date   : 05 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_FAcDs.py
   Role          : Sequence merger and pre-processing pipeline wrapper.
-  Imports from  : 00_03_Project_Utils_FAcDs.py  (ConsoleColours, clean_spines)
-                  00_02_Project_Config_FAcDs.py  (CFG — PREP_AMBIGUOUS_AA QC, CPU reserve)
+  Imports from  : 00_02_Project_Utils_FAcDs.py  (ConsoleColours, clean_spines)
+                  00_01_Project_Config_FAcDs.py  (CFG — PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   — merged, deduplicated sequence set
                   <output>.log     — inclusion/exclusion statistics
@@ -120,7 +120,7 @@ from scipy.stats import skew, gaussian_kde
 from Bio import SeqIO
 
 # -------------------------------------------------------------------------------
-# Step 1.4: Pipeline utilities (00_03) + config (00_02) via importlib
+# Step 1.4: Pipeline utilities (00_02) + config (00_01) via importlib
 # -------------------------------------------------------------------------------
 """
 CFG supplies only PREP_AMBIGUOUS_AA for QC (no geometric thresholds used here).
@@ -135,8 +135,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_03_Project_Utils_FAcDs.py")
-_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_02_Project_Config_FAcDs.py")
+_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
 CFG             = _cfg_mod.CFG()
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
@@ -371,7 +371,7 @@ def process_and_write(
 # =============================================================================
 
 def apply_clean_spines(ax):
-    """Delegate to 00_03_Project_Utils.clean_spines (mandatory import)."""
+    """Delegate to 00_02_Project_Utils.clean_spines (mandatory import)."""
     clean_spines(ax)
 
 def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger):

@@ -33,8 +33,8 @@ Dependency Map
   Script        : 06_SID_Prime-MMGBSA_FAcDs.py
   Role          : Step 06 — Desmond post-simulation post-processing.
                   Produces EAF interaction files for the Step 07 MD engine.
-  Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — project metadata)
-                  00_03_Project_Utils_FAcDs.py   (ConsoleColours, logging, banners)
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — project metadata)
+                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, logging, banners)
   Reads         : Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
                   Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*_trj
   Writes        : .../desmond_md_job_R_N/*_SID-in.eaf, *_SID-out.eaf, *.log
@@ -111,7 +111,7 @@ for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
     os.environ.setdefault(_tv, _CPU_CAP)
 
 # -------------------------------------------------------------------------------
-# SECTION 1: PIPELINE MODULES (00_02 CFG, 00_03 utils) via importlib
+# SECTION 1: PIPELINE MODULES (00_01 CFG, 00_02 utils) via importlib
 # -------------------------------------------------------------------------------
 def _load_module(name: str, path: Path):
     if not path.exists():
@@ -123,8 +123,8 @@ def _load_module(name: str, path: Path):
 
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-_utils_mod = _load_module("ProjectUtils", _SCRIPT_DIR / "00_03_Project_Utils_FAcDs.py")
-_cfg_mod = _load_module("ProjectConfig", _SCRIPT_DIR / "00_02_Project_Config_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils", _SCRIPT_DIR / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod = _load_module("ProjectConfig", _SCRIPT_DIR / "00_01_Project_Config_FAcDs.py")
 
 CFG = _cfg_mod.CFG()
 print_script_banner = _utils_mod.print_script_banner

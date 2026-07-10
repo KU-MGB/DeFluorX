@@ -487,12 +487,12 @@ echo ""
 
 # Verify the environment is complete.
 run_step "00a  Environment check" \
-    python 00_01_Environment_Installation_FAcDs.py
+    python 00_03_Environment_FAcDs.py
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
 run_step "00b  Environment export" \
-    python 00_01_Environment_Installation_FAcDs.py --export || true
+    python 00_03_Environment_FAcDs.py --export || true
 
 run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \

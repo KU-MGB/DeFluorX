@@ -13,8 +13,8 @@ Date   : 05 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_FAcDs.py
   Role          : "Engine" — Boltz-2 prediction orchestrator and ranker.
-  Imports from  : 00_02_Project_Config_FAcDs.py  (CFG — all geometric thresholds)
-                  00_03_Project_Utils_FAcDs.py   (geometric utilities, console funcs)
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — all geometric thresholds)
+                  00_02_Project_Utils_FAcDs.py   (geometric utilities, console funcs)
   Reads         : 01_Merge_FAcDs.py output — merged *.fasta (protein sequences)
                   User-supplied *.smi (SMILES ligand file)
   Writes        : <Run>/1_Boltz2_Production/  (Boltz-2 CIF outputs)
@@ -354,8 +354,8 @@ def _load_module(name: str, path):
     return mod
 
 _REPO_DIR  = _Path(__file__).resolve().parent
-_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_02_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_03_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
 
 safe_name = _utils_mod.safe_name
@@ -595,7 +595,7 @@ for k in REF_ACTIVE_SITE_MAP:
 # Step 2.9: Global State Variables
 # -------------------------------------------------------------------------------
 
-# ConsoleColours sourced from 00_03_Project_Utils (single canonical definition).
+# ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
