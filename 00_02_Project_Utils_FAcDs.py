@@ -1052,7 +1052,14 @@ def ensure_jobserver_on_working_disk(
         if hp.is_file():
             cur, ok = _tmpdir_on_disk(hp)
             if ok:
-                os.environ["SCHRODINGER_HOSTS"] = str(hp)  # pin job control to this file
+                # Only pin SCHRODINGER_HOSTS for a NON-default (user-local) file;
+                # pointing it at the default $SCHRODINGER/schrodinger.hosts makes
+                # Schrödinger emit a noisy "custom hosts file … is being ignored"
+                # warning (it reads that path by default anyway).
+                if hp == user_hosts:
+                    os.environ["SCHRODINGER_HOSTS"] = str(hp)
+                else:
+                    os.environ.pop("SCHRODINGER_HOSTS", None)
                 _reload()
                 say(f"[job-server] scratch OK — {hp} tmpdir {cur} is on the working disk.")
                 return True

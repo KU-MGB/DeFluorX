@@ -665,12 +665,12 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     _ncpu = max(1, int(getattr(CFG, "GLOBAL_MAX_WORKERS", max(1, (os.cpu_count() or 4) - 2))))
     cmd = [SCHROD_RUN, "thermal_mmgbsa.py", cms_file.name,
            "-j", f"{job_name}_mmgbsa", "-HOST", f"localhost:{_ncpu}"]
-    # Pin the ligand explicitly (ASL from CFG) so Prime scores the PFAS molecule; a
-    # small/heavily-fluorinated ligand can otherwise be misassigned as solvent by
-    # Prime's auto-detection. Empty CFG value → fall back to auto-detect.
+    # Pin the ligand explicitly (ASL from CFG, via thermal_mmgbsa's -lig_asl flag) so
+    # Prime scores the PFAS molecule; a small/heavily-fluorinated ligand can otherwise
+    # be misassigned as solvent by auto-detection. Empty CFG value → auto-detect.
     _lig_asl = str(getattr(CFG, "MMGBSA_LIGAND_ASL", "") or "").strip()
     if _lig_asl:
-        cmd += ["-ligand", _lig_asl]
+        cmd += ["-lig_asl", _lig_asl]
     if getattr(CFG, "MMGBSA_STEP_SIZE", 0) and CFG.MMGBSA_STEP_SIZE > 0:
         cmd += ["-step_size", str(CFG.MMGBSA_STEP_SIZE)]
     _echo(f"  [Rank {rank}] Running MM-GBSA on {_ncpu} cores: {' '.join(cmd[1:])}")
