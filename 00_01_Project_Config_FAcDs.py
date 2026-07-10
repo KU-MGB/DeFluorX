@@ -1482,6 +1482,7 @@ class CFG:
 
     # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
     QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 reproduces the legacy single best-frame (lower-bound) behaviour
+    QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap (legacy).
 
     # --- Step 10.3: Defluorination verdict — the concrete "does it defluorinate?" gate (Step 07) ---
     """

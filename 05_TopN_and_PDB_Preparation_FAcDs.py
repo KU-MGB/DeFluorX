@@ -704,6 +704,14 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     acid_found, acid_offset = find_type_near(acid_ref, ASP_TYPES)
     base_found, base_offset = find_type_near(base_ref, HIS_TYPES)
 
+    # QC: the catalytic nucleophile Asp must be DEPROTONATED (ASP) for the SN2 attack.
+    # At pH 8 PropKa should assign ASP, but a raised local pKa can give ASH (protonated
+    # = catalytically dead). Warn loudly so a dead-enzyme QM/MM is not run unnoticed.
+    if nuc_found is not None and resnum_to_resname.get(nuc_found) == "ASH":
+        _msg = (f"[QC] Nucleophile Asp{nuc_found} is PROTONATED (ASH) — a deprotonated "
+                f"ASP is required for the SN2 defluorination. Check PropKa/Epik pH.")
+        (logger.warning if logger else print)(_msg)
+
     """
     Use the most common non-zero offset (consensus across Nuc/Acid/Base);
     fall back to 0 when all three agree on the reference numbering.

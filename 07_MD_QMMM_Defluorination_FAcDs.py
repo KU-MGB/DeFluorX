@@ -1692,6 +1692,19 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         if _r is not None:
             _resolved_cuts.append((rn, _r[0], _r[1]))
 
+    # Cap the QM region size. The list is priority-ordered (nucleophile, base, acid,
+    # stab-F, then cradle), so truncating keeps the catalytic core and drops the
+    # furthest cradle residues. A very large QM region (e.g. 17 residues) inflates the
+    # electron count and makes a molchg / electron-parity mismatch likely — which
+    # Jaguar rejects with 'incorrect molecular charge' and then skips every scan point.
+    _max_qm = int(getattr(CFG, "QSITE_MAX_QM_RESIDUES", 0))
+    if _max_qm > 0 and len(_resolved_cuts) > _max_qm:
+        _dropped = len(_resolved_cuts) - _max_qm
+        _resolved_cuts = _resolved_cuts[:_max_qm]
+        console_info(f"    [QSite] QM region capped to {_max_qm} residues "
+                     f"(dropped {_dropped} furthest cradle residue(s)) to keep the "
+                     f"charge/electron count tractable.")
+
     # ── QM region net charge — derived from the structure, not assumed ─────
     # QM atoms = full ligand + each catalytic residue's sidechain beyond the
     # Cα–Cβ cut (CA/backbone remain MM). Instead of assuming protonation states
@@ -1879,7 +1892,40 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     else:
         console_info(f"    {ConsoleColours.WARNING}[Rank {rank}] QSite {jobname} exited rc={_rc} "
                      f"after {_elapsed / 60:.1f} min — check {_log_path.name}.{ConsoleColours.ENDC}")
+    # Self-check: surface the common QSite failure where the QM-region charge /
+    # electron count is inconsistent (Jaguar 'incorrect molecular charge', odd
+    # electrons) and it silently skips every scan point → an empty/NaN barrier.
+    # Report it loudly so it is never mistaken for a converged result.
+    try:
+        _reason = _qsite_scan_failure_reason(qsite_dir, jobname)
+        if _reason:
+            console_info(f"    {ConsoleColours.FAIL}[Rank {rank}] QSite produced no valid "
+                         f"reaction coordinate: {_reason}{ConsoleColours.ENDC}")
+    except Exception:
+        pass
     return True
+
+
+def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
+    """Read the QSite/Jaguar .out and return a human-readable reason when the scan
+    failed to produce a valid PES (charge/electron mismatch, skipped points), else
+    None. Used to convert Jaguar's silent 'Skipping to next scan point' into a clear
+    diagnosis rather than an empty barrier."""
+    try:
+        _o = next((p for p in ([qsite_dir / f"{job_name}.out"] + sorted(qsite_dir.glob("*.out")))
+                   if p.exists() and p.stat().st_size > 0), None)
+        if _o is None:
+            return None
+        _t = _o.read_text(errors="ignore")
+        _skips = _t.count("Skipping to next scan point")
+        if re.search(r"incorrect molecular charge|Odd number of electrons", _t, re.I) or _skips:
+            _m = re.search(r"Molecular charge:\s*(-?\d+)", _t)
+            _got = f" (Jaguar reads charge {_m.group(1)})" if _m else ""
+            return (f"QM-region charge/electron mismatch{_got} — {_skips} scan point(s) "
+                    f"skipped. Reduce CFG.QSITE_MAX_QM_RESIDUES or check molchg/protonation.")
+    except Exception:
+        return None
+    return None
 
 
 # -----------------------------------------------------------------------------

@@ -233,11 +233,14 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
         # Clamp branch length at 0: a non-monotonic linkage can give node.dist >
         # parentdist, which would emit a negative branch length (rejected by most
         # tree parsers). max(0.0, …) keeps the Newick valid.
+        # UPGMA is ultrametric: node height = half the cophenetic (merge) distance
+        # scipy stores in node.dist, so each branch length is (parent−node)/2. Without
+        # the /2 every leaf-to-leaf path is exactly 2× the true cosine distance.
         if node.is_leaf():
-            return f"{_nwk_safe(labels[node.id])}:{max(0.0, parentdist - node.dist):.4f}"
+            return f"{_nwk_safe(labels[node.id])}:{max(0.0, (parentdist - node.dist) / 2.0):.4f}"
         left_str  = build_newick(node.left,  node.dist)
         right_str = build_newick(node.right, node.dist)
-        return f"({left_str},{right_str}):{max(0.0, parentdist - node.dist):.4f}"
+        return f"({left_str},{right_str}):{max(0.0, (parentdist - node.dist) / 2.0):.4f}"
 
     left      = build_newick(tree_node.left,  tree_node.dist)
     right     = build_newick(tree_node.right, tree_node.dist)
@@ -735,7 +738,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         document.addEventListener('click', () => colorPalette.classList.add('hidden'));
         document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); } });
 
-        const zoom = d3.zoom().scaleExtent([0.05, 5]).on("zoom", (e) => g.attr("transform", e.transform));
+        const zoom = d3.zoom().scaleExtent([0.002, 8]).on("zoom", (e) => g.attr("transform", e.transform));
         svg.call(zoom);
         const g = svg.append("g");
 
