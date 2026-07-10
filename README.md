@@ -216,8 +216,8 @@ flowchart TD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,064 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; Traj analysis · NAC dwell · defluorination verdict &nbsp; \n &nbsp; QSite reaction profile + decomposition + landscape figs &nbsp; \n &nbsp; 📄 ~3,361 lines &nbsp; "]
+        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Desmond SID → *_SID-out.eaf (frame-count validated) &nbsp; \n &nbsp; Per-frame ΔG_bind + energy components + plots &nbsp; \n &nbsp; Disk-safe scratch · phase-aware heartbeat · WARN status &nbsp; \n &nbsp; 📄 ~1,064 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~3,361 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
