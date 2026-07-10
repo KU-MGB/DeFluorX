@@ -62,6 +62,16 @@ RUN_ID=""
 # abort. Keep in sync with EXIT_WARN in 06_SID_Prime-MMGBSA_FAcDs.py.
 readonly WARN_EXIT_CODE=3
 
+# Terminal colours for the interactive prelude (mode/sudo prompts). Only emitted
+# to a real TTY; the log copy is ANSI-stripped downstream, so these never pollute
+# the file. Empty on non-interactive stdout (pipe/redirect).
+if [[ -t 1 ]]; then
+    _C_GREEN=$'\033[0;32m'; _C_RED=$'\033[0;31m'; _C_YELLOW=$'\033[0;33m'
+    _C_BOLD=$'\033[1m';     _C_RESET=$'\033[0m'
+else
+    _C_GREEN=""; _C_RED=""; _C_YELLOW=""; _C_BOLD=""; _C_RESET=""
+fi
+
 for _arg in "$@"; do
     case "$_arg" in
         --dry-run)       DRY_RUN=1 ;;
@@ -188,6 +198,33 @@ if [[ "$_PIPELINE_MODE" == "fresh" && "$RESUME_FROM" -gt 0 ]]; then
     RESUME_FROM=0
 fi
 
+# ── Resume from a chosen step (interactive; resume mode only) ──────────────────
+# Lets the user skip already-completed early steps (e.g. jump straight to 03 or 06
+# without re-running the hours-long Step 02). Steps below the chosen number are
+# marked SKIP. Prompted only when resuming interactively and --resume-from was not
+# already given on the command line; Enter (default) runs the whole pipeline.
+if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && -t 0 ]]; then
+    echo ""
+    echo "  ${_C_BOLD}── Resume from which step? ──${_C_RESET}"
+    echo "    [1] 01  Merge sequences"
+    echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
+    echo "    [3] 03  Validation figures"
+    echo "    [4] 04  Dendrogram"
+    echo "    [5] 05  Top-N selection + PDB preparation"
+    echo "    [6] 06  SID + Prime MM-GBSA"
+    echo "    [7] 07  MD thermodynamics + QM/MM engine"
+    read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step </dev/tty || _from_step=""
+    if [[ -z "$_from_step" ]]; then
+        echo "  ${_C_GREEN}→ Running the full pipeline (all steps).${_C_RESET}"
+    elif [[ "$_from_step" =~ ^[1-7]$ ]]; then
+        RESUME_FROM="$_from_step"
+        printf "  ${_C_GREEN}→ Resuming from Step %02d onwards; Steps below %02d will be skipped.${_C_RESET}\n" \
+            "$_from_step" "$_from_step"
+    else
+        echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' — running the full pipeline.${_C_RESET}"
+    fi
+fi
+
 # ── Sudo credential cache (OPTIONAL) ──────────────────────────────────────────
 # systemd-oomd masking stops the Linux OOM-killer from terminating the
 # memory-heavy Steps 06-07. It needs sudo, which is OPTIONAL: not every user has
@@ -213,11 +250,11 @@ while true; do
     read -r -s -p "  Enter sudo password to enable oomd masking, or press Enter to skip (NORMAL mode): " _sudo_pw </dev/tty || _sudo_pw=""
     echo ""
     if [[ -z "$_sudo_pw" ]]; then
-        echo "  → No password entered — running in NORMAL mode (systemd-oomd NOT masked)."
+        echo "  ${_C_YELLOW}→ No password entered — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
         break
     elif echo "$_sudo_pw" | sudo -S -v 2>/dev/null; then
         SUDO_ENABLED=1
-        echo "  → sudo enabled — systemd-oomd will be masked during Steps 06-07."
+        echo "  ${_C_GREEN}→ sudo enabled — systemd-oomd will be masked during Steps 06-07.${_C_RESET}"
         # Keepalive: refresh credential every 60 s for long-running pipelines
         ( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
         _SUDO_KEEPALIVE_PID=$!
@@ -225,10 +262,10 @@ while true; do
     else
         _sudo_attempt=$(( _sudo_attempt + 1 ))
         if (( _sudo_attempt >= 3 )); then
-            echo "  → Wrong password 3 times (or no sudo access) — running in NORMAL mode (systemd-oomd NOT masked)."
+            echo "  ${_C_RED}→ Wrong password 3 times (or no sudo access) — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
             break
         fi
-        echo "  → Wrong password. Try again, or press Enter to skip (NORMAL mode).  [attempt ${_sudo_attempt}/3]"
+        echo "  ${_C_RED}→ Wrong password. Try again, or press Enter to skip (NORMAL mode).  [attempt ${_sudo_attempt}/3]${_C_RESET}"
     fi
 done
 unset _sudo_pw
