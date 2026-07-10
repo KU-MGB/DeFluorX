@@ -1003,60 +1003,101 @@ def ensure_jobserver_on_working_disk(
     """
     say = echo or (lambda m="": print(f"  {m}", flush=True))
     jsc = os.path.join(str(schrodinger), "jsc")
-    hosts = Path(schrodinger) / "schrodinger.hosts"
     anchor = Path(work_disk_anchor)
     target = (anchor / jobserver_subdir).resolve()
-    if not hosts.is_file():
-        say(f"[job-server] hosts file not found at {hosts}; cannot redirect scratch — "
-            f"Schrödinger scratch may land on /tmp (OS disk).")
-        return False
-    try:
-        text = hosts.read_text()
-    except Exception as e:
-        say(f"[job-server] could not read {hosts} ({e}); scratch may stay on /tmp.")
-        return False
-
-    _m = _re.search(r"(?m)^\s*tmpdir:\s*(.*)$", text)
-    _cur = _m.group(1).strip() if _m else ""
     anchor_dev = _fs_device(anchor)
-    if _cur and anchor_dev is not None and _fs_device(Path(_cur)) == anchor_dev:
-        say(f"[job-server] scratch OK — hosts tmpdir {_cur} is on the working disk.")
-        return True
+    global_hosts = Path(schrodinger) / "schrodinger.hosts"       # shared /opt install
+    user_hosts   = Path.home() / ".schrodinger" / "schrodinger.hosts"  # per-user override
 
-    say(f"[job-server] hosts tmpdir is '{_cur or '(unset → /tmp)'}' (OS disk); a large "
-        f"Prime/QSite job would exhaust it. Redirecting → {target}")
-    try:
-        target.mkdir(parents=True, exist_ok=True)
-        # Back up the hosts file next to the run's code backups, then set the
-        # localhost tmpdir (its settings apply to every host entry). Replace the
-        # first tmpdir: line (localhost is first in the file); insert one after the
-        # localhost name if none exists.
+    def _reload():
+        """Apply the hosts change to the running server(s) — no restart, no killed
+        job. reload-hosts inherits SCHRODINGER_HOSTS from os.environ, so it reads
+        whichever hosts file we selected."""
+        for _a in (_jobserver_addresses(jsc) if os.path.isfile(jsc) else []):
+            try:
+                subprocess.run([jsc, "admin", "reload-hosts", _a],
+                               capture_output=True, text=True, timeout=60)
+            except Exception:
+                pass
+
+    def _tmpdir_on_disk(hp: Path):
+        """(current tmpdir string, is-it-on-the-working-disk?) for a hosts file."""
         try:
-            (hosts.parent / f"schrodinger.hosts.bak").write_text(text)
+            t = hp.read_text()
+            _m = _re.search(r"(?m)^\s*tmpdir:\s*(.*)$", t)
+            cur = _m.group(1).strip() if _m else ""
+            return cur, (bool(cur) and anchor_dev is not None
+                         and _fs_device(Path(cur)) == anchor_dev)
         except Exception:
-            pass
-        if _m:
-            new_text = _re.sub(r"(?m)^(\s*tmpdir:\s*).*$",
-                               lambda _mm: f"{_mm.group(1)}{target}", text, count=1)
+            return "", False
+
+    def _write_tmpdir(hp: Path, template: str):
+        """Set the localhost tmpdir to `target` in hosts file `hp`, seeding from
+        `template` (the global localhost entry) or a minimal localhost entry."""
+        base = template if _re.search(r"(?m)^\s*name:\s*localhost", template) else \
+            "name:        localhost\ntmpdir:      \n"
+        if _re.search(r"(?m)^\s*tmpdir:\s*.*$", base):
+            new = _re.sub(r"(?m)^(\s*tmpdir:\s*).*$",
+                          lambda mm: f"{mm.group(1)}{target}", base, count=1)
         else:
-            new_text = _re.sub(r"(?m)^(\s*name:\s*localhost\s*)$",
-                               lambda _mm: f"{_mm.group(1)}\ntmpdir:      {target}", text, count=1)
-        hosts.write_text(new_text)
-    except Exception as e:
-        say(f"[job-server] could not write hosts tmpdir ({e}); scratch may stay on /tmp.")
-        return False
+            new = _re.sub(r"(?m)^(\s*name:\s*localhost\s*)$",
+                          lambda mm: f"{mm.group(1)}\ntmpdir:      {target}", base, count=1)
+        hp.parent.mkdir(parents=True, exist_ok=True)
+        hp.write_text(new)
 
-    # Apply on the running server(s) so the change takes effect for the next jobs
-    # without a restart (no live job is killed).
-    _addrs = _jobserver_addresses(jsc) if os.path.isfile(jsc) else []
-    for _a in _addrs:
-        try:
-            subprocess.run([jsc, "admin", "reload-hosts", _a],
-                           capture_output=True, text=True, timeout=60)
-        except Exception:
-            pass
-    say(f"[job-server] ✔ scratch tmpdir → {target} (applied to {len(_addrs) or 'no'} "
-        f"running server(s) via reload-hosts; no job stopped).")
-    return True
+    target.mkdir(parents=True, exist_ok=True)
+
+    # 1. Already on the working disk (user-local first, then global)? Then done.
+    for hp in (user_hosts, global_hosts):
+        if hp.is_file():
+            cur, ok = _tmpdir_on_disk(hp)
+            if ok:
+                os.environ["SCHRODINGER_HOSTS"] = str(hp)  # pin job control to this file
+                _reload()
+                say(f"[job-server] scratch OK — {hp} tmpdir {cur} is on the working disk.")
+                return True
+
+    # 2. PREFER a user-local hosts file (~/.schrodinger). This NEVER edits the shared
+    #    /opt hosts, so on a multi-tenant cluster it cannot reroute other users' scratch;
+    #    SCHRODINGER_HOSTS points job control at it. tmpdir → the USB working disk.
+    _tmpl = ""
+    try:
+        _tmpl = global_hosts.read_text() if global_hosts.is_file() else ""
+    except Exception:
+        pass
+    try:
+        _write_tmpdir(user_hosts, _tmpl)
+        os.environ["SCHRODINGER_HOSTS"] = str(user_hosts)
+        _reload()
+        _cur, _ok = _tmpdir_on_disk(user_hosts)
+        if _ok:
+            say(f"[job-server] ✔ scratch → {target} via user-local hosts {user_hosts} "
+                f"(multi-tenant safe; global /opt hosts untouched).")
+            return True
+    except Exception as e:
+        say(f"[job-server] user-local hosts setup failed ({e}); trying global fallback.")
+
+    # 3. Fallback: edit the GLOBAL hosts, but ONLY when the user owns it (a single-user
+    #    install) — never on a shared cluster where it is root-owned. This guarantees a
+    #    600 GB Prime/QSite job cannot fill the OS disk on the user's own machine.
+    try:
+        if global_hosts.is_file() and os.access(global_hosts, os.W_OK):
+            _txt = global_hosts.read_text()
+            try:
+                (global_hosts.parent / "schrodinger.hosts.bak").write_text(_txt)
+            except Exception:
+                pass
+            _write_tmpdir(global_hosts, _txt)
+            os.environ.pop("SCHRODINGER_HOSTS", None)  # use the (now-correct) global file
+            _reload()
+            say(f"[job-server] ✔ scratch → {target} via global hosts (fallback; you own "
+                f"this single-user install).")
+            return True
+    except Exception as e:
+        say(f"[job-server] global hosts write failed ({e}).")
+
+    say(f"[job-server] ⚠ could NOT put scratch on the working disk — a large job may "
+        f"fill the OS disk. Set 'tmpdir: {target}' in {user_hosts} manually and reload.")
+    return False
 
 

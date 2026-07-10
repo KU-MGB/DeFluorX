@@ -2673,10 +2673,13 @@ def topn_extraction_phase(args):
                 if smi not in ligand_data and mol_source:
                     mol = extract_chain_l_mol(mol_source)
                     # The mol was parsed from PDB with sanitize=False (all-single-bond
-                    # topology, no formal charges). Restore the true bond orders/charges
-                    # from the reference SMILES so the handover SDF carries correct PFAS
-                    # chemistry. Best-effort: on any template-match failure keep the
-                    # geometry-only mol rather than dropping the ligand.
+                    # topology). Restore true bond orders from the reference SMILES so the
+                    # handover SDF carries correct PFAS connectivity. NOTE: the SDF then
+                    # reflects the reference-SMILES protonation, NOT the pH-adjusted
+                    # (Epik) MD state — this SDF is a connectivity handover record; QM/MM
+                    # (Step 07) parametrises from the Schrödinger .maegz, not this SDF.
+                    # Best-effort: on any template-match failure keep the geometry-only
+                    # mol rather than dropping the ligand.
                     if mol is not None and smi:
                         try:
                             _tmpl = Chem.MolFromSmiles(smi)

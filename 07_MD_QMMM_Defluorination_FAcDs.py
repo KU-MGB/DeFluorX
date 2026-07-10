@@ -2752,8 +2752,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                            "Lipo": r"lipo", "Packing": r"packing",
                            "SolvGB": r"solv.?gb|gb\b|solvation", "SelfCont": r"self.?cont"}
             for _name, _pat in _components.items():
+                # Require a dG_Bind DELTA column (not the absolute Complex/Receptor/
+                # Ligand energies, which are thousands of kcal/mol and would swamp the
+                # decomposition). e.g. r_psp_MMGBSA_dG_Bind_Coulomb, not *_Complex_Coulomb.
                 _hit = [c for c in _mdf.columns
-                        if re.search(r"mmgbsa|dg.?bind|prime", c, re.I) and re.search(_pat, c, re.I)]
+                        if re.search(r"dg.?bind", c, re.I) and re.search(_pat, c, re.I)
+                        and not re.search(r"complex|receptor|ligand", c, re.I)]
                 if _hit:
                     _nac, _glob = _nac_vs_global(_hit[0])
                     _decomp[_name] = (_nac, _glob)
