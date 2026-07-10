@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
         CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,012 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,045 lines &nbsp; "]
+        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,050 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~298 lines &nbsp; "]
         CFG --- UTL --- ENV
     end
@@ -216,7 +216,7 @@ flowchart TD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,063 lines &nbsp; "]
+        M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Frame count validation &nbsp; \n &nbsp; ΔG_bind per job + plots &nbsp; \n &nbsp; 📄 ~1,064 lines &nbsp; "]
         M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; Traj analysis · NAC dwell · defluorination verdict &nbsp; \n &nbsp; QSite reaction profile + decomposition + landscape figs &nbsp; \n &nbsp; 📄 ~3,341 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
