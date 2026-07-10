@@ -269,17 +269,17 @@ and regenerated on major code changes. **`CFG` is the top god node (betweenness
 0.574)** — every module's thresholds and figure colours route through it, which is
 the single-source-of-truth architecture showing up structurally.
 
-The overview below shows the **40 most-connected nodes** (the core abstractions),
-coloured by community; the full 605-node graph is in the interactive HTML.
+The screenshot below shows the **full 605-node graph** coloured by its
+38 communities (module-level clusters listed in the side panel).
 
-![FAcDs code graph — 40 most-connected nodes](docs/code_graph.png)
+![FAcDs code graph — full 605-node graph coloured by community](docs/code_graph.png)
 
 > [!NOTE]
-> The image above (`docs/code_graph.png`) is a **static** screenshot. For the
-> **interactive** graph (zoom, pan, community filter, node search) open
-> [`docs/code_graph.html`](docs/code_graph.html) locally (clone → open in any
-> browser). The audit trail (god nodes, communities, surprising connections) is in
-> [`docs/code_graph_report.md`](docs/code_graph_report.md).
+> The image above (`docs/code_graph.png`) is a **static** screenshot of the
+> interactive graph. For the live version (zoom, pan, community filter, node
+> search) open [`docs/code_graph.html`](docs/code_graph.html) locally (clone →
+> open in any browser). The audit trail (god nodes, communities, surprising
+> connections) is in [`docs/code_graph_report.md`](docs/code_graph_report.md).
 
 ---
 
