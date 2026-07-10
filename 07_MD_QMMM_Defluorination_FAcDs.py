@@ -2067,6 +2067,11 @@ def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -
     return float(series[idx])
 
 
+# -----------------------------------------------------------------------------
+# SECTION 8b: NAC PERSISTENCE (continuous strict-NAC dwell → nanoseconds)
+# The real "time in position": longest/mean uninterrupted strict-NAC run, not the
+# frame-count fraction a flickering ligand can inflate.
+# -----------------------------------------------------------------------------
 def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
     """Continuous-residence statistics for a per-frame strict-NAC boolean series.
 
@@ -2095,6 +2100,11 @@ def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
     }
 
 
+# -----------------------------------------------------------------------------
+# SECTION 8c: PER-JOB TRAJECTORY ANALYSIS ENGINE
+# NAC geometry + Dream-Team tracking + WaterMap/EAF/MM-GBSA integration + QM/MM
+# frame selection, producing the per-rank NAC_Data.csv, dashboards, and stats row.
+# -----------------------------------------------------------------------------
 def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        master_out_dir: Path, lig_resname: str, stride: int,
                        triad_override: dict = None,
