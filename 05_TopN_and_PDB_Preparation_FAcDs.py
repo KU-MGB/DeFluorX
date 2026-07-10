@@ -32,7 +32,7 @@ Date   : 05 July 2026 <───────────────────
                     00_TopN_and_Preparation_Log.txt  (single log for both phases)
   Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
   Downstream    : 06_SID_Prime-MMGBSA_FAcDs.py         → reads prepared PDBs / handover
-                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py → reads prepared PDBs for MD/QM-MM
+                  07_MD_QMMM_Defluorination_FAcDs.py → reads prepared PDBs for MD/QM-MM
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────

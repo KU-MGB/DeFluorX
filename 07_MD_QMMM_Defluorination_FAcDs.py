@@ -2,19 +2,32 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 07  |  MD Thermodynamics & QM/MM Engine
+FAcDs Pipeline  |  Step 07  |  MD + QM/MM Defluorination Engine
 ===============================================================================
 
-Molecular dynamics trajectory analysis: near-attack conformation (NAC) geometry,
-8-residue Dream Team catalytic machinery tracking, WaterMap thermodynamic
-integration, Desmond EAF ligand dynamics, and QSite automation for QM/MM
-SN2 reaction-coordinate scans.
+Terminal computational step: turns the Desmond MD trajectories into a concrete,
+ranked verdict on whether each candidate DEFLUORINATES — not merely binds.
+
+It combines four evidence streams into the master ranking + figures:
+  1. Kinetic pre-organisation — near-attack-conformation (NAC) geometry, the
+     8-residue Dream Team catalytic machinery, WaterMap hydration, Desmond EAF
+     ligand dynamics, and the CONTINUOUS strict-NAC dwell time (ns).
+  2. Quantum barrier — QSite QM/MM SN2 relaxed scans over the top pre-organised
+     frames, PARSED into ΔE‡ / ΔE_rxn and a departing-fluoride charge (→ −1 = F⁻);
+     the reaction-profile figure is the direct proof of C–F cleavage.
+  3. Reactive-pose thermodynamics — Prime MM-GBSA (Step 06) conditioned on the
+     strict-NAC frames, with an energy-component decomposition + machinery
+     engagement (classical support, not bond-breaking).
+  4. Verdict — Is_Defluorinating gate + Defluor_Propensity (P(strict-NAC)·
+     exp(−ΔE‡/RT)), and the whole-story Defluorination Landscape figure.
+
+All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 05 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+  Script        : 07_MD_QMMM_Defluorination_FAcDs.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
@@ -57,9 +70,9 @@ Date   : 05 July 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
+    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
+    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
 
 Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
@@ -177,8 +190,8 @@ import shutil
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 # Both forms are equivalent:
-#   python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   $SCHRODINGER/run 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -1348,6 +1361,10 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     console_info(f"    Viability Bar Chart Saved   : {out_path.resolve()}")
 
 
+# -----------------------------------------------------------------------------
+# SECTION 5b: DEFLUORINATION FIGURES (verdict landscape + reactive-state decomp)
+# Colours/thresholds from CFG.DEFLUOR_FIG_COLOUR / DEFLUOR_ENGAGE_* (SSOT).
+# -----------------------------------------------------------------------------
 def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) -> None:
     """The whole-story figure. Every candidate is placed by catalytic PERSISTENCE
     (x — longest continuous strict-NAC dwell, ns) against its QM/MM SN2 BARRIER
@@ -1391,17 +1408,18 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         _xhi = max(float(x.max()) * 1.12, Y * 1.5)
         _ylo = min(float(y.min()) * 0.9, 0.0)
         _yhi = max(float(y.max()) * 1.12, (Z * 1.25 if _has_bar else float(y.max()) * 1.12))
+        _C = getattr(CFG, "DEFLUOR_FIG_COLOUR", {})
         ax.set_xlim(0, _xhi); ax.set_ylim(_ylo, _yhi)
         if _has_bar:
             ax.add_patch(plt.Rectangle((Y, _ylo), _xhi - Y, Z - _ylo,
-                                       color="#22C55E", alpha=0.09, zorder=0))
-            ax.axhline(Z, color="#16A34A", ls="--", lw=1.2, zorder=1)
-            ax.axvline(Y, color="#16A34A", ls="--", lw=1.2, zorder=1)
+                                       color=_C.get("gate", "#22C55E"), alpha=0.09, zorder=0))
+            ax.axhline(Z, color=_C.get("gate_line", "#16A34A"), ls="--", lw=1.2, zorder=1)
+            ax.axvline(Y, color=_C.get("gate_line", "#16A34A"), ls="--", lw=1.2, zorder=1)
             ax.text(_xhi * 0.98, _ylo + (Z - _ylo) * 0.5,
                     f"defluorination-competent\n(dwell ≥ {Y:g} ns, ΔE‡ ≤ {Z:g})",
-                    ha="right", va="center", fontsize=8, color="#15803D", style="italic")
-        sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else "#3B82F6"),
-                        cmap="viridis", vmin=0, vmax=1, edgecolor="#334155",
+                    ha="right", va="center", fontsize=8, color=_C.get("gate_text", "#15803D"), style="italic")
+        sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else _C.get("scatter", "#3B82F6")),
+                        cmap="viridis", vmin=0, vmax=1, edgecolor=_C.get("edge", "#334155"),
                         linewidth=0.8, alpha=0.92, zorder=5)
         for xi, yi, lab in zip(x, y, d["_label"]):
             ax.annotate(str(lab), (xi, yi), fontsize=7, xytext=(4, 4),
@@ -1417,7 +1435,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         out_path = out_dir / "12_Defluorination_Landscape.png"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            plt.savefig(out_path, dpi=300, bbox_inches="tight")
+            plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
         plt.close(fig)
         console_info(f"    Defluorination Landscape Saved : {out_path.resolve()}")
     except Exception as _e:
@@ -1438,6 +1456,9 @@ def plot_mmgbsa_nac_decomposition(out_path: Path, job_name: str, rank,
         _panels = int(bool(decomp)) + int(bool(dt_nac))
         if _panels == 0:
             return
+        _C = getattr(CFG, "DEFLUOR_FIG_COLOUR", {})
+        _contact = float(getattr(CFG, "DEFLUOR_ENGAGE_CONTACT_A", 4.0))
+        _near = float(getattr(CFG, "DEFLUOR_ENGAGE_NEAR_A", 6.0))
         fig, axes = plt.subplots(1, _panels, figsize=(6.2 * _panels, 5.2), squeeze=False)
         _ax = list(axes[0]); _i = 0
         if decomp:
@@ -1446,9 +1467,9 @@ def plot_mmgbsa_nac_decomposition(out_path: Path, job_name: str, rank,
             _nacv = [decomp[k][0] for k in _labels]
             _glov = [decomp[k][1] for k in _labels]
             _x = np.arange(len(_labels)); _w = 0.38
-            ax.bar(_x - _w / 2, _glov, _w, label="whole trajectory", color="#94A3B8")
-            ax.bar(_x + _w / 2, _nacv, _w, label="strict-NAC frames", color="#2563EB")
-            ax.axhline(0, color="#334155", lw=0.8)
+            ax.bar(_x - _w / 2, _glov, _w, label="whole trajectory", color=_C.get("ensemble", "#94A3B8"))
+            ax.bar(_x + _w / 2, _nacv, _w, label="strict-NAC frames", color=_C.get("reactive", "#2563EB"))
+            ax.axhline(0, color=_C.get("edge", "#334155"), lw=0.8)
             ax.set_xticks(_x); ax.set_xticklabels(_labels, rotation=30, ha="right", fontsize=8)
             ax.set_ylabel("MM-GBSA component (kcal/mol)", fontweight="bold")
             ax.set_title("Energy decomposition — reactive pose vs ensemble", fontsize=10, fontweight="bold")
@@ -1457,9 +1478,12 @@ def plot_mmgbsa_nac_decomposition(out_path: Path, job_name: str, rank,
         if dt_nac:
             ax = _ax[_i]
             _labels = list(dt_nac.keys()); _vals = [dt_nac[k] for k in _labels]
-            _cols = ["#16A34A" if v <= 4.0 else ("#F59E0B" if v <= 6.0 else "#DC2626") for v in _vals]
-            ax.bar(range(len(_labels)), _vals, color=_cols, edgecolor="#334155", linewidth=0.6)
-            ax.axhline(4.0, color="#16A34A", ls="--", lw=1.0, label="≈ contact (4 Å)")
+            _cols = [_C.get("engage_ok", "#16A34A") if v <= _contact
+                     else (_C.get("engage_mid", "#F59E0B") if v <= _near else _C.get("engage_far", "#DC2626"))
+                     for v in _vals]
+            ax.bar(range(len(_labels)), _vals, color=_cols, edgecolor=_C.get("edge", "#334155"), linewidth=0.6)
+            ax.axhline(_contact, color=_C.get("engage_ok", "#16A34A"), ls="--", lw=1.0,
+                       label=f"≈ contact ({_contact:g} Å)")
             ax.set_xticks(range(len(_labels))); ax.set_xticklabels(_labels, rotation=30, ha="right", fontsize=8)
             ax.set_ylabel("Mean distance to warhead C in NAC frames (Å)", fontweight="bold")
             ax.set_title("Catalytic-machinery engagement", fontsize=10, fontweight="bold")
@@ -1469,7 +1493,7 @@ def plot_mmgbsa_nac_decomposition(out_path: Path, job_name: str, rank,
                      f"{format_job_label(job_name, rank)}", fontsize=11, fontweight="bold")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            plt.tight_layout(); plt.savefig(out_path, dpi=300, bbox_inches="tight")
+            plt.tight_layout(); plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
         plt.close(fig)
         console_info(f"    MM-GBSA NAC decomposition saved : {out_path.name}")
     except Exception as _e:
@@ -1844,6 +1868,12 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     return True
 
 
+# -----------------------------------------------------------------------------
+# SECTION 7b: QM/MM SCAN PARSING → BARRIER, REACTION PROFILE, FLUORIDE CHARGE
+# Turns the Jaguar/QSite relaxed-scan .out into ΔE‡ / ΔE_rxn, the PES, and the
+# departing-F charge. Best-effort regex parsing (Jaguar output varies by version);
+# every failure path returns NaN/empty and is non-fatal.
+# -----------------------------------------------------------------------------
 def _extract_scan_energies(text: str) -> "list[float]":
     """Best-effort per-scan-point energy series (Hartree) from a Jaguar/QSite
     relaxed-scan .out. Tries, in priority order: (1) the geometry-scan summary
@@ -1878,11 +1908,13 @@ def _extract_fluoride_charge_series(text: str) -> "list[float]":
     this is heuristic (most-negative charge in each Mulliken block, clamped to a
     physical window); returns [] when nothing sane is found — the reaction profile
     still plots the reliable energy PES. Needs validation against a real .out."""
+    _lo = float(getattr(CFG, "DEFLUOR_FLUORIDE_CHARGE_MIN", -1.2))
+    _hi = float(getattr(CFG, "DEFLUOR_FLUORIDE_CHARGE_MAX", -0.4))
     series = []
     for _blk in re.split(r"(?i)mulliken", text)[1:]:
         _seg = _blk[:3000]
         _vals = [float(v) for v in re.findall(r"(-?\d\.\d{3,})", _seg)]
-        _fvals = [v for v in _vals if -1.2 <= v <= -0.4]   # fluoride window (reject O/typical)
+        _fvals = [v for v in _vals if _lo <= v <= _hi]   # fluoride window (reject O / still-bonded F)
         if _fvals:
             series.append(min(_fvals))
     return series
@@ -1955,37 +1987,37 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
             return
         n = min(len(x), len(y))
         x, y = x[:n], y[:n]
+        _C = getattr(CFG, "DEFLUOR_FIG_COLOUR", {})
         fig, ax = plt.subplots(figsize=(8.5, 5.5))
-        ax.plot(x, y, "-o", color="#1D4ED8", lw=2, ms=4, zorder=3, label="QM/MM PES")
+        ax.plot(x, y, "-o", color=_C.get("pes", "#1D4ED8"), lw=2, ms=4, zorder=3, label="QM/MM PES")
         _imax = int(np.argmax(y))
-        ax.scatter([x[_imax]], [y[_imax]], s=120, color="#DC2626", zorder=5, label="transition state")
-        ax.scatter([x[-1]], [y[-1]], s=90, color="#16A34A", zorder=5, label="product")
+        ax.scatter([x[_imax]], [y[_imax]], s=120, color=_C.get("ts", "#DC2626"), zorder=5, label="transition state")
+        ax.scatter([x[-1]], [y[-1]], s=90, color=_C.get("product", "#16A34A"), zorder=5, label="product")
         ax.annotate(f"ΔE‡ = {profile.get('QSite_Barrier_kcal', float('nan')):.1f} kcal/mol",
                     (x[_imax], y[_imax]), xytext=(6, 8), textcoords="offset points",
-                    fontsize=9, color="#DC2626", fontweight="bold")
+                    fontsize=9, color=_C.get("ts", "#DC2626"), fontweight="bold")
         ax.annotate(f"ΔE_rxn = {profile.get('QSite_dErxn_kcal', float('nan')):.1f}",
                     (x[-1], y[-1]), xytext=(6, -12), textcoords="offset points",
-                    fontsize=9, color="#16A34A", fontweight="bold")
+                    fontsize=9, color=_C.get("product", "#16A34A"), fontweight="bold")
         ax.set_xlabel("Reaction coordinate — Nu(O)···C distance (Å), reactant → product",
                       fontweight="bold")
         ax.set_ylabel("Relative QM/MM energy (kcal/mol)", fontweight="bold")
-        ax.invert_xaxis()   # 3.5 Å (NAC) on the left → 1.3 Å (product) on the right
+        ax.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
         clean_spines(ax)
         _fq = profile.get("f_charge") or []
         if len(_fq) >= 3:
+            _fc = _C.get("f_charge", "#B45309")
             ax2 = ax.twinx()
             _xf = [x[min(int(i * (n - 1) / (len(_fq) - 1)), n - 1)] for i in range(len(_fq))]
-            ax2.plot(_xf, _fq, "--s", color="#B45309", lw=1.4, ms=3, alpha=0.85,
-                     label="departing-F charge")
-            ax2.set_ylabel("Mulliken charge on departing F (→ −1 = fluoride)",
-                           color="#B45309", fontweight="bold")
-            ax2.tick_params(axis="y", labelcolor="#B45309")
+            ax2.plot(_xf, _fq, "--s", color=_fc, lw=1.4, ms=3, alpha=0.85, label="departing-F charge")
+            ax2.set_ylabel("Mulliken charge on departing F (→ −1 = fluoride)", color=_fc, fontweight="bold")
+            ax2.tick_params(axis="y", labelcolor=_fc)
         ax.set_title(f"QM/MM SN2 reaction profile — Rank {rank}: {format_job_label(job_name, rank)}",
                      fontsize=11, fontweight="bold")
         ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            plt.savefig(out_path, dpi=300, bbox_inches="tight")
+            plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
         plt.close(fig)
         console_info(f"    QSite reaction profile saved : {out_path.name}")
     except Exception as _e:
@@ -2950,7 +2982,7 @@ def main():
 
 
     _utils_mod.print_script_banner(
-        "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py",
+        "07_MD_QMMM_Defluorination_FAcDs.py",
         "MD Thermodynamics  ·  QM/MM Frame Extraction  ·  NAC Validation",
     )
     console_info(f"Run Directory    : {work_dir.parent}")
@@ -3306,4 +3338,4 @@ if __name__ == "__main__":
     import time as _time
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "07_MD_Thermodynamics_QMMM_Engine_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "07_MD_QMMM_Defluorination_FAcDs.py")

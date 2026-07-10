@@ -15,7 +15,7 @@ Date   : 05 July 2026 <───────────────────
   Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
                   05_TopN_and_PDB_Preparation_FAcDs.py, 06_SID_Prime-MMGBSA_FAcDs.py,
-                  07_MD_Thermodynamics_QMMM_Engine_FAcDs.py
+                  07_MD_QMMM_Defluorination_FAcDs.py
                   (also referenced by 00_01 for a ConsoleColours drift check)
   Reads         : (none — pure utility module)
   Writes        : (none — pure utility module)

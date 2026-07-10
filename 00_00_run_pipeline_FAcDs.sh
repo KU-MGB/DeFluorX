@@ -233,12 +233,12 @@ fi
 #
 # Scripts/operations that use sudo (only when enabled):
 #   06_SID_Prime-MMGBSA_FAcDs.py              → systemctl stop / mask systemd-oomd
-#   07_MD_Thermodynamics_QMMM_Engine_FAcDs.py → systemctl mask / unmask / start systemd-oomd
+#   07_MD_QMMM_Defluorination_FAcDs.py → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
 echo ""
 echo "  ── Optional sudo: systemd-oomd masking for Steps 06-07 ──"
-echo "    Sudo is used only by: 06_SID_Prime-MMGBSA_FAcDs.py and 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py"
+echo "    Sudo is used only by: 06_SID_Prime-MMGBSA_FAcDs.py and 07_MD_QMMM_Defluorination_FAcDs.py"
 echo "    (systemctl stop/mask/unmask/start systemd-oomd around the OOM-prone phase)."
 echo ""
 # Pressing Enter (empty) skips silently → NORMAL mode. A NON-EMPTY entry is treated as a
@@ -564,7 +564,7 @@ run_step "06  SID + Prime MM-GBSA post-processing (*_SID-out.eaf + MM-GBSA)" \
     python 06_SID_Prime-MMGBSA_FAcDs.py "$RUN_ID" --pipeline-mode
 
 run_step "07  MD thermodynamics + QM/MM engine" \
-    python 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py "$RUN_ID"
+    python 07_MD_QMMM_Defluorination_FAcDs.py "$RUN_ID"
 
 # Restore systemd-oomd after both Steps 06 and 07 have completed (only if masked).
 if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then

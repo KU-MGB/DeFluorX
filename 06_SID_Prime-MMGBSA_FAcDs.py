@@ -6,7 +6,7 @@ FAcDs Pipeline  |  Step 06  |  Desmond SID + Prime MM-GBSA Post-Processing
 Runs Schrödinger Event Analysis (event_analysis.py) and Simulation Interaction
 Diagram analysis (analyze_simulation.py) on completed Desmond molecular
 dynamics trajectories, producing the *_SID-out.eaf files that are consumed
-downstream by 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py.
+downstream by 07_MD_QMMM_Defluorination_FAcDs.py.
 
 It then runs Prime MM-GBSA (thermal_mmgbsa.py <job>-out.cms) on every completed
 MD job — the end-state ligand binding free energy over the MD ensemble — and
@@ -43,7 +43,7 @@ Dependency Map
                   .../MolecularDynamics/Prime_MMGBSA/01_MMGBSA_Combined_AllRanks.png
                   .../MolecularDynamics/Prime_MMGBSA/Rank_NN_MMGBSA_Profile_*.png
   Upstream      : Desmond molecular dynamics simulations (manual Maestro step).
-  Downstream    : 07_MD_Thermodynamics_QMMM_Engine_FAcDs.py (Step 07; consumes EAF output).
+  Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (Step 07; consumes EAF output).
 -------------------------------------------------------------------------------
 The Critic's Corner: Known Limitations & Failure Points
 -------------------------------------------------------------------------------
