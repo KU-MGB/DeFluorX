@@ -31,9 +31,12 @@ Date   : 05 July 2026 <───────────────────
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2/            (primary QM/MM scan) + _QSite_SN2_f<frame>/ (extra ensemble frames)
+                    - <Name>_QSite_Reaction_Profile.png   (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
+                    - <Name>_MMGBSA_NAC_Decomposition.png (energy-component + catalytic-machinery engagement in the reactive pose)
                   <Run>/7_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
-                    (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, NAC-conditioned
-                     MM-GBSA, and the Defluor_Propensity / Is_Defluorinating verdict)
+                    (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
+                     charge, NAC-conditioned MM-GBSA + component decomposition, and
+                     the Defluor_Propensity / Is_Defluorinating verdict)
                   <Run>/7_MD_Thermodynamics_Results/12_Defluorination_Landscape.png
                     (whole-story figure: persistence × QM/MM barrier × binding)
   Upstream      : 06_SID_Prime-MMGBSA_FAcDs.py   → produces *_SID-out.eaf + Prime MM-GBSA summary consumed here
@@ -100,11 +103,16 @@ Arguments:
  11. Master aggregation: 08_MD_Master_Ranking.csv.
  12. NAC persistence: longest/mean continuous strict-NAC dwell converted to ns
      (real "time in position", not a frame-count fraction).
- 13. NAC-conditioned MM-GBSA: ΔG_bind averaged over the strict-NAC frames vs the
-     global mean (proves the reactive pose is thermodynamically stable).
- 14. Defluorination verdict: Is_Defluorinating gate + Defluor_Propensity
+ 13. NAC-conditioned MM-GBSA: ΔG_bind over the strict-NAC frames vs the global
+     mean, PLUS an energy-component decomposition (Coulomb / vdW / Covalent strain
+     / …) and catalytic-machinery engagement (Nuc + fluoride-cradle + clamp
+     distances) in the reactive pose → *_MMGBSA_NAC_Decomposition.png.
+ 14. QM/MM reaction profile: the PES along the SN2 coordinate with ΔE‡ / ΔE_rxn
+     and the departing-fluoride Mulliken charge (→ −1 = F⁻) — the direct proof of
+     C–F cleavage → *_QSite_Reaction_Profile.png (cols F_Charge_Reactant/Product/Delta).
+ 15. Defluorination verdict: Is_Defluorinating gate + Defluor_Propensity
      ( P(strict-NAC)·exp(−ΔE‡/RT) ) — the concrete turnover claim, not affinity.
- 15. Defluorination landscape figure (12_*): persistence × QM/MM barrier × binding.
+ 16. Defluorination landscape figure (12_*): persistence × QM/MM barrier × binding.
 ───────────────────────────────────────────────────────────────────────────────
 
 Scientific references
@@ -1416,6 +1424,58 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         console_info(f"    [!] Defluorination landscape failed ({_e}).")
 
 
+def plot_mmgbsa_nac_decomposition(out_path: Path, job_name: str, rank,
+                                  decomp: dict, dt_nac: dict) -> None:
+    """Two-panel 'did the machinery engage' figure for one candidate. Left: the
+    MM-GBSA energy-component decomposition (Coulomb, vdW, Covalent strain, …)
+    averaged over the strict-NAC frames vs the whole trajectory — shows which
+    forces stabilise the reactive pose (favourable Coulomb = electrostatic pre-
+    organisation for the SN2). Right: mean distance of the nucleophile + fluoride
+    cradle + clamps to the warhead carbon over the NAC frames — how tightly the
+    catalytic machinery closes in. Classical energetics/geometry (supporting
+    evidence of engagement); the bond-breaking proof is the QM/MM reaction profile."""
+    try:
+        _panels = int(bool(decomp)) + int(bool(dt_nac))
+        if _panels == 0:
+            return
+        fig, axes = plt.subplots(1, _panels, figsize=(6.2 * _panels, 5.2), squeeze=False)
+        _ax = list(axes[0]); _i = 0
+        if decomp:
+            ax = _ax[_i]; _i += 1
+            _labels = list(decomp.keys())
+            _nacv = [decomp[k][0] for k in _labels]
+            _glov = [decomp[k][1] for k in _labels]
+            _x = np.arange(len(_labels)); _w = 0.38
+            ax.bar(_x - _w / 2, _glov, _w, label="whole trajectory", color="#94A3B8")
+            ax.bar(_x + _w / 2, _nacv, _w, label="strict-NAC frames", color="#2563EB")
+            ax.axhline(0, color="#334155", lw=0.8)
+            ax.set_xticks(_x); ax.set_xticklabels(_labels, rotation=30, ha="right", fontsize=8)
+            ax.set_ylabel("MM-GBSA component (kcal/mol)", fontweight="bold")
+            ax.set_title("Energy decomposition — reactive pose vs ensemble", fontsize=10, fontweight="bold")
+            ax.legend(fontsize=8, framealpha=0.9)
+            clean_spines(ax)
+        if dt_nac:
+            ax = _ax[_i]
+            _labels = list(dt_nac.keys()); _vals = [dt_nac[k] for k in _labels]
+            _cols = ["#16A34A" if v <= 4.0 else ("#F59E0B" if v <= 6.0 else "#DC2626") for v in _vals]
+            ax.bar(range(len(_labels)), _vals, color=_cols, edgecolor="#334155", linewidth=0.6)
+            ax.axhline(4.0, color="#16A34A", ls="--", lw=1.0, label="≈ contact (4 Å)")
+            ax.set_xticks(range(len(_labels))); ax.set_xticklabels(_labels, rotation=30, ha="right", fontsize=8)
+            ax.set_ylabel("Mean distance to warhead C in NAC frames (Å)", fontweight="bold")
+            ax.set_title("Catalytic-machinery engagement", fontsize=10, fontweight="bold")
+            ax.legend(fontsize=8, framealpha=0.9)
+            clean_spines(ax)
+        fig.suptitle(f"MM-GBSA reactive-state decomposition — Rank {rank}: "
+                     f"{format_job_label(job_name, rank)}", fontsize=11, fontweight="bold")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            plt.tight_layout(); plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        console_info(f"    MM-GBSA NAC decomposition saved : {out_path.name}")
+    except Exception as _e:
+        console_info(f"    [!] MM-GBSA NAC decomposition plot failed ({_e}).")
+
+
 # =============================================================================
 # SECTION 6: PHYSICAL CHEMISTRY MODULES
 # =============================================================================
@@ -1810,34 +1870,126 @@ def _extract_scan_energies(text: str) -> "list[float]":
     return max(candidates, key=len) if candidates else []
 
 
-def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
-    """Parse the QM/MM SN2 relaxed scan and return the activation barrier and
-    reaction energy in kcal/mol. The scan runs from the NAC (reactant, r≈3.5 Å) to
-    the product (r≈1.3 Å); ΔE‡ = E_max − E_reactant proves C–F cleavage is
-    surmountable, ΔE_rxn = E_product − E_reactant proves it is (or is not) downhill.
-    Returns NaNs when no parseable output exists (non-fatal)."""
-    _nan = {"QSite_Barrier_kcal": np.nan, "QSite_dErxn_kcal": np.nan, "QSite_NScan": 0}
+def _extract_fluoride_charge_series(text: str) -> "list[float]":
+    """Best-effort ordered list of the most-negative Mulliken fluorine charge per
+    population-analysis block. As the SN2 proceeds the departing F becomes fluoride
+    (charge → ~−0.9), so a monotonic drop across the scan is the electronic
+    signature of defluorination. Jaguar's charge-table layout varies by version, so
+    this is heuristic (most-negative charge in each Mulliken block, clamped to a
+    physical window); returns [] when nothing sane is found — the reaction profile
+    still plots the reliable energy PES. Needs validation against a real .out."""
+    series = []
+    for _blk in re.split(r"(?i)mulliken", text)[1:]:
+        _seg = _blk[:3000]
+        _vals = [float(v) for v in re.findall(r"(-?\d\.\d{3,})", _seg)]
+        _fvals = [v for v in _vals if -1.2 <= v <= -0.4]   # fluoride window (reject O/typical)
+        if _fvals:
+            series.append(min(_fvals))
+    return series
+
+
+def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
+    """Parse the QM/MM SN2 relaxed scan into a full reaction profile: the barrier
+    and reaction energy (kcal/mol), the per-point PES, the reconstructed reaction
+    coordinate (Nu_O···C distance, Å), and a best-effort departing-fluoride charge.
+    The scan runs NAC (reactant, r≈3.5 Å) → product (r≈1.3 Å); ΔE‡ = E_max−E_react
+    proves C–F cleavage is surmountable, ΔE_rxn = E_product−E_react whether it is
+    downhill, and the fluoride charge → ~−0.9 whether F actually leaves as F⁻."""
+    _empty = {"QSite_Barrier_kcal": np.nan, "QSite_dErxn_kcal": np.nan, "QSite_NScan": 0,
+              "coord": [], "energy_kcal": [], "f_charge": [],
+              "F_Charge_Reactant": np.nan, "F_Charge_Product": np.nan, "F_Charge_Delta": np.nan}
     try:
-        _outs = ([qsite_dir / f"{job_name}_QSite_SN2.out"]
-                 + sorted(qsite_dir.glob("*.out")))
+        _outs = ([qsite_dir / f"{job_name}_QSite_SN2.out"] + sorted(qsite_dir.glob("*.out")))
         text = ""
         for _o in _outs:
             if _o.exists() and _o.stat().st_size > 0:
                 text = _o.read_text(errors="ignore"); break
         if not text:
-            return _nan
+            return _empty
         e = _extract_scan_energies(text)
         if len(e) < 3:
-            return _nan
+            return _empty
         _h2k = float(getattr(CFG, "HARTREE_TO_KCAL", 627.509474))
         _react = e[0]
+        _energy_kcal = [round((x - _react) * _h2k, 3) for x in e]
+        # Reaction coordinate reconstructed from the CFG scan grid (Nu_O···C, Å).
+        _start = float(getattr(CFG, "QSITE_SCAN_START", 3.5))
+        _step = float(getattr(CFG, "QSITE_SCAN_STEP", -0.1))
+        _coord = [round(_start + _step * i, 3) for i in range(len(e))]
+        _fq = _extract_fluoride_charge_series(text)
+        _fq_react = _fq[0] if _fq else np.nan
+        _fq_prod = _fq[-1] if _fq else np.nan
         return {
             "QSite_Barrier_kcal": round((max(e) - _react) * _h2k, 2),
-            "QSite_dErxn_kcal":   round((e[-1]  - _react) * _h2k, 2),
+            "QSite_dErxn_kcal":   round((e[-1] - _react) * _h2k, 2),
             "QSite_NScan":        len(e),
+            "coord":              _coord,
+            "energy_kcal":        _energy_kcal,
+            "f_charge":           _fq,
+            "F_Charge_Reactant":  round(_fq_react, 3) if _fq_react == _fq_react else np.nan,
+            "F_Charge_Product":   round(_fq_prod, 3) if _fq_prod == _fq_prod else np.nan,
+            "F_Charge_Delta":     (round(_fq_prod - _fq_react, 3)
+                                   if (_fq_react == _fq_react and _fq_prod == _fq_prod) else np.nan),
         }
     except Exception:
-        return _nan
+        return _empty
+
+
+def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
+    """Scalar barrier/reaction-energy/fluoride subset of parse_qsite_profile, for
+    the multi-frame ensemble aggregation. Returns NaNs when nothing parseable."""
+    _p = parse_qsite_profile(qsite_dir, job_name)
+    return {k: _p[k] for k in ("QSite_Barrier_kcal", "QSite_dErxn_kcal", "QSite_NScan",
+                               "F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta")}
+
+
+def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict) -> None:
+    """The direct 'did it defluorinate' figure: the QM/MM potential-energy surface
+    along the SN2 reaction coordinate (Nu_O···C compression), with the activation
+    barrier ΔE‡ and reaction energy ΔE_rxn marked, and — where parseable — the
+    departing-fluoride Mulliken charge dropping toward −1 (F becoming free F⁻)."""
+    try:
+        x = profile.get("coord") or []
+        y = profile.get("energy_kcal") or []
+        if len(x) < 3 or len(y) < 3:
+            return
+        n = min(len(x), len(y))
+        x, y = x[:n], y[:n]
+        fig, ax = plt.subplots(figsize=(8.5, 5.5))
+        ax.plot(x, y, "-o", color="#1D4ED8", lw=2, ms=4, zorder=3, label="QM/MM PES")
+        _imax = int(np.argmax(y))
+        ax.scatter([x[_imax]], [y[_imax]], s=120, color="#DC2626", zorder=5, label="transition state")
+        ax.scatter([x[-1]], [y[-1]], s=90, color="#16A34A", zorder=5, label="product")
+        ax.annotate(f"ΔE‡ = {profile.get('QSite_Barrier_kcal', float('nan')):.1f} kcal/mol",
+                    (x[_imax], y[_imax]), xytext=(6, 8), textcoords="offset points",
+                    fontsize=9, color="#DC2626", fontweight="bold")
+        ax.annotate(f"ΔE_rxn = {profile.get('QSite_dErxn_kcal', float('nan')):.1f}",
+                    (x[-1], y[-1]), xytext=(6, -12), textcoords="offset points",
+                    fontsize=9, color="#16A34A", fontweight="bold")
+        ax.set_xlabel("Reaction coordinate — Nu(O)···C distance (Å), reactant → product",
+                      fontweight="bold")
+        ax.set_ylabel("Relative QM/MM energy (kcal/mol)", fontweight="bold")
+        ax.invert_xaxis()   # 3.5 Å (NAC) on the left → 1.3 Å (product) on the right
+        clean_spines(ax)
+        _fq = profile.get("f_charge") or []
+        if len(_fq) >= 3:
+            ax2 = ax.twinx()
+            _xf = [x[min(int(i * (n - 1) / (len(_fq) - 1)), n - 1)] for i in range(len(_fq))]
+            ax2.plot(_xf, _fq, "--s", color="#B45309", lw=1.4, ms=3, alpha=0.85,
+                     label="departing-F charge")
+            ax2.set_ylabel("Mulliken charge on departing F (→ −1 = fluoride)",
+                           color="#B45309", fontweight="bold")
+            ax2.tick_params(axis="y", labelcolor="#B45309")
+        ax.set_title(f"QM/MM SN2 reaction profile — Rank {rank}: {format_job_label(job_name, rank)}",
+                     fontsize=11, fontweight="bold")
+        ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        console_info(f"    QSite reaction profile saved : {out_path.name}")
+    except Exception as _e:
+        console_info(f"    [!] QSite reaction-profile plot failed ({_e}).")
 
 
 # =============================================================================
@@ -2510,33 +2662,72 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     _n_mapped_log = stats.get('Dream_Team_Mapped', 0)
 
-    # ── NAC-conditioned MM-GBSA ───────────────────────────────────────────────
-    # ΔG_bind averaged over ONLY the strict-NAC frames vs the global mean. If the
-    # reactive pose is not bought with a binding penalty (the NAC-conditioned mean
-    # stays as negative as the global mean), the pre-organised catalytic state is
-    # thermodynamically stable — not a strained, transient artefact. Best-effort:
-    # the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned to trajectory frames.
+    # ── NAC-conditioned MM-GBSA: total ΔG, energy-component decomposition, and
+    #    catalytic-machinery engagement, all restricted to the strict-NAC frames ──
+    # Shows WHERE the binding energy comes from in the reactive pose (Coulomb =
+    # electrostatic pre-organisation for the SN2, Covalent = ligand strain toward
+    # the TS, etc.) and whether the nucleophile + fluoride cradle are geometrically
+    # engaged. Best-effort: the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned
+    # to trajectory frames; component columns are matched by name.
+    _nac_fr = [r["Frame"] for r in results if r.get("NAC_Strict_Pass", 0)]
+    _decomp = {}   # component → (nac_mean, global_mean) for the decomposition plot
     try:
         _mmg = (sorted(job_folder.glob("*prime*mmgbsa*.csv"))
                 or sorted(job_folder.glob("*mmgbsa*.csv")))
         if _mmg:
             _mdf = pd.read_csv(_mmg[0])
+
+            def _nac_vs_global(col):
+                _s = pd.to_numeric(_mdf[col], errors="coerce")
+                _g = float(_s.mean())
+                _v = [float(_s.iloc[fi]) for fi in _nac_fr if 0 <= fi < len(_s)]
+                _v = [x for x in _v if x == x]
+                return (float(np.mean(_v)) if _v else np.nan), (_g if _g == _g else np.nan)
+
             _dgc = getattr(CFG, "MMGBSA_DG_COLUMN", "r_psp_MMGBSA_dG_Bind")
             if _dgc not in _mdf.columns:
                 _c = [c for c in _mdf.columns if re.search(r"dg.?bind", c, re.I)]
                 _dgc = _c[0] if _c else None
             if _dgc is not None:
-                _dg = pd.to_numeric(_mdf[_dgc], errors="coerce")
-                _glob = float(_dg.mean())
-                _nac_fr = [r["Frame"] for r in results if r.get("NAC_Strict_Pass", 0)]
-                _vals = [float(_dg.iloc[fi]) for fi in _nac_fr if 0 <= fi < len(_dg)]
-                _vals = [v for v in _vals if v == v]
+                _nac, _glob = _nac_vs_global(_dgc)
                 stats["MMGBSA_dG_Global_Mean_kcal"] = round(_glob, 2) if _glob == _glob else np.nan
-                stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(float(np.mean(_vals)), 2) if _vals else np.nan
-                stats["MMGBSA_NAC_Penalty_kcal"]    = (round(float(np.mean(_vals)) - _glob, 2)
-                                                       if _vals and _glob == _glob else np.nan)
+                stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
+                stats["MMGBSA_NAC_Penalty_kcal"]    = (round(_nac - _glob, 2)
+                                                       if _nac == _nac and _glob == _glob else np.nan)
+            # Energy-component decomposition (the "which forces" breakdown).
+            _components = {"Coulomb": r"coulomb", "vdW": r"vdw|van.?der.?waals",
+                           "Covalent": r"covalent", "H-bond": r"h.?bond",
+                           "Lipo": r"lipo", "Packing": r"packing",
+                           "SolvGB": r"solv.?gb|gb\b|solvation", "SelfCont": r"self.?cont"}
+            for _name, _pat in _components.items():
+                _hit = [c for c in _mdf.columns
+                        if re.search(r"mmgbsa|dg.?bind|prime", c, re.I) and re.search(_pat, c, re.I)]
+                if _hit:
+                    _nac, _glob = _nac_vs_global(_hit[0])
+                    _decomp[_name] = (_nac, _glob)
+                    stats[f"MMGBSA_{_name}_NAC_Mean_kcal"] = round(_nac, 2) if _nac == _nac else np.nan
     except Exception as _e:
-        console_info(f"    [!] NAC-conditioned MM-GBSA skipped ({_e}).")
+        console_info(f"    [!] NAC-conditioned MM-GBSA decomposition skipped ({_e}).")
+
+    # Catalytic-machinery engagement: mean distance of the nucleophile + fluoride
+    # cradle + clamps to the warhead carbon over the strict-NAC frames (did the
+    # machinery actually close in during the reactive windows?).
+    _dt_nac = {}
+    _dt_cols = {"Nuc (Asp)": "DT_Nuc_LigC_A", "Cradle-His": "DT_StabH_LigC_A",
+                "Cradle-Trp": "DT_StabW_LigC_A", "Cradle-Tyr": "DT_StabY_LigC_A",
+                "Clamp1": "DT_Clamp1_LigC_A", "Clamp2": "DT_Clamp2_LigC_A",
+                "Acid": "DT_Acid_LigC_A"}
+    _nac_set = set(_nac_fr)
+    for _lbl, _col in _dt_cols.items():
+        _vv = [r[_col] for r in results
+               if r.get("Frame") in _nac_set and _col in r and r[_col] == r[_col]]
+        if _vv:
+            _dt_nac[_lbl] = float(np.mean(_vv))
+            stats[f"{_col.replace('_LigC_A','')}_NAC_Mean_A"] = round(float(np.mean(_vv)), 2)
+    if _decomp or _dt_nac:
+        plot_mmgbsa_nac_decomposition(
+            job_out_dir / f"{job_name}_MMGBSA_NAC_Decomposition.png",
+            job_name, rank, _decomp, _dt_nac)
 
     # ── Output: per-frame CSV with rolling EAF smoothing ──────────────────────
     df_res = pd.DataFrame(results)
@@ -2615,6 +2806,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _b = _res.get("QSite_Barrier_kcal")
             if _b == _b:   # not NaN → a barrier was parsed
                 _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
+            if _k == 0:
+                # Primary frame: full reaction profile (PES + departing-fluoride
+                # charge) → the direct "did it defluorinate" figure + F-charge cols.
+                _prof = parse_qsite_profile(_fold, job_name)
+                plot_qsite_reaction_profile(
+                    job_out_dir / f"{job_name}_QSite_Reaction_Profile.png", job_name, rank, _prof)
+                for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
+                    stats[_fk] = _prof.get(_fk, np.nan)
         if _barriers:
             _imin = int(np.argmin(_barriers))
             stats["QSite_Barrier_kcal"]      = round(float(np.min(_barriers)), 2)   # min = most accessible TS
