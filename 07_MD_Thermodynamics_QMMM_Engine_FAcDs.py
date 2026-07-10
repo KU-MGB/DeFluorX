@@ -30,8 +30,12 @@ Date   : 05 July 2026 <───────────────────
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
-                    - <Name>_QSite_SN2.in         (QM/MM scan input)
+                    - <Name>_QSite_SN2/            (primary QM/MM scan) + _QSite_SN2_f<frame>/ (extra ensemble frames)
                   <Run>/7_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
+                    (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, NAC-conditioned
+                     MM-GBSA, and the Defluor_Propensity / Is_Defluorinating verdict)
+                  <Run>/7_MD_Thermodynamics_Results/12_Defluorination_Landscape.png
+                    (whole-story figure: persistence × QM/MM barrier × binding)
   Upstream      : 06_SID_Prime-MMGBSA_FAcDs.py   → produces *_SID-out.eaf + Prime MM-GBSA summary consumed here
                   05_TopN_and_PDB_Preparation_FAcDs.py → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
@@ -87,10 +91,20 @@ Arguments:
      gyration (RG) extracted from pl_interact_survey EAF files.
   6. Water blockade: dG-weighted count of waters obstructing the SN2 runway.
   7. Walden pre-organisation: improper dihedral check for TS flattening (×1.1).
-  8. QSite automation: B3LYP/6-31+G(d,p) QM/MM .in generation + execution.
+  8. QSite automation: B3LYP/6-31+G(d,p) QM/MM SN2 relaxed-scan generation +
+     execution over the top CFG.QSITE_N_FRAMES pre-organised NAC frames (ensemble
+     barrier, not a single-frame lower bound), with the scan output PARSED back
+     into ΔE‡ (min/mean/σ) and ΔE_rxn.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
  11. Master aggregation: 08_MD_Master_Ranking.csv.
+ 12. NAC persistence: longest/mean continuous strict-NAC dwell converted to ns
+     (real "time in position", not a frame-count fraction).
+ 13. NAC-conditioned MM-GBSA: ΔG_bind averaged over the strict-NAC frames vs the
+     global mean (proves the reactive pose is thermodynamically stable).
+ 14. Defluorination verdict: Is_Defluorinating gate + Defluor_Propensity
+     ( P(strict-NAC)·exp(−ΔE‡/RT) ) — the concrete turnover claim, not affinity.
+ 15. Defluorination landscape figure (12_*): persistence × QM/MM barrier × binding.
 ───────────────────────────────────────────────────────────────────────────────
 
 Scientific references
@@ -1326,6 +1340,82 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     console_info(f"    Viability Bar Chart Saved   : {out_path.resolve()}")
 
 
+def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) -> None:
+    """The whole-story figure. Every candidate is placed by catalytic PERSISTENCE
+    (x — longest continuous strict-NAC dwell, ns) against its QM/MM SN2 BARRIER
+    (y — ΔE‡ kcal/mol, lower = more accessible transition state). Marker size
+    encodes NAC-conditioned MM-GBSA binding strength (a stable reactive pose) and
+    colour encodes the fused defluorination propensity. The shaded green quadrant
+    is the competence gate (dwell ≥ Y and ΔE‡ ≤ Z): points inside it, brightest,
+    are predicted to defluorinate; tight binders outside it are the "bind-but-do-
+    not-react" decoys. One figure separates catalysis from mere affinity."""
+    try:
+        d = df_master.copy()
+        _lab = "Job_Name" if "Job_Name" in d.columns else d.columns[0]
+        d["_label"] = [format_job_label(r.get(_lab, "?"), r.get("Scientific_Rank", i + 1))
+                       for i, (_, r) in enumerate(d.iterrows())]
+        _has_bar = "QSite_Barrier_kcal" in d.columns and pd.to_numeric(
+            d["QSite_Barrier_kcal"], errors="coerce").notna().any()
+        x = pd.to_numeric(d.get("NAC_Dwell_Max_ns"), errors="coerce")
+        if _has_bar:
+            y = pd.to_numeric(d["QSite_Barrier_kcal"], errors="coerce")
+            ylab = "QM/MM S$_N$2 barrier  ΔE‡  (kcal/mol) — lower = more reactive"
+        else:
+            y = pd.to_numeric(d.get("Strict_Viability_Pct"), errors="coerce")
+            ylab = "Strict-NAC viability (%) — QM/MM barrier pending"
+        m = x.notna() & y.notna()
+        if int(m.sum()) == 0:
+            console_info("    [!] Defluorination landscape skipped — no dwell/barrier data yet.")
+            return
+        d, x, y = d[m].reset_index(drop=True), x[m].reset_index(drop=True), y[m].reset_index(drop=True)
+
+        _dg = None
+        for _c in ("MMGBSA_dG_NAC_Mean_kcal", "MMGBSA_dG_Global_Mean_kcal", "MMGBSA_dG_ArithMean_kcal"):
+            if _c in d.columns and pd.to_numeric(d[_c], errors="coerce").notna().any():
+                _dg = pd.to_numeric(d[_c], errors="coerce").abs(); break
+        _sz = ((60 + 260 * (_dg / _dg.max())).fillna(110)
+               if _dg is not None and _dg.max() and _dg.max() > 0 else pd.Series(130, index=d.index))
+        _col = pd.to_numeric(d.get("Defluor_Propensity_Norm"), errors="coerce")
+
+        Y = float(getattr(CFG, "DEFLUOR_DWELL_MIN_NS", 1.0))
+        Z = float(getattr(CFG, "DEFLUOR_BARRIER_MAX_KCAL", 22.0))
+        fig, ax = plt.subplots(figsize=(11, 7.5))
+        _xhi = max(float(x.max()) * 1.12, Y * 1.5)
+        _ylo = min(float(y.min()) * 0.9, 0.0)
+        _yhi = max(float(y.max()) * 1.12, (Z * 1.25 if _has_bar else float(y.max()) * 1.12))
+        ax.set_xlim(0, _xhi); ax.set_ylim(_ylo, _yhi)
+        if _has_bar:
+            ax.add_patch(plt.Rectangle((Y, _ylo), _xhi - Y, Z - _ylo,
+                                       color="#22C55E", alpha=0.09, zorder=0))
+            ax.axhline(Z, color="#16A34A", ls="--", lw=1.2, zorder=1)
+            ax.axvline(Y, color="#16A34A", ls="--", lw=1.2, zorder=1)
+            ax.text(_xhi * 0.98, _ylo + (Z - _ylo) * 0.5,
+                    f"defluorination-competent\n(dwell ≥ {Y:g} ns, ΔE‡ ≤ {Z:g})",
+                    ha="right", va="center", fontsize=8, color="#15803D", style="italic")
+        sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else "#3B82F6"),
+                        cmap="viridis", vmin=0, vmax=1, edgecolor="#334155",
+                        linewidth=0.8, alpha=0.92, zorder=5)
+        for xi, yi, lab in zip(x, y, d["_label"]):
+            ax.annotate(str(lab), (xi, yi), fontsize=7, xytext=(4, 4),
+                        textcoords="offset points", zorder=6)
+        if _col.notna().any():
+            cb = fig.colorbar(sc, ax=ax, pad=0.02)
+            cb.set_label("Defluorination propensity  (normalised, best = 1)", fontsize=9)
+        ax.set_xlabel("Catalytic persistence — longest continuous strict-NAC dwell (ns)", fontweight="bold")
+        ax.set_ylabel(ylab, fontweight="bold")
+        ax.set_title("Defluorination landscape — persistence × QM/MM barrier × binding",
+                     fontsize=13, fontweight="bold")
+        clean_spines(ax)
+        out_path = out_dir / "12_Defluorination_Landscape.png"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        console_info(f"    Defluorination Landscape Saved : {out_path.resolve()}")
+    except Exception as _e:
+        console_info(f"    [!] Defluorination landscape failed ({_e}).")
+
+
 # =============================================================================
 # SECTION 6: PHYSICAL CHEMISTRY MODULES
 # =============================================================================
@@ -1694,6 +1784,62 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     return True
 
 
+def _extract_scan_energies(text: str) -> "list[float]":
+    """Best-effort per-scan-point energy series (Hartree) from a Jaguar/QSite
+    relaxed-scan .out. Tries, in priority order: (1) the geometry-scan summary
+    table, (2) QM/MM total-energy lines, (3) converged SCF energies — and returns
+    the longest coherent series so a single unconverged step cannot corrupt it."""
+    candidates: list[list[float]] = []
+    # (1) Scan summary table: "  step  coord  energy" rows (energy = last float).
+    _tbl = re.findall(r"^\s*\d+\s+[-\d.]+\s+(-\d+\.\d{4,})\s*$", text, re.MULTILINE)
+    if _tbl:
+        candidates.append([float(x) for x in _tbl])
+    # (2) QM/MM total energy per point.
+    _qmmm = re.findall(r"(?:QM/MM|total)\s+energy[^\n-]*?(-\d+\.\d{4,})", text, re.IGNORECASE)
+    if _qmmm:
+        candidates.append([float(x) for x in _qmmm])
+    # (3) Jaguar SCFE final energies.
+    _scfe = re.findall(r"SCFE:.*?(-\d+\.\d{4,})", text)
+    if _scfe:
+        candidates.append([float(x) for x in _scfe])
+    # (4) Generic "energy ... hartree(s)".
+    _eh = re.findall(r"energy[^\n-]*?(-\d+\.\d{4,})\s*(?:a\.u\.|hartree|Hartrees|Eh)", text, re.IGNORECASE)
+    if _eh:
+        candidates.append([float(x) for x in _eh])
+    candidates = [c for c in candidates if len(c) >= 3]
+    return max(candidates, key=len) if candidates else []
+
+
+def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
+    """Parse the QM/MM SN2 relaxed scan and return the activation barrier and
+    reaction energy in kcal/mol. The scan runs from the NAC (reactant, r≈3.5 Å) to
+    the product (r≈1.3 Å); ΔE‡ = E_max − E_reactant proves C–F cleavage is
+    surmountable, ΔE_rxn = E_product − E_reactant proves it is (or is not) downhill.
+    Returns NaNs when no parseable output exists (non-fatal)."""
+    _nan = {"QSite_Barrier_kcal": np.nan, "QSite_dErxn_kcal": np.nan, "QSite_NScan": 0}
+    try:
+        _outs = ([qsite_dir / f"{job_name}_QSite_SN2.out"]
+                 + sorted(qsite_dir.glob("*.out")))
+        text = ""
+        for _o in _outs:
+            if _o.exists() and _o.stat().st_size > 0:
+                text = _o.read_text(errors="ignore"); break
+        if not text:
+            return _nan
+        e = _extract_scan_energies(text)
+        if len(e) < 3:
+            return _nan
+        _h2k = float(getattr(CFG, "HARTREE_TO_KCAL", 627.509474))
+        _react = e[0]
+        return {
+            "QSite_Barrier_kcal": round((max(e) - _react) * _h2k, 2),
+            "QSite_dErxn_kcal":   round((e[-1]  - _react) * _h2k, 2),
+            "QSite_NScan":        len(e),
+        }
+    except Exception:
+        return _nan
+
+
 # =============================================================================
 # SECTION 8: CORE ANALYSIS ENGINE
 # =============================================================================
@@ -1735,6 +1881,34 @@ def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -
         return np.nan
     idx = max(0, min(int((frame_t - t_start) / eaf_dt), len(series) - 1))
     return float(series[idx])
+
+
+def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
+    """Continuous-residence statistics for a per-frame strict-NAC boolean series.
+
+    Distinguishes genuine catalytic pre-organisation (the ligand SITTING in the
+    reactive geometry) from mere frame-count fraction (which a ligand flickering
+    in and out can inflate). Returns the longest and mean continuous run and the
+    total, each converted to nanoseconds via ns_per_frame (= total simulated ns /
+    analysed frames), plus the number of distinct NAC episodes.
+    """
+    runs, cur = [], 0
+    for f in flags:
+        if f:
+            cur += 1
+        elif cur:
+            runs.append(cur); cur = 0
+    if cur:
+        runs.append(cur)
+    _max = max(runs) if runs else 0
+    _mean = float(np.mean(runs)) if runs else 0.0
+    _tot = int(sum(runs))
+    return {
+        "NAC_Dwell_Max_ns":   round(_max  * ns_per_frame, 3),
+        "NAC_Dwell_Mean_ns":  round(_mean * ns_per_frame, 3),
+        "NAC_Total_ns":       round(_tot  * ns_per_frame, 3),
+        "NAC_Episodes":       len(runs),
+    }
 
 
 def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
@@ -2078,6 +2252,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     best_score      = -1e9
     ideal_frame_idx = -1
     ideal_geom      = {}
+    _qm_candidates: list = []   # (score, f_idx, nuc_o_idx, lig_c_idx) for every productive NAC frame
     n_pocket = n_relaxed = n_strict = n_triad = n_nac = 0
     _wm_radius = CFG.WATERMAP_SITE_RADIUS
 
@@ -2220,10 +2395,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             n_relaxed += 1
         if triad_ok and min_nuc_dist <= THRESHOLD_STRICT_NAC_DIST and max_ang >= THRESHOLD_STRICT_NAC_ANGLE:
             n_strict += 1
+        if _productive > 0.0:
+            # Candidate pool for multi-frame QM/MM: every pre-organised NAC frame,
+            # ranked by score. The top CFG.QSITE_N_FRAMES give an ensemble barrier
+            # (min/mean/σ) rather than a single best-frame lower bound.
+            _qm_candidates.append((score, f_idx, best_nuc_idx, best_ca_idx))
         if score > best_score and _productive > 0.0:
-            # Single most pre-organised (highest-score) NAC frame. The QM/MM barrier
-            # computed from it is therefore a LOWER BOUND (best-case reactive geometry),
-            # not an ensemble-representative estimate.
+            # Single most pre-organised (highest-score) NAC frame — kept as the
+            # primary QM/MM frame (its barrier is the lower bound of the ensemble).
             best_score = score; ideal_frame_idx = f_idx
             ideal_geom = {'nuc_o': best_nuc_idx, 'lig_c': best_ca_idx}
 
@@ -2295,6 +2474,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         "Strict_Viability_Pct":     round((n_strict  / n_pocket) * 100, 2) if n_pocket else 0.0,
         "Triad_Integrity_Pct":      round((n_triad   / n_pocket) * 100, 2) if n_pocket else 0.0,
         "NAC_Geom_Only_Pct":        round((n_nac     / n_pocket) * 100, 2) if n_pocket else 0.0,
+        # Continuous strict-NAC residence in ns (real "time in position", not frame
+        # fraction). ns_per_frame = total simulated ns / analysed frames (uniform stride).
+        **_nac_dwell_stats([r.get("NAC_Strict_Pass", 0) for r in results],
+                           ((sim_span / 1000.0) / total) if total else 0.0),
+        "Sim_Total_ns":             round(sim_span / 1000.0, 2),
         "MD_Avg_NAC_Dist_A":        _mean_col("NAC_Distance_A"),
         "MD_Min_NAC_Dist_A":        _min_col("NAC_Distance_A"),
         "MD_Avg_NAC_Angle_Deg":     _mean_col("NAC_Angle_Deg"),
@@ -2326,6 +2510,34 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     _n_mapped_log = stats.get('Dream_Team_Mapped', 0)
 
+    # ── NAC-conditioned MM-GBSA ───────────────────────────────────────────────
+    # ΔG_bind averaged over ONLY the strict-NAC frames vs the global mean. If the
+    # reactive pose is not bought with a binding penalty (the NAC-conditioned mean
+    # stays as negative as the global mean), the pre-organised catalytic state is
+    # thermodynamically stable — not a strained, transient artefact. Best-effort:
+    # the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned to trajectory frames.
+    try:
+        _mmg = (sorted(job_folder.glob("*prime*mmgbsa*.csv"))
+                or sorted(job_folder.glob("*mmgbsa*.csv")))
+        if _mmg:
+            _mdf = pd.read_csv(_mmg[0])
+            _dgc = getattr(CFG, "MMGBSA_DG_COLUMN", "r_psp_MMGBSA_dG_Bind")
+            if _dgc not in _mdf.columns:
+                _c = [c for c in _mdf.columns if re.search(r"dg.?bind", c, re.I)]
+                _dgc = _c[0] if _c else None
+            if _dgc is not None:
+                _dg = pd.to_numeric(_mdf[_dgc], errors="coerce")
+                _glob = float(_dg.mean())
+                _nac_fr = [r["Frame"] for r in results if r.get("NAC_Strict_Pass", 0)]
+                _vals = [float(_dg.iloc[fi]) for fi in _nac_fr if 0 <= fi < len(_dg)]
+                _vals = [v for v in _vals if v == v]
+                stats["MMGBSA_dG_Global_Mean_kcal"] = round(_glob, 2) if _glob == _glob else np.nan
+                stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(float(np.mean(_vals)), 2) if _vals else np.nan
+                stats["MMGBSA_NAC_Penalty_kcal"]    = (round(float(np.mean(_vals)) - _glob, 2)
+                                                       if _vals and _glob == _glob else np.nan)
+    except Exception as _e:
+        console_info(f"    [!] NAC-conditioned MM-GBSA skipped ({_e}).")
+
     # ── Output: per-frame CSV with rolling EAF smoothing ──────────────────────
     df_res = pd.DataFrame(results)
     if 'EAF_MSA' in df_res.columns and df_res['EAF_MSA'].notna().any():
@@ -2337,58 +2549,82 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         df_res, job_name, job_out_dir / f"{job_name}_NAC_Dashboard.png", stats)
 
     if ideal_frame_idx != -1:
-        # 1. Snap the CMS model to the chosen trajectory frame.
-        topo.update_cms(cms_model, tr[ideal_frame_idx])
+        # Top-N pre-organised NAC frames for QM/MM: the ensemble barrier (min/mean/σ)
+        # over several reactive frames is defensible where a single best-frame value
+        # is only a lower bound. Frames are the highest-scoring distinct NAC frames.
+        _n_qm = max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1)))
+        _seen, _sel = set(), []
+        for _cand in sorted(_qm_candidates, key=lambda t: t[0], reverse=True):
+            if _cand[1] in _seen:
+                continue
+            _seen.add(_cand[1]); _sel.append(_cand)
+            if len(_sel) >= _n_qm:
+                break
 
-        # 2. Repair periodic-boundary wrapping. Desmond stores frame coordinates
-        #    wrapped into the box, so the solute sits at the box edge with all
-        #    water piled to one side — the "protein outside / broken water box"
-        #    artifact. make_whole_cms reconnects molecules; center_cms re-centres
-        #    the box on the LIGAND (the reactive centre) — not the whole protein —
-        #    so a surface-exposed active site sits at the box middle and every
-        #    first-shell water stays in the primary cell. Centering on the whole
-        #    protein pushes a surface active site to the box edge, wrapping its
-        #    waters to the far side where the droplet trim misses them (vacuum
-        #    artifact → QSite SCF divergence / warped barriers).
-        topo.make_whole_cms(msys_model, cms_model)
-        _solute_gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
-        topo.center_cms(msys_model, _solute_gids, cms_model)
+        def _prep_and_run(_fi: int, _geom: dict, _folder: Path, _primary: bool) -> dict:
+            """Snap → PBC-repair → droplet → .in → run → parse for one frame.
 
-        # 3. Viewer-friendly full-system structure (.maegz).
-        mae_path = job_out_dir / f"{job_name}_Ideal_Final.maegz"
-        cms_model.fsys_ct.write(str(mae_path))
-        print(f"  [Rank {rank}] QM/MM frame extracted | best frame: {ideal_frame_idx} | score: {best_score:.2f} (lower-bound: most pre-organised NAC frame)", flush=True)
-
-        # 4. QSite QM/MM relaxed scan — folder-wise and idempotent: if the output
-        #    folder already exists the whole step is skipped (mirrors the PDB-prep
-        #    cache). A fresh folder gets the .mae + valid .in, then QSite is run.
-        qsite_dir = job_out_dir / f"{job_name}_QSite_SN2"
-        if qsite_dir.exists():
-            console_info(f"    [Rank {rank}] QSite folder exists — skipping: {qsite_dir.name}")
-        else:
-            qsite_dir.mkdir(parents=True, exist_ok=True)
-            # QSite/Jaguar reads uncompressed .mae (not .maegz). Trim the full
-            # periodic water box to a local solvation droplet so the QM/MM MM
-            # region stays tractable; the coordinating first-shell waters (added
-            # to the QM region below) sit well inside the droplet radius.
-            qsite_mae = qsite_dir / f"{job_name}_Ideal_Final.mae"
-            _drop_status = write_qsite_droplet(cms_model, qsite_mae, lig_resname)
-            print(f"  [Rank {rank}] QSite .mae solvent: {_drop_status}", flush=True)
-            inp_path = generate_qsite_inputs(
-                qsite_mae, job_name, nuc_num, stab_f_num,
-                ideal_geom['lig_c'], ideal_geom['nuc_o'],
-                base_num=base_num, acid_num=acid_num, lig_resname=lig_resname,
-                cradle_nums=cradle_nums)
-            for _artifact in (qsite_mae, inp_path):
-                if not _artifact.exists() or _artifact.stat().st_size == 0:
-                    console_info(f"    [!] QSite input missing/empty for {job_name}: {_artifact.name}")
-            console_qmm_ready(f"Best frame: {ideal_frame_idx} | Score: {best_score:.2f} | "
-                              f"QSite input: {inp_path.name}")
-            if _QSITE_RUN:
-                run_qsite(qsite_dir, inp_path, job_name, rank)
+            Repairs periodic wrapping (make_whole_cms) and re-centres the box on the
+            LIGAND (center_cms) so a surface active site sits at the box middle and
+            every first-shell water stays in the primary cell — centring on the whole
+            protein pushes a surface site to the box edge and the droplet trim then
+            misses its waters (vacuum artefact → SCF divergence / warped barrier).
+            Idempotent: an existing folder is re-parsed, not re-run.
+            """
+            topo.update_cms(cms_model, tr[_fi])
+            topo.make_whole_cms(msys_model, cms_model)
+            _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
+            topo.center_cms(msys_model, _gids, cms_model)
+            if _primary:
+                cms_model.fsys_ct.write(str(job_out_dir / f"{job_name}_Ideal_Final.maegz"))
+            if _folder.exists():
+                console_info(f"    [Rank {rank}] QSite folder exists — parsing: {_folder.name}")
             else:
-                console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) — "
-                             f"inputs written to {qsite_dir.name}")
+                _folder.mkdir(parents=True, exist_ok=True)
+                # QSite/Jaguar reads uncompressed .mae; trim the periodic box to a
+                # local solvation droplet so the QM/MM MM region stays tractable.
+                _mae = _folder / f"{job_name}_Ideal_Final.mae"
+                _ds = write_qsite_droplet(cms_model, _mae, lig_resname)
+                print(f"  [Rank {rank}] QSite .mae solvent (frame {_fi}): {_ds}", flush=True)
+                _inp = generate_qsite_inputs(
+                    _mae, job_name, nuc_num, stab_f_num,
+                    _geom['lig_c'], _geom['nuc_o'],
+                    base_num=base_num, acid_num=acid_num, lig_resname=lig_resname,
+                    cradle_nums=cradle_nums)
+                for _a in (_mae, _inp):
+                    if not _a.exists() or _a.stat().st_size == 0:
+                        console_info(f"    [!] QSite input missing/empty for {job_name}: {_a.name}")
+                if _primary:
+                    console_qmm_ready(f"Best frame: {_fi} | Score: {best_score:.2f} | "
+                                      f"QSite input: {_inp.name}")
+                if _QSITE_RUN:
+                    run_qsite(_folder, _inp, job_name, rank)
+                else:
+                    console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) — "
+                                 f"inputs written to {_folder.name}")
+            return parse_qsite_barrier(_folder, job_name)
+
+        print(f"  [Rank {rank}] QM/MM: {len(_sel)} frame(s) (best {ideal_frame_idx}, "
+              f"score {best_score:.2f}) — ensemble SN2 barrier.", flush=True)
+        _barriers, _derxns = [], []
+        for _k, _cand in enumerate(_sel):
+            _fi = _cand[1]
+            _fold = (job_out_dir / f"{job_name}_QSite_SN2") if _k == 0 \
+                    else (job_out_dir / f"{job_name}_QSite_SN2_f{_fi}")
+            _res = _prep_and_run(_fi, {'nuc_o': _cand[2], 'lig_c': _cand[3]}, _fold, _k == 0)
+            _b = _res.get("QSite_Barrier_kcal")
+            if _b == _b:   # not NaN → a barrier was parsed
+                _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
+        if _barriers:
+            _imin = int(np.argmin(_barriers))
+            stats["QSite_Barrier_kcal"]      = round(float(np.min(_barriers)), 2)   # min = most accessible TS
+            stats["QSite_Barrier_Mean_kcal"] = round(float(np.mean(_barriers)), 2)
+            stats["QSite_Barrier_SD_kcal"]   = round(float(np.std(_barriers)), 2) if len(_barriers) > 1 else 0.0
+            stats["QSite_dErxn_kcal"]        = round(float(_derxns[_imin]), 2)
+            stats["QSite_N_Frames_Scored"]   = len(_barriers)
+            print(f"  [Rank {rank}] QM/MM ΔE‡ = {stats['QSite_Barrier_kcal']:.1f} "
+                  f"(mean {stats['QSite_Barrier_Mean_kcal']:.1f} ± {stats['QSite_Barrier_SD_kcal']:.1f}, "
+                  f"n={len(_barriers)}) | ΔE_rxn = {stats['QSite_dErxn_kcal']:.1f} kcal/mol", flush=True)
 
     print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats
@@ -2773,6 +3009,51 @@ def main():
         elif not _mmgbsa_csv.exists():
             console_info("MM-GBSA summary not found (Step 06 not run) — master written without ΔG_bind columns.")
 
+        # ── Defluorination verdict + propensity (the concrete turnover claim) ──────
+        # Propensity is a kcat-like rate proxy that fuses persistence and barrier:
+        #   Defluor_Propensity = P(strict-NAC) · exp(−ΔE‡ / RT)
+        # tiny in absolute terms but monotonic; Defluor_Propensity_Norm rescales it
+        # to the best candidate (0–1) for a readable ranking. Is_Defluorinating is the
+        # boolean gate: strict persistence AND real dwell AND surmountable barrier AND
+        # a non-uphill SN2 product. Thresholds are CFG (SSOT). Barrier absent → the
+        # claim cannot be made (verdict "Barrier pending"), never a false positive.
+        _RT = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+        def _p_strict(r) -> float:
+            return max(0.0, float(r.get("Strict_Viability_Pct", 0.0) or 0.0)) / 100.0
+        _prop = []
+        for _, _r in df_master.iterrows():
+            _bar = _r.get("QSite_Barrier_kcal", np.nan)
+            _prop.append(_p_strict(_r) * float(np.exp(-float(_bar) / _RT)) if _bar == _bar else np.nan)
+        df_master["Defluor_Propensity"] = _prop
+        _valid = [p for p in _prop if p == p]
+        _mx = max(_valid) if _valid else np.nan
+        df_master["Defluor_Propensity_Norm"] = [
+            round(p / _mx, 4) if (p == p and _mx == _mx and _mx > 0) else np.nan for p in _prop]
+
+        def _verdict(r):
+            _sv  = float(r.get("Strict_Viability_Pct", 0) or 0)
+            _dw  = float(r.get("NAC_Dwell_Max_ns", 0) or 0)
+            _bar = r.get("QSite_Barrier_kcal", np.nan)
+            _der = r.get("QSite_dErxn_kcal", np.nan)
+            if _bar != _bar:
+                return 0, "Barrier pending"
+            _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
+                   and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
+                   and float(_bar) <= CFG.DEFLUOR_BARRIER_MAX_KCAL
+                   and (_der != _der or float(_der) <= CFG.DEFLUOR_DERXN_MAX_KCAL))
+            return (1, "Defluorination-competent") if _ok else (0, "Binds, not competent")
+        _v = [_verdict(r) for _, r in df_master.iterrows()]
+        df_master["Is_Defluorinating"] = [x[0] for x in _v]
+        df_master["Defluor_Verdict"]   = [x[1] for x in _v]
+        # Turnover ranking (highest propensity = rank 1; unscored ranks sort last).
+        df_master["Defluor_Rank"] = (
+            df_master["Defluor_Propensity"].rank(ascending=False, method="min", na_option="bottom").astype("Int64"))
+        _ncomp = int(sum(x[0] for x in _v))
+        console_info(f"Defluorination-competent candidates : {_ncomp} / {len(df_master)} "
+                     f"(gate: strict≥{CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT}%, "
+                     f"dwell≥{CFG.DEFLUOR_DWELL_MIN_NS} ns, ΔE‡≤{CFG.DEFLUOR_BARRIER_MAX_KCAL}, "
+                     f"ΔE_rxn≤{CFG.DEFLUOR_DERXN_MAX_KCAL} kcal/mol)")
+
         master_csv_path = master_out_dir / "08_MD_Master_Ranking.csv"
         df_master.to_csv(master_csv_path, index=False)
         console_info(f"Total Simulations Validated : {len(df_master)}")
@@ -2806,6 +3087,7 @@ def main():
         for label, fn in [
             ("Global Comparative Dashboard (3-panel)...", generate_global_comparative_dashboard),
             ("MD Viability & Retention Bar Chart...", generate_viability_bar_chart),
+            ("Defluorination Landscape (persistence × barrier × binding)...", generate_defluorination_landscape),
         ]:
             console_info(f"  ✔ Generating {label}")
             try:

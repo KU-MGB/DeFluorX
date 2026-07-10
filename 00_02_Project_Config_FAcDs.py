@@ -1480,6 +1480,24 @@ class CFG:
     QSITE_MAESTRO_RENDER: bool = True        # render reactant/TS/product QM-region images via headless Maestro (best-effort; degrades gracefully if no $SCHRODINGER/display)
     QSITE_RENDER_TIMEOUT_SEC: int = 600      # hard timeout for each headless Maestro render call
 
+    # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
+    QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 reproduces the legacy single best-frame (lower-bound) behaviour
+
+    # --- Step 10.3: Defluorination verdict — the concrete "does it defluorinate?" gate (Step 07) ---
+    """
+    Binding (MM-GBSA) proves a Michaelis complex, not turnover. A candidate is called
+    defluorination-competent only when it (i) persists in a STRICT near-attack
+    conformation for a real dwell, (ii) surmounts a QM/MM SN2 barrier at body
+    temperature, and (iii) the SN2 product (F⁻ displaced onto the Asp nucleophile) is
+    not uphill. Defluorination_Propensity fuses persistence and barrier into a single
+    kcat-like rate proxy:  P(strict-NAC) · exp(−ΔE‡ / RT)  (RT from GAS_CONSTANT_KCAL ×
+    MMGBSA_TEMPERATURE_K). Rank candidates by that proxy, not by ΔG_bind.
+    """
+    DEFLUOR_STRICT_VIABILITY_MIN_PCT: float = 1.0    # Xs — min % of pocket-bound frames in the STRICT NAC
+    DEFLUOR_DWELL_MIN_NS: float             = 1.0    # Y  — min longest CONTINUOUS strict-NAC residence (ns)
+    DEFLUOR_BARRIER_MAX_KCAL: float         = 22.0   # Z  — max surmountable QM/MM SN2 barrier ΔE‡ (kcal/mol)
+    DEFLUOR_DERXN_MAX_KCAL: float           = 0.0    # SN2 reaction energy ceiling — product must be ≤ reactant (ΔE_rxn ≤ this)
+
     # ===============================================================================
     # SECTION 11: CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 07)
     # ===============================================================================
