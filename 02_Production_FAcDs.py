@@ -8,7 +8,7 @@ Large-scale, resume-safe Boltz-2 protein-ligand predictions with deep
 structural, geometric, and chemical scoring for FAcD SN2 degrader tiers.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 05 July 2026 <────────────────────────────────────────────────────────
+Date   : 10 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_FAcDs.py

@@ -19,7 +19,7 @@ environment and shells out to $SCHRODINGER/run for the Schrödinger interpreter
 — it does NOT need to be launched with $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 05 July 2026
+Date   : 10 July 2026
 ===============================================================================
 Usage (standalone):
   python 06_SID_Prime-MMGBSA_FAcDs.py [Boltz-2_Run_Directory]
