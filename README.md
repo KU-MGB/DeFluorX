@@ -269,7 +269,10 @@ and regenerated on major code changes. **`CFG` is the top god node (betweenness
 0.574)** — every module's thresholds and figure colours route through it, which is
 the single-source-of-truth architecture showing up structurally.
 
-![FAcDs code graph](docs/code_graph.svg)
+The overview below shows the **40 most-connected nodes** (the core abstractions),
+coloured by community; the full 605-node graph is in the interactive HTML.
+
+![FAcDs code graph — 40 most-connected nodes](docs/code_graph.svg)
 
 > [!NOTE]
 > The image above is a **static** export — GitHub strips JavaScript from README
