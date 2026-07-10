@@ -272,15 +272,14 @@ the single-source-of-truth architecture showing up structurally.
 The overview below shows the **40 most-connected nodes** (the core abstractions),
 coloured by community; the full 605-node graph is in the interactive HTML.
 
-![FAcDs code graph — 40 most-connected nodes](docs/code_graph.svg)
+![FAcDs code graph — 40 most-connected nodes](docs/code_graph.png)
 
 > [!NOTE]
-> The image above is a **static** export — GitHub strips JavaScript from README
-> markdown, so it cannot be interactive here. For the **interactive** graph
-> (zoom, pan, community filter, node search) open [`docs/code_graph.html`](docs/code_graph.html)
-> locally (clone → open in any browser), or enable GitHub Pages (requires a public
-> repo or a paid plan) to serve it. The audit trail (god nodes, communities,
-> surprising connections) is in [`docs/code_graph_report.md`](docs/code_graph_report.md).
+> The image above (`docs/code_graph.png`) is a **static** screenshot. For the
+> **interactive** graph (zoom, pan, community filter, node search) open
+> [`docs/code_graph.html`](docs/code_graph.html) locally (clone → open in any
+> browser). The audit trail (god nodes, communities, surprising connections) is in
+> [`docs/code_graph_report.md`](docs/code_graph_report.md).
 
 ---
 
