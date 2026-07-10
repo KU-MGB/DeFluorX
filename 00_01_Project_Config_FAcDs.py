@@ -88,7 +88,7 @@ Scientific References:
        - Schrödinger Release 2026-1: Maestro, Schrödinger, LLC, New York, NY. https://www.schrodinger.com/maestro
        - H-bond geometry (H···A, angle): McDonald & Thornton (1994) J Mol Biol 238:777–793. DOI: https://doi.org/10.1006/jmbi.1994.1334
        - H-bond heavy-atom proxy (D···A ≈ H···A + ~1.0 Å, for H-free Boltz-2 CIF): Jeffrey, G.A. (1997) An Introduction to Hydrogen Bonding. Oxford University Press. ISBN 978-0-19-509549-4.
-       - Salt bridge (≤5.0 Å): Barlow & Thornton (1983) J Mol Biol 168:867–885, DOI: https://doi.org/10.1016/S0022-2836(83)80024-X; Kumar & Nussinov (2002) ChemBioChem 3:604–617. DOI: https://doi.org/10.1002/1439-7633(20020703)3:7<604::AID-CBIC604>3.0.CO;2-X
+       - Salt bridge (≤5.0 Å): Barlow & Thornton (1983) J Mol Biol 168:867–885, DOI: https://doi.org/10.1016/S0022-2836(83)80079-5; Kumar & Nussinov (2002) ChemBioChem 3:604–617. DOI: https://doi.org/10.1002/1439-7633(20020703)3:7<604::AID-CBIC604>3.0.CO;2-X
        - Hydrophobic contact: Salentin, S. et al. (2015) Nucleic Acids Res 43:W443–W447. DOI: https://doi.org/10.1093/nar/gkv315
        - Aromatic (weak) H-bond: Levitt & Perutz (1988) J Mol Biol 201:751–754. DOI: https://doi.org/10.1016/0022-2836(88)90471-8
        - π–π stacking: McGaughey, G.B. et al. (1998) J Biol Chem 273:15458–15463. DOI: https://doi.org/10.1074/jbc.273.25.15458
@@ -116,7 +116,7 @@ Scientific References:
    12. QSite QM/MM (B3LYP/6-31+G(d,p)) defluorination energetics:
        - Becke, A.D. (1993) J Chem Phys 98:5648–5652. DOI: https://doi.org/10.1063/1.464913
        - Lee, C., Yang, W. & Parr, R.G. (1988) Phys Rev B 37:785–789. DOI: https://doi.org/10.1103/PhysRevB.37.785
-       - Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457. DOI: https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-I  (QSite implementation)
+       - Murphy, R.B. et al. (2000) J Comput Chem 21:1442–1457. DOI: https://doi.org/10.1002/1096-987X(200012)21:16<1442::AID-JCC3>3.0.CO;2-O  (QSite implementation)
        - Rosta, E. et al. (2006) J Phys Chem B 110:2934–2941. DOI: https://doi.org/10.1021/jp057109j  (QM/MM free-energy benchmark)
        - Yue, Y. et al. (2021) Environ Sci Technol 55(14):9817–9825. DOI: https://doi.org/10.1021/acs.est.0c08811  (FAcD QM/MM)
    13. OPLS4 force field (MD parameterisation):

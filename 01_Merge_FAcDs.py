@@ -28,8 +28,9 @@ Date   : 10 July 2026 <───────────────────
      deduplication; does not handle fuzzy matching or SNP variants.
   2. FASTA Formatting: Highly sensitive to header formatting (expects UniProt/
      NCBI standard pipes).
-  3. RAM Bottleneck: Loads entire FASTA into memory; may struggle with datasets
-     exceeding 100k sequences on standard workstations.
+  3. Memory: Input is streamed record-by-record (SeqIO.parse) and only sequence
+     hashes + IDs are retained for deduplication, so the footprint scales with the
+     UNIQUE-sequence count, not the raw file size — large FASTAs stream fine.
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
@@ -346,11 +347,11 @@ def process_and_write(
         # Step 4.7: Write to Stream (Single line per sequence)
         # -------------------------------------------------------------------------------
         if keep_gaps:
-            # Preserve gap characters, but still upper-case and strip a single trailing
-            # stop so the emitted record matches the QC that ran on clean_seq.
-            seq_to_write = str(rec.seq).upper()
-            if seq_to_write.endswith("*"):
-                seq_to_write = seq_to_write[:-1]
+            # Preserve gap characters, but still upper-case and strip a trailing stop
+            # so the emitted record matches the QC that ran on clean_seq. Tolerate a
+            # stop followed by trailing gaps (e.g. "…*-"), which a plain endswith("*")
+            # would miss and leak an internal stop into the final FASTA.
+            seq_to_write = re.sub(r"\*(-*)$", r"\1", str(rec.seq).upper())
         else:
             seq_to_write = clean_seq
 

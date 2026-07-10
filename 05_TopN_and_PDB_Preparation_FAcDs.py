@@ -131,6 +131,7 @@ from matplotlib.lines import Line2D as _Line2D
 from Bio import SeqIO
 from Bio.PDB import PDBParser as _PDBParser
 from rdkit import Chem
+from rdkit.Chem import AllChem
 DEFAULT_BASE_PATH = Path.cwd()
 
 
@@ -2671,6 +2672,19 @@ def topn_extraction_phase(args):
                 """
                 if smi not in ligand_data and mol_source:
                     mol = extract_chain_l_mol(mol_source)
+                    # The mol was parsed from PDB with sanitize=False (all-single-bond
+                    # topology, no formal charges). Restore the true bond orders/charges
+                    # from the reference SMILES so the handover SDF carries correct PFAS
+                    # chemistry. Best-effort: on any template-match failure keep the
+                    # geometry-only mol rather than dropping the ligand.
+                    if mol is not None and smi:
+                        try:
+                            _tmpl = Chem.MolFromSmiles(smi)
+                            if _tmpl is not None:
+                                mol = AllChem.AssignBondOrdersFromTemplate(_tmpl, mol)
+                        except Exception as _be:
+                            if logger:
+                                logger.debug(f"Bond-order assignment failed for {smi}: {_be}")
                     ligand_data[smi] = (l_name, mol)
 
             # --- C. Extract Sequence (individual entry + unique-protein aggregation) ---

@@ -22,6 +22,18 @@ Date   : 10 July 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
+The Critic's Corner: Known Limitations & Failure Points
+-------------------------------------------------------------------------------
+  1. Pure library: no executable entry point and no input validation of its own —
+     callers must pass well-formed arrays/paths.
+  2. Geometry helpers assume Cartesian coordinates in Ångström; the MIC routines
+     expect a Schrödinger/Desmond frame.box (3×3 or flat-9 vectors), NOT a
+     6-parameter crystallographic cell.
+  3. Heavy optional dependencies (gemmi, RDKit, pandas) are imported lazily on
+     demand; the relevant helper raises cleanly if the dependency is absent.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
 Scientific References:
     1. Numerical arrays & vector geometry:
        - Harris, C.R. et al. (2020) Array programming with NumPy. Nature 585:357–362.
