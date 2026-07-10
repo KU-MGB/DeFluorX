@@ -1581,6 +1581,11 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 _QSITE_DROPLET_RADIUS = float(getattr(CFG, "QSITE_DROPLET_RADIUS", 8.0))
 
 
+# -----------------------------------------------------------------------------
+# SECTION 7a: QM/MM INPUT PREPARATION & EXECUTION
+# Trims the periodic box to a solvation droplet, writes the QSite/Jaguar SN2
+# relaxed-scan .in, and launches the QM/MM job (idempotent per output folder).
+# -----------------------------------------------------------------------------
 def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
                         radius: float = _QSITE_DROPLET_RADIUS) -> str:
     """Write an uncompressed QSite .mae trimmed to a solvation droplet: the full
