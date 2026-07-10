@@ -1701,7 +1701,11 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     # whatever PrepWizard assigned (deprotonated Asp −1, neutral His, protonated
     # catalytic acid 0, HIP +1, …) and for any residue numbering, so QSite/Jaguar
     # does not abort on a QM charge/electron-count mismatch.
-    _backbone = {'N', 'C', 'CA', 'O', 'H', 'HA'}   # matches Smart-Lock convention (L429)
+    # Include terminal backbone atoms (OXT + N-terminal H1/H2/H3): if a catalytic /
+    # QM residue sits at a chain terminus, OXT would otherwise be counted as a
+    # sidechain atom and add a spurious −1 to qm_charge, while the QM/MM cut at CB–CA
+    # leaves OXT in the MM region → a charge/electron-count mismatch that aborts QSite.
+    _backbone = {'N', 'C', 'CA', 'O', 'H', 'HA', 'OXT', 'H1', 'H2', 'H3'}   # Smart-Lock convention (L429) + termini
 
     def _sidechain_formal_charge(molid, chain, resnum):
         return sum(
@@ -1885,29 +1889,40 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
 # every failure path returns NaN/empty and is non-fatal.
 # -----------------------------------------------------------------------------
 def _extract_scan_energies(text: str) -> "list[float]":
-    """Best-effort per-scan-point energy series (Hartree) from a Jaguar/QSite
-    relaxed-scan .out. Tries, in priority order: (1) the geometry-scan summary
-    table, (2) QM/MM total-energy lines, (3) converged SCF energies — and returns
-    the longest coherent series so a single unconverged step cannot corrupt it."""
-    candidates: list[list[float]] = []
-    # (1) Scan summary table: "  step  coord  energy" rows (energy = last float).
+    """Per-scan-point energy series, returned in KCAL/MOL, from a Jaguar/QSite
+    relaxed-scan .out.
+
+    QSite prints each converged scan point's QM/MM total as
+    ``Total Energy of the system...... -X.XXXXXE+03 kcal/mol`` — already kcal/mol
+    (this is the real format; an earlier version wrongly assumed hartree/SCFE and
+    also mis-converted the units). Hartree-based Jaguar layouts (scan-summary table,
+    SCFE) are supported as fallbacks and converted with HARTREE_TO_KCAL. Returns []
+    if fewer than two points parse.
+
+    CAVEAT: a scan whose .out contains 'Skipping to next scan point' has NOT fully
+    converged (points were dropped); the returned series is then short and any
+    barrier from it is only a partial estimate — check QSite_NScan against
+    CFG.QSITE_SCAN_NSTEPS before trusting ΔE‡."""
+    _h2k = float(getattr(CFG, "HARTREE_TO_KCAL", 627.509474))
+    # Restrict to the scan region: any 'Total Energy' printed BEFORE the first
+    # 'Geometry scan coordinates' block is the pre-scan initial-structure reference,
+    # not a scan point, and would corrupt the reactant baseline (a huge false barrier).
+    _scan0 = re.search(r"Geometry scan coordinates", text, re.IGNORECASE)
+    _body = text[_scan0.start():] if _scan0 else text
+    # (1) PRIMARY — QSite QM/MM per-point total energy, ALREADY in kcal/mol.
+    _qmmm = re.findall(
+        r"Total Energy of the system\.*\s*(-?\d[\d.]*(?:[eE][+-]?\d+)?)\s*kcal", _body, re.IGNORECASE)
+    if len(_qmmm) >= 2:
+        return [float(x) for x in _qmmm]
+    # (2) Fallback — Jaguar geometry-scan summary table (hartree → kcal).
     _tbl = re.findall(r"^\s*\d+\s+[-\d.]+\s+(-\d+\.\d{4,})\s*$", text, re.MULTILINE)
-    if _tbl:
-        candidates.append([float(x) for x in _tbl])
-    # (2) QM/MM total energy per point.
-    _qmmm = re.findall(r"(?:QM/MM|total)\s+energy[^\n-]*?(-\d+\.\d{4,})", text, re.IGNORECASE)
-    if _qmmm:
-        candidates.append([float(x) for x in _qmmm])
-    # (3) Jaguar SCFE final energies.
+    if len(_tbl) >= 2:
+        return [float(x) * _h2k for x in _tbl]
+    # (3) Fallback — Jaguar SCFE converged energies (hartree → kcal).
     _scfe = re.findall(r"SCFE:.*?(-\d+\.\d{4,})", text)
-    if _scfe:
-        candidates.append([float(x) for x in _scfe])
-    # (4) Generic "energy ... hartree(s)".
-    _eh = re.findall(r"energy[^\n-]*?(-\d+\.\d{4,})\s*(?:a\.u\.|hartree|Hartrees|Eh)", text, re.IGNORECASE)
-    if _eh:
-        candidates.append([float(x) for x in _eh])
-    candidates = [c for c in candidates if len(c) >= 3]
-    return max(candidates, key=len) if candidates else []
+    if len(_scfe) >= 2:
+        return [float(x) * _h2k for x in _scfe]
+    return []
 
 
 def _extract_fluoride_charge_series(text: str) -> "list[float]":
@@ -1948,12 +1963,11 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
                 text = _o.read_text(errors="ignore"); break
         if not text:
             return _empty
-        e = _extract_scan_energies(text)
+        e = _extract_scan_energies(text)   # already in kcal/mol
         if len(e) < 3:
             return _empty
-        _h2k = float(getattr(CFG, "HARTREE_TO_KCAL", 627.509474))
         _react = e[0]
-        _energy_kcal = [round((x - _react) * _h2k, 3) for x in e]
+        _energy_kcal = [round(x - _react, 3) for x in e]   # relative to reactant
         # Reaction coordinate reconstructed from the CFG scan grid (Nu_O···C, Å).
         _start = float(getattr(CFG, "QSITE_SCAN_START", 3.5))
         _step = float(getattr(CFG, "QSITE_SCAN_STEP", -0.1))
@@ -1962,8 +1976,8 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
         _fq_react = _fq[0] if _fq else np.nan
         _fq_prod = _fq[-1] if _fq else np.nan
         return {
-            "QSite_Barrier_kcal": round((max(e) - _react) * _h2k, 2),
-            "QSite_dErxn_kcal":   round((e[-1] - _react) * _h2k, 2),
+            "QSite_Barrier_kcal": round(max(e) - _react, 2),
+            "QSite_dErxn_kcal":   round(e[-1] - _react, 2),
             "QSite_NScan":        len(e),
             "coord":              _coord,
             "energy_kcal":        _energy_kcal,

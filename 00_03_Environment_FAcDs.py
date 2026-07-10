@@ -79,9 +79,11 @@ def export_environment():
 
     print(f"Exporting Conda environment to {_yml_path}...")
     try:
-        # --no-builds omits OS-specific build hashes for cross-platform portability.
+        # Pin the export to the PFAS environment explicitly (-n PFAS) — never the
+        # ACTIVE env: running this from `base` would otherwise export base and
+        # silently overwrite PFAS.yml. --no-builds omits OS-specific build hashes.
         result = subprocess.run(
-            ["conda", "env", "export", "--no-builds"],
+            ["conda", "env", "export", "-n", "PFAS", "--no-builds"],
             capture_output=True, text=True, check=True
         )
         '''

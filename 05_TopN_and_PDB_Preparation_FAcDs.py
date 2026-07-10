@@ -462,6 +462,9 @@ def run_prepwizard(raw_pdb: Path, final_dest: Path):
         cmd = [
             str(PREPWIZARD_BIN),
             "-fillsidechains",       # Fill truncated side chains (common in AI models)
+            "-fillloops",            # Rebuild missing loops — experimental control PDBs
+                                     # can have unresolved loops; a physical chain break
+                                     # otherwise crashes the downstream Amber/Desmond build
             "-propka_pH", str(CFG.PREPWIZARD_PROPKA_PH),  # protein protonation pH
             "-epik_pH",   str(CFG.PREPWIZARD_EPIK_PH),    # PFAS ligand protonation via Epik
             "-r",         str(CFG.PREPWIZARD_RMSD_RESTRAIN),  # RMSD-restrained minimisation
