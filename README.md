@@ -261,6 +261,26 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 
 ---
 
+## 🕸 Code architecture graph
+
+A function-level knowledge graph of the whole pipeline (605 nodes · 1,222 edges ·
+38 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
+and regenerated on major code changes. **`CFG` is the top god node (betweenness
+0.574)** — every module's thresholds and figure colours route through it, which is
+the single-source-of-truth architecture showing up structurally.
+
+![FAcDs code graph](docs/code_graph.svg)
+
+> [!NOTE]
+> The image above is a **static** export — GitHub strips JavaScript from README
+> markdown, so it cannot be interactive here. For the **interactive** graph
+> (zoom, pan, community filter, node search) open [`docs/code_graph.html`](docs/code_graph.html)
+> locally (clone → open in any browser), or enable GitHub Pages (requires a public
+> repo or a paid plan) to serve it. The audit trail (god nodes, communities,
+> surprising connections) is in [`docs/code_graph_report.md`](docs/code_graph_report.md).
+
+---
+
 ## 📁 Repository structure
 
 ```
