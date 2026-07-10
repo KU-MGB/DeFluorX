@@ -979,11 +979,12 @@ def main() -> int:
     /tmp on the OS disk. Prime MM-GBSA replicates the multi-GB complexes file into
     every subjob's scratch dir — hundreds of GB on a 100k-frame trajectory — which
     exhausts a small /tmp mid-job (the cause of a silent Prime rc=1 after hours).
-    TWO mechanisms are needed because the modern jobserverd ignores env vars for
-    its subjob scratch:
-      1. The authoritative one — relocate the local job-server directory onto the
-         working disk (jsc local-server-dir --set), where jobserverd stages every
-         subjob's complexes copy. This is what actually prevents the /tmp overflow.
+    TWO mechanisms:
+      1. The authoritative one — set the job server's scratch `tmpdir` (the
+         localhost entry of $SCHRODINGER/schrodinger.hosts) to the working disk and
+         apply it LIVE with `jsc admin reload-hosts`. This works on a RUNNING server
+         (no stop, no killed job), so MM-GBSA is no longer deferred when another job
+         happens to be running. This is what actually prevents the /tmp overflow.
       2. Belt-and-braces — point SCHRODINGER_TMPDIR/TMPDIR at the working disk for
          any tool that still honours them (driver-side temp, non-server steps).
     """

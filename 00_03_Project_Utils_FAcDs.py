@@ -945,17 +945,14 @@ def _fs_device(path: Path) -> "int | None":
         return None
 
 
-def _jobserver_running_jobs(jsc: str) -> "bool | None":
-    """True/False whether the local Schrödinger job server reports any RUNNING job;
-    None when the state cannot be read (jsc missing/unresponsive). Callers treat
-    None as 'do not touch the server'."""
+def _jobserver_addresses(jsc: str) -> "list[str]":
+    """Registered local job-server addresses (e.g. ['localhost:40931']) parsed from
+    ``jsc server-info`` — needed to reload the hosts file on a RUNNING server."""
     try:
-        out = subprocess.run([jsc, "list"], capture_output=True, text=True, timeout=60)
-        if out.returncode != 0:
-            return None
-        return bool(_re.search(r"\bRunning\b", out.stdout))
+        out = subprocess.run([jsc, "server-info"], capture_output=True, text=True, timeout=60)
+        return _re.findall(r"^\s*(\S+:\d+)\s*$", out.stdout, _re.MULTILINE)
     except Exception:
-        return None
+        return []
 
 
 def ensure_jobserver_on_working_disk(
@@ -964,82 +961,90 @@ def ensure_jobserver_on_working_disk(
     jobserver_subdir: str = "_Schrodinger_JobServer",
     echo=None,
 ) -> bool:
-    """Keep the Schrödinger local job-server directory on the working disk.
+    """Force ALL Schrödinger job scratch onto the working disk — live, without
+    stopping the server or killing a running job.
 
-    Returns True when the server's scratch directory is guaranteed to be on the
-    working-disk filesystem (already there, or relocated this call), False when it
-    could not be guaranteed (still on the OS disk — a caller launching a scratch-
-    heavy job such as Prime MM-GBSA should skip it rather than risk a /tmp
-    exhaustion). Callers that do not care may ignore the return value.
+    The huge per-subjob scratch a Prime MM-GBSA / QSite run stages (the multi-GB
+    complexes copies, hundreds of GB on a 100k-frame trajectory) lands in the job
+    server's ``tmpdir``, NOT its server directory. That ``tmpdir`` is the
+    ``localhost`` entry of ``$SCHRODINGER/schrodinger.hosts``; when it is ``/tmp``
+    (the default) the OS disk fills and the job dies with a silent
+    ``copy_file_range: no space left on device`` (rc=1) after hours.
 
-    The modern jobserverd stages EVERY subjob's (multi-GB) input under its OWN
-    server directory (``jsc local-server-dir``), NOT under ``SCHRODINGER_TMPDIR``.
-    On a large Prime MM-GBSA run it copies hundreds of GB there; when that
-    directory defaults to /tmp on the OS disk, /tmp fills and the job dies with a
-    silent ``copy_file_range: no space left on device`` (rc=1) after hours. Env
-    vars cannot move an already-running server — only ``jsc local-server-dir --set``
-    can, and the server must be stopped first.
+    The fix is to point that ``tmpdir`` at the working disk and apply it with
+    ``jsc admin reload-hosts <server-address>`` — which a RUNNING server accepts
+    for its NEXT jobs, so nothing is stopped and no live job is lost. (This is why
+    the earlier stop-and-relocate approach was wrong: it needed an idle server that
+    never comes, and it moved the small server dir, not the scratch tmpdir.)
 
-    Idempotent and safe:
-      • no-op when the server dir already sits on the working-disk filesystem;
-      • never stops the server while ANY job is RUNNING (a concurrent MD/analysis
-        run is never killed) — it warns and defers relocation to an idle run.
+    Returns True when the hosts ``tmpdir`` is on the working-disk filesystem
+    (already, or set this call) so scratch-heavy jobs are safe to launch; False
+    only if the hosts file cannot be read/written.
 
     Parameters
     ----------
     schrodinger      : path to the Schrödinger installation ($SCHRODINGER).
-    work_disk_anchor : any path on the target (large) working disk; the server dir
-                       is created as ``<anchor>/<jobserver_subdir>``.
-    jobserver_subdir : name of the relocated server directory (from CFG).
+    work_disk_anchor : any path on the target (large) working disk; scratch goes to
+                       ``<anchor>/<jobserver_subdir>``.
+    jobserver_subdir : name of the working-disk scratch directory (from CFG).
     echo             : optional print-like callable for progress lines.
     """
     say = echo or (lambda m="": print(f"  {m}", flush=True))
     jsc = os.path.join(str(schrodinger), "jsc")
-    if not os.path.isfile(jsc):
-        say(f"[job-server] jsc not found at {jsc}; cannot verify scratch location — "
-            f"Schrödinger scratch may land on /tmp (OS disk).")
-        return False
+    hosts = Path(schrodinger) / "schrodinger.hosts"
     anchor = Path(work_disk_anchor)
     target = (anchor / jobserver_subdir).resolve()
+    if not hosts.is_file():
+        say(f"[job-server] hosts file not found at {hosts}; cannot redirect scratch — "
+            f"Schrödinger scratch may land on /tmp (OS disk).")
+        return False
     try:
-        cur = subprocess.run([jsc, "local-server-dir"], capture_output=True, text=True, timeout=60)
-        cur_dir = Path(cur.stdout.strip()) if (cur.returncode == 0 and cur.stdout.strip()) else None
-    except Exception:
-        cur_dir = None
+        text = hosts.read_text()
+    except Exception as e:
+        say(f"[job-server] could not read {hosts} ({e}); scratch may stay on /tmp.")
+        return False
 
+    _m = _re.search(r"(?m)^\s*tmpdir:\s*(.*)$", text)
+    _cur = _m.group(1).strip() if _m else ""
     anchor_dev = _fs_device(anchor)
-    if cur_dir is not None and anchor_dev is not None and _fs_device(cur_dir) == anchor_dev:
-        say(f"[job-server] scratch OK — server dir {cur_dir} is on the working disk.")
+    if _cur and anchor_dev is not None and _fs_device(Path(_cur)) == anchor_dev:
+        say(f"[job-server] scratch OK — hosts tmpdir {_cur} is on the working disk.")
         return True
 
-    say(f"[job-server] server dir {cur_dir} is NOT on the working disk; a large "
-        f"Prime/QSite job would exhaust it. Target → {target}")
-    manual = f"{jsc} local-server-stop && {jsc} local-server-dir --set {target}"
-    running = _jobserver_running_jobs(jsc)
-    if running is None:
-        say("[job-server] could not query running jobs; NOT touching the server. "
-            f"Relocate manually when idle:\n      {manual}")
-        return False
-    if running:
-        say("[job-server] ⚠ a job is currently RUNNING on the local server — "
-            "relocation skipped so the live job is not killed. Scratch stays on the "
-            "OS disk this run. Once no jobs are running, relocate with:\n"
-            f"      {manual}")
-        return False
-    target.mkdir(parents=True, exist_ok=True)
+    say(f"[job-server] hosts tmpdir is '{_cur or '(unset → /tmp)'}' (OS disk); a large "
+        f"Prime/QSite job would exhaust it. Redirecting → {target}")
     try:
-        subprocess.run([jsc, "local-server-stop"], capture_output=True, text=True, timeout=120)
-        rel = subprocess.run([jsc, "local-server-dir", "--set", str(target)],
-                             capture_output=True, text=True, timeout=120)
-        if rel.returncode == 0:
-            say(f"[job-server] ✔ relocated server dir → {target} (auto-starts here on "
-                f"the next job; all subjob scratch now on the working disk).")
-            return True
-        say(f"[job-server] relocation failed (rc={rel.returncode}): "
-            f"{(rel.stderr or rel.stdout).strip()}\n      retry manually: {manual}")
-        return False
+        target.mkdir(parents=True, exist_ok=True)
+        # Back up the hosts file next to the run's code backups, then set the
+        # localhost tmpdir (its settings apply to every host entry). Replace the
+        # first tmpdir: line (localhost is first in the file); insert one after the
+        # localhost name if none exists.
+        try:
+            (hosts.parent / f"schrodinger.hosts.bak").write_text(text)
+        except Exception:
+            pass
+        if _m:
+            new_text = _re.sub(r"(?m)^(\s*tmpdir:\s*).*$",
+                               lambda _mm: f"{_mm.group(1)}{target}", text, count=1)
+        else:
+            new_text = _re.sub(r"(?m)^(\s*name:\s*localhost\s*)$",
+                               lambda _mm: f"{_mm.group(1)}\ntmpdir:      {target}", text, count=1)
+        hosts.write_text(new_text)
     except Exception as e:
-        say(f"[job-server] relocation error ({e}); scratch may stay on /tmp.\n      {manual}")
+        say(f"[job-server] could not write hosts tmpdir ({e}); scratch may stay on /tmp.")
         return False
+
+    # Apply on the running server(s) so the change takes effect for the next jobs
+    # without a restart (no live job is killed).
+    _addrs = _jobserver_addresses(jsc) if os.path.isfile(jsc) else []
+    for _a in _addrs:
+        try:
+            subprocess.run([jsc, "admin", "reload-hosts", _a],
+                           capture_output=True, text=True, timeout=60)
+        except Exception:
+            pass
+    say(f"[job-server] ✔ scratch tmpdir → {target} (applied to {len(_addrs) or 'no'} "
+        f"running server(s) via reload-hosts; no job stopped).")
+    return True
 
 
