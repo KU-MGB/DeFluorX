@@ -8600,8 +8600,28 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     if id_col is None or 'sn2_angle_deg' not in vdf.columns or 'sn2_distance_A' not in vdf.columns:
         reporter.log("  ! Figure 01C skipped: variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
         return
+    """
+    The tier is a property of the COMPLEX, not of a diffusion sample, so it belongs to the ranked sheet
+    and not to a per-model table. It is joined in here on the complex id rather than duplicated into
+    every one of the 290,000 model rows — and joining also means an existing variance CSV stays valid
+    when the tiering changes, instead of 165 minutes of parsing being thrown away because a column it
+    never needed to carry is missing.
+    """
     if CFG.COL_TIER not in vdf.columns:
-        reporter.log("  ! Figure 01C skipped: variance CSV lacks 'degrader_tier'.")
+        _rk = sorted(Path(_prod).glob(CFG.GLOB_RANKED_CSV))
+        if _rk:
+            try:
+                _tier_map = pd.read_csv(_rk[-1], low_memory=False,
+                                        usecols=["job_name", CFG.COL_TIER])
+                vdf = vdf.merge(_tier_map, how="left", left_on=id_col, right_on="job_name")
+                _n_tier = int(vdf[CFG.COL_TIER].notna().sum())
+                reporter.log(f'  · Figure 1: tier joined from the ranked sheet for {_n_tier:,} of '
+                             f'{len(vdf):,} model rows.')
+            except Exception as _e:                              # noqa: BLE001
+                reporter.log(f"  ! Figure 01C: could not join the tier ({type(_e).__name__}: {_e}).")
+    if CFG.COL_TIER not in vdf.columns or vdf[CFG.COL_TIER].notna().sum() == 0:
+        reporter.log("  ! Figure 01C skipped: no degrader_tier available (not in the variance CSV, and "
+                     "the ranked sheet could not supply it).")
         return
     vdf['sn2_distance_A'] = pd.to_numeric(vdf['sn2_distance_A'], errors='coerce')
     vdf['sn2_angle_deg'] = pd.to_numeric(vdf['sn2_angle_deg'], errors='coerce')
@@ -9276,12 +9296,21 @@ def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None
         _dest.mkdir(parents=True, exist_ok=True)
         try:
             _fn(df, _dest, reporter)
-            reporter.log(f"    -> {_folder}/{_name}.png")
-            _ok += 1
+            """
+            A panel can return WITHOUT drawing — Figure 1 does exactly that when its inputs are missing.
+            The count is therefore taken from the file on disk, not from the absence of an exception:
+            the previous version logged the destination path and counted a success for a figure that was
+            never written, and reported '7/7' when six existed. A count that cannot fail is not a count.
+            """
+            if (_dest / f"{_name}.png").exists():
+                reporter.log(f"    -> {_folder}/{_name}.png")
+                _ok += 1
+            else:
+                reporter.log(f"  ! {_folder}/{_name}: the panel drew nothing (see its own message above).")
         except Exception as _e:                                  # noqa: BLE001
             reporter.log(f"  ! {_folder}/{_name} skipped: {type(_e).__name__}: {_e}")
             plt.close("all")
-    reporter.log(f"  Extended analysis: {_ok}/{len(_XN_EXT_ROUTES)} figures merged into the thematic folders")
+    reporter.log(f"  Extended analysis: {_ok}/{len(_XN_EXT_ROUTES)} figures written to the thematic folders")
 
 
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
