@@ -2907,6 +2907,9 @@ def prep_and_convert_phase(args):
             print("")
         if _raw_failures:
             console_info(f"Raw PDB conversion failures: {len(_raw_failures)}")
+            # Sorted: the list is filled in thread-completion order, so WHICH 20 of them get
+            # printed would otherwise change between identical runs.
+            _raw_failures = sorted(_raw_failures)
             for _fjob, _freason in _raw_failures[:20]:
                 console_info(f"  ! {_fjob}: {_freason}")
             if len(_raw_failures) > 20:

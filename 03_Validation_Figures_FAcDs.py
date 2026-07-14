@@ -8427,8 +8427,12 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
                 if _m:
                     _nuc_by_job[str(_jn)] = int(_m.group(1))
         except Exception as _e:                                  # noqa: BLE001
+            # There is NO whole-protein fallback — _xn_compute_sn2_geometry refuses without the
+            # mapped aspartate, because the fallback scan is what put a serine in the results.
+            # Complexes with no mapped nucleophile are SKIPPED, and the message must say so.
             reporter.log(f'  ! Could not read Mapped_Nucleophile ({type(_e).__name__}); '
-                         f'geometry will fall back to the whole-protein scan.')
+                         f'those complexes will be SKIPPED — geometry is measured only at the '
+                         f'mapped catalytic aspartate, never by a whole-protein scan.')
     _missing = sum(1 for p in job_folders if p.name not in _nuc_by_job)
     if _missing:
         reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile; those fall back to the scan.')
