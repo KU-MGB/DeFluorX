@@ -190,8 +190,8 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,757 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,381 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,761 lines &nbsp; "]
+        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,393 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
         CFG --- UTL --- ENV
     end
@@ -201,7 +201,7 @@ flowchart TD
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
         M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,922 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~9,897 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,158 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,657 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -210,7 +210,7 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~2,968 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~2,978 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
@@ -218,7 +218,7 @@ flowchart TD
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
         M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Desmond SID → *_SID-out.eaf (frame-count validated) &nbsp; \n &nbsp; Per-frame ΔG_bind + energy components + plots &nbsp; \n &nbsp; Disk-safe scratch · phase-aware heartbeat · WARN status &nbsp; \n &nbsp; 📄 ~2,265 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,735 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,757 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
@@ -525,10 +525,10 @@ Completed jobs are detected from the master CSV and skipped automatically — ze
 
 ### Run individual steps
 
-Each script after step 02 accepts the run directory as its sole argument:
+Each script after step 02 takes the run directory as its first argument (03 also accepts `--no-variance`):
 
 ```bash
-python 03_Validation_Figures_FAcDs.py  Boltz-2_Run_20260309T085406Z
+python 03_Validation_Figures_FAcDs.py  Boltz-2_Run_20260309T085406Z [--no-variance]
 python 04_Dendrogram_FAcDs.py           Boltz-2_Run_20260309T085406Z
 python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
 python 06_SID_Prime-MMGBSA_FAcDs.py Boltz-2_Run_20260309T085406Z
@@ -609,6 +609,21 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 | §15 — PDB Preparation | PrepWizard pH, RMSD restraint, chain assignment, residue classification |
 | §16 — Data Registry & Aesthetics | Master CSV column name constants (`COL_*`), tier marker sizes/alphas, alignment grade definitions |
 | §17 — Prime MM-GBSA | End-state binding free-energy parameters (Step 06) |
+
+**Column registry (§16) — enforced, not merely defined.** The master-CSV column names live in CFG
+(`COL_TIER`, `COL_PROT`, `COL_LIG`, `COL_CONF`, `COL_SN2`, `COL_MECH_S`, …) and the scripts reference
+them rather than repeating the string: a column rename is one edit, not a grep across ten thousand
+lines. `CONTROL_JOB_PREFIX` likewise replaces the magic `"0000000"` that identifies a control job.
+Deliberately **excluded** from the registry are `ptm` / `iptm` where they name keys in Boltz-2's *own*
+confidence JSON — that is an external schema this project does not own, and routing it through CFG
+would assert an ownership that does not exist.
+
+**Figure palette (§13) — every colour, no exceptions.** `VIS_INK` (neutrals, strokes, text), `VIS_ACCENT`
+(Okabe–Ito colour-blind-safe base + the MD star, twin-axis pair, pass/warn/fail), `VIS_BAND`
+(strong/moderate/weak zones), `VIS_RAMP`, `VIS_TINT`, `BOND_TYPE_COLOUR` and the ordered series
+palettes. Step 03 contains **zero** hard-coded hex literals, so a restyle is one edit in CFG rather
+than a hunt through the plotting code — and a band label cannot be one green in one figure and a
+slightly different green in another, which a reader is entitled to read as two different meanings.
 
 **Backward-compatibility aliases (§3 — π–π stacking):** `THRESHOLD_PI_FACE` ↔ `PI_STACK_FACE_DIST_MAX` and `THRESHOLD_PI_EDGE` ↔ `PI_STACK_EDGE_DIST_MAX` hold identical values. Both names are intentionally retained so that older analysis and figure code importing the `PI_STACK_*` names continues to resolve against the single source of truth; edit only the `THRESHOLD_PI_*` definitions and the aliases follow.
 
@@ -850,20 +865,30 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 **Usage:**
 ```bash
 python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z --no-variance   # skip the CIF re-parse
 ```
 
-**Generated figures (up to 53 figure panels across folders 02–08 + 5 Ramachandran control plots in folder 01; the Hidden-Gems panel is emitted only when rescue candidates exist), written to `3_Validation_Figures/` in eight numbered, content-matched folders:**
+> **`--no-variance`.** The two inter-model uncertainty panels need a per-model variance table, built by
+> re-parsing all five model CIFs for every complex (~58,000 × 5). It is built **once**, cached in
+> `00_Analysis_Data/boltz_qc_multimodel_variance.csv`, and reused thereafter; a later run validates it
+> (schema, coverage, and whether any geometry actually resolved) and parses **only the complexes it is
+> missing**, so an interrupted build resumes rather than restarting. Progress is checkpointed every
+> 5,000 complexes. The cost is I/O, not CPU — the corpus is ~16 CPU-minutes of parsing but ~58 GB of
+> small-file reads, so on a spinning disk it is disk-bound and extra cores do not help. `--no-variance`
+> skips it; the geometry figure then draws its absolute-geometry panels and says so in the log.
+
+**Generated figures (54 panels across folders 02–07 + 5 Ramachandran control plots in folder 01 = 59; the Hidden-Gems panel is emitted only when rescue candidates exist), written to `3_Validation_Figures/` in seven numbered, content-matched folders:**
 - **`01_Ramachandran/`** — control backbone-geometry validation: 3R3U crystal, DeHa4 and 3R3U Boltz-2 controls, each with a crystal-overlay comparison.
-- **`02_Dataset_and_Alignment_Overview/` (01–04):** active-site residue mapping coverage (data labels inside bars), tier distribution + model-selection pie, sequence-identity grades, tier × grade cross-tabulation.
+- **`02_Dataset_and_Alignment_Overview/` (01–05):** active-site residue mapping coverage (data labels inside bars), tier distribution + model-selection pie, sequence-identity grades, tier × grade cross-tabulation, **evolutionary phylogeny of the cohort**.
 - **`03_AI_Confidence_Quality/` (01–03):** Boltz-2 confidence assessment, Tier_1A pTM/ipTM quality space (structure thumbnails), pTM vs ipTM scatter.
-- **`04_Catalytic_Geometry_and_Mechanism/` (01–10):** active-site RMSD (median trend line), halide-stabilisation × clamp cross-tab, mechanistic score ± CI, SN2-angle ECDF, geometry scatter, Tier_1A mechanistic space, Spearman correlation heatmap, Cleveland dot plot, mechanistic fingerprint (parallel coordinates), **two-criteria tier logic (3-panel: Criterion A gates Criterion B · B-ECDF separates tiers · SN2 dead-end BDE×occlusion gate)**.
-- **`05_Ligand_Interactions_and_Chemical_Space/` (01–08):** bond-type profile, Tier_1A interaction space, fluorine engagement, catalytic-quality vs inhibition, active-site contact density, UMAP chemical-space manifold, Tier_1A chemical-space landscape, **binding energetics (binding-probability violin + product-inhibition line)**.
-- **`06_PFAS_Scope_and_Synthesis/` (01–13):** radar profiles (top hits + tier reps), tier success rates, confidence × SN2 landscape, conflict composition, hidden gems, Euler overlap, top-25 multitarget proteins, top-tier PFAS breakdown, Sankey workflow, PFAS chain-length hexbin / composition / carbon-confidence-MW panels.
-- **`07_Diagnostic_and_MultiModel_Trends/` (01–09):** pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) — scatter panels annotated with Spearman ρ / p / n.
+- **`04_Catalytic_Geometry_and_Mechanism/` (01–14):** active-site RMSD (median trend line), halide-stabilisation × clamp cross-tab, mechanistic score ± CI, SN2-angle ECDF, geometry scatter, Tier_1A mechanistic space, Spearman correlation heatmap, Cleveland dot plot, mechanistic fingerprint (parallel coordinates), **two-criteria tier logic (3-panel: Criterion A gates Criterion B · B-ECDF separates tiers · SN2 dead-end BDE×occlusion gate)**, **reaction geometry with multi-model uncertainty**, **mechanistic breakdown by tier**.
+- **`05_Ligand_Interactions_and_Chemical_Space/` (01–09):** bond-type profile, Tier_1A interaction space, fluorine engagement, catalytic-quality vs inhibition, active-site contact density, UMAP chemical-space manifold, Tier_1A chemical-space landscape, **binding energetics (binding-probability violin + product-inhibition line)**, **binding affinity by tier**.
+- **`06_PFAS_Scope_and_Synthesis/` (01–15):** radar profiles (top hits + tier reps), tier success rates, confidence × SN2 landscape, conflict composition, hidden gems, Euler overlap, top-25 multitarget proteins, top-tier PFAS breakdown, Sankey workflow, PFAS chain-length hexbin / composition / carbon-confidence-MW panels, **chain length by tier**, **Tier_1A cross-ligand heatmap**.
+- **`07_Diagnostic_and_MultiModel_Trends/` (01–09):** *(includes the merged **pillar divergence by tier**)* pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) — scatter panels annotated with Spearman ρ / p / n.
 
-**Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt`, `06_Statistical_Tests.csv` (BH-corrected q-values for every test on every panel), `06_Analysis_Log.txt`.
+**Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt` (legends for every figure the run actually produced; a figure that legitimately drew no data — Hidden Gems, when no complex is high-tier yet low-confidence — is listed under *Not produced in this run*, with the reason), `06_Statistical_Tests.csv`, `06_Analysis_Log.txt`, `boltz_qc_multimodel_variance.csv` (per-model geometry + confidence; cached and reused).
 
-**Statistics:** Pareto fronts (unified duplicate handling), pairwise-complete Spearman correlations with Benjamini–Hochberg FDR on unique pairs, bootstrap 95% CIs for plotted means. Every hypothesis test drawn on a panel (Kruskal–Wallis across tiers, paired Wilcoxon ipTM vs pTM, silhouette label-permutation for UMAP tier separation) is registered and the **whole family is corrected once by Benjamini–Hochberg**; the panel shows the raw test result and the corrected q-values are written to `00_Analysis_Data/06_Statistical_Tests.csv`, which is the value to quote. Colours, fonts and grid sourced from CFG through `utils.apply_figure_style()` (single source of truth).
+**Statistics:** Pareto fronts (unified duplicate handling), pairwise-complete Spearman correlations with Benjamini–Hochberg FDR on unique pairs, bootstrap 95% CIs for plotted means. Beyond the tests each panel registers, a **statistical battery** tests every claim the ranking rests on: Kruskal–Wallis across tiers per metric (with ε²), Mann–Whitney for degraders-vs-rest and Tier_1A-vs-rest (with rank-biserial *r* and group medians), and Spearman ρ **between** the ranking metrics — a screen built on three correlated pillars has one pillar and two echoes. Every row carries an effect size, deliberately: at *n* = 58,056 a p-value is nearly free, and the effect size is what decides whether a difference means anything. Every hypothesis test drawn on a panel (Kruskal–Wallis across tiers, paired Wilcoxon ipTM vs pTM, silhouette label-permutation for UMAP tier separation) is registered and the **whole family — panels and battery together — is corrected once by Benjamini–Hochberg**; the panel shows the raw test result and the corrected q-values are written to `00_Analysis_Data/06_Statistical_Tests.csv`, which is the value to quote. Colours, fonts and grid sourced from CFG through `utils.apply_figure_style()` (single source of truth).
 
 **Configuration (CFG §13):** figure DPI, fonts, axis proportions, maximum display ranks.
 </details>
