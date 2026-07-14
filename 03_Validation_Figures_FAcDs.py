@@ -185,7 +185,9 @@ Scientific References:
 # -------------------------------------------------------------------------------
 import sys
 import re
+import json
 import shutil
+import concurrent.futures as cf
 import argparse
 import warnings
 from pathlib import Path
@@ -7727,15 +7729,17 @@ _xn_NUCLEOPHILE_ATTACK_ATOMS = {
     "CYS": ("SG",),
 }
 
+@dataclass
 class _xn_AtomRecord:
-    """Atomo con metadati minimi necessari per geometria e tracciabilita'."""
+    """An atom plus the minimum metadata needed to locate it: residue, sequence id, chain."""
     atom: gemmi.Atom
     residue_name: str
     residue_seqid: int
     chain_name: str
 
+@dataclass
 class _xn_GeometryResult:
-    """Risultato della migliore geometria S_N2 trovata in un modello."""
+    """The best SN2 geometry found in one model."""
     sn2_distance_A: float
     sn2_angle_deg: float
     sn2_angle_deviation_deg: float
@@ -7899,6 +7903,10 @@ _xn_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
 # 'Tier_4' and 'Tier_5_Decoy' overlap and the axis becomes unreadable at the one place the
 # figure is decided. The width is set so the longest name fits without rotating it.
 _xn_COL_DOUBLE_IN = 14.5
+
+# Set from --no-variance in main(). Declared here so the geometry figure can read it even when a panel
+# is invoked directly rather than through a full run.
+_ALLOW_VARIANCE_COMPUTE = True
 
 _xn_STRIP_MAX_PER_GROUP = 250
 
@@ -8204,63 +8212,105 @@ def _xn__tier_boxstrip(ax, sub, tiers, val_col, ylabel, *, group_col='tier'):
     _xn__stat_header(ax, _xn__kruskal(sub, group_col, val_col, tiers))
     return ax
 
-def _xn__ensure_multimodel_variance_csv(prod_dir: Path, reporter) -> Path:
-    """Return the per-model variance CSV, computing it lazily if absent.
+def _xn__variance_rows_for_job(job_dir: Path) -> tuple:
+    """One complex: its 5 model CIFs parsed to rows. Runs in a worker process.
 
-    Target path is ``prod_dir/4_Prediction_Jobs/boltz_qc_multimodel_variance.csv``.
-    When missing, the geometry is recomputed by parsing every model ``.cif`` for
-    all complexes under ``4_Prediction_Jobs``. The heavy SN2 geometry (nucleophile
-    → reactive carbon → leaving fluorine) is delegated to the internal gemmi
-    engine (_xn_compute_sn2_geometry, merged in above) so the recomputed values are
-    numerically identical to the pipeline's own analysis rather than a divergent
-    re-implementation. Per-model ``ptm``/``iptm``/``ligand_iptm``/``confidence_score``
-    are read from the sibling ``confidence_*.json``.
+    Module-level and self-contained so it pickles for the process pool. Returns (rows, n_geom_fail)
+    rather than logging: a worker writing to the run log would interleave its output with the others.
+    """
+    _mre = re.compile(r'_(model_\d+)\.json$')
+    _rows, _fail = [], 0
+    for cj in sorted(job_dir.glob('boltz_results_*/predictions/*/confidence_*_model_*.json')):
+        _mm = _mre.search(cj.name)
+        if not _mm:
+            continue
+        cif_path = cj.with_name(cj.name.replace('confidence_', '', 1).replace('.json', '.cif'))
+        if not cif_path.exists():
+            continue
+        try:
+            with open(cj) as fh:
+                cd = json.load(fh)
+        except (OSError, ValueError):
+            cd = {}
+        try:
+            geo = _xn_compute_sn2_geometry(cif_path)
+            sn2_dist, sn2_ang = float(geo.sn2_distance_A), float(geo.sn2_angle_deg)
+        except Exception:                                        # noqa: BLE001
+            # A model with no nucleophile in range has no SN2 geometry; that is a real outcome, not an
+            # error. It is COUNTED and reported by the caller rather than silently becoming a NaN.
+            sn2_dist, sn2_ang, _fail = float('nan'), float('nan'), _fail + 1
+        _rows.append({'complex_id': job_dir.name, 'model_name': _mm.group(1),
+                      'ptm': cd.get('ptm', np.nan), 'iptm': cd.get('iptm', np.nan),
+                      'ligand_iptm': cd.get('ligand_iptm', np.nan),
+                      'confidence_score': cd.get('confidence_score', np.nan),
+                      'sn2_distance_A': sn2_dist, 'sn2_angle_deg': sn2_ang})
+    return _rows, _fail
+
+
+def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter) -> Path:
+    """Return the per-model variance CSV, computing it if absent.
+
+    It READS the model CIFs from the production folder (02's output) and WRITES the CSV into 03's own
+    00_Analysis_Data. A step writes its artefacts into its own folder: 1_Boltz2_Production is 02's
+    record of what it produced, and 03 dropping a derived table into it would leave an analysis
+    product filed as though the production run had made it.
+
+    The geometry is recomputed by parsing every model .cif under 4_Prediction_Jobs. The SN2 geometry
+    (nucleophile → reactive carbon → leaving fluorine) is delegated to the internal gemmi engine
+    (_xn_compute_sn2_geometry) so the recomputed values are numerically identical to the pipeline's
+    own analysis rather than a divergent re-implementation. Per-model ptm/iptm/ligand_iptm/
+    confidence_score are read from the sibling confidence_*.json.
     """
     jobs_dir = prod_dir / '4_Prediction_Jobs'
-    target = jobs_dir / 'boltz_qc_multimodel_variance.csv'
+    target = _aux_dir(out_dir) / 'boltz_qc_multimodel_variance.csv'
     if target.exists():
         return target
-    _root_copy = prod_dir / 'boltz_qc_multimodel_variance.csv'
-    if _root_copy.exists():
-        return _root_copy
     if not jobs_dir.exists():
         reporter.log(f'  ! Multi-model variance: {jobs_dir} not found; cannot compute.')
         return target
-    reporter.log('  ⧗ boltz_qc_multimodel_variance.csv missing — computing structural variance from CIF files (this can take several minutes)…')
-    import json as _json
-    _mre = re.compile('_(model_\\d+)\\.json$')
-    rows = []
     job_folders = sorted((p for p in jobs_dir.iterdir() if p.is_dir()))
     n_jobs = len(job_folders)
-    for ji, job_dir in enumerate(job_folders, 1):
-        if ji % 500 == 0 or ji == n_jobs:
-            reporter.log(f'    · variance progress: {ji}/{n_jobs} complexes')
-        conf_jsons = sorted(job_dir.glob('boltz_results_*/predictions/*/confidence_*_model_*.json'))
-        for cj in conf_jsons:
-            mm = _mre.search(cj.name)
-            if not mm:
-                continue
-            model_name = mm.group(1)
-            cif_path = cj.with_name(cj.name.replace('confidence_', '', 1).replace('.json', '.cif'))
-            if not cif_path.exists():
-                continue
-            try:
-                with open(cj) as fh:
-                    cd = _json.load(fh)
-            except Exception:
-                cd = {}
-            try:
-                geo = _xn_compute_sn2_geometry(cif_path)
-                sn2_dist = float(geo.sn2_distance_A)
-                sn2_ang = float(geo.sn2_angle_deg)
-            except Exception:
-                sn2_dist = float('nan')
-                sn2_ang = float('nan')
-            rows.append({'complex_id': job_dir.name, 'model_name': model_name, 'ptm': cd.get('ptm', np.nan), 'iptm': cd.get('iptm', np.nan), 'ligand_iptm': cd.get('ligand_iptm', np.nan), 'confidence_score': cd.get('confidence_score', np.nan), 'sn2_distance_A': sn2_dist, 'sn2_angle_deg': sn2_ang})
+
+    """
+    The work is one independent gemmi parse per model CIF — five per complex, tens of thousands of
+    complexes — with no shared state, so it parallelises cleanly across cores. Two cores are left free
+    so the machine stays usable and a GPU job's feeder process is never starved.
+    """
+    _n_proc = max(1, (_os.cpu_count() or 4) - 2)
+    reporter.log(f'  ⧗ Building boltz_qc_multimodel_variance.csv — parsing {n_jobs:,} complexes '
+                 f'× 5 model CIFs across {_n_proc} cores…')
+
+    rows: list = []
+    _n_geom_fail = 0
+    with cf.ProcessPoolExecutor(max_workers=_n_proc) as _ex:
+        _done = 0
+        for _job_rows, _fails in _ex.map(_xn__variance_rows_for_job, job_folders, chunksize=16):
+            rows.extend(_job_rows)
+            _n_geom_fail += _fails
+            _done += 1
+            if _done % 2000 == 0 or _done == n_jobs:
+                reporter.log(f'    · variance progress: {_done:,}/{n_jobs:,} complexes')
+
     var_df = pd.DataFrame(rows)
-    jobs_dir.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
     var_df.to_csv(target, index=False)
-    reporter.log(f"  ✔ Computed multi-model variance for {var_df['complex_id'].nunique()} complexes → {target.resolve()}")
+
+    """
+    The geometry failures are REPORTED, not swallowed. A silent `except: nan` here is what let the
+    whole table be written with an empty geometry column: every row present, every distance and angle
+    NaN, and nothing in the log to say so. If the geometry is missing for most models the CSV is not
+    usable and the run must say that out loud.
+    """
+    _n_rows = len(var_df)
+    _n_geo = int(var_df['sn2_distance_A'].notna().sum()) if _n_rows else 0
+    reporter.log(f"  ✔ Multi-model variance: {var_df['complex_id'].nunique():,} complexes, "
+                 f"{_n_rows:,} model rows, geometry resolved for {_n_geo:,} ({_n_geo / max(1, _n_rows):.1%})"
+                 f" → {target.resolve()}")
+    if _n_geo == 0:
+        reporter.log('  ! Multi-model variance: NO geometry resolved on any model — the uncertainty '
+                     'panels would be empty. Treat this CSV as unusable.')
+    elif _n_geom_fail:
+        reporter.log(f'    · {_n_geom_fail:,} model(s) had no resolvable SN2 geometry (no nucleophile in range).')
     return target
 
 def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
@@ -8300,11 +8350,13 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     without the flag, an absent CSV falls through to the two absolute-geometry panels, which
     carry the same tier claim and are drawn from the ranked CSV in seconds.
     """
+    _fig_root = out_dir if out_dir.name.startswith('3_') else out_dir.parent
     if globals().get('_ALLOW_VARIANCE_COMPUTE', False):
-        var_path = _xn__ensure_multimodel_variance_csv(_prod, reporter)
+        var_path = _xn__ensure_multimodel_variance_csv(_prod, _fig_root, reporter)
     else:
-        var_path = next((p for p in (_prod / '4_Prediction_Jobs' / 'boltz_qc_multimodel_variance.csv',
-                                     _prod / 'boltz_qc_multimodel_variance.csv') if p.exists()), None)
+        var_path = next((p for p in (_aux_dir(_fig_root) / 'boltz_qc_multimodel_variance.csv',
+                                     _prod / '4_Prediction_Jobs' / 'boltz_qc_multimodel_variance.csv')
+                         if p.exists()), None)
         if var_path is None:
             reporter.log('  · Figure 1: no per-model variance CSV; drawing the two geometry panels. '
                          'Pass --variance to build it from the CIFs (slow) and get the uncertainty panels too.')
@@ -9901,7 +9953,21 @@ def main():
         usage="%(prog)s <run_folder>  (e.g. Boltz-2_Run_20260309T085406Z)"
     )
     parser.add_argument("run", help="Name of the Boltz-2 run folder (e.g. Boltz-2_Run_20260309T085406Z)")
+    parser.add_argument("--no-variance", action="store_true",
+                        help="Skip building the per-model variance CSV. By default it is built once "
+                             "(re-parsing the 5 model CIFs per complex) and cached in "
+                             "00_Analysis_Data; later runs reuse it. Skipping it costs the geometry "
+                             "figure its two inter-model uncertainty panels.")
     args = parser.parse_args()
+
+    """
+    The variance CSV is BUILT BY DEFAULT, once. It is the only artefact behind the uncertainty panels,
+    and a figure that quietly omits half of itself on every run is worse than a run that pays the cost
+    once: the build re-parses five CIFs per complex, but the result is cached in 00_Analysis_Data, so
+    only the first run after a fresh production pays for it.
+    """
+    global _ALLOW_VARIANCE_COMPUTE
+    _ALLOW_VARIANCE_COMPUTE = not bool(args.no_variance)
 
     root_dir = Path.cwd()
     run_ttth = root_dir / args.run
