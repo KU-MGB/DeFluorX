@@ -138,12 +138,13 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
 
     ── 07_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
     • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
-    • 02_Pocket_Occupancy_by_Carbon_Number.png     <-- Occupancy violin+box per PFAS carbon number, median trend
-    • 05_MultiModel_Consensus_by_Tier.png          <-- Multi-model degrader consensus, mean ± CI by tier
-    • 06_Confidence_vs_Consensus.png               <-- Confidence vs cross-model consensus hexbin + trend
-    • 07_Quality_and_Competence_Diagnostics.png    <-- Confidence×competence + mech-score×penalty scatter (tier)
-    • 08_Size_Preference_Containment.png           <-- Effective-mech distribution + means + hit-rate + pocket containment vs ligand size
-    • 09_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
+    • 02_Pocket_Occupancy_by_Carbon_Number.png     <-- Whole-cavity coverage (violin) + 8-residue active-site coverage (box) per PFAS carbon number, both means trended
+    • 03_MultiModel_Consensus_by_Tier.png          <-- Multi-model degrader consensus, mean ± CI by tier
+    • 04_Confidence_vs_Consensus.png               <-- Confidence vs cross-model consensus hexbin + trend
+    • 05_Quality_and_Competence_Diagnostics.png    <-- Confidence×competence + mech-score×penalty scatter (tier)
+    • 06_Size_Preference_Containment.png           <-- Effective-mech distribution + means + hit-rate + pocket containment vs ligand size
+    • 07_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
+    • 08_Model_Agreement.png                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
 
 -------------------------------------------------------------------------------
 Scientific References:
@@ -7079,7 +7080,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         reporter.log(f"  ! Diag 02 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    # ── Figure 05: Multi-model degrader consensus by tier ───────────────────────
+    # ── Figure 03: Multi-model degrader consensus by tier ───────────────────────
     """
     Per-tier distribution of the Boltz-2 multi-model degrader consensus (fraction
     of the 5 diffusion models that independently called the complex a degrader),
@@ -7124,16 +7125,16 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                       fontsize=8.5, framealpha=0.92, fancybox=True,
                       columnspacing=1.2, handletextpad=0.5, borderaxespad=0.0)
             plt.tight_layout()
-            _o = out_dir / "05_MultiModel_Consensus_by_Tier.png"
+            _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
         else:
-            reporter.log("  ! Diag 05 skipped: insufficient consensus data")
+            reporter.log("  ! Diag 03 skipped: insufficient consensus data")
     except Exception as e:
-        reporter.log(f"  ! Diag 05 skipped: {e}")
+        reporter.log(f"  ! Diag 03 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    # ── Figure 06: Model confidence by multi-model consensus level ──────────────
+    # ── Figure 04: Model confidence by multi-model consensus level ──────────────
     """
     Boltz-2 model confidence distribution at each multi-model degrader-consensus level
     (fraction of the 5 diffusion models that independently called the complex a
@@ -7175,16 +7176,16 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.legend(loc="lower right", fontsize=8.5, framealpha=0.92,
                       title=_ss06, title_fontsize=8.5)
             plt.tight_layout()
-            _o = out_dir / "06_Confidence_vs_Consensus.png"
+            _o = out_dir / "04_Confidence_vs_Consensus.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
         else:
-            reporter.log("  ! Diag 06 skipped: insufficient confidence/consensus data")
+            reporter.log("  ! Diag 04 skipped: insufficient confidence/consensus data")
     except Exception as e:
-        reporter.log(f"  ! Diag 06 skipped: {e}")
+        reporter.log(f"  ! Diag 04 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    # ── Figure 07: Quality & competence diagnostics (2-panel scatter) ───────────
+    # ── Figure 05: Quality & competence diagnostics (2-panel scatter) ───────────
     """
     Two tier-coloured scatter panels relating the AI, geometric and competence signals
     per complex:
@@ -7259,19 +7260,19 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                        ncol=12, fontsize=7.5, framealpha=0.92, columnspacing=1.0,
                        handletextpad=0.4)
             plt.tight_layout()
-            _o = out_dir / "07_Quality_and_Competence_Diagnostics.png"
+            _o = out_dir / "05_Quality_and_Competence_Diagnostics.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
         else:
-            reporter.log("  ! Diag 07 skipped: quality/competence columns absent")
+            reporter.log("  ! Diag 05 skipped: quality/competence columns absent")
     except Exception as e:
-        reporter.log(f"  ! Diag 07 skipped: {e}")
+        reporter.log(f"  ! Diag 05 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
     finally:
         if fig is not None:
             plt.close(fig)
 
-    # ── Figure 08: Size preference — competence distribution & viability vs ligand size ──
+    # ── Figure 06: Size preference — competence distribution & viability vs ligand size ──
     """
     FAcD is a small-substrate (haloacetate) hydrolase. Single-panel size-preference
     summary in the Figure-26c visual grammar: per-size-bin distribution of the effective
@@ -7360,16 +7361,16 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                        ncol=5, fontsize=7.5, framealpha=0.95, columnspacing=1.0,
                        handletextpad=0.4)
             plt.tight_layout()
-            _o = out_dir / "08_Size_Preference_Containment.png"
+            _o = out_dir / "06_Size_Preference_Containment.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
         else:
-            reporter.log("  ! Diag 08 skipped: insufficient size/tier data")
+            reporter.log("  ! Diag 06 skipped: insufficient size/tier data")
     except Exception as e:
-        reporter.log(f"  ! Diag 08 skipped: {e}")
+        reporter.log(f"  ! Diag 06 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    # ── Figure 09: Reactive-centre engagement with the 8 catalytic residues vs size ──
+    # ── Figure 07: Reactive-centre engagement with the 8 catalytic residues vs size ──
     """
     Why FAcD favours small substrates is NOT that large PFAS cannot reach the catalytic
     machinery — they can (the reactive carbon still lands within van-der-Waals attack
@@ -7394,14 +7395,14 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         _lcol09 = next((c for c in [CFG.COL_LIG, "Ligand_Name", "ligand"] if c in df.columns), None)
         _need09 = _D8_09 + ["SN2_Attack_Angle", "mechanistic_score_effective", "degrader_tier"]
         if _lcol09 is None or not all(c in df.columns for c in _need09):
-            reporter.log("  ! Diag 09 skipped: reactive-geometry / ligand columns absent")
+            reporter.log("  ! Diag 07 skipped: reactive-geometry / ligand columns absent")
         else:
             _smi09 = out_dir.parents[1] / CFG.INPUT_SMILES
             if not _smi09.exists():
                 _smi09 = Path.cwd() / CFG.INPUT_SMILES
             _LP09 = _utils_mod.compute_ligand_properties(_smi09)
             if not _LP09:
-                reporter.log(f"  ! Diag 09 skipped: ligand SMILES not found ({_smi09})")
+                reporter.log(f"  ! Diag 07 skipped: ligand SMILES not found ({_smi09})")
                 raise RuntimeError("ligand properties unavailable")
             _PROD_LO, _PROD_HI = CFG.VIS_DIAG_PROD_LO_A, CFG.VIS_DIAG_PROD_HI_A
             _READY, _SENT = CFG.VIS_DIAG_READY_DIST_A, CFG.VIS_DIAG_DIST_SENTINEL_A
@@ -7422,7 +7423,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                    "tv": _tv09, "ready": _ready09, "reach": _reach09}).dropna(subset=["nC"])
             _grps09 = sorted(_sub09["nC"].unique())
             if len(_grps09) < 3:
-                reporter.log("  ! Diag 09 skipped: insufficient carbon-number groups")
+                reporter.log("  ! Diag 07 skipped: insufficient carbon-number groups")
             else:
                 _pos09 = np.arange(len(_grps09))
                 _box09 = [_sub09.loc[_sub09.nC.eq(g), "dnuc"].dropna().values for g in _grps09]
@@ -7512,11 +7513,11 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 axL.legend(handles=_leg09, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=8,
                            fontsize=7.0, framealpha=0.95, columnspacing=0.8, handletextpad=0.35)
                 plt.tight_layout()
-                _o = out_dir / "09_Reactive_Engagement.png"
+                _o = out_dir / "07_Reactive_Engagement.png"
                 fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
                 reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
     except Exception as e:
-        reporter.log(f"  ! Diag 09 skipped: {e}")
+        reporter.log(f"  ! Diag 07 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
     _diag10_model_agreement(df, out_dir, reporter)
@@ -7542,14 +7543,14 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     try:
         _c10 = "model_degrader_consensus"
         if _c10 not in df.columns or CFG.COL_TIER not in df.columns:
-            reporter.log(f"  ! Diag 10 skipped: needs {_c10} + {CFG.COL_TIER}")
+            reporter.log(f"  ! Diag 08 skipped: needs {_c10} + {CFG.COL_TIER}")
             return
         d10 = df[[_c10, CFG.COL_TIER]].copy()
         d10[_c10] = pd.to_numeric(d10[_c10], errors="coerce")
         d10 = d10.dropna(subset=[_c10])
         _t10 = [t for t in CFG.TIER_ORDER if (d10[CFG.COL_TIER] == t).sum() >= 3]
         if not _t10:
-            reporter.log("  ! Diag 10 skipped: no tier with ≥3 complexes")
+            reporter.log("  ! Diag 08 skipped: no tier with ≥3 complexes")
             return
 
         fig, ax = plt.subplots(figsize=(11, 6))
@@ -7599,11 +7600,11 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                     ax.scatter(np.full(len(_y10), _x10), _y10.to_numpy(),
                                **({**_MD_STAR_KW, "s": 200}))
         plt.tight_layout()
-        _o = out_dir / "10_Model_Agreement.png"
+        _o = out_dir / "08_Model_Agreement.png"
         fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
         reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
     except Exception as e:                                   # noqa: BLE001
-        reporter.log(f"  ! Diag 10 skipped: {e}")
+        reporter.log(f"  ! Diag 08 skipped: {e}")
         plt.close("all")
 
 
@@ -8147,7 +8148,7 @@ def write_figure_descriptions(out_dir: Path):
         "            perfluoro chains approach it. Annotation reports the overfill count.",
         "",
         "-" * 80,
-        "02_Pocket_Occupancy_by_Ligand.png",
+        "02_Pocket_Occupancy_by_Carbon_Number.png",
         "  Title   : Pocket occupancy by PFAS carbon number",
         "  Type    : Violin + box per carbon group (C2…Cn, fluorine counts in parentheses);",
         "            red diamond = group median, joined by a median trend line",
@@ -8169,7 +8170,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: small ligands pass universally; fit rate erodes for the largest PFAS.",
         "",
         "-" * 80,
-        "05_MultiModel_Consensus_by_Tier.png",
+        "03_MultiModel_Consensus_by_Tier.png",
         "  Title   : Multi-model degrader consensus by tier",
         "  Type    : Strip + tier mean (diamond) + 95% CI; coloured tier ticks with μ/median/n",
         "  Y-axis  : Fraction of the 5 Boltz-2 diffusion models that independently called a degrader",
@@ -8177,7 +8178,7 @@ def write_figure_descriptions(out_dir: Path):
         "confirming tier ordering reflects cross-model agreement.",
         "",
         "-" * 80,
-        "06_Confidence_vs_Consensus.png",
+        "04_Confidence_vs_Consensus.png",
         "  Title   : AI confidence vs cross-model consensus",
         "  Type    : Density hexbin (log count) + binned-median trend",
         "  Axes    : X = Boltz-2 model confidence; Y = multi-model degrader consensus",
@@ -8185,7 +8186,7 @@ def write_figure_descriptions(out_dir: Path):
         "            still split the ensemble are robustness outliers.",
         "",
         "-" * 80,
-        "07_Quality_and_Competence_Diagnostics.png",
+        "05_Quality_and_Competence_Diagnostics.png",
         "  Title   : Quality & competence diagnostics (2-panel scatter, tier-coloured)",
         "  Panel A : Boltz model confidence (x) vs catalytic competence (y) — whether confident",
         "            predictions are also catalytically competent, or whether the two diverge",
@@ -8197,6 +8198,30 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "ADDED CATALYTIC / BINDING FIGURES (main suite)",
         "=" * 80,
+        "",
+        "-" * 80,
+        "06_Size_Preference_Containment.png",
+        "  Title   : Size preference — effective mechanistic score vs ligand size",
+        "  Type    : Per-size-bin distribution + bin means + catalytic hit-rate + mean containment",
+        "  Look for: competence falls with ligand size; containment falls with it too. FAcD is a",
+        "            small-substrate hydrolase, and this is where that shows.",
+        "",
+        "-" * 80,
+        "07_Reactive_Engagement.png",
+        "  Title   : Reactive-carbon engagement with the catalytic residues by carbon number",
+        "  Type    : Nucleophile-distance box + 8-residue spread + properly-positioned fraction",
+        "  Look for: the properly-positioned fraction collapses beyond ~C6 while the ligand is",
+        "            still nominally bound — reach is not engagement.",
+        "",
+        "-" * 80,
+        "08_Model_Agreement.png",
+        "  Title   : Diffusion-sample consensus by tier — are the elite hits reproducible?",
+        "  Type    : Consensus distribution per tier (violin + box), per-tier mean, MD-selected starred",
+        "  X-axis  : Degrader tier; Y-axis: fraction of diffusion samples independently reaching a",
+        "            degrader tier (model_degrader_consensus)",
+        "  Look for: whether Tier_1A is consensus-backed. A tier whose hits sit BELOW 0.5 earned",
+        "            its label from a minority of samples — a best-of-N over the diffusion ensemble,",
+        "            not a reproducible property of the complex.",
         "",
         "-" * 80,
         "04_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
