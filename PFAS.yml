@@ -1,6 +1,6 @@
 # PFAS Conda Environment
-# Exported : 09 July 2026, 15:11
-# Script   : 00_01_Environment_Installation_FAcDs.py --export
+# Exported : 14 July 2026, 23:12
+# Script   : 00_03_Environment_FAcDs.py --export
 #
 name: PFAS
 channels:
