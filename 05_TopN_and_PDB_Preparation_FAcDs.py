@@ -1441,6 +1441,59 @@ def _plip_cfg_cutoffs():
         "water":       CFG.WATER_BRIDGE_DIST_MAX,   # Maestro water-bridge ceiling
     }
 
+
+"""
+ANGLE CRITERIA — the half of the definition that was being thrown away.
+
+A hydrogen bond is not "an N or O within 3.5 Å"; a halogen bond is not "a halogen within 3.5 Å". Both
+are defined by GEOMETRY: a donor angle that says the interaction points the right way, and an acceptor
+angle that says the lone pair is oriented to receive it. CFG §3-4 carries those angles — the
+Schrödinger-Maestro values — and until now nothing applied them. PLIP was clamped on DISTANCE only, so
+PLIP's own looser internal angles decided which contacts survived, and the CFG angle constants were
+config nobody read.
+
+PLIP reports each angle in its XML, so the criteria can be enforced on its output rather than
+re-implemented. Each entry is (xml_tag, minimum, maximum); None means unbounded on that side.
+
+Not listed, deliberately:
+  · pi-stacking / pi-cation — PLIP applies its own offset and angle tests and does not expose them in a
+    form that can be re-gated without re-deriving the ring geometry, so the distance clamp stands alone.
+  · the aromatic-H-bond family (AROM_HB_*) — a Maestro interaction class PLIP does not model at all.
+    Those constants describe a criterion no engine in this pipeline can evaluate; they are reference,
+    not configuration, and are marked as such in CFG.
+"""
+_PLIP_ANGLE_RULES: dict = {
+    "hbond":   [("don_angle", CFG.THRESHOLD_HB_ANGLE_MIN, None)],
+    "halogen": [("don_angle", CFG.HALOGEN_DON_ANGLE_MIN, None),
+                ("acc_angle", CFG.HALOGEN_DON_ACC_ANGLE_MIN, None)],
+    "water":   [("don_angle", CFG.WATER_BRIDGE_DON_ANGLE_MIN, None),
+                ("water_angle", CFG.WATER_BRIDGE_OMEGA_MIN, CFG.WATER_BRIDGE_OMEGA_MAX)],
+}
+
+
+def _plip_angles_ok(node, itype: str) -> bool:
+    """True when every CFG angle criterion for this interaction type is satisfied.
+
+    A missing angle in the XML is NOT treated as a pass: the criterion exists because the geometry
+    decides whether the contact is real, and an unverifiable contact is not a verified one.
+    """
+    _rules = _PLIP_ANGLE_RULES.get(itype)
+    if not _rules:
+        return True
+    for _tag, _lo, _hi in _rules:
+        _el = node.find(_tag)
+        if _el is None or _el.text is None:
+            return False
+        try:
+            _v = float(_el.text)
+        except ValueError:
+            return False
+        if _lo is not None and _v < float(_lo):
+            return False
+        if _hi is not None and _v > float(_hi):
+            return False
+    return True
+
 # Metadata cache: job_name → {p: protein_name, l: ligand_name}
 METADATA_CACHE: dict = {}
 
@@ -1696,15 +1749,20 @@ def _parse_plip_xml(xml_path, lig, pro):
         return lig[idx], float(dists[idx])
 
     _cfg_cut = _plip_cfg_cutoffs()   # Maestro/CFG distance ceilings per interaction type
+    _ANGLE_REJECTS: dict = {}        # contacts PLIP found but the CFG geometry criteria reject
 
-    def _register(resnr, restype, reschain, dist, itype, protcoo_3d, ligcoo_3d):
+    def _register(resnr, restype, reschain, dist, itype, protcoo_3d, ligcoo_3d, node=None):
         key = (reschain, int(resnr), restype)
         """
-        Clamp PLIP's looser internal cutoffs to the project's CFG (Maestro) criteria
-        so PLIP, PyMOL, and InteractionMap all agree on what counts as a bond.
+        Clamp PLIP's looser internal cutoffs to the project's CFG (Maestro) criteria — on DISTANCE and
+        on ANGLE — so PLIP, PyMOL and InteractionMap all agree on what counts as a bond, and so the
+        geometry half of each definition is actually applied rather than left to PLIP's own defaults.
         """
         ceil = _cfg_cut.get(itype)
         if ceil is not None and dist > ceil:
+            return
+        if node is not None and not _plip_angles_ok(node, itype):
+            _ANGLE_REJECTS[itype] = _ANGLE_REJECTS.get(itype, 0) + 1
             return
         la, _  = _closest_lig_atom(ligcoo_3d)
         # C–F bonds are leaving groups in FAcDs SN2; exclude F from H-bond / halogen contacts
@@ -1734,14 +1792,14 @@ def _parse_plip_xml(xml_path, lig, pro):
             ligcoo  = _plip_coo(hb.find("ligcoo"))
             dist    = float(hb.find("dist_d-a").text)
             _register(hb.find("resnr").text, hb.find("restype").text,
-                      hb.find("reschain").text, dist, "hbond", protcoo, ligcoo)
+                      hb.find("reschain").text, dist, "hbond", protcoo, ligcoo, node=hb)
 
         for hx in iact.findall("./halogen_bonds/halogen_bond"):
             protcoo = _plip_coo(hx.find("protcoo"))
             ligcoo  = _plip_coo(hx.find("ligcoo"))
             dist    = float(hx.find("dist").text)
             _register(hx.find("resnr").text, hx.find("restype").text,
-                      hx.find("reschain").text, dist, "halogen", protcoo, ligcoo)
+                      hx.find("reschain").text, dist, "halogen", protcoo, ligcoo, node=hx)
 
         for sb in iact.findall("./salt_bridges/salt_bridge"):
             protcoo = _plip_coo(sb.find("protcoo"))
@@ -1757,7 +1815,7 @@ def _parse_plip_xml(xml_path, lig, pro):
             dist_a  = float(wb.find("dist_a-w").text)
             _register(wb.find("resnr").text, wb.find("restype").text,
                       wb.find("reschain").text, max(dist_d, dist_a), "water",
-                      protcoo, ligcoo)
+                      protcoo, ligcoo, node=wb)
 
         for ps in iact.findall("./pi_stacks/pi_stack"):
             protcoo = _plip_coo(ps.find("protcoo"))
@@ -1804,6 +1862,16 @@ def _parse_plip_xml(xml_path, lig, pro):
                         "itype": "contact", "is_hbond": False, "is_salt": False,
                         "lig_atom": la, "prot_atom": "", "center": protcoo,
                     }
+
+    """
+    A filter that removes contacts silently is indistinguishable from a filter that is not running. The
+    count of contacts PLIP found and the CFG geometry rejected is reported, so tightening a criterion in
+    CFG has a visible consequence rather than an invisible one.
+    """
+    if _ANGLE_REJECTS:
+        _msg = ", ".join(f"{_n} {_t}" for _t, _n in sorted(_ANGLE_REJECTS.items()))
+        console_info(f"      CFG geometry criteria rejected {sum(_ANGLE_REJECTS.values())} PLIP "
+                     f"contact(s) on angle: {_msg}")
 
     return sorted(contacts_by_key.values(), key=lambda x: x["dist"])
 

@@ -567,6 +567,14 @@ class CFG:
     # Step 3.6b: Aromatic H-bonds (Schrödinger Maestro defaults)
     # -------------------------------------------------------------------------------
     """Weak H-bonds donated to aromatic π-acceptors. Levitt & Perutz (1988)."""
+    """
+    AROMATIC HYDROGEN BONDS — REFERENCE ONLY. NO ENGINE IN THIS PIPELINE EVALUATES THESE.
+
+    A Maestro interaction class (C–H···O/N from an aromatic carbon). PLIP does not model it, and Step 02
+    cannot: the Boltz-2 CIF carries no hydrogens at all. The criteria are recorded here so the project's
+    definition of an interaction is complete and matches Maestro, NOT because anything reads them. They
+    are documentation, and are marked as such so nobody assumes a contact was filtered on them.
+    """
     AROM_HB_DIST_O_ACC: float       = 2.8    # Å  maximum distance, O acceptor
     AROM_HB_DIST_N_ACC: float       = 2.5    # Å  maximum distance, N= acceptor
     AROM_HB_DON_ANGLE_O: float      = 90.0   # °  donor minimum angle (O acceptor)
