@@ -117,7 +117,6 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Additional stack for the Top-N extraction + figure phase ---
-import tempfile
 import xml.etree.ElementTree as _ET
 from collections import defaultdict
 import numpy as np
@@ -281,7 +280,7 @@ def load_rank_map(prod_dir: Path) -> dict:
     then falls back to any master CSV.
     Uses Scientific_Rank if present, otherwise Boltz_Model_Confidence (rounded to 4dp).
     """
-    rank_csvs = sorted(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv"))
+    rank_csvs = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV))
     if not rank_csvs:
         rank_csvs = sorted(prod_dir.glob("*_Ranked_*.csv"))
     if not rank_csvs:
@@ -314,7 +313,7 @@ def load_md_selected_jobs(prod_dir: Path) -> set:
     in which case the caller falls back to processing every best-complex CIF.
     """
     md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
-    rank_csvs = (sorted(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv")) or
+    rank_csvs = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                  sorted(prod_dir.glob("*_Ranked_*.csv")))
     if not rank_csvs:
         return set()
@@ -468,6 +467,11 @@ def run_prepwizard(raw_pdb: Path, final_dest: Path):
             "-propka_pH", str(CFG.PREPWIZARD_PROPKA_PH),  # protein protonation pH
             "-epik_pH",   str(CFG.PREPWIZARD_EPIK_PH),    # PFAS ligand protonation via Epik
             "-r",         str(CFG.PREPWIZARD_RMSD_RESTRAIN),  # RMSD-restrained minimisation
+            # Minimisation force field, stated rather than defaulted: PrepWizard's own default is
+            # OPLS_2005, while every downstream stage (Desmond build, MD, WaterMap, Prime MM-GBSA)
+            # runs the OPLS4 family. Minimising under one force field and simulating under another
+            # means the prepared geometry is not a minimum of the potential the MD uses.
+            "-f",         str(CFG.PREPWIZARD_FORCEFIELD),
             "-disulfides",           # Detect and bond proximal Cys pairs
             "-NOJOBID",              # Run inline — no Schrödinger Job Control layer
             input_pdb_local.name,
@@ -594,7 +598,67 @@ def check_prep_needed(job_name: str, dir_raw: Path, dir_prep_clean: Path):
 
     return True # Needed (Missing)
 
-def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: str, prep_index: dict):
+def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) -> dict:
+    """Give each catalytic residue the protonation its ROLE requires (CFG §15).
+
+    PropKa assigns protonation per structure from a pKa prediction, without knowing which aspartate
+    is the nucleophile. It is not a tuning knob: it decides whether the chemistry can happen. A
+    controlled experiment — two systems identical but for one hydrogen, same build, same relaxation —
+    measured the cost of getting it wrong: with the catalytic histidine as HIP (+1) the SN2 attack
+    angle collapses 150° → 98° during the Desmond relaxation, while the neutral HID tautomer holds
+    at 170° / 3.77 Å, a pose that still passes relaxed NAC.
+
+    The state is imposed by REMOVING the hydrogens that contradict the role — the force-field
+    templates read the charged (ASP) or neutral (ASH) form from the hydrogens present. A histidine
+    is only converted when its partner proton (HD1) is there; stripping HE2 from an HIE tautomer
+    would leave an imidazole with no proton at all, which is not a species that exists.
+
+    Returns {role: (resname, resnum, action)} for the run log. The structure is rewritten in place
+    only when something actually changes.
+    """
+    _policy = CFG.CATALYTIC_PROTONATION_POLICY
+    if not anchors:
+        return {}
+    try:
+        lines = pdb_path.read_text().splitlines()
+    except Exception as e:
+        if logger:
+            logger.warning(f"Protonation enforcement skipped for {job_name}: {e}")
+        return {}
+
+    _drop, _report = set(), {}
+    for _role, _num in anchors.items():
+        _pol = _policy.get(_role)
+        if _pol is None or not _num:
+            continue
+        _idx = [i for i, l in enumerate(lines)
+                if l.startswith(("ATOM", "HETATM")) and l[22:26].strip() == str(_num)]
+        if not _idx:
+            _report[_role] = ("?", _num, "residue not found")
+            continue
+        _rname = lines[_idx[0]][17:20].strip()
+        _names = {lines[i][12:16].strip() for i in _idx}
+
+        if _rname.upper().startswith("HI") and "HE2" in _pol["strip_H"] and "HD1" not in _names:
+            _report[_role] = (_rname, _num, "left as-is (no HD1 to keep)")
+            continue
+
+        _removed = [lines[i][12:16].strip() for i in _idx
+                    if lines[i][12:16].strip() in _pol["strip_H"]]
+        for i in _idx:
+            if lines[i][12:16].strip() in _pol["strip_H"]:
+                _drop.add(i)
+        _report[_role] = (_rname, _num,
+                          f"{_pol['state']} (removed {', '.join(_removed)})" if _removed
+                          else f"{_pol['state']} (already correct)")
+
+    if _drop:
+        pdb_path.write_text("\n".join(l for i, l in enumerate(lines) if i not in _drop) + "\n")
+    return _report
+
+
+def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: str, prep_index: dict,
+                     anchors: dict | None = None):
     """
     Task 2: Protein Preparation.
     Logic: Checks consistency between Raw and Prep PDBs (Timestamp + Source Tag).
@@ -625,15 +689,18 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
         return {"job": job_name, "status": "No_PrepWizard", "rank": rank}
 
     prep_success = run_prepwizard(raw_pdb_path, final_prep_path)
+    _prot = {}
     if prep_success:
+        if CFG.PREPWIZARD_ENFORCE_PROTONATION:
+            _prot = enforce_catalytic_protonation(final_prep_path, anchors or {}, job_name)
         update_pdb_header(final_prep_path, job_name, rank, raw_source or "Unknown")
 
     status = "Success" if prep_success else "Prep_Failed"
-    return {"job": job_name, "status": status, "rank": rank}
+    return {"job": job_name, "status": status, "rank": rank, "protonation": _prot}
 
 
 # =============================================================================
-# SECTION 5: MAIN EXECUTION
+# SECTION 5: STRUCTURE & MOLECULE HANDLING
 # =============================================================================
 
 def load_catalytic_anchor_map(prod_dir: Path) -> dict:
@@ -643,7 +710,7 @@ def load_catalytic_anchor_map(prod_dir: Path) -> dict:
     robust to insertions/deletions — instead of a static ±window around the
     canonical reference numbers. Returns {job_name: {"Nuc"/"Acid"/"Base": int}}."""
     import re as _re
-    rank_csvs = sorted(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv")) or sorted(prod_dir.glob("*_Ranked_*.csv"))
+    rank_csvs = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or sorted(prod_dir.glob("*_Ranked_*.csv"))
     if not rank_csvs:
         return {}
     try:
@@ -812,7 +879,7 @@ def load_reference_data(input_data_dir: Path):
     return seq_map, smi_map, fasta_count, smi_count
 
 # -------------------------------------------------------------------------------
-# Step 4.2: Molecule Handling
+# Step 5.1: Molecule Handling
 # -------------------------------------------------------------------------------
 def extract_chain_l_mol(pdb_path: Path):
     """Extracts Chain L (Ligand) lines from PDB and returns RDKit Mol."""
@@ -834,7 +901,7 @@ def extract_chain_l_mol(pdb_path: Path):
 
 
 # =============================================================================
-# SECTION 6: MAIN EXECUTION LOGIC
+# SECTION 6: MAIN EXECUTION
 # =============================================================================
 
 
@@ -875,7 +942,6 @@ METADATA_CACHE: dict = {}
 
 def load_metadata(ext_dir: Path):
     """Populates METADATA_CACHE from any *_Scientific_Data.csv found under ext_dir."""
-    global METADATA_CACHE
     try:
         import pandas as pd
         for csv in ext_dir.rglob("*_Scientific_Data.csv"):
@@ -1108,7 +1174,7 @@ def _parse_plip_xml(xml_path, lig, pro):
 
     Each contact dict carries:
       key, resname, resnum, chain, dist, itype, is_hbond, is_salt,
-      lig_atom (nearest ligand atom), prot_atom (''), center (3-D protcoo)
+      lig_atom (nearest ligand atom), prot_atom (''), centre (3-D protcoo)
     """
     _ITYPE_ORDER = ["hbond", "halogen", "salt", "water", "pistack", "pication",
                     "hydrophobic", "contact"]
@@ -1332,7 +1398,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
         ax.add_patch(_mpatches.Circle(xy, r, color=col, zorder=5, ec="white", lw=1.4))
         if a["elem"] not in ("C",):
             ax.text(xy[0], xy[1], a["elem"],
-                    ha="center", va="center", fontsize=6.5,
+                    ha="center", va="center", fontsize=7.0,
                     color="white", fontweight="bold", zorder=6)
 
     # Residue boxes
@@ -1349,8 +1415,8 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
             "hydrophobic": "hydrophobic", "contact": "contact",
         }
         badge = _BADGE.get(itype, "contact")
-        # Annotate steric-contact quality (Bondi vdW ratio: good/bad/ugly)
-        if itype == "contact" and c.get("quality") in ("bad", "ugly"):
+        # Annotate steric-contact quality (Bondi vdW ratio: good/bad/severe)
+        if itype == "contact" and c.get("quality") in ("bad", "severe"):
             badge = f"contact ({c['quality']})"
         ax.add_patch(_FancyBboxPatch(
             (rpos[0]-bw/2+0.04, rpos[1]-bh/2-0.04), bw, bh,
@@ -1423,7 +1489,7 @@ def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C):
     if not sw["PLIP"]: return "Missing"
     out_dir = fig_root / "PLIP"
     out_dir.mkdir(exist_ok=True, parents=True)
-    log_path = log_dir / f"{base_name}_PLIP.log"
+    log_path = log_dir / f"{base_name}{CFG.SUFFIX_PLIP_LOG}"
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="plip_"))
     try:
@@ -1703,7 +1769,7 @@ def _im_find_contacts(lig, pro, lig_hb=None):
             # True parsed element (ZN/SE/MG/FE safe); fall back to first letter only if absent.
             rb = _IM_VDW.get(res["elems"].get(pname, pname[0].upper()).upper(), _IM_VDW_DEF)
             ratio = mind / (ra + rb)
-            quality = ("ugly" if ratio < _IM_CONTACT_UGLY else
+            quality = ("severe" if ratio < _IM_CONTACT_UGLY else
                        "bad"  if ratio < _IM_CONTACT_BAD  else
                        "good" if ratio < _IM_CONTACT_GOOD else "far")
             itype = "contact"
@@ -1944,7 +2010,7 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
     Phase 2: Run PyMOL and PLIP rendering on all PDB files under ext_dir.
     Called at the end of main() after Phase 1 (extraction) has completed.
     """
-    global _fig_logger, logger
+    global _fig_logger
 
     if not ext_dir.exists():
         console_info("Phase 2: Extraction directory not found — skipping figure generation.")
@@ -2185,7 +2251,7 @@ def prep_and_convert_phase(args):
     console_info("Generating Raw PDBs")
 
     console_info("Indexing existing Raw PDBs...")
-    raw_index = index_existing_files(dir_raw, "_RAW.pdb")
+    raw_index = index_existing_files(dir_raw, CFG.SUFFIX_RAW_PDB)
     # Quick index of full filenames for exact matches
     existing_raw_files = {f.name for f in dir_raw.glob("*_RAW.pdb")}
 
@@ -2306,7 +2372,8 @@ def prep_and_convert_phase(args):
                 batch = prep_jobs_to_run[batch_start: batch_start + BATCH_SIZE]
                 futures = {
                     executor.submit(preparation_step, job_name, dir_raw, dir_prep_clean,
-                                    str(rank_map.get(job_name, "N/A")), prep_index): job_name
+                                    str(rank_map.get(job_name, "N/A")), prep_index,
+                                    cat_anchor_map.get(job_name)): job_name
                     for job_name in batch
                 }
                 for future in as_completed(futures):
@@ -2321,6 +2388,15 @@ def prep_and_convert_phase(args):
                         job_id_num = "?"
                     print(f"({count}/{total_prep} | ID:{job_id_num}) {symbol} {res['job']} | [{stat_text}]", flush=True)
                     if logger: logger.info(f"{symbol} {res['job']} | [{stat_text}]")
+                    """
+                    The catalytic protonation is REPORTED, never silent. A residue whose charge was
+                    changed — or one left as it was — decides whether the SN2 can happen at all, and
+                    the run log is where that decision has to be visible.
+                    """
+                    for _role, (_rn, _num, _act) in (res.get("protonation") or {}).items():
+                        _msg = f"      protonation · {_role:<5} {_rn}{_num} → {_act}"
+                        print(_msg, flush=True)
+                        if logger: logger.info(_msg)
                     # Residue identity guard: run after every successful PrepWizard job
                     if stat_text == "Success":
                         _prep_ok += 1
@@ -2385,7 +2461,7 @@ def topn_extraction_phase(args):
     # Step 5.4: Load ranking logic
     # -------------------------------------------------------------------------------
     # Primary: FAcDs Ranked CSV written by 02_Production_FAcDs.py
-    rank_csvs = (sorted(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv")) or
+    rank_csvs = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                  sorted(prod_dir.glob("*_Ranked_*.csv")))
     if not rank_csvs:
         console_info("Error: No Ranked CSV found in production directory.")
@@ -2605,7 +2681,7 @@ def topn_extraction_phase(args):
 
         for idx, (i, row) in enumerate(subset.iterrows()):
             # Metadata — handover naming keys on the true Scientific_Rank
-            # (not selection order) so R_N matches every downstream MD/WaterMap artifact.
+            # (not selection order) so R_N matches every downstream MD/WaterMap artefact.
             rank = row.get("Scientific_Rank", i+1)
             name = row["job_name"]
 

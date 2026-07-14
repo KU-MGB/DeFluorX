@@ -35,7 +35,7 @@
 
 5. [Installation](#-installation)
 6. [Quick Start](#-quick-start)
-7. [Script Catalog](#-script-catalog)
+7. [Script Catalogue](#-script-catalogue)
 8. [Reproducibility](#-reproducibility)
 
 </td>
@@ -59,9 +59,9 @@
 
 ### The PFAS problem
 
-Per- and polyfluoroalkyl substances (PFAS) — the so-called 'forever chemicals' — are a family of >12,000 synthetic compounds characterised by extraordinarily stable carbon–fluorine bonds (C–F bond dissociation energy ~544 kJ mol⁻¹). Ubiquitous environmental contamination, bioaccumulation, and links to endocrine disruption and carcinogenicity make PFAS remediation one of the defining environmental challenges of the 21st century.
+Per- and polyfluoroalkyl substances (PFAS) are a family of >12,000 synthetic compounds, persistent in the environment and resistant to biotic and abiotic degradation, characterised by extraordinarily stable carbon–fluorine bonds (C–F bond dissociation energy ~544 kJ mol⁻¹). Ubiquitous environmental contamination, bioaccumulation, and links to endocrine disruption and carcinogenicity make PFAS remediation one of the defining environmental challenges of the 21st century.
 
-Enzymatic defluorination represents the most thermodynamically elegant route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. The question this pipeline addresses:
+Enzymatic defluorination represents the most thermodynamically elegant route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. This pipeline addresses the following question:
 
 > *Among thousands of phylogenetically diverse fluoroacetate dehalogenase (FAcD) candidate proteins, which ones possess the precise three-dimensional active-site geometry capable of catalysing defluorination of long-chain perfluorinated PFAS?*
 
@@ -158,7 +158,7 @@ All mechanistic geometry is benchmarked against the **3R3U crystal structure** (
 
 ### The mechanistic filter: beyond structural confidence
 
-Boltz-2 confidence metrics (ipTM, pLDDT, cross-PAE) assess structural plausibility — they do not assess catalytic competence. A protein can score perfectly on every confidence metric whilst being entirely unable to perform SN2 defluorination. This pipeline adds independent mechanistic gates that must all pass. Critically, every ligand-side gate is keyed on the **reactive centre** — the α-carbon bonded to the substrate carboxylate, the position FAcD defluorinates — not on the nearest ligand atom, so a large PFAS cannot satisfy the gates with stray fluorines:
+Boltz-2 confidence metrics (ipTM, pLDDT, cross-PAE) assess structural plausibility — they do not assess catalytic competence. A protein can score perfectly on every confidence metric whilst being entirely unable to perform SN2 defluorination. This pipeline adds independent mechanistic gates that must all pass. Critically, every ligand-side gate is keyed on the **reactive centre** — the α-carbon bonded to the substrate carboxylate, the position FAcD defluorinates — not on the nearest ligand atom, so a large PFAS cannot satisfy the gates with non-reactive peripheral fluorines:
 
 The tier ladder gates on a **feasibility-weighted mechanistic score** — `mechanistic_score_effective` = raw geometry mechanistic score **−** a graded chemistry penalty (scissile C–F BDE + backside occlusion) **−** a graded pocket-containment penalty. Both penalties are **graded, per-pose, and engage only past a chemistry/steric threshold**, so proven small substrates are untouched and the demotion is proportional to how recalcitrant or oversized a ligand is — never a hard substrate-class veto. A novel variant that reorganises its pocket, or presents a favourable pose, can still surface. Competence and within-tier ranking keep the **raw** geometry score. Every ligand-side gate keys on the α-carbon reactive centre.
 
@@ -166,21 +166,22 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 |------|-----------|-------|
 | **Productive α-attack** | The SN2 attack carbon (used for the distance/angle gates) must be the **α-carbon adjacent to the ligand carboxylate**; required for every degrader tier. A mid-chain CF₂ or a non-carboxylate head (sulfonate, ether) does not qualify. | FAcD attacks Cα of a 2-haloalkanoate; the carboxylate is the obligatory anchoring handle (Chan 2011; Kurihara & Esaki 2008) |
 | **SN2 attack angle** | ≥ 145° relaxed · ≥ 170° (Tier_1A), measured Asp110-Oδ → α-carbon → leaving F | Backside attack geometry; 180° = ideal Walden inversion (170° is the near-attack gate for the native substrates, within ~10° of the 180° Walden TS given Boltz ground-state noise) |
-| **Nucleophile–C distance** | ≤ 3.8 Å relaxed · ≤ 3.0 Å (Tier_1A), measured Asp110-Oδ → **α-carbon** | Near Attack Conformation (NAC) requirement |
+| **Nucleophile–C distance** | ≤ 3.8 Å relaxed · ≤ 3.0 Å (Tier_1A), measured **attacking** Asp110-Oδ → **α-carbon**. The oxygen is the one that produced the reported SN2 angle, not the nearer of the two: measuring the distance to one Oδ and the angle to the other describes a chimeric nucleophile. The minimum over both oxygens is retained as `dist_Nuc_nearest_O` (diagnostic) | Near Attack Conformation (NAC) requirement — one atom must satisfy both halves of it |
 | **Mechanistic-score gate (ladder + coupled elite gate)** | Gates on `mechanistic_score_effective` = raw holistic 0–1 geometry score (anchor reach + triad relays + clamp + halide stabilisation + Šidák-corrected angle) **minus** the graded chemistry and pocket-containment penalties. Ladder floor ≥ 0.85 / 0.85 / 0.70 for Tier_1A / 1B / 2A. Tier_1A additionally requires the **coupled elite gate**: effective-mech ≥ 0.90 **OR** (≥ 0.85 **AND** Criterion-B constellation ≥ 0.74). | Feasibility-weighted tier-gate key |
 | **Representative-pose selection** | Across the Boltz-2 diffusion samples, the reported pose is the highest degrader tier reached, then the **highest SN2 attack angle** within that tier (the near-attack/Walden conformer), then competence, then confidence | Surfaces each candidate's genuine near-attack geometry rather than an arbitrary sample |
-| **Pocket-containment penalty (graded)** | `pocket_containment` = fraction of ligand heavy atoms within `CONTAINMENT_RADIUS` (5 Å) of the carboxylate anchor; a graded penalty demotes ligands that spill the small FAcD pocket (FA/DFA/PFBA ≈ 1.0 → no penalty; long PFCAs fall to ~0.3). **Per-pose and per-protein**, so a genuine wide-pocket homolog that truly contains a longer chain is spared — long-PFAS hydrolytic-SN2 hits are **exploratory leads, not degraders** | FAcD is a small-substrate haloacetate hydrolase; long PFAS defluorinate (rarely) by radical decarboxylation, not hydrolytic SN2 (Wackett 2022; Chan 2011) |
-| **Bidentate carboxylate clamp** | Tier_1A requires the ligand –COO⁻ oxygens to salt-bridge **both** distinct cationic clamp residues (Arg111/Arg114, or an engineered Lys), donor N within 4.0 Å | The two-arm clamp positions the substrate for α-attack; one contact, or a non-carboxylate head, is insufficient (Maestro salt-bridge geometry; Donald 2011) |
+| **Pocket containment — two protein-aware measurements** | `pocket_containment_cavity` (**gates**) = fraction of ligand heavy atoms the **protein cavity** encloses, by ray-cast buriedness: 42 rays per ligand heavy atom, an atom counts as contained at buriedness ≥ `BURIAL_MIN` (0.70, corpus-calibrated). Measured against protein coordinates, so the same ligand scores differently in a narrow and a wide pocket and a genuine wide-pocket homolog is not punished for the ligand's intrinsic length. `pocket_containment_site8` (**reported**) = fraction of ligand heavy atoms within `SITE8_SHELL_A` (5 Å) of the **eight mapped catalytic residues** — catalytic engagement, not cavity fit. Measured: FA/DFA/TFA ≈ 0.92–1.00 · PFBA/PFHxA/PFOA ≈ 0.91–0.99 · PFTeDA (C14) 0.36 · PFODA (C18) 0.35. Perfluoro recalcitrance is carried by the **β-fluorine chemistry penalty**, not by containment | FAcD is a small-substrate haloacetate hydrolase; long PFAS defluorinate (rarely) by radical decarboxylation, not hydrolytic SN2 (Wackett 2022; Chan 2011). Containment must express the **pocket**, not the ligand — a metric computed on ligand coordinates alone cannot tell a narrow pocket from a wide one |
+| **Bidentate carboxylate clamp** | Tier_1A requires the ligand –COO⁻ oxygens to salt-bridge **both** distinct cationic clamp residues (Arg111/Arg114, or an engineered Lys), donor N within 4.0 Å, **and the two arms must be assignable to distinct carboxylate oxygens** — both arginines converging on the same oxygen is a monodentate collapse and earns no bidentate credit | The two-arm clamp positions the substrate for α-attack; one contact, one oxygen, or a non-carboxylate head, is insufficient (Maestro salt-bridge geometry; Donald 2011) |
+| **Elite bond-strength ceiling** | A scissile C–F above `TIER_ELITE_BDE_MAX` (123 kcal/mol) **cannot hold Tier_1A at any attack angle** — it is capped at Tier_1B and remains a discovery lead for Step-07 QM/MM. The angle fade applies to the **backside-occlusion** term only (a steric obstruction a near-linear approach genuinely clears); the C–F dissociation energy is a property of the bond, not of the angle of approach, and does not fade | Geometry cannot repeal thermochemistry: a perfect 180° trajectory onto a 127.5 kcal/mol α-CF3 still has to break a 127.5 kcal/mol bond. **Consequence: TFA (α-CF3) is capped at Tier_1B**, where FA (109.5) and DFA (119.5) are untouched |
 | **Criterion A — active-site integrity** | Fraction of the **eight** catalytic residues (Asp110 nucleophile · His277 base · Asp134 acid · two clamp arginines · His155/Trp156/Tyr217 cradle) present and correctly typed | Identity/presence of the catalytic machinery (Chan 2011); replaces global sequence identity as the conservation signal |
 | **Criterion B — catalytic constellation** | `1/(1+RMSD)` of the eight catalytic-residue Cα superposed on the 3R3U crystal; a per-tier floor (0.55 / 0.45 / 0.35 / 0.25) **caps** the tier — a pose below its floor is demoted (downgrade-only, never a promoter; B<0.25 → Tier_4, unmeasurable → Decoy) | Residues present (A) ≠ residues geometrically assembled (B); B enforces a crystal-grade constellation for the elite tiers |
 | **Fluoride cradle occupancy** | His155 / Trp156 / Tyr217 **H-bond-donor atom** within 5.5 Å of the departing F | Electrostatic + aromatic stabilisation of F⁻ departure; donor-atom test avoids a ring carbon spuriously satisfying the gate |
-| **Nucleophile-resolution guard** | Tier_1A requires the catalytic Asp to be a direct alignment hit or a tight (≤ 2-residue) windowed rescue, recorded in `nuc_resolution` | The ±5 resolver can otherwise latch onto a non-catalytic Asp; the elite tier is barred from far-fetched rescues |
+| **Nucleophile-resolution guard** | Tier_1A requires the catalytic Asp to be a direct alignment hit or a tight (≤ 2-residue) windowed rescue, recorded in `nuc_resolution` | The ±5 resolver can otherwise latch onto a non-catalytic Asp; the elite tier is barred from improbable realignments |
 | **Confidence demotion** | A Tier_1A hit whose Boltz confidence < 0.85 is demoted one notch to Tier_1B; the raw geometric tier is retained in `geometric_tier` | Guards the headline elite claim against an unconfident predicted fold |
 | **Size-fair backbone-clash veto** | A pose is decoyed when the backbone-clash **fraction** ≥ 0.15 **and** count ≥ 3 (clashing tail atoms / ligand heavy atoms) | Fraction-based, so a long PFAS is not penalised for length the way a flat clash count would |
 
-**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr217 basket, is **classified non-degrader regardless of Boltz-2 confidence** — high-affinity binders are not FAcDs. Beyond that, recalcitrance is folded into the tier as a **graded** penalty on `mechanistic_score_effective`: the chemistry penalty (scissile C–F BDE above 123 kcal/mol + backside occlusion above 2.0 Å) demotes the SN2 dead-end **TFA to ≈ Tier_2B on a typical pose**, and the pocket-containment penalty demotes oversized chains — both proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Critically, the α-chemistry penalty **fades with a near-ideal SN2 attack angle** (applied in full at/below 175°, waived at/above 180°): a variant that organises TFA into a ≥175° near-linear Walden trajectory has the pre-filter penalty deferred and **surfaces to Tier_1A as an experimental lead ranked below the native substrates**, while the poor-angle DeHa4×TFA control (~159°) keeps the full penalty and stays low. The β-fluorination and containment penalties do **not** fade, so a perfluoroalkyl chain is never rescued by a single favourable angle. The **`feasibility_factor`** and the two-factor **`sn2_dead_end`** flag remain reported diagnostics. The activation barrier is decided downstream by **Step-07 QM/MM** (the final arbiter); DeHa4's inability to turn over TFA (Wackett 2022) does not prove no FAcD variant can — the near-ideal geometry is exactly the prerequisite such a variant would need — hence graded not vetoed. Within a tier, ties break on `competence_score` → catalytic constellation (Criterion B) → active-site conservation → **`model_degrader_consensus`** (the fraction of Boltz diffusion samples that agree — a reproducible pose floats above a single-frame fluke, but is never filtered). A control assertion flags the run if the native substrates FA/DFA fail to register as degraders.
+**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr217 basket, is **classified non-degrader regardless of Boltz-2 confidence** — high-affinity binders are not FAcDs. Beyond that, recalcitrance is folded into the tier as a **graded** penalty on `mechanistic_score_effective`: the chemistry penalty (scissile C–F BDE above 123 kcal/mol + backside occlusion above 2.0 Å) demotes the SN2 dead-end **TFA to ≈ Tier_2B on a typical pose**, and the pocket-containment penalty demotes oversized chains — both proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Critically, only the **backside-occlusion** half of the chemistry penalty fades with a near-ideal SN2 attack angle (applied in full at/below 175°, waived at/above 180°) — occlusion is a steric obstruction of the attack trajectory, and a pose that reaches 180° has by construction cleared it. The **C–F bond-dissociation energy does not fade**, because the strength of the bond being broken is a property of the bond and not of the angle of approach. A scissile C–F above `TIER_ELITE_BDE_MAX` (123 kcal/mol) is therefore **barred from Tier_1A at any angle** and capped at Tier_1B: **TFA (α-CF₃, 127.5 kcal/mol) is a Tier_1B discovery lead, not an elite hit**, however perfectly a variant organises it. The β-fluorination and containment penalties likewise do not fade, so a perfluoroalkyl chain is never rescued by a single favourable angle. The **`feasibility_factor`** and the two-factor **`sn2_dead_end`** flag remain reported diagnostics. The activation barrier is decided downstream by **Step-07 QM/MM** (the final arbiter); DeHa4's inability to turn over TFA (Wackett 2022) does not prove no FAcD variant can — the near-ideal geometry is exactly the prerequisite such a variant would need — hence graded not vetoed. Within a tier, ties break on `competence_score` → catalytic constellation (Criterion B) → active-site conservation → **`model_degrader_consensus`** (the fraction of Boltz diffusion samples that agree — a reproducible pose floats above a single-frame fluke, but is never filtered). A control assertion flags the run if the native substrates FA/DFA fail to register as degraders.
 
-**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide — high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-base electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
+**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide — high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-acid electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
 
 ---
 
@@ -195,7 +196,7 @@ flowchart TD
         CFG --- UTL --- ENV
     end
 
-    START([🧬 &nbsp; Input FASTA + SMILES &nbsp;]) --> M1
+    START(["🧬 &nbsp; Input FASTA + SMILES &nbsp;"]) --> M1
     M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~699 lines &nbsp; "] --> M2
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
@@ -265,7 +266,7 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 
 A function-level knowledge graph of the whole pipeline (605 nodes · 1,222 edges ·
 38 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
-and regenerated on major code changes. **`CFG` is the top god node (betweenness
+and regenerated on major code changes. **`CFG` is the top primary hub node (betweenness
 0.574)** — every module's thresholds and figure colours route through it, which is
 the single-source-of-truth architecture showing up structurally.
 
@@ -278,7 +279,7 @@ The screenshot below shows the **full 605-node graph** coloured by its
 > The image above (`docs/code_graph.png`) is a **static** screenshot of the
 > interactive graph. For the live version (zoom, pan, community filter, node
 > search) open [`docs/code_graph.html`](docs/code_graph.html) locally (clone →
-> open in any browser). The audit trail (god nodes, communities, surprising
+> open in any browser). The audit trail (primary hub nodes, communities, surprising
 > connections) is in [`docs/code_graph_report.md`](docs/code_graph_report.md).
 
 ---
@@ -324,7 +325,7 @@ FAcDs_PFAS-27_Defluorination/
 │   │
 │   ├── 2_Best_Complexes_CIFs/           ← Top-ranked CIF per protein × ligand (generated by 02_Production_FAcDs.py)
 │   │
-│   ├── 3_Validation_Figures/            ← 51 figure panels + 5 Ramachandran controls in 8 numbered folders + validated master CSV (generated by 03_Validation_Figures_FAcDs.py)
+│   ├── 3_Validation_Figures/            ← 53 figure panels + 5 Ramachandran controls in 8 numbered folders + validated master CSV (generated by 03_Validation_Figures_FAcDs.py)
 │   │
 │   ├── 4_Dendrogram/                     ← Interactive phylogenetic D3 tree apps (generated by 04_Dendrogram_FAcDs.py)
 │   │
@@ -343,15 +344,15 @@ FAcDs_PFAS-27_Defluorination/
 │   │
 │   └── 7_MD_Thermodynamics_Results/     ← MD + NAC analysis + QM/MM engine outputs (generated by 07_MD_QMMM_Defluorination_FAcDs.py)
 │       ├── Rank_N_<Name>/               ← Per-candidate: PBC-corrected frame (_Ideal_Final.maegz), NAC + WaterMap dashboard/CSV, MD_Stats.json (resume cache), and <job>_QSite_SN2/ (QSite .in/.mae + run output + defluorination energy profile/CSV/renders)
+│       ├── 00_MD_Thermodynamics_Engine.log ← Step 07 engine execution log
 │       ├── 08_MD_Master_Ranking.csv     ← Master ranked thermodynamic validation CSV (NAC dwell ns, QSite ΔE‡/ΔE_rxn, departing-F charge, NAC-conditioned + component-decomposed MM-GBSA, Defluor_Propensity / Is_Defluorinating verdict)
-│       ├── 12_Defluorination_Landscape.png ← whole-story figure: catalytic persistence × QM/MM barrier × binding
-│       └── Rank_N_<Name>/*_QSite_Reaction_Profile.png (PES + departing-F charge = C–F-cleavage proof) · *_MMGBSA_NAC_Decomposition.png (energy components + machinery engagement)
 │       ├── 09_MD_Comparative_Analysis.png ← MD frames distance/angle distributions
 │       ├── 10_MD_Viability_Summary.png  ← Parallel nested viability bar chart
-│       ├── 11_WaterMap_SN2_Context.png  ← WaterMap ΔG vs SN2 viability + ΔH/−TΔS decomposition
-│       ├── 12_QSite_Reaction_Profiles.png ← All-rank QM/MM defluorination energy overlay
-│       ├── 13_QSite_Barrier_Comparison.png ← Per-rank activation barrier ΔE‡ bars
-│       └── 14_MD_Thermodynamics_Engine.log ← Step 07 engine execution logs
+│       ├── 11_Comparative_Residue_Engagement.png ← Heatmap: mean distance of each catalytic residue to the warhead C, all cases
+│       ├── 12_Defluorination_Landscape.png ← whole-story figure: catalytic persistence × QM/MM barrier × binding
+│       ├── 13_MMGBSA_Decomposition_AllRanks.png ← ΔG components, whole trajectory vs reactive (NAC) pose, all candidates
+│       ├── 14_Machinery_Engagement_AllRanks.png ← Per-residue median distance + contact occupancy against the CFG criterion bands
+│       └── Rank_N_<Name>/*_QSite_Reaction_Profile.png (PES + departing-F charge = C–F-cleavage proof) · *_MMGBSA_NAC_Decomposition.png (per-candidate ΔG components) · *_Machinery_Engagement.png (per-candidate residue engagement)
 │
 ├── PFAS_Geneious.geneious           ← Geneious alignment project (auxiliary)
 └── LICENSE                          ← CC BY-NC 4.0
@@ -538,7 +539,7 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 
 ## 💻 Technical reference
 
-### 📖 Script catalog
+### 📖 Script catalogue
 
 <details>
 <summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
@@ -786,8 +787,13 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 | `confidence_score` / `Boltz_Model_Confidence` | Boltz-2 global confidence of the selected model |
 | `binding_likelihood_computed` | Sigmoid composite of ipTM, pLDDT, interaction density, cross-PAE, confidence |
 | `identity_pct` | Sequence identity of candidate to DEHA4 reference (BLOSUM62 alignment) |
-| `dist_Nuc` → `Dist_Nucleophile` | Nucleophile–substrate α-carbon distance (Å); ≤ 3.0 Å (Tier_1A) / ≤ 3.8 Å relaxed |
+| `dist_Nuc` → `Dist_Nucleophile` | **Attacking** Asp-Oδ → substrate α-carbon distance (Å) — the same oxygen the SN2 angle is measured on; ≤ 3.0 Å (Tier_1A) / ≤ 3.8 Å relaxed |
+| `dist_Nuc_nearest_O` | Closest approach over **both** Asp-Oδ (diagnostic). Differs from `Dist_Nucleophile` when the nearer oxygen is not the aligned one |
 | `sn2_attack_angle` | SN2 attack angle (°); target ≥ 170° (Tier_1A) |
+| `pocket_containment_cavity` | Fraction of ligand heavy atoms enclosed by the **protein cavity** (ray-cast buriedness ≥ `BURIAL_MIN`) — the containment term the tier gate penalises |
+| `pocket_containment_site8` | Fraction of ligand heavy atoms within `SITE8_SHELL_A` of the **eight mapped catalytic residues** — catalytic engagement (reported, does not gate) |
+| `ligand_buriedness_mean` | Mean per-atom buriedness (continuous companion to `pocket_containment_cavity`) |
+| `angle_multiplicity` | Šidák exponent actually applied: 2 (the two Asp oxygens) when the fluoride cradle resolves the leaving F, else 2 × the fluorine count on the scissile carbon |
 | `dist_nuc_base_internal` / `dist_base_acid_internal` | Internal catalytic-triad distances (Å) |
 | `mechanistic_score` | **In-house composite (not a standard literature formula)** — 0–1 holistic score: nucleophile reach + triad relay distances + carboxylate clamp + halide stabilisation + **Šidák-corrected SN2 attack angle**, CFG-weighted (sum = 1.0). Components are literature-derived (NAC, triad geometry, Walden inversion); the weighting/saturation are bespoke. The **tier-gate key** — **geometry + machinery only, no chemical-feasibility term** (chemistry rides in `competence_score` and Step-07 QM/MM, never in the tier gate) |
 | `scissile_cf_bde` | SN2 dead-end indicator **A** — estimated leaving C–F bond-dissociation energy (kcal/mol) from the attack carbon's fluorination (O'Hagan 2008); > 123 = too strong to cleave |
@@ -796,7 +802,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 | `scissile_is_alpha` | 1.0 = the SN2 attack carbon is the α-carbon adjacent to the carboxylate (productive defluorination); required for every degrader tier |
 | `nuc_resolution` | How the catalytic Asp was resolved from the alignment: `direct` (exact column) or `window+N` / `window_gap+N` (N-residue rescue). Tier_1A requires `direct` or N ≤ 2 |
 | `nuc_rescue_offset` | Residue offset of a windowed nucleophile rescue (0 = direct alignment hit) |
-| `carboxylate_clamp_integrity` | Ligand –COO⁻ clamp engagement: 1.0 = bidentate (both arginines salt-bridged), 0.5 = one arm, 0.0 = none |
+| `carboxylate_clamp_integrity` | Ligand –COO⁻ clamp engagement: 1.0 = bidentate (both arginines salt-bridged **to distinct carboxylate oxygens**), 0.5 = one arm, or both arms collapsed onto the same oxygen, 0.0 = none |
 | `active_site_integrity` | **Criterion A** — fraction (0–1) of the eight catalytic residues present and correctly typed (identity/presence of the machinery) |
 | `catalytic_constellation_score` | **Criterion B** — `1/(1+Active_Site_RMSD_to_Control)` (0–1); how crystal-like the eight catalytic residues are geometrically assembled. A per-tier floor **caps** the tier (downgrade-only); also a within-tier ranking key above conservation |
 | `active_site_plddt` | Mean Boltz pLDDT over the eight mapped catalytic residues (local active-site confidence, distinct from the global `mean_plddt`) |
@@ -820,7 +826,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 | Tier_4 | — | ≤ 8.0 Å | — |
 | Tier_5_Decoy | — | > 8.0 Å | — |
 
-> ¹ **Coupled elite gate (Tier_1A):** mech ≥ `MECH_ELITE_HI` (0.90) **OR** (mech ≥ `MECH_ELITE_LO` (0.85) **AND** constellation B ≥ `MECH_ELITE_CONSTELLATION` (0.74)). The ladder mech floor is 0.85; the coupled clause lets a slightly backside-occluded native substrate (α-CF₃ TFA caps at 0.85) reach elite only with a crystal-exact constellation.
+> ¹ **Coupled elite gate (Tier_1A):** mech ≥ `MECH_ELITE_HI` (0.90) **OR** (mech ≥ `MECH_ELITE_LO` (0.85) **AND** constellation B ≥ `MECH_ELITE_CONSTELLATION` (0.74)). The ladder mech floor is 0.85; the coupled clause lets a slightly backside-occluded substrate reach elite only with a crystal-exact constellation. It cannot rescue a bond that is too strong to break: the `TIER_ELITE_BDE_MAX` ceiling (123 kcal/mol) is applied independently, so an α-CF₃ substrate such as TFA is capped at Tier_1B whatever its constellation or angle.
 >
 > Tier_1A/1B/2A tiers additionally require the internal catalytic-triad distances
 > (Nuc–Base ≤ `TIER_NB_MAX`, Base–Acid ≤ `TIER_BA_MAX`). Beyond the table, every degrader
@@ -846,7 +852,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
-**Generated figures (up to 51 figure panels across folders 02–08 + 5 Ramachandran control plots in folder 01; the Hidden-Gems panel is emitted only when rescue candidates exist), written to `3_Validation_Figures/` in eight numbered, content-matched folders:**
+**Generated figures (up to 53 figure panels across folders 02–08 + 5 Ramachandran control plots in folder 01; the Hidden-Gems panel is emitted only when rescue candidates exist), written to `3_Validation_Figures/` in eight numbered, content-matched folders:**
 - **`01_Ramachandran/`** — control backbone-geometry validation: 3R3U crystal, DeHa4 and 3R3U Boltz-2 controls, each with a crystal-overlay comparison.
 - **`02_Dataset_and_Alignment_Overview/` (01–04):** active-site residue mapping coverage (data labels inside bars), tier distribution + model-selection pie, sequence-identity grades, tier × grade cross-tabulation.
 - **`03_AI_Confidence_Quality/` (01–03):** Boltz-2 confidence assessment, Tier_1A pTM/ipTM quality space (structure thumbnails), pTM vs ipTM scatter.
@@ -855,9 +861,9 @@ python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z
 - **`06_PFAS_Scope_and_Synthesis/` (01–13):** radar profiles (top hits + tier reps), tier success rates, confidence × SN2 landscape, conflict composition, hidden gems, Euler overlap, top-25 multitarget proteins, top-tier PFAS breakdown, Sankey workflow, PFAS chain-length hexbin / composition / carbon-confidence-MW panels.
 - **`07_Diagnostic_and_MultiModel_Trends/` (01–09):** pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) — scatter panels annotated with Spearman ρ / p / n.
 
-**Data outputs (folder root):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt`, `06_Analysis_Log.txt`.
+**Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt`, `06_Statistical_Tests.csv` (BH-corrected q-values for every test on every panel), `06_Analysis_Log.txt`.
 
-**Statistics:** Pareto fronts (unified duplicate handling), pairwise-complete Spearman correlations with Benjamini–Hochberg FDR on unique pairs, bootstrap 95% CIs for plotted medians. Colours sourced from CFG (single source of truth).
+**Statistics:** Pareto fronts (unified duplicate handling), pairwise-complete Spearman correlations with Benjamini–Hochberg FDR on unique pairs, bootstrap 95% CIs for plotted means. Every hypothesis test drawn on a panel (Kruskal–Wallis across tiers, paired Wilcoxon ipTM vs pTM, silhouette label-permutation for UMAP tier separation) is registered and the **whole family is corrected once by Benjamini–Hochberg**; the panel shows the raw test result and the corrected q-values are written to `00_Analysis_Data/06_Statistical_Tests.csv`, which is the value to quote. Colours, fonts and grid sourced from CFG through `utils.apply_figure_style()` (single source of truth).
 
 **Configuration (CFG §13):** figure DPI, fonts, axis proportions, maximum display ranks.
 </details>
@@ -996,15 +1002,99 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
     3.  **Desmond SID Post-Processing:** Step 06 post-processes the trajectories (runs sequentially or automatically via the pipeline runner) to generate the event-analysis `.eaf` files (see [`06_SID_Prime-MMGBSA_FAcDs.py`](./06_SID_Prime-MMGBSA_FAcDs.py)).
     4.  **WaterMap Hydration Mapping:** Desmond trajectories are analysed via Schrödinger WaterMap to generate hydration thermodynamics (exported CSVs are placed under `6_Physics_Validation/WaterMaps/`).
 
+---
+
+#### 🧪 `6_Physics_Validation/` — the manual Maestro steps: settings, job naming, layout
+
+Steps 06 and 07 read the Desmond and WaterMap outputs **by path and by job name**. Nothing here is
+guessed from file content, so a mis-named job is silently invisible to the pipeline. Set up the runs
+exactly as below.
+
+**Directory layout** (produced by Maestro; the pipeline only reads it):
+
+```
+6_Physics_Validation/
+├── SystemBuilder/
+│   ├── desmond_setup_R_1/               ← solvated, neutralised system per rank
+│   ├── desmond_setup_R_2/
+│   └── desmond_setup_R_<N>/
+├── MolecularDynamics/
+│   ├── desmond_md_job_R_1/              ← Desmond production run  (read by Step 06 + 07)
+│   │   ├── desmond_md_job_R_1-out.cms   ← topology + final frame
+│   │   ├── desmond_md_job_R_1_trj/      ← trajectory
+│   │   └── desmond_md_job_R_1-out.ene   ← energy stream (equilibration check)
+│   ├── desmond_md_job_R_2/
+│   ├── MD_Simulation_Results_R_1/       ← Step 06 SID output (.eaf, report)
+│   ├── MD_Simulation_Results_R_2/
+│   └── Prime_MMGBSA/                    ← Step 06 MM-GBSA output
+├── WaterMaps/
+│   ├── watermap_R_1/                    ← WaterMap job directory
+│   ├── watermap_data_R_1.csv            ← exported hydration-site table (read by Step 07)
+│   └── watermap_data_R_1.png
+└── <Project>.prj/                       ← Maestro project (not read by the pipeline)
+```
+
+**Job naming — this is a contract, not a convention.** `R_<n>` is the **`MD_Rank`** column from the
+ranked CSV (the MD-selected cohort, 1…N), *not* `Scientific_Rank`. Steps 06 and 07 locate every
+artefact from this name:
+
+| Artefact | Required job name | Example |
+|---|---|---|
+| System Builder | `desmond_setup_R_<n>` | `desmond_setup_R_1` |
+| Desmond MD | `desmond_md_job_R_<n>` | `desmond_md_job_R_1` |
+| WaterMap | `watermap_R_<n>` | `watermap_R_1` |
+| WaterMap export | `watermap_data_R_<n>.csv` | `watermap_data_R_1.csv` |
+
+**System Builder settings:**
+
+| Setting | Value | Why |
+|---|---|---|
+| Solvent model | **TIP3P** (SPC equally valid) | Both are rigid 3-site models within OPLS4's validated envelope. Do **not** switch to TIP4P variants: OPLS4, Prime MM-GBSA and WaterMap are all validated against SPC/TIP3P. Note the limitation — TIP3P self-diffusion is ~2.4× too fast, so water residence and blockade counts from Step 07 are **lower bounds** |
+| Box shape / buffer | Orthorhombic, **10 Å** | Standard; the ligand stays pocket-bound so the buffer is set by the protein |
+| Force field | **OPLS4** | Must match the WaterMap and MD force field |
+| Ion placement | **Neutralise** + **Add salt 0.15 M NaCl** | The active site is an anion trap (Asp nucleophile, Asp acid, carboxylate ligand). Counter-ions alone give no ionic strength and leave that electrostatics under-screened |
+| **Excluded region** | **Exclude ion and salt placement within 5 Å** of the ligand | **Required.** A Na⁺ placed on the Asp-Oδ screens the nucleophile and corrupts the NAC geometry being measured. Step 07 additionally flags any cation that *diffuses* into the site during the run (`Cation_Capped`, `CATION_CAP_DIST` = 3.0 Å) — a high `Cation_Capped_Pct` means this exclusion was too small |
+
+**Desmond MD settings:**
+
+| Setting | Value | Why |
+|---|---|---|
+| Ensemble / T / P | **NPT**, 300 K, 1.01325 bar | Physiological; NPT lets the box equilibrate |
+| Relax model system | **On** | Default Desmond relaxation protocol before production |
+| Simulation time | **≥ 300 ns** | NAC occupancy and dwell converge well before 1 µs |
+| Recording interval | **20–50 ps** | 10 ps over 1 µs = 100,000 frames per system — that is what fills the scratch disk and makes the Step-07 SID pass take hours. 20 ps/300 ns = 15,000 frames resolves nanosecond NAC dwell fully |
+| Energy interval | 1.2 ps (default) | This is the `.ene` stream the equilibration check reads |
+| Interactions analysis on completion | **Off** | Step 06 runs SID itself |
+
+**WaterMap settings:**
+
+| Setting | Value | Why |
+|---|---|---|
+| Binding site | **Ligand**, analyse waters within **10 Å** | Must be ≥ `WATERMAP_SITE_RADIUS` (5.0 Å), which is the radius Step 07 actually reads |
+| **Retain ligand** | **On** | Deliberate, and a departure from the canonical protocol. Standard WaterMap strips the ligand and reports **displacement** free energies for the apo pocket. Step 07 instead asks whether a water **blocks the Asp→Cα attack runway in the holo complex**, so the site map must describe the same system the MD does. **Consequence: the ΔG values are stabilities of waters in the occupied pocket, and must NOT be reported as displacement thermodynamics** |
+| Force field | **OPLS4** | Must match System Builder |
+| Truncate protein | On | Speed; the site is local |
+| Existing waters | As solvent | |
+| Simulation time | **5 ns** (≥ 1.5 ns required) | |
+
+**Ligand parameters (PFAS-specific).** The perfluoro ligands take OPLS4's assigned charges by
+default. Fixed-charge force fields under-represent fluorine polarisability, which is worst for a
+perfluoroalkyl carboxylate — a hard-charged head on a long, weakly-polarisable-modelled tail. For the
+polyfluorinated ligands (C6O4, TFA), **QM-derived ESP charges (Jaguar)** are the meaningful upgrade;
+they change the α-carbon's electrophilicity, which is precisely what the SN2 depends on. This affects
+the result far more than the water model does.
+
+---
+
 *   **Step 07 Analysis & QM/MM Automation (Performed by Script):**
     1.  **Smart-Lock residue identification** — 3D geometry-biased automatic detection of catalytic triad residues from structure (no manual input required)
     2.  **NAC trajectory analysis** — parses the Desmond trajectory to compute geometry metrics (Nuc–C distance, SN2 angle, triad distances, Walden improper dihedral, and cradle occupancy) across all frames.
-    3.  **WaterMap thermodynamic integration** — reads the hydration-site CSV reports to calculate dG-weighted water blockade scores on the SN2 reaction runway.
+    3.  **WaterMap thermodynamic integration** — reads the hydration-site reports to calculate ΔG-weighted water blockade scores on the SN2 reaction runway. **Every frame is superimposed (Kabsch, on Cα) onto the structure the WaterMap sites were computed in before a single site distance is taken, and the sites are carried across with the protein.** This is not optional: the protein diffuses and tumbles through the periodic box — measured on this project's own trajectory, the Cα centroid moves 30–45 Å over 1 µs while the fold stays rigid (2–3 Å RMSD once superimposed) — so comparing an MD coordinate against a static site coordinate compares two unrelated frames. Sites are read only from atoms carrying `r_watermap_deltaG`; a WaterMap *input* file (which contains the protein, not the sites) is rejected rather than being read as thousands of zero-ΔG "sites". If the sites cannot be aligned, WaterMap scoring is disabled for that rank rather than reported wrongly.
     4.  **Conformation frame scoring** — ranks all frames using a multi-parameter scoring function to locate the ideal conformation.
-    5.  **PBC-corrected frame extraction** — the chosen frame is snapped into the CMS model, then `make_whole_cms` + `center_cms` repair periodic-boundary wrapping (reconnect split molecules and re-centre the box on the protein+ligand) before the full system is written to `<Rank>/<job>_Ideal_Final.maegz`. This removes the "protein at the box edge / water box on one side" artifact produced by writing a raw wrapped frame.
-    6.  **QSite input generation** — a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP/6-31+G(d,p) QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His277, Acid Asp134, StabH His155 sidechains + ligand — these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3. No implicit-solvation keyword is emitted — the extracted frame keeps its explicit TIP3P box in the MM region, so adding implicit solvation would double-count.
+    5.  **PBC-corrected frame extraction** — the chosen frame is snapped into the CMS model, then `make_whole_cms` + `center_cms` repair periodic-boundary wrapping (reconnect split molecules and re-centre the box on the protein+ligand) before the full system is written to `<Rank>/<job>_Ideal_Final.maegz`. This removes the "protein at the box edge / water box on one side" artefact produced by writing a raw wrapped frame.
+    6.  **QSite input generation** — a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The scan runs the non-diffuse `QSITE_SCAN_BASIS` (6-31G**) for SCF stability — a diffuse basis on a large QM region drives near-linear-dependence and aborts scan points — and emits `mulken=1`, without which Jaguar writes **no charge table at all** and the departing-fluoride charge cannot be parsed. Residues with no Cβ (glycine) and prolines (whose Cα–Cβ cut would sever the pyrrolidine ring) are dropped from the QM region rather than aborting the job. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His277, Acid Asp134, StabH His155 sidechains + ligand — these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3 — verified directly against a real QM/MM input: Jaguar aborts with `ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts: DFT(b3lyp-d3)`. **This is a declared limitation, not an oversight:** the substrate is polyfluorinated and the C–F···π contacts against the Trp/Tyr cradle are dispersion-bound, so the barrier is computed without them; dispersion would require abandoning the frozen-cut QM region altogether. No implicit-solvation keyword is emitted — the extracted frame keeps its explicit TIP3P box in the MM region, so adding implicit solvation would double-count.
     7.  **Automated QSite execution** — unless disabled, `$SCHRODINGER/qsite` is launched on each generated input, with all output written to a per-candidate folder `<Rank>/<job>_QSite_SN2/`. Execution is **idempotent**: if that folder already exists the whole QSite step is skipped (mirroring the PDB-preparation cache), so re-runs do not resubmit completed jobs. A live scan-point heartbeat reports progress.
-    8.  **QM/MM defluorination figures** — once a scan finishes, the relaxed-scan energies are parsed into the SN2 reaction profile: a per-job 2-panel figure (`<job>_QSite_Energy_Profile.png`) showing the activation energy + breaking C–F distance with reactant/TS/product regions shaded, plus the O···C···F backside-attack angle (≈180° at TS confirms Walden inversion). A profile CSV is persisted and reloaded into the cross-rank overlay (`12_QSite_Reaction_Profiles.png`) and barrier comparison (`13_QSite_Barrier_Comparison.png`). Best-effort headless Maestro renders of the QM-region structures are also attempted.
+    8.  **QM/MM defluorination figures** — once a scan finishes, the relaxed-scan energies are parsed into the SN2 reaction profile: a per-job figure (`<job>_QSite_Reaction_Profile.png`) showing the potential-energy surface along the reaction coordinate together with the departing-fluoride Mulliken charge (→ ≈ −0.9 as F leaves — the C–F-cleavage proof). A profile CSV is persisted and reloaded into the cross-rank `12_Defluorination_Landscape.png`. **A scan that resolves no transition state (monotonically downhill from the first point) reports its barrier as NaN, never as 0.0** — a fabricated zero would read as 'barrierless', the strongest possible claim, from a scan that simply failed. Best-effort headless Maestro renders of the QM-region structures are also attempted.
     9.  **WaterMap ↔ SN2 + dashboards** — each per-job dashboard gains a WaterMap panel (displaceable active-site waters), and a combined `11_WaterMap_SN2_Context.png` relates hydration ΔG to SN2 viability with an ΔH/−TΔS decomposition.
     10. **Smart MD resume** — when a rank already has valid per-job outputs (`NAC_Data.csv` + dashboard + extracted frame), the 6–7 h trajectory analysis is **skipped**: summary stats are sourced from a persisted `MD_Stats.json`, or exactly reconstructed from the per-frame `NAC_Data.csv` classification flags. Only the (cheap) QSite figures are regenerated. Mirrors the QSite folder-wise skip.
 
@@ -1012,11 +1102,24 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 
 | Parameter | Strict NAC | Relaxed NAC |
 |-----------|-----------|-------------|
-| Nuc–C distance | ≤ 3.2 Å | ≤ 3.8 Å |
+| Nuc–C distance (**attacking** Oδ) | ≤ 3.2 Å | ≤ 3.8 Å |
 | SN2 attack angle (O–C–F) | ≥ 155° | ≥ 145° |
 | Catalytic triad NB (MD) | ≤ 6.5 Å | ≤ 6.5 Å |
 | Catalytic triad BA (MD) | ≤ 9.0 Å | ≤ 9.0 Å |
 | Walden improper dihedral | ≤ 15° | — |
+
+The NAC distance and the NAC angle are measured on the **same** aspartate oxygen — the one giving the
+best backside O–C–F angle. Taking the distance from the nearer oxygen and the angle from the other
+describes a nucleophile that does not exist, and lets a frame pass the NAC criterion on an oxygen
+that is not attacking. The closest approach over both oxygens is retained as `Nuc_Min_Dist_A`, which
+is what pocket residency means.
+
+**Frame-integrity flags (per-frame CSV + `MD_Stats.json`):**
+
+| Flag | Meaning | Effect |
+|---|---|---|
+| `Cation_Capped` / `Cation_Capped_Pct` | A counter-ion (Na⁺/K⁺/Mg²⁺/Ca²⁺) sits within `CATION_CAP_DIST` (3.0 Å — inner-sphere) of the nucleophile Oδ or a ligand carboxylate oxygen. PFAS carboxylates pair strongly with Na⁺, and such a frame's NAC geometry can look ideal while the catalytic charge is screened | Frame is flagged and reported, and **barred from QM/MM frame selection** — a QM region containing a Na⁺ on the nucleophile computes that ion pair's barrier, not the enzyme's. A high `Cation_Capped_Pct` means the System Builder ion-exclusion region was too small |
+| `Fold_RMSD_A` / `Frames_Fold_Rejected` | Cα RMSD of the frame against the WaterMap reference exceeds `MD_FOLD_RMSD_MAX` (3.0 Å) | The frame's WaterMap term is **withheld** (a rigid transform exists between any two point sets, so a broken fold still yields a rotation and the sites it carries land arbitrarily). Its geometry is kept |
 
 **Memory Requirements & Concurrency Control:**
 As the final computational analysis step, the following design architectures are built in to ensure robust execution and prevent memory exhaustion:

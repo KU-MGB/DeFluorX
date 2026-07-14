@@ -7,6 +7,13 @@ FAcDs Pipeline  |  Step 02  |  Boltz-2 Production, Analysis & FAcD Ranking
 Large-scale, resume-safe Boltz-2 protein-ligand predictions with deep
 structural, geometric, and chemical scoring for FAcD SN2 degrader tiers.
 
+Clean/final build: all old-format folder/file migration and job-name renaming
+have been removed. Resume (--resume) is retained and reuses completed GPU
+predictions (boltz_results_*/), recomputing only analysis; it assumes the input
+roster (proteins × ligands) is stable across resumes — change parameters and
+re-run, not the ligand/protein list. Only the canonical directory layout and
+job-naming scheme are supported.
+
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 10 July 2026 <────────────────────────────────────────────────────────
 
@@ -442,6 +449,10 @@ POSITIVE_RES = CFG.POSITIVE_RES
 NEGATIVE_RES = CFG.NEGATIVE_RES
 METALS       = CFG.METALS
 
+# Protein backbone atom names — the amide N and carbonyl O are not the formally charged
+# groups, so they are excluded from salt-bridge assignment (see classify_pair).
+_BACKBONE_ATOMS = {"N", "CA", "C", "O", "OXT"}
+
 """
 Protonation-variant → canonical residue name normalisation (CFG §2.9).
 Force-field engines rename residues to encode protonation state; this
@@ -581,7 +592,9 @@ DEFAULT_METRICS = {
     "pocket_occupancy": 0.0,                # ligand_volume / active_site_volume (convex-hull proxy; not a tier input)
     "fit_ratio": 0.0,                       # (ligand_max_extent/2) / active_site_radius (convex-hull proxy; not a tier input)
     "ligand_fits": 0,                       # 1 = ligand within the convex-hull envelope on both proxies
-    "pocket_containment": 1.0,              # frac of ligand heavy atoms within CONTAINMENT_RADIUS of the carboxylate anchor
+    "pocket_containment_cavity": 1.0,       # frac of ligand heavy atoms enclosed by the PROTEIN cavity (ray-cast buriedness ≥ BURIAL_MIN) — the tier-gate term
+    "pocket_containment_site8": 1.0,        # frac of ligand heavy atoms within SITE8_SHELL_A of the eight mapped active-site residues (catalytic engagement; reported)
+    "ligand_buriedness_mean": 0.0,          # mean per-atom buriedness (blocked ray fraction) — continuous companion to pocket_containment_cavity
     "ligand_reach": 0.0,                    # Å; farthest ligand atom from the carboxylate anchor (molecular reach out of the pocket)
     "chem_penalty": 0.0,                    # graded BDE+occlusion penalty subtracted from mech for the tier gate
     "containment_penalty": 0.0,             # graded pocket-fit penalty subtracted from mech for the tier gate
@@ -607,7 +620,6 @@ CACHED_ALIGNMENTS: Dict[str, Dict] = {}
 _PERSISTED_PROTEINS: set = set()   # proteins whose alignment .txt + stats row are already written this run
 
 GLOBAL_STATS = {
-    "renamed_yaml": 0, "renamed_dirs": 0, "renamed_files": 0,
     "created_yaml": 0, "created_aln": 0, "created_json": 0, "created_csv_rows": 0,
     "csv_columns": 0, "jobs_run_gpu": 0, "jobs_repaired_cpu": 0,
     "total_alignments_generated": 0,
@@ -695,97 +707,6 @@ def remove_stale_protein_jobs(prod_dir: Path, protein_id: str):
                 shutil.rmtree(item, ignore_errors=True)
 
 
-def job_key_from_yaml(yaml_path: Path) -> Optional[Tuple[str, str]]:
-    """Extracts the stable resume key from an existing YAML definition file."""
-    try:
-        with open(yaml_path, "r") as yf:
-            data = yaml.safe_load(yf)
-        seq = data.get("sequences", [])[0].get("protein", {}).get("sequence", "")
-        smi_raw = data.get("sequences", [])[1].get("ligand", {}).get("smiles", "")
-        smi = smi_raw
-        if smi_raw:
-            mol = Chem.MolFromSmiles(smi_raw)
-            if mol is not None:
-                smi = Chem.MolToSmiles(mol)
-        if seq and smi:
-            return sequence_hash(seq), smi
-    except Exception:
-        pass
-    return None
-
-
-def reconcile_resume_job_names(prod_dir: Path, expected_job_stems: Dict[Tuple[str, str], str]):
-    """Renames existing YAMLs and run folders to match the current input ordering during resume."""
-    yaml_dir = prod_dir / "2_Boltz2_YAML_Configs"
-    runs_dir = prod_dir / "4_Prediction_Jobs"
-    if not yaml_dir.exists():
-        return
-
-    _yamls = sorted(yaml_dir.glob("*.yaml"), key=lambda p: p.name)
-    _recon_total = len(_yamls)
-    '''
-    Set of names that are ALREADY correct. A YAML whose stem is in this set needs
-    no work, so we skip the (slow, on-USB) read+parse entirely — only mismatched
-    files are opened. On a normal resume nearly all names already match, so this
-    turns a 58k-file read storm into a near-instant set-membership scan.
-    '''
-    _expected_stems = set(expected_job_stems.values())
-    _renamed = 0
-    if _recon_total:
-        console_info(f"  Reconciling resume job names across {_recon_total:,} YAML config(s)...")
-    for _recon_i, yaml_path in enumerate(_yamls, 1):
-        if _recon_i % 1000 == 0 or _recon_i == _recon_total:
-            _tty_write(f"\r    Reconciling job names {_recon_i:,}/{_recon_total:,}  (renamed {_renamed:,})\033[K")
-        # Fast path: name already correct → no file read needed.
-        if yaml_path.stem in _expected_stems:
-            continue
-        key = job_key_from_yaml(yaml_path)
-        if not key or key not in expected_job_stems:
-            continue
-
-        expected_stem = expected_job_stems[key]
-        current_stem = yaml_path.stem
-        if current_stem == expected_stem:
-            continue
-        _renamed += 1
-
-        target_yaml = yaml_dir / f"{expected_stem}.yaml"
-        if target_yaml.exists():
-            try:
-                if yaml_path.read_text(encoding="utf-8") == target_yaml.read_text(encoding="utf-8"):
-                    yaml_path.unlink(missing_ok=True)
-                else:
-                    alternate = yaml_dir / f"{expected_stem}_{int(time.time())}.yaml"
-                    yaml_path.rename(alternate)
-                    logger.debug(f"Preserved conflicting YAML {yaml_path.name} as {alternate.name}")
-            except Exception:
-                pass
-        else:
-            try:
-                yaml_path.rename(target_yaml)
-                GLOBAL_STATS["renamed_yaml"] += 1
-            except Exception:
-                pass
-
-        old_run_dir = runs_dir / current_stem
-        new_run_dir = runs_dir / expected_stem
-        if old_run_dir.exists() and old_run_dir != new_run_dir:
-            try:
-                deep_rename_job_folder(old_run_dir, current_stem, expected_stem)
-                if new_run_dir.exists():
-                    shutil.rmtree(new_run_dir, ignore_errors=True)
-                old_run_dir.rename(new_run_dir)
-                GLOBAL_STATS["renamed_dirs"] += 1
-            except Exception:
-                pass
-
-    if _recon_total:
-        _tty_write("\r\033[K")
-        console_info(f"    Resume reconciliation complete "
-                     f"({GLOBAL_STATS.get('renamed_yaml', 0):,} YAML, "
-                     f"{GLOBAL_STATS.get('renamed_dirs', 0):,} folder(s) renamed).")
-
-
 # =============================================================================
 # SECTION 4: REFERENCE & SELF-HEALING SYSTEM (DATA RECOVERY)
 # =============================================================================
@@ -800,16 +721,6 @@ def setup_reference_data(target_dir: Path):
     if absent. Reference files live alongside the run inputs (no separate folder).
     """
     target_dir.mkdir(parents=True, exist_ok=True)
-
-    # Retire the legacy standalone reference folder, migrating its PDB if still present.
-    _legacy_ref = target_dir.parent / CFG.REFERENCE_DIR_NAME
-    if _legacy_ref.exists():
-        _legacy_pdb = _legacy_ref / f"{CFG.REFERENCE_PDB_ID}.pdb"
-        _dest_pdb = target_dir / f"{CFG.REFERENCE_PDB_ID}.pdb"
-        if _legacy_pdb.exists() and not _dest_pdb.exists():
-            try: shutil.move(str(_legacy_pdb), str(_dest_pdb))
-            except Exception: pass
-        shutil.rmtree(_legacy_ref, ignore_errors=True)
 
     pdb_path   = target_dir / f"{CFG.REFERENCE_PDB_ID}.pdb"
     fasta_path = target_dir / CFG.DEHA4_REF_FASTA
@@ -838,14 +749,7 @@ def setup_reference_data(target_dir: Path):
     else:
         console_info(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC}  DeHa4 Reference Sequence located.")
 
-    """
-    3. Create Reference SMILES (all 3 control ligands)
-    Legacy single-ligand file is superseded — always regenerate if stale or absent.
-    """
-    _legacy_smi = target_dir / "Fluoroacetate_Ref.smi"
-    if _legacy_smi.exists():
-        try: _legacy_smi.unlink()
-        except Exception: pass
+    # 3. Create Reference SMILES (all three control ligands).
     if not smi_path.exists():
         with open(smi_path, "w") as f:
             for _ln, _ls in CTRL_LIGANDS:
@@ -877,25 +781,8 @@ def extract_3r3u_sequence(pdb_path: Path) -> Optional[str]:
 
 
 # -------------------------------------------------------------------------------
-# Step 4.2: File Renaming & MSA Algorithms
+# Step 4.2: MSA Algorithms
 # -------------------------------------------------------------------------------
-def deep_rename_job_folder(job_dir: Path, old_stem: str, new_stem: str):
-    """
-    Recursively updates filenames within a job folder to reflect changes in identifier formats or protein names.
-    Matches against the complete string stem to ensure thorough renaming across all file types (such as summary.json, .cif).
-    """
-    for root, dirs, files in os.walk(job_dir, topdown=False):
-        for name in files:
-            if old_stem in name:
-                new_name = name.replace(old_stem, new_stem, 1)
-                try: (Path(root)/name).rename(Path(root)/new_name)
-                except Exception as e: logger.debug(f"Renaming operation deferred: {e}")
-        for name in dirs:
-            if old_stem in name:
-                new_name = name.replace(old_stem, new_stem, 1)
-                try: (Path(root)/name).rename(Path(root)/new_name)
-                except Exception as e: logger.debug(f"Directory renaming operation deferred: {e}")
-
 def validate_a3m_file(a3m_path: Path) -> bool:
     """
     Validates the A3M MSA file to detect corruption. Returns True if the file structure is sound.
@@ -1072,38 +959,6 @@ def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> boo
 # -------------------------------------------------------------------------------
 # Step 4.4: Stale YAML and Run Folder Cleanup
 # -------------------------------------------------------------------------------
-def sanitize_dataset(prod_dir: Path):
-    """Removes duplicate or incorrectly numbered YAML configuration files to prevent phantom tasks during resumed runs."""
-    console_info("-------------------------------------------------------------------------------")
-    console_info("YAML Duplicate Detection and Maintenance Cleanup")
-
-    yaml_dir = prod_dir / "2_Boltz2_YAML_Configs"
-    if yaml_dir.exists():
-        all_yamls = sorted(list(yaml_dir.glob("*.yaml")))
-        seen_stems = {}
-
-        for f in all_yamls:
-            match = re.match(r"^(\d+)_(.+)$", f.name)
-            if match:
-                curr_id, rest = match.group(1), match.group(2)
-                if rest in seen_stems:
-                    old_f, old_id = seen_stems[rest]
-                    if len(curr_id) > len(old_id):
-                        if old_f.exists(): old_f.unlink()
-                        seen_stems[rest] = (f, curr_id)
-                    else:
-                        if f.exists(): f.unlink()
-                else:
-                    seen_stems[rest] = (f, curr_id)
-
-                if len(curr_id) < 7:
-                    new_name = f"{curr_id.zfill(7)}_{rest}"
-                    target = yaml_dir / new_name
-                    if not target.exists():
-                        f.rename(target)
-                        seen_stems[rest] = (target, curr_id.zfill(7))
-    console_info("YAML Maintenance Completed. Standardised naming conventions enforced.")
-
 def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
     """Deletes YAML files and active run folders that are no longer referenced within the input dataset."""
     yaml_count, run_count = 0, 0
@@ -1145,7 +1000,6 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
 # -------------------------------------------------------------------------------
 def load_cached_alignments(csv_path: Path):
     """Loads previously calculated alignments into memory and ensures data types are strictly preserved."""
-    global CACHED_ALIGNMENTS
     if csv_path.exists():
         try:
             df = pd.read_csv(csv_path, dtype={"protein": str, "protein_id": str})
@@ -1656,7 +1510,8 @@ def map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol):
         min-cost over all candidates, so this only ever improves the match.
         '''
         _s0 = float(Sm[0]) if len(Sm) else 0.0
-        if len(Sm) >= 3 and _s0 > 1e-6 and abs(float(Sm[1]) - float(Sm[2])) / _s0 < 0.15:
+        if (len(Sm) >= 3 and _s0 > 1e-6
+                and abs(float(Sm[1]) - float(Sm[2])) / _s0 < CFG.PCA_DEGENERACY_TOL):
             _ax = np.asarray(Vm[0], float)
             _ax = _ax / (np.linalg.norm(_ax) or 1.0)
             _Kx = np.array([[0.0, -_ax[2], _ax[1]],
@@ -1770,12 +1625,20 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
         # are classified, not just the bare canonical codes (consistent with the rest of the engine).
         _pres = _canonical_resname(p_atom["resname"])
 
-        # Case A: cationic residue (Arg/Lys/His) vs anionic ligand group
-        if _pres in POSITIVE_RES and lig_ion == "anion":
+        # The formal charge sits on specific sidechain atoms, not the whole residue: the
+        # cationic nitrogen (Arg NH1/NH2/NE, Lys NZ, His ND1/NE2) or the carboxylate oxygen
+        # (Asp OD1/OD2, Glu OE1/OE2). Gate on the protein atom's element AND exclude backbone
+        # N/O, so a residue's backbone and sidechain carbons within SALT_BRIDGE_MAX_DIST no
+        # longer each register a spurious salt bridge (interaction-density inflation).
+        _pname = p_atom.get("atom_name", "")
+        _is_backbone = _pname in _BACKBONE_ATOMS
+
+        # Case A: cationic residue (Arg/Lys/His) vs anionic ligand group — charged sidechain N.
+        if _pres in POSITIVE_RES and lig_ion == "anion" and pel.upper() == "N" and not _is_backbone:
             is_salt_bridge = True
 
-        # Case B: anionic residue (Asp/Glu) vs cationic ligand group
-        if _pres in NEGATIVE_RES and lig_ion == "cation":
+        # Case B: anionic residue (Asp/Glu) vs cationic ligand group — carboxylate sidechain O.
+        if _pres in NEGATIVE_RES and lig_ion == "cation" and pel.upper() == "O" and not _is_backbone:
             is_salt_bridge = True
 
         if is_salt_bridge:
@@ -1962,6 +1825,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
             tree = cKDTree(prot_coords)
             indices_list = tree.query_ball_point(lig_coords, r=CFG.CATALYTIC_DIST_CUTOFF)
 
+            _salt_seen = set()   # (chain, resseq) that already contributed one salt bridge
             for i, p_indices in enumerate(indices_list):
                 la = lig[i]
                 l_pos = lig_coords[i]
@@ -1971,6 +1835,15 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
                     d = distance(p_pos, l_pos)
                     labels = classify_pair(pa, la, d, rd_mol, mm_map)
                     if labels:
+                        # Count at most one salt bridge per cationic/anionic residue: a single
+                        # Arg/Lys/His (up to 3 sidechain N) opposite a carboxylate (2 O) otherwise
+                        # registers up to 6 pairwise salt bridges for one ionic contact.
+                        if "salt_bridge" in labels:
+                            _rk = (pa.get("chain"), pa.get("resseq"))
+                            if _rk in _salt_seen:
+                                labels = [x for x in labels if x != "salt_bridge"]
+                            else:
+                                _salt_seen.add(_rk)
                         dists.append(d)
                         for l in labels: counts[l] += 1
                         if "fluorine_contact" in labels: interacting_f_set.add(la["atom_name"])
@@ -2210,7 +2083,9 @@ def perform_control_calibration(control_cif: Path, ref_pdb: Path,
                 if not ref_pos:
                     continue
 
-                min_dist   = 6.0
+                # Search radius for matching a control's catalytic residue onto its structural
+                # counterpart. A gate distance belongs in CFG, not in the loop that applies it.
+                min_dist   = float(CFG.CONTROL_RESIDUE_MATCH_RADIUS)
                 best_match = None
                 best_match_resname = ""
 
@@ -2604,8 +2479,16 @@ def _derive_burgi_dunitz(nuc_np, centres, neigh_fn, sym_fn, pos_fn):
         _cC = pos_fn(_ctr)
         if _cC is None:
             continue
-        _cO = next((pos_fn(n) for n in neigh_fn(_ctr)
-                    if sym_fn(n) == "O" and pos_fn(n) is not None), None)
+        """
+        The Bürgi-Dunitz trajectory is defined against the CARBONYL oxygen. Taking whichever oxygen
+        the neighbour list happens to yield first can return the single-bonded one on an ester or a
+        carboxylate, which points the reference vector at the wrong lone pair. The carbonyl is the
+        oxygen with the SHORTEST C–O distance (C=O ~1.21 Å against C–O ~1.31 Å), which is a
+        geometric fact of the frame and needs no bond-order perception.
+        """
+        _os = [(pos_fn(n), np.linalg.norm(np.asarray(pos_fn(n)) - np.asarray(_cC)))
+               for n in neigh_fn(_ctr) if sym_fn(n) == "O" and pos_fn(n) is not None]
+        _cO = min(_os, key=lambda t: t[1])[0] if _os else None
         if _cO is not None:
             return round(calculate_burgi_dunitz(nuc_np, _cC, _cO), 1)
     return None
@@ -2683,15 +2566,45 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             return 0.0, 999.0, 0, None, None, None
         valid_cx_pairs = _restricted
 
-    # Pick the C-X pair whose carbon is closest to a nucleophile oxygen
-    min_dist_O_C = 999.0
+    """
+    Choose the attacking oxygen and the warhead carbon by the REACTION, not by proximity.
+
+    FAcD's nucleophile is the aspartate carboxylate: it attacks the α-carbon and displaces the
+    fluoride, forming the covalent ester intermediate. Its two oxygens are resonance-equivalent, so
+    the one that reacts is the one lined up for backside attack — not the one that happens to be
+    nearer. They sit ~2.2 Å apart and can point in quite different directions, so picking the closer
+    of two chemically identical atoms can report a side-on approach (~95°) for a complex whose other
+    oxygen is properly anti-periplanar (~172°), and the pose then fails the angle gate on an
+    arbitrary tiebreak.
+
+    The pair is therefore scored by the backside O–C–F angle it produces, with the scissile fluorine
+    resolved for each candidate carbon exactly as below (cradle-coupled where the cradle is known).
+    Distance breaks ties, so among equally-aligned pairs the closest still wins.
+    """
+    def _scissile_for(_c, _o):
+        """The leaving fluorine for this carbon: the cradle-facing α-F, else the most
+        anti-periplanar one to this oxygen."""
+        _fs = [x for cc, x in valid_cx_pairs if cc == _c]
+        if not _fs:
+            return None
+        if cradle_coords:
+            _cc0 = np.mean(np.asarray(cradle_coords, float), axis=0)
+            return min(_fs, key=lambda x: (x.pos.x - _cc0[0])**2 + (x.pos.y - _cc0[1])**2
+                       + (x.pos.z - _cc0[2])**2)
+        return max(_fs, key=lambda x: calculate_angle(_o.pos, _c.pos, x.pos))
+
     best_O, best_C = None, None
+    _best_key = None
     for o in asp_oxygens:
-        for c, x in valid_cx_pairs:
-            d = o.pos.dist(c.pos)
-            if d < min_dist_O_C:
-                min_dist_O_C = d
-                best_O, best_C = o, c
+        for c, _x in valid_cx_pairs:
+            _f = _scissile_for(c, o)
+            if _f is None:
+                continue
+            _ang = calculate_angle(o.pos, c.pos, _f.pos)
+            _d = o.pos.dist(c.pos)
+            _key = (_ang, -_d)              # best backside angle first, then the shorter approach
+            if _best_key is None or _key > _best_key:
+                _best_key, best_O, best_C = _key, o, c
 
     if not best_O or not best_C: return 0.0, 999.0, 0, None, None, None
 
@@ -2728,8 +2641,22 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     try:
         vec_cx  = np.array([best_X.pos.x - best_C.pos.x, best_X.pos.y - best_C.pos.y, best_X.pos.z - best_C.pos.z])
         vec_cnu = np.array([best_O.pos.x - best_C.pos.x, best_O.pos.y - best_C.pos.y, best_O.pos.z - best_C.pos.z])
-        cross_prod = np.cross(vec_cnu, vec_cx)
-        deviation = np.linalg.norm(cross_prod) / (np.linalg.norm(vec_cx) + 1e-6)
+        """
+        Deviation from the BACKSIDE attack ray, not from the C–X line.
+
+        The perpendicular distance to the C–X line alone cannot tell a backside attack (180°, the
+        Walden inversion the mechanism requires) from a front-side approach (0°, no reaction): both
+        are collinear, and both give a perpendicular distance of zero. Measuring instead against the
+        ray that leaves C directly OPPOSITE the leaving group makes the two distinguishable — a
+        front-side nucleophile projects onto the wrong half-line, its nearest point on the ray is C
+        itself, and its deviation is its full distance from the carbon.
+        """
+        _u = vec_cx / (np.linalg.norm(vec_cx) + 1e-6)
+        _t = float(np.dot(vec_cnu, _u))          # < 0 = backside (opposite the leaving group)
+        if _t < 0.0:
+            deviation = float(np.linalg.norm(np.cross(vec_cnu, _u)))     # perpendicular offset
+        else:
+            deviation = float(np.linalg.norm(vec_cnu))                   # front side: fully off-axis
     except Exception: deviation = 999.0
 
     # Teflon Shield Calculation: Count adjacent fluorines that sterically clash with Aspartate catalytic oxygen
@@ -2780,8 +2707,19 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
         except Exception:
             beta_f_count = 0
 
+    """
+    The attacking oxygen travels with the angle it produced. The nucleophile approach distance
+    must be measured to THIS oxygen: reporting the minimum over both Oδ while taking the angle
+    from the other one describes a nucleophile that does not exist — one oxygen supplying the
+    trajectory and its partner supplying the reach.
+
+    cradle_resolved records whether the scissile fluorine was fixed by the fluoride cradle. When
+    it was, the leaving F is deterministic and the angle carries no best-of-N inflation, so the
+    Šidák multiplicity exponent must not be applied over the fluorine count (CFG §5.5).
+    """
     aux = {"burgi_dunitz_angle": 999.0, "flippin_lodge_offset": 999.0,
-           "n_scissile_f": n_scissile_f, "beta_f_count": beta_f_count}
+           "n_scissile_f": n_scissile_f, "beta_f_count": beta_f_count,
+           "attack_o_atom": best_O, "cradle_resolved": bool(cradle_coords)}
     if rd_mol and mm_map:
         try:
             inv_map   = {v: k for k, v in mm_map.items()}
@@ -2841,8 +2779,10 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                     is_leaving_fn=lambda n: inv_map.get(n.GetIdx()) == best_X.name)
                 if _fl is not None:
                     aux["flippin_lodge_offset"] = _fl
-        except Exception:
-            pass
+        except Exception as _e:
+            # A swallowed failure here leaves flippin_lodge_offset absent, and the metric then
+            # reads as "not measured" rather than "measurement failed" — say which it was.
+            logger.debug(f"Flippin-Lodge offset (RDKit path) failed: {_e}")
 
     # ── Structure-only fallback (no RDKit needed) ─────────────────────────────
     """
@@ -2885,8 +2825,8 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                     is_leaving_fn=lambda n: n is best_X)
                 if _fl is not None:
                     aux["flippin_lodge_offset"] = _fl
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug(f"Flippin-Lodge offset (structure path) failed: {_e}")
 
     return angle, deviation, teflon_clashes, best_X.pos, best_C, aux
 
@@ -2897,25 +2837,39 @@ def sigmoid(x: float, k: float = 1.0, x0: float = 0.0) -> float:
     except OverflowError:
         return 0.0 if x - x0 < 0 else 1.0
 
-def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list) -> Dict[str, Any]:
+def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
+                       all_prot_atoms: Optional[list] = None) -> Dict[str, Any]:
     """
-    Steric complementarity of the active-site pocket and the docked ligand. These are
-    DIAGNOSTIC columns by design — reported for analysis/figures, deliberately NOT a tier or
-    competence input (pocket occupancy is a weak, size-sensitive proxy; the catalytic decision
-    rests on the SN2 geometry, the constellation score and Step-07 QM/MM). The pocket is the
-    convex hull of the eight catalytic-residue
-    atoms (Nuc/Base/Acid, the two clamp arginines, the His/Trp/Tyr cradle); the ligand volume
-    is the union of its heavy-atom Bondi vdW spheres (a physical molecular volume, since the
-    convex hull of atom centres collapses to ~0 for a small/planar ligand). Reports a 3D volume
-    and a characteristic radius for each, plus occupancy (ligand_vol / pocket_vol) and a radius fit_ratio
-    (ligand half-extent / pocket radius). ligand_fits = the ligand is enclosed by the
-    pocket envelope on both measures. Degenerate hulls (< 4 points / coplanar) fall back
-    to a bounding-sphere volume so every pose returns a value.
+    Steric complementarity of the enzyme and the docked ligand.
+
+    Containment is measured TWICE, both times against protein coordinates (CFG §5.2c):
+
+      pocket_containment_cavity — does the protein cavity enclose the ligand? Each ligand heavy
+        atom casts CFG.BURIAL_RAYS rays; a ray is blocked when a protein heavy atom obstructs it
+        within CFG.BURIAL_PROBE_A. Buriedness is the blocked fraction, and an atom is contained at
+        or above CFG.BURIAL_MIN. The metric is the mean over ligand heavy atoms. This is the term
+        the tier gate penalises (mechanistic_score_effective): it is protein-dependent, so the same
+        ligand scores differently in a narrow and a wide pocket, and a wide-pocket homolog that
+        genuinely encloses a long chain is not punished for the ligand's intrinsic length.
+
+      pocket_containment_site8 — how much of the ligand sits inside the catalytic constellation?
+        Fraction of ligand heavy atoms within CFG.SITE8_SHELL_A of any heavy atom of the eight
+        mapped active-site residues (Nuc/Base/Acid, the two clamp arginines, the His/Trp/Tyr
+        cradle). This is catalytic ENGAGEMENT, not cavity fit — a tail outside the shell is outside
+        the reactive machinery. Reported and plotted; it does not gate.
+
+    The volume/occupancy fields (hull volume of the eight catalytic residues, ligand vdW volume,
+    occupancy, fit_ratio) remain DIAGNOSTIC: the eight-residue hull overstates the true cavity and
+    is blind to the rest of the fold, which is precisely why it does not decide anything. The
+    ligand volume is the union of its heavy-atom Bondi vdW spheres, since the convex hull of atom
+    centres collapses to ~0 for a small or planar ligand. Degenerate hulls (< 4 points / coplanar)
+    fall back to a bounding-sphere volume so every pose returns a value.
     """
     out = {"active_site_volume": 0.0, "active_site_radius": 0.0,
            "ligand_volume": 0.0, "ligand_radius_gyration": 0.0, "ligand_max_extent": 0.0,
            "pocket_occupancy": 0.0, "fit_ratio": 0.0, "ligand_fits": 0,
-           "pocket_containment": 1.0, "ligand_reach": 0.0}
+           "pocket_containment_cavity": 1.0, "pocket_containment_site8": 1.0,
+           "ligand_reach": 0.0}
     try:
         from scipy.spatial import ConvexHull
         from scipy.spatial.distance import pdist
@@ -2966,38 +2920,88 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list) -> 
         occ = lv / pv if pv > 0 else 0.0
         fr  = (lext / 2.0) / pr if pr > 0 else 0.0
 
-        # Catalytic-anchored pocket containment — the size-fit signal used by the tier gate.
-        # (The hull volume/occupancy above overstate the true cavity ~3× and are size-blind, so
-        # they stay diagnostic.) Anchor on the ligand carboxylate carbon (the head that binds
-        # the Arg clamp + nucleophile); containment = fraction of ligand heavy
-        # atoms within CONTAINMENT_RADIUS of it. FAcD's small pocket fully holds ≤C4
-        # (containment ≈ 1.0); longer PFAS spill out (containment falls monotonically).
-        contain, reach = 1.0, 0.0
+        """
+        (A) CAVITY CONTAINMENT — the protein-aware fit that gates.
+
+        Buriedness by ray casting: from each ligand heavy atom, CFG.BURIAL_RAYS directions are
+        spread over the sphere (Fibonacci lattice — even coverage without a mesh). A direction is
+        blocked when some PROTEIN heavy atom lies within CFG.BURIAL_RAY_CLEARANCE of the ray axis,
+        ahead of the atom and no farther than CFG.BURIAL_PROBE_A along it. The blocked fraction is
+        that atom's buriedness; at or above CFG.BURIAL_MIN the atom is enclosed by the protein.
+
+        Ray casting is used rather than a hull or a neighbour count because it answers the
+        question directly — is there protein in the way, in every direction — and it degrades
+        gracefully at the pocket mouth, where a hull test flips discontinuously.
+        """
+        contain_cav, contain_s8, reach = 1.0, 1.0, 0.0
         if len(lpts) >= 1:
+            # ligand_reach — head-to-tail span from the carboxylate carbon (the head held by the
+            # Arg clamp and attacked by the nucleophile). A ligand shape descriptor, reported only.
             _els = [a.element.name.upper() for a in lig_atoms_obj if a.element.name != "H"]
             _oi  = [i for i, e in enumerate(_els) if e == "O"]
             _ai, _bc = -1, 0
-            for i, e in enumerate(_els):
-                if e != "C" or not _oi:
+            for _i2, _e2 in enumerate(_els):
+                if _e2 != "C" or not _oi:
                     continue
-                _n = int((np.sqrt(((lpts[_oi] - lpts[i]) ** 2).sum(1)) < 1.6).sum())
-                if _n > _bc:
-                    _bc, _ai = _n, i
-            if _ai < 0 and len(pkt):                       # no carboxylate: use pocket-proximal atom
+                _n2 = int((np.sqrt(((lpts[_oi] - lpts[_i2]) ** 2).sum(1)) < CFG.BOND_CO_MAX_A).sum())
+                if _n2 > _bc:
+                    _bc, _ai = _n2, _i2
+            if _ai < 0 and len(pkt):                       # no carboxylate: use the pocket-proximal atom
                 _ai = int(np.argmin(((lpts - pkt.mean(0)) ** 2).sum(1)))
             if _ai < 0:
                 _ai = 0
-            _dd = np.sqrt(((lpts - lpts[_ai]) ** 2).sum(1))
-            contain = float((_dd <= CFG.CONTAINMENT_RADIUS).mean())
-            reach   = float(_dd.max())
+            reach = float(np.sqrt(((lpts - lpts[_ai]) ** 2).sum(1)).max())
+
+            _ppts = np.asarray(
+                [[a["pos"].x, a["pos"].y, a["pos"].z] for a in (all_prot_atoms or [])
+                 if str(a.get("element", "")).upper() != "H"], float)
+
+            if len(_ppts) >= 4:
+                _k = int(CFG.BURIAL_RAYS)
+                _i = np.arange(_k) + 0.5
+                _phi = np.arccos(1.0 - 2.0 * _i / _k)
+                _theta = np.pi * (1.0 + 5.0 ** 0.5) * _i
+                _dirs = np.stack([np.cos(_theta) * np.sin(_phi),
+                                  np.sin(_theta) * np.sin(_phi),
+                                  np.cos(_phi)], axis=1)          # (K, 3) unit vectors
+
+                _probe = float(CFG.BURIAL_PROBE_A)
+                _clear = float(CFG.BURIAL_RAY_CLEARANCE)
+                _burial = np.zeros(len(lpts), float)
+                for _j, _p in enumerate(lpts):
+                    _rel = _ppts - _p                              # (P, 3)
+                    _d2 = (_rel ** 2).sum(1)
+                    _near = _rel[_d2 <= _probe * _probe]           # only atoms within the probe sphere
+                    if len(_near) == 0:
+                        continue
+                    _t = _near @ _dirs.T                           # (P', K) projection along each ray
+                    _perp2 = (_near ** 2).sum(1)[:, None] - _t ** 2
+                    _blocked = ((_t > 0.0) & (_perp2 <= _clear * _clear)).any(axis=0)
+                    _burial[_j] = float(_blocked.mean())
+                contain_cav = float((_burial >= float(CFG.BURIAL_MIN)).mean())
+                out["ligand_buriedness_mean"] = round(float(_burial.mean()), 3)
+
+            """
+            (B) ACTIVE-SITE CONTAINMENT — engagement with the eight catalytic residues.
+            Fraction of ligand heavy atoms within CFG.SITE8_SHELL_A of any heavy atom of the
+            mapped constellation. Says how much of the molecule is inside the reactive machinery,
+            which is a mechanistic statement — not a cavity measurement and not a size penalty.
+            """
+            if len(pkt):
+                _dmin = np.sqrt(((lpts[:, None, :] - pkt[None, :, :]) ** 2).sum(-1)).min(axis=1)
+                contain_s8 = float((_dmin <= float(CFG.SITE8_SHELL_A)).mean())
 
         out.update(active_site_volume=round(pv, 1), active_site_radius=round(pr, 2),
                    ligand_volume=round(lv, 1), ligand_radius_gyration=round(lr, 2),
                    ligand_max_extent=round(lext, 2), pocket_occupancy=round(occ, 3),
                    fit_ratio=round(fr, 3), ligand_fits=int(occ <= 1.0 and fr <= 1.0),
-                   pocket_containment=round(contain, 3), ligand_reach=round(reach, 2))
-    except Exception:
-        pass
+                   pocket_containment_cavity=round(contain_cav, 3),
+                   pocket_containment_site8=round(contain_s8, 3),
+                   ligand_reach=round(reach, 2))
+    except Exception as _e:
+        # pocket_containment_cavity feeds the tier gate: if it is missing the candidate is judged
+        # on an incomplete record, so the failure must be visible.
+        logger.debug(f"Pocket-fit metrics failed: {_e}")
     return out
 
 
@@ -3121,21 +3125,47 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         elite tier additionally gates on cradle role-identity, so a stray polar residue cannot
         earn elite stabilisation credit on its donor alone.
         """
+        # The fluoride cradle stabilises the DEPARTING F⁻, so measure the donor→ligand
+        # distance to the ligand fluorine atoms only, not to every heavy atom. Otherwise a
+        # donor sitting near the carboxylate head earns Halide_Stabilisation without ever
+        # contacting the leaving fluorine. Fall back to all ligand atoms for a non-fluorinated
+        # ligand so the metric never silently drops to 999 for those.
+        _lig_f_pos = [a.pos for a in lig_atoms_obj if a.element.name == "F"] or lig_coords
         for _sk in ("Stab_H", "Stab_W", "Stab_Y"):
             _res3 = _canonical_resname(site_resname.get(_sk, ""))
             _donor = POLAR_SIDECHAIN_ATOMS.get(_res3, set())
-            if _sk in site_atoms_obj and _donor and lig_coords:
+            if _sk in site_atoms_obj and _donor and _lig_f_pos:
                 _dd = min((la.dist(a.pos) for a in site_atoms_obj[_sk] if a.name in _donor
-                           for la in lig_coords), default=999.0)
+                           for la in _lig_f_pos), default=999.0)
                 dists[_sk] = _dd
                 results[f"dist_{_sk}"] = round(_dd, 2)
 
+        # Catalytic-triad relay distances are between the functional sidechain atoms
+        # (Asp Oδ, His Nδ/Nε, Asp/Glu Oδ/Oε) — NOT the backbone. Measuring over all residue
+        # atoms lets a misfolded triad pass the strict relay gate on an incidental backbone
+        # CA···CA contact. Restrict to the functional atoms, with a fallback to all atoms of
+        # the residue when none match (non-standard naming / altloc) so it never regresses.
+        _TRIAD_FUNC = {
+            "Nuc":  {"OD1", "OD2"},
+            "Base": {"ND1", "NE2"},
+            "Acid": {"OD1", "OD2", "OE1", "OE2"},
+        }
+        _BACKBONE_NAMES = {"N", "CA", "C", "O", "OXT"}
+        def _triad_func_pos(_key):
+            _objs = site_atoms_obj.get(_key, [])
+            _pts = [a.pos for a in _objs if a.name in _TRIAD_FUNC.get(_key, set())]
+            # Fall back to sidechain (non-backbone) atoms — never the full residue — so a
+            # naming mismatch cannot silently re-admit backbone CA···CA relay contacts.
+            return _pts or [a.pos for a in _objs if a.name not in _BACKBONE_NAMES] or [a.pos for a in _objs]
+
         dist_nuc_base = 999.0
         dist_base_acid = 999.0
-        if "Nuc" in site_atoms and "Base" in site_atoms:
-            dist_nuc_base = min([p1.dist(p2) for p1 in site_atoms["Nuc"] for p2 in site_atoms["Base"]])
-        if "Base" in site_atoms and "Acid" in site_atoms:
-            dist_base_acid = min([p1.dist(p2) for p1 in site_atoms["Base"] for p2 in site_atoms["Acid"]])
+        if site_atoms_obj.get("Nuc") and site_atoms_obj.get("Base"):
+            _nuc_p, _base_p = _triad_func_pos("Nuc"), _triad_func_pos("Base")
+            dist_nuc_base = min(p1.dist(p2) for p1 in _nuc_p for p2 in _base_p)
+        if site_atoms_obj.get("Base") and site_atoms_obj.get("Acid"):
+            _base_p, _acid_p = _triad_func_pos("Base"), _triad_func_pos("Acid")
+            dist_base_acid = min(p1.dist(p2) for p1 in _base_p for p2 in _acid_p)
 
         results["dist_nuc_base_internal"] = round(dist_nuc_base, 2)
         results["dist_base_acid_internal"] = round(dist_base_acid, 2)
@@ -3191,12 +3221,22 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["scissile_is_alpha"] = 1.0 if scissile_is_alpha else 0.0
 
         """
-        Nucleophile reach is measured Asp-Oδ → SN2 attack carbon (the reactive centre),
+        Nucleophile reach is measured attacking Asp-Oδ → SN2 attack carbon (the reactive centre),
         not Asp → nearest ligand atom, so a stray fluorine cannot satisfy the gate.
+
+        The oxygen is the one that produced the reported attack angle, not the nearer of the two.
+        Measuring the distance to one oxygen and the angle to the other describes a chimeric
+        nucleophile and lets a pose clear the NAC distance gate on an oxygen that is not attacking.
+        The minimum over both Oδ is retained as a separate diagnostic column.
         """
         _asp_ox = [a for a in site_atoms_obj.get("Nuc", []) if a.name in ("OD1", "OD2")] or site_atoms_obj.get("Nuc", [])
-        if best_c_atom is not None and _asp_ox:
+        _attack_o = _aux.get("attack_o_atom")
+        if best_c_atom is not None and _attack_o is not None:
+            results["dist_Nuc"] = round(_attack_o.pos.dist(best_c_atom.pos), 2)
+        elif best_c_atom is not None and _asp_ox:
             results["dist_Nuc"] = round(min(o.pos.dist(best_c_atom.pos) for o in _asp_ox), 2)
+        if best_c_atom is not None and _asp_ox:
+            results["dist_Nuc_nearest_O"] = round(min(o.pos.dist(best_c_atom.pos) for o in _asp_ox), 2)
 
         d_nuc = results["dist_Nuc"]
         angle  = results["sn2_attack_angle"]
@@ -3267,17 +3307,44 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         role-identity / elite gate separately decides which residue types earn elite status.
         '''
         _CLAMP_CATION_N = ("NH1", "NH2", "NE", "NZ")
-        def _clamp_arm_engaged(_site_key):
+        def _clamp_arm_oxygens(_site_key):
+            """The ligand carboxylate oxygens this clamp arm salt-bridges, by atom name."""
             _arg_ns = [a for a in site_atoms_obj.get(_site_key, []) if a.name in _CLAMP_CATION_N]
             if not _arg_ns or not carboxylate_o_names:
-                return False
+                return set()
             _o_atoms = [a for a in lig_atoms_obj if a.name in carboxylate_o_names]
-            return any(_n.pos.dist(_o.pos) <= CFG.CLAMP_SALT_BRIDGE_DIST
-                       for _n in _arg_ns for _o in _o_atoms)
-        _arm1 = _clamp_arm_engaged("Carb1")
-        _arm2 = _clamp_arm_engaged("Carb2")
+            return {_o.name for _n in _arg_ns for _o in _o_atoms
+                    if _n.pos.dist(_o.pos) <= CFG.CLAMP_SALT_BRIDGE_DIST}
+        _o1 = _clamp_arm_oxygens("Carb1")
+        _o2 = _clamp_arm_oxygens("Carb2")
+        _arm1, _arm2 = bool(_o1), bool(_o2)
+        """
+        The two arms must also be two DIFFERENT residues. The alignment can map Carb1 and Carb2 onto
+        the same arginine, and that single residue reaching both carboxylate oxygens would otherwise
+        report a full bidentate clamp — one guanidinium chelating the head is not the two-point
+        anchoring the mechanism requires. The elite tier already refuses a duplicated mapping
+        (elite_identity_ok), but carboxylate_clamp_integrity is reported for every pose and must not
+        claim a clamp that does not exist.
+        """
+        _clamp_residues_distinct = (
+            mapped_sites.get("Carb1") is not None
+            and mapped_sites.get("Carb2") is not None
+            and mapped_sites.get("Carb1") != mapped_sites.get("Carb2")
+        )
+        """
+        Bidentate credit requires the two arms to hold DIFFERENT carboxylate oxygens. Two
+        arginines converging on the same oxygen is a monodentate collapse: the head group is
+        pinched at one point and free to rotate, which is not the two-point anchoring that holds
+        a 2-haloalkanoate rigid for α-attack. Distinct arginines alone are not sufficient.
+
+        The test is whether the arms can be assigned to distinct oxygens at all, not whether they
+        already contact disjoint sets: with two arms that holds exactly when each arm engages at
+        least one oxygen and the two arms reach at least two oxygens between them.
+        """
+        _bidentate_oxygens = bool(_o1 and _o2 and len(_o1 | _o2) >= 2)
         clamp_ok = bool(head_is_carboxylate and (_arm1 or _arm2))
-        ligand_clamp_engaged = bool(head_is_carboxylate and _arm1 and _arm2)
+        ligand_clamp_engaged = bool(head_is_carboxylate and _arm1 and _arm2
+                                    and _bidentate_oxygens and _clamp_residues_distinct)
         results["carboxylate_clamp_integrity"] = 1.0 if ligand_clamp_engaged else (0.5 if clamp_ok else 0.0)
         results["sn2_alignment_score"] = angle
 
@@ -3352,6 +3419,19 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         beta_f_count = int(_aux.get("beta_f_count", 0))
         results["beta_f_count"] = beta_f_count
         n_scissile_f = int(_aux.get("n_scissile_f", 1))
+        """
+        Angle multiplicity for the Šidák correction (CFG §5.5). The correction exists to remove
+        best-of-N inflation: where the leaving fluorine is picked as the most anti-periplanar of
+        several, a poly-fluorinated carbon gets N chances at a near-linear angle. Where the
+        fluoride cradle resolves the leaving F, that selection is deterministic — the departing
+        F is the one the cradle stabilises — so there is no best-of-N over fluorines and the
+        exponent must fall to 1. The attacking oxygen is still chosen as the better of the two
+        Oδ, so a multiplicity of 2 remains earned in every case.
+        """
+        _cradle_resolved = bool(_aux.get("cradle_resolved", False))
+        n_angle_choices = (CFG.ANGLE_MULTIPLICITY_OXYGENS if _cradle_resolved
+                           else max(1, n_scissile_f) * CFG.ANGLE_MULTIPLICITY_OXYGENS)
+        results["angle_multiplicity"] = int(n_angle_choices)
         # feasibility_factor stays a reported diagnostic (α C–F BDE × β-fluorination). The
         # separate graded chemistry penalty (BDE + occlusion, below) is what feeds the tier
         # via mechanistic_score_effective; competence/ranking keep the raw geometry. Step-07
@@ -3374,7 +3454,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             d_nuc, dist_nuc_base, dist_base_acid,
             clamp_ok, stabilised, angle, steric_clashes,
             scissile_cf_bde, backside_occlusion, beta_f_count,
-            scissile_f_count=n_scissile_f,
+            scissile_f_count=n_angle_choices,
         )
         results["mechanistic_score"] = round(mech_score, 2)
 
@@ -3447,10 +3527,12 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             results["competence_score"] = round(
                 max(0.0, results.get("competence_score", 0.0) - CFG.MAINCHAIN_CLASH_PENALTY * clash_count), 3)
 
-        # Active-site pocket vs ligand steric complementarity. pocket_containment (the
-        # catalytic-anchored fit) feeds the feasibility-weighted tier score below; the hull
-        # volume/occupancy fields stay diagnostic.
-        results.update(compute_pocket_fit(site_atoms_obj, lig_atoms_obj))
+        # Enzyme vs ligand steric complementarity (§5.2c). pocket_containment_cavity (protein
+        # ray-cast buriedness) feeds the feasibility-weighted tier score below;
+        # pocket_containment_site8 (engagement with the eight catalytic residues) and the hull
+        # volume/occupancy fields are reported diagnostics. The full protein is required: a
+        # containment measured on ligand coordinates alone cannot tell a narrow pocket from a wide one.
+        results.update(compute_pocket_fit(site_atoms_obj, lig_atoms_obj, all_prot_atoms))
 
         # Feasibility-weighted mechanistic score (tier-gate key). Two graded penalties are
         # subtracted from the geometric mech_score: (A) chemistry — scissile C–F BDE and
@@ -3464,15 +3546,19 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         # substrate. Competence and the reported mechanistic_score stay on the raw geometry;
         # only the tier gates use the effective value. FAcD small-substrate scope + PFAS
         # recalcitrance: Wackett 2022; Chan 2011.
-        # α-chemistry (BDE + backside occlusion) fades toward a near-ideal SN2 angle; β-fluorine
-        # stays flat. So a CF3 substrate (TFA) can rise on an exceptional near-attack pose, while a
-        # mediocre-angle pose keeps the full penalty, and a perfluoro chain is never rescued by angle.
-        _alpha_pen = (CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
-                      + CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX))
+        """
+        Only the backside-occlusion term fades toward a near-ideal SN2 angle (§5.2b): occlusion is
+        a steric obstruction of the attack trajectory, and a pose that reaches 180° has cleared it.
+        The C–F bond dissociation energy does NOT fade — the strength of the bond being broken is a
+        property of the bond, not of the angle of approach, so a near-linear attack on a strong C–F
+        keeps its full penalty. β-fluorination and containment stay flat for the same reason.
+        """
+        _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
+        _bde_pen  = CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
         _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
-        _chem_pen = _alpha_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
-        _cont     = float(results.get("pocket_containment", 1.0) or 1.0)
+        _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
+        _cont     = float(results.get("pocket_containment_cavity", 1.0) or 1.0)
         _cont_pen = CFG.CONTAIN_PEN_W * max(0.0, CFG.CONTAIN_PEN_TARGET - _cont)
         mech_effective = max(0.0, mech_score - _chem_pen - _cont_pen)
         results["chem_penalty"]              = round(_chem_pen, 3)
@@ -3547,7 +3633,16 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         resolved without a wide alignment rescue (§5.4).
         """
         productive_attack = scissile_is_alpha
+        """
+        Elite bond-strength ceiling (§8.5). The attack angle is a property of the approach; the
+        C–F dissociation energy is a property of the bond. A near-linear trajectory onto a C–F
+        above TIER_ELITE_BDE_MAX does not make that bond cleavable, so such a pose is barred from
+        the elite tier no matter how ideal its geometry — it falls to Tier_1B and stays a
+        discovery lead for Step-07 QM/MM to adjudicate.
+        """
+        bde_elite_ok = scissile_cf_bde <= CFG.TIER_ELITE_BDE_MAX
         elite_ready = (elite_identity_ok and ligand_clamp_engaged and stabilised
+                       and bde_elite_ok
                        and nuc_rescue_offset <= CFG.NUC_RESCUE_MAX_OFFSET_ELITE)
 
         tier, is_degrader, meaning, constraint = CFG.TIER_DECOY, False, "No significant documented interactions.", "Fail"
@@ -3731,11 +3826,15 @@ def load_extra_boltz_metrics(br_dir: Path, model_name: str, prot_len: int, lig_l
         if conf_files:
             d = json.loads(conf_files[0].read_text())
             out.update({k: d.get(k) for k in ["iptm", "confidence_score", "ptm", "ligand_iptm", "protein_iptm"]})
-        plddt_files = list(br_dir.rglob(f"plddt_*{model_name}.npz"))
+        # sorted(): glob/rglob return entries in filesystem order, which is arbitrary and differs
+        # between machines and filesystems. Taking [0] of an unsorted match makes the value that ends
+        # up in the CSV depend on the disk, not on the data — the same run on another box can pick a
+        # different model's pLDDT. Sorting makes the choice deterministic and reproducible.
+        plddt_files = sorted(br_dir.rglob(f"plddt_*{model_name}.npz"))
         if plddt_files:
             with np.load(str(plddt_files[0])) as data:
                 if "plddt" in data: out["mean_plddt"] = float(np.mean(data["plddt"]))
-        pae_files = list(br_dir.rglob(f"pae_*{model_name}.npz"))
+        pae_files = sorted(br_dir.rglob(f"pae_*{model_name}.npz"))
         if pae_files and prot_len > 0 and lig_len > 0:
             out["cross_interface_pae_mean"] = compute_cross_interface_pae(pae_files[0], prot_len, lig_len)
     except Exception: pass
@@ -3778,7 +3877,7 @@ def cpu_usage_summary():
 def check_job_status(job_dir: Path) -> bool:
     """Verifies the finality of a job by checking for a complete and uncorrupted summary JSON file."""
     if not job_dir.exists(): return False
-    summary = next(job_dir.glob("*_summary.json"), None)
+    summary = next(iter(sorted(job_dir.glob("*_summary.json"))), None)
     if summary:
         try:
             if '"status": "Success"' in summary.read_text(): return True
@@ -3946,11 +4045,15 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         env["CUDA_VISIBLE_DEVICES"] = str(gpu_idx)
         env["CC"] = shutil.which("gcc") or "gcc"
         env["CXX"] = shutil.which("g++") or "g++"
-        env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / "triton_cache")
-        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH
-        env["OMP_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
-        env["MKL_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
-        env["OPENBLAS_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
+        # in a shared /tmp/triton_cache.
+        env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
+        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
+        # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
+        # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+        env["OMP_NUM_THREADS"] = "1"
+        env["MKL_NUM_THREADS"] = "1"
+        env["OPENBLAS_NUM_THREADS"] = "1"
 
         cmd = [
             BOLTZ_BIN, "predict", str(job["yaml"]), "--out_dir", str(job_dir),
@@ -4035,19 +4138,39 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         by the tier ladder — Tier_1A requires all eight residues mapped to the correct type
         (triad_identity_ok + elite_identity_ok) at catalytic distances with the fluoride cradle
         engaged — so global sequence identity is NOT used here: a distant homolog with a valid,
-        well-resolved active site keeps its tier. The only residual risk for the headline claim
-        is an unconfident predicted fold, so a Tier_1A hit whose Boltz confidence is below
-        TIER_ELITE_CONF_MIN is demoted ONE notch to Tier_1B (still elite geometry, still
-        reviewed); the geometric tier is preserved in its own column.
+        well-resolved active site keeps its tier.
+
+        The residual risk is an unconfident predicted fold, and the confidence that matters is
+        LOCAL. Every geometric quantity the elite tier rests on — the SN2 angle, the nucleophile
+        distance, the triad relay, the cradle — is measured on the eight catalytic residues and
+        nowhere else. A global confidence score averages those eight residues together with
+        hundreds of loop and surface residues that the tier decision never touches: a protein with
+        a crisply resolved active site and disordered termini is punished for the termini, while a
+        globally confident fold with a smeared active site passes. `active_site_plddt` is the mean
+        Boltz pLDDT over exactly the eight mapped residues, so the gate now asks about the region
+        it actually trusts. A Tier_1A hit below ELITE_AS_PLDDT_MIN is demoted ONE notch to Tier_1B
+        (still elite geometry, still reviewed); the geometric tier is preserved in its own column.
+        The global score is retained as the fallback when the local value is unavailable.
         """
         data["geometric_tier"] = data.get("degrader_tier", CFG.TIER_DECOY)
         if data.get("degrader_tier") == CFG.TIER_ORDER[0]:
-            _conf = float(data.get("confidence_score", 0.0) or 0.0)
-            if _conf < CFG.TIER_ELITE_CONF_MIN:
-                data["degrader_tier"] = CFG.TIER_ORDER[1]
-                data["elite_demotion"] = f"low_confidence(<{CFG.TIER_ELITE_CONF_MIN:g})"
+            _as_plddt = float(data.get("active_site_plddt", 0.0) or 0.0)
+            if _as_plddt > 0.0:
+                if _as_plddt < CFG.TIER_ELITE_AS_PLDDT_MIN:
+                    data["degrader_tier"] = CFG.TIER_ORDER[1]
+                    data["elite_demotion"] = (
+                        f"low_active_site_plddt({_as_plddt:g}<{CFG.TIER_ELITE_AS_PLDDT_MIN:g})")
+                else:
+                    data["elite_demotion"] = "none"
             else:
-                data["elite_demotion"] = "none"
+                # No per-residue confidence for this pose — fall back to the global fold score
+                # rather than waving the pose through unchecked.
+                _conf = float(data.get("confidence_score", 0.0) or 0.0)
+                if _conf < CFG.TIER_ELITE_CONF_MIN:
+                    data["degrader_tier"] = CFG.TIER_ORDER[1]
+                    data["elite_demotion"] = f"low_confidence(<{CFG.TIER_ELITE_CONF_MIN:g})"
+                else:
+                    data["elite_demotion"] = "none"
         else:
             data["elite_demotion"] = "none"
 
@@ -4441,7 +4564,8 @@ CSV_COLUMN_ORDER = [
     "teflon_shield_clashes", "mainchain_clash_ratio", "mainchain_clash_count",
     "hydrophobic_desolvation_ratio", "active_site_contact_flag",
     # --- Active-site pocket vs ligand steric fit ---
-    "pocket_containment", "ligand_reach",
+    "pocket_containment_cavity", "pocket_containment_site8", "ligand_buriedness_mean",
+    "ligand_reach", "dist_Nuc_nearest_O", "angle_multiplicity",
     "active_site_volume", "active_site_radius",
     "ligand_volume", "ligand_radius_gyration", "ligand_max_extent",
     "pocket_occupancy", "fit_ratio", "ligand_fits",
@@ -4956,43 +5080,14 @@ def main():
 
     PROD = run_root / "1_Boltz2_Production"
 
-    # Step 1: migrate very-old flat folder names (legacy runs only)
-    _folder_renames = {
-        "1_Input_FASTA_and_SMILES": "1_Input_Data",
-        "2_YAML_Files":     "2_Boltz2_YAML_Configs",
-        "3_Colabfold":      "3_MSA_Sequence_Data",   # kept so truly old runs cascade forward
-        "4_Alignment_Data": "4_Active_Site_Alignments",
-        "5_RUNS":           "4_Prediction_Jobs",
-        "5_Prediction_Jobs": "4_Prediction_Jobs",
-    }
-    for _old, _new in _folder_renames.items():
-        _old_path = PROD / _old
-        _new_path = PROD / _new
-        if _old_path.exists() and not _new_path.exists():
-            _old_path.rename(_new_path)
-
+    # Canonical production directory layout.
     D_IN   = PROD / "1_Input_Data"
     D_YAML = PROD / "2_Boltz2_YAML_Configs"
     D_RUNS = PROD / "4_Prediction_Jobs"
-
-    # Step 2: migrate legacy folder names → current sequential naming scheme
     D_SEQ       = PROD / "3_Sequence_Reference_Data"
     D_COLABFOLD = D_SEQ / "MSA_Sequences"
     D_ALN       = D_SEQ / "Active_Site_Alignments"
     D_SEQ.mkdir(parents=True, exist_ok=True)
-
-    _old_msa  = PROD / "3_MSA_Sequence_Data"
-    _old_aln  = PROD / "4_Active_Site_Alignments"
-    _old_runs = PROD / "5_Prediction_Jobs"
-    if _old_msa.exists() and not D_COLABFOLD.exists():
-        shutil.move(str(_old_msa), str(D_COLABFOLD))
-        console_info("  [Migrate] 3_MSA_Sequence_Data  →  3_Sequence_Reference_Data/MSA_Sequences")
-    if _old_aln.exists() and not D_ALN.exists():
-        shutil.move(str(_old_aln), str(D_ALN))
-        console_info("  [Migrate] 4_Active_Site_Alignments  →  3_Sequence_Reference_Data/Active_Site_Alignments")
-    if _old_runs.exists() and not D_RUNS.exists():
-        shutil.move(str(_old_runs), str(D_RUNS))
-        console_info("  [Migrate] 5_Prediction_Jobs  →  4_Prediction_Jobs")
 
     # Fresh alignments every run: wipe any prior Active_Site_Alignments (no cache reuse).
     # Alignment is cheap (~2 s for all variants); the cache only ever caused file/CSV bloat.
@@ -5026,7 +5121,7 @@ def main():
         try:
             # Skip the reference files (now co-located in the input folder) when
             # picking the user input FASTA/SMI on resume.
-            _ref_files = {CFG.DEHA4_REF_FASTA, "Control_Ligands_TFA_FA_DFA_Ref.smi", "Fluoroacetate_Ref.smi"}
+            _ref_files = {CFG.DEHA4_REF_FASTA, "Control_Ligands_TFA_FA_DFA_Ref.smi"}
             f_path = next(p for p in sorted(D_IN.glob("*.fasta")) if p.name not in _ref_files)
             s_path = next(p for p in sorted(D_IN.glob("*.smi"))   if p.name not in _ref_files)
         except StopIteration:
@@ -5149,25 +5244,6 @@ def main():
     # -------------------------------------------------------------------------------
     ref_pdb_path = setup_reference_data(D_IN)
 
-    if resumed:
-        sanitize_dataset(PROD)
-
-    # Build an ordered expected mapping of sequence+ligand keys to current job stems.
-    console_info(f"  Building expected job map ({len(proteins):,} proteins × {len(ligands)} ligands = "
-                 f"{len(proteins) * len(ligands):,} jobs)...")
-    expected_job_stems = {}
-    num_ligands = len(ligands)
-    for protein_order, pid, seq, fasta_pos in proteins:
-        protein_position = fasta_pos if fasta_pos > 0 else protein_order
-        for lig_order, lid, smi in ligands:
-            jid = str((protein_position - 1) * num_ligands + lig_order).zfill(7)
-            job_pid = f"{protein_position}_{pid}"
-            expected_job_stems[(sequence_hash(seq), smi)] = f"{jid}_{job_pid}_{lid}"
-    console_info(f"   -> Expected job map built ({len(expected_job_stems):,} unique sequence/ligand keys).")
-
-    if resumed:
-        reconcile_resume_job_names(PROD, expected_job_stems)
-
     console_info("  Loading alignment cache...")
     load_cached_alignments(D_ALN / CFG.FILE_ALIGNMENT_STATS)
     console_separator()
@@ -5277,62 +5353,9 @@ def main():
 
     console_info("\nPre-Processing phase unequivocally completed.")
     if resumed:
-        # Migrate very-old legacy DeHa4 folder names → _2_ intermediary (then caught below)
-        _ctrl_legacy    = D_RUNS / "0000000_DeHa4_Control_26_Fluoroacetate"
-        _ctrl_v0        = D_RUNS / "0000000_01_DeHa4_Control_26_Fluoroacetate"
-        _ctrl_v2        = D_RUNS / "0000000_02_DeHa4_Control_26_Fluoroacetate"
-        if _ctrl_legacy.exists() and not _ctrl_v2.exists():
-            deep_rename_job_folder(_ctrl_legacy, "0000000_DeHa4_Control_26_Fluoroacetate",
-                                   "0000000_02_DeHa4_Control_26_Fluoroacetate")
-            _ctrl_legacy.rename(_ctrl_v2)
-            console_info("  [Migrate] 0000000_DeHa4_Control_26_Fluoroacetate  →  0000000_02_DeHa4_Control_26_Fluoroacetate")
-        elif _ctrl_v0.exists() and not _ctrl_v2.exists():
-            deep_rename_job_folder(_ctrl_v0, "0000000_01_DeHa4_Control_26_Fluoroacetate",
-                                   "0000000_02_DeHa4_Control_26_Fluoroacetate")
-            _ctrl_v0.rename(_ctrl_v2)
-            console_info("  [Migrate] 0000000_01_DeHa4_Control_26_Fluoroacetate  →  0000000_02_DeHa4_Control_26_Fluoroacetate")
-        # Migrate very-old 3R3U crystal folder → _1_ intermediary (then caught below)
-        _r3u_legacy     = D_RUNS / "0000001_0_3R3U_Crystal_26_Fluoroacetate"
-        _r3u_v1         = D_RUNS / "0000000_02_3R3U_Control_26_Fluoroacetate"
-        if _r3u_legacy.exists() and not _r3u_v1.exists():
-            deep_rename_job_folder(_r3u_legacy, "0000001_0_3R3U_Crystal_26_Fluoroacetate",
-                                   "0000000_02_3R3U_Control_26_Fluoroacetate")
-            _r3u_legacy.rename(_r3u_v1)
-            console_info("  [Migrate] 0000001_0_3R3U_Crystal_26_Fluoroacetate  →  0000000_02_3R3U_Control_26_Fluoroacetate")
-        # Migrate old YAML files to _2_ / _1_ intermediary
-        for _old_yaml, _new_yaml in [
-            ("0000000_DeHa4_Control_26_Fluoroacetate.yaml",   "0000000_02_DeHa4_Control_26_Fluoroacetate.yaml"),
-            ("0000000_01_DeHa4_Control_26_Fluoroacetate.yaml", "0000000_02_DeHa4_Control_26_Fluoroacetate.yaml"),
-            ("0000001_0_3R3U_Crystal_26_Fluoroacetate.yaml",  "0000000_02_3R3U_Control_26_Fluoroacetate.yaml"),
-        ]:
-            _op = D_YAML / _old_yaml
-            _np = D_YAML / _new_yaml
-            if _op.exists() and not _np.exists():
-                _op.rename(_np)
-        # Migrate fixed-prefix naming (_2_DeHa4_ / _1_3R3U_) → sequential numbering (1–6)
+        # Register the canonical control-calibration job stems (DeHa4 × 3R3U × the
+        # control ligands) so the orphan purge below never deletes a valid control run.
         _n_ctrl_ligs = len(CTRL_LIGANDS)
-        for _sq, (_mig_lig, _) in enumerate(CTRL_LIGANDS, start=1):
-            _old_d = D_RUNS / f"0000000_02_DeHa4_Control_{_mig_lig}"
-            _new_d = D_RUNS / f"0000000_{_sq}_DeHa4_Control_{_mig_lig}"
-            if _old_d.exists() and not _new_d.exists():
-                deep_rename_job_folder(_old_d, f"0000000_02_DeHa4_Control_{_mig_lig}", f"0000000_{_sq}_DeHa4_Control_{_mig_lig}")
-                _old_d.rename(_new_d)
-                console_info(f"  [Migrate] 0000000_02_DeHa4_Control_{_mig_lig}  →  0000000_{_sq}_DeHa4_Control_{_mig_lig}")
-            _old_dy = D_YAML / f"0000000_02_DeHa4_Control_{_mig_lig}.yaml"
-            _new_dy = D_YAML / f"0000000_{_sq}_DeHa4_Control_{_mig_lig}.yaml"
-            if _old_dy.exists() and not _new_dy.exists():
-                _old_dy.rename(_new_dy)
-        for _sq, (_mig_lig, _) in enumerate(CTRL_LIGANDS, start=_n_ctrl_ligs + 1):
-            _old_r = D_RUNS / f"0000000_02_3R3U_Control_{_mig_lig}"
-            _new_r = D_RUNS / f"0000000_{_sq}_3R3U_Control_{_mig_lig}"
-            if _old_r.exists() and not _new_r.exists():
-                deep_rename_job_folder(_old_r, f"0000000_02_3R3U_Control_{_mig_lig}", f"0000000_{_sq}_3R3U_Control_{_mig_lig}")
-                _old_r.rename(_new_r)
-                console_info(f"  [Migrate] 0000000_02_3R3U_Control_{_mig_lig}  →  0000000_{_sq}_3R3U_Control_{_mig_lig}")
-            _old_ry = D_YAML / f"0000000_02_3R3U_Control_{_mig_lig}.yaml"
-            _new_ry = D_YAML / f"0000000_{_sq}_3R3U_Control_{_mig_lig}.yaml"
-            if _old_ry.exists() and not _new_ry.exists():
-                _old_ry.rename(_new_ry)
         for _sq, (_ctl_lig, _) in enumerate(CTRL_LIGANDS, start=1):
             active_job_stems.add(f"0000000_{_sq}_DeHa4_Control_{_ctl_lig}")
             active_job_stems.add(f"0000000_{_sq + _n_ctrl_ligs}_3R3U_Control_{_ctl_lig}")
@@ -5653,7 +5676,8 @@ def main():
             _row("Carboxylate Clamp (0/½/1)",  "carboxylate_clamp_integrity",   fmt="{:.1f}", unit="")
             _row("Nucleophile Resolution",     "nuc_resolution",                fmt="{}",     unit="")
             _row("Mechanistic Score (geometry)", "mechanistic_score",            fmt="{:.2f}", unit="")
-            _row("Pocket Containment",         "pocket_containment",            fmt="{:.2f}", unit="")
+            _row("Pocket Containment (cavity)", "pocket_containment_cavity",     fmt="{:.2f}", unit="")
+            _row("Pocket Containment (site-8)", "pocket_containment_site8",      fmt="{:.2f}", unit="")
             _row("Feasibility-wtd Mech (tier)", "mechanistic_score_effective",   fmt="{:.2f}", unit="")
             _row("Active Site Conservation Score",  "ActiveSite_Conservation_Score",     fmt="{:.2f}", unit="%")
             _row("Boltz-2 Confidence",         "confidence_score",              fmt="{:.4f}", unit="")
@@ -5876,11 +5900,6 @@ def main():
 
     if pending_jobs > 0:
         workspace_dir = PROD / "_Temp_Workspace"
-        for _legacy_ws in ["8_System_Workspace", "6_System_Workspace"]:
-            _legacy_path = PROD / _legacy_ws
-            if _legacy_path.exists() and not workspace_dir.exists():
-                _legacy_path.rename(workspace_dir)
-                break
         workspace_dir.mkdir(exist_ok=True)
 
         batch_out_dir = workspace_dir / "Boltz_Batch_Output"
@@ -5889,11 +5908,15 @@ def main():
         env = os.environ.copy()
         env["CC"] = shutil.which("gcc") or "gcc"
         env["CXX"] = shutil.which("g++") or "g++"
-        env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / "triton_cache")
-        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH
-        env["OMP_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
-        env["MKL_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
-        env["OPENBLAS_NUM_THREADS"] = str(CFG.GLOBAL_MAX_WORKERS)
+        # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
+        # in a shared /tmp/triton_cache.
+        env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
+        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
+        # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
+        # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+        env["OMP_NUM_THREADS"] = "1"
+        env["MKL_NUM_THREADS"] = "1"
+        env["OPENBLAS_NUM_THREADS"] = "1"
         env["PYTHONWARNINGS"] = "ignore"
         env["PYTORCH_LIGHTNING_SUPPRESS_WARNINGS"] = "1"
         env["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -5916,7 +5939,7 @@ def main():
             job_dir = D_RUNS / job_name
             if check_job_status(job_dir):
                 return  # already complete
-            prediction = next(job_dir.glob("**/predictions/**/*.cif"), None)
+            prediction = next(iter(sorted(job_dir.glob("**/predictions/**/*.cif"))), None)
             with _scan_lock:
                 _scan_done[0] += 1
                 n = _scan_done[0]
@@ -6178,7 +6201,7 @@ def main():
             while attempt < max_retries:
                 # --- Salvage any partial predictions before wiping the temp folder ---
                 if protein_batch_out.exists() and attempt > 0:
-                    _salvage_res_dir = next(protein_batch_out.glob("boltz_results_*"), None)
+                    _salvage_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
                     if _salvage_res_dir and (_salvage_res_dir / "predictions").exists():
                         _salvaged = set()
                         for _pred_dir in (_salvage_res_dir / "predictions").iterdir():
@@ -6246,13 +6269,16 @@ def main():
                                 raise subprocess.CalledProcessError(-9, cmd, stderr="WATCHDOG TIMEOUT ERROR: GPU Batch Deadlocked Iteration.")
 
                             # --- Incremental move: pick up finished predictions every 5 s ---
-                            _res_dir = next(protein_batch_out.glob("boltz_results_*"), None) if protein_batch_out.exists() else None
+                            _res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None) if protein_batch_out.exists() else None
                             if _res_dir and (_res_dir / "predictions").exists():
                                 for _pred_dir in list((_res_dir / "predictions").iterdir()):
                                     _stem = _pred_dir.name
                                     if not _pred_dir.is_dir() or _stem in _moved_stems or _stem not in job_map:
                                         continue
-                                    if not any(_pred_dir.glob("*.cif")):
+                                    # Require the confidence JSON too: Boltz writes it after the
+                                    # structure, so its presence marks a complete prediction and
+                                    # prevents moving a still-being-written .cif (truncation race).
+                                    if not any(_pred_dir.glob("*.cif")) or not any(_pred_dir.glob("confidence_*.json")):
                                         continue  # not finished yet
                                     _job = job_map[_stem]
                                     _jname = f"{_job['job_index']}_{_job.get('job_protein', _job['protein'])}_{_job['ligand']}"
@@ -6301,7 +6327,7 @@ def main():
                             time.sleep(5.0)
 
                     if proc.returncode == 0:
-                        total_res_dir = next(protein_batch_out.glob("boltz_results_*"), None)
+                        total_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
                         moved_count   = 0
                         failed_jobs   = []
 
@@ -6774,8 +6800,8 @@ def main():
         console_info(f"  ├{'─'*(_jw+2)}┼{'─'*12}┤")
         console_info(f"  │  {'Jobs Accounted':<{_jw}}│  {len(df_final)+grid_failures:>8,}  │")
         console_info(f"  │  {'Successful Outputs':<{_jw}}│  {int((df_final['status']=='Success').sum()):>8,}  │")
-        _fail_str = f"{total_failures}" + ("  ← re-run to retry" if grid_failures else "")
-        console_info(f"  │  {'Analytical Failures':<{_jw}}│  {total_failures:>8,}  │")
+        _fail_str = f"{total_failures:,}" + ("  ← re-run to retry" if grid_failures else "")
+        console_info(f"  │  {'Analytical Failures':<{_jw}}│  {_fail_str:>8}  │")
         console_info(f"  └{'─'*(_jw+2)}┴{'─'*12}┘")
 
         _tier_order = CFG.TIER_ORDER

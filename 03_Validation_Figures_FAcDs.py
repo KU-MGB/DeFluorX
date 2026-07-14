@@ -107,7 +107,9 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 07_Feature_Correlations.png                  <-- Spearman ρ feature correlation heatmap
     • 08_Tier_Quality_DotPlot.png                  <-- Multi-metric tier-quality Cleveland dot plot
     • 09_Mechanistic_Fingerprint.png               <-- Per-tier catalytic feature profile (radar / spider; config §5 components)
-    • 10_TwoCriteria_Tier_Logic.png                <-- 3-panel: Criterion A gates B (a) · B-ECDF separates tiers (b) · SN2 dead-end BDE×occlusion gate (c)
+    • 10_Criterion_A_Gates_B.png                   <-- active-site integrity gates the catalytic constellation
+    • 11_Criterion_B_ECDF_by_Tier.png             <-- the constellation score separates the tiers (ECDF)
+    • 12_SN2_DeadEnd_Gate.png                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
 
     ── 05_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
     • 01_Molecular_Interaction_Profile.png         <-- Bond-type profile + fluorine engagement
@@ -180,7 +182,6 @@ import argparse
 import warnings
 from pathlib import Path
 import contextlib
-from datetime import datetime
 
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
@@ -265,12 +266,127 @@ TIER_ORDER_LOGIC = list(CFG.TIER_ORDER)
 
 CONFLICT_PALETTE = dict(CFG.CONFLICT_COLOUR)   # sourced from CFG § 8.7
 
-# MD-ready cohort — the "super-best" MD-selected complexes, overlaid as gold stars on
+
+# =============================================================================
+# Inferential-statistics helpers (COPY script — trial additions for review).
+# Each returns a short annotation string; _stat_box() draws it inside an axis.
+# =============================================================================
+def _stat_box(ax, text, loc="upper right", fontsize=8):
+    """Draw a boxed statistics annotation inside an axis (no effect if text is empty)."""
+    if not text:
+        return
+    xy = {"upper right": (0.985, 0.985, "right", "top"),
+          "upper left": (0.015, 0.985, "left", "top"),
+          "lower right": (0.985, 0.015, "right", "bottom"),
+          "lower left": (0.015, 0.015, "left", "bottom"),
+          "lower centre": (0.5, 0.015, "center", "bottom")}.get(loc, (0.985, 0.985, "right", "top"))
+    ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=fontsize,
+            family="monospace", zorder=30,
+            bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#BBBBBB", alpha=0.92))
+
+
+"""
+Every hypothesis test drawn on a panel is registered here, and the family is corrected ONCE, at the
+end of the run, by Benjamini-Hochberg. Several tests are run across the same candidate set (one per
+panel), so an uncorrected p-value overstates significance: with a handful of tests at alpha = 0.05 a
+false positive is expected by chance alone. The panel keeps the RAW p (it is what that test
+measured); the corrected q-value for the whole family goes to 00_Analysis_Data/06_Statistical_Tests.csv,
+which is the value to quote.
+"""
+_PVALUES: list = []
+
+
+def _register_p(test: str, panel: str, stat: float, n: int, p: float) -> None:
+    _PVALUES.append({"test": test, "panel": panel, "statistic": stat, "n": n, "p_raw": p})
+
+
+def _write_statistical_tests(out_dir):
+    """The whole test family with Benjamini-Hochberg q-values, ranked by q."""
+    if not _PVALUES:
+        return None
+    from scipy.stats import false_discovery_control
+    _df = pd.DataFrame(_PVALUES)
+    _df["q_BH"] = false_discovery_control(_df["p_raw"].to_numpy(float), method="bh")
+    _df["significant_q<0.05"] = _df["q_BH"] < 0.05
+    _df = _df.sort_values("q_BH").reset_index(drop=True)
+    _path = _aux_dir(out_dir) / "06_Statistical_Tests.csv"
+    _df.to_csv(_path, index=False)
+    return _path
+
+
+def _kruskal_by_tier(df, value_col, tier_col="degrader_tier", tiers=None):
+    """Kruskal–Wallis across tiers with epsilon-squared effect size. Returns annotation or ''."""
+    from scipy.stats import kruskal as _kw
+    if value_col not in df.columns or tier_col not in df.columns:
+        return ""
+    order = tiers or [t for t in TIER_ORDER_LOGIC if t in set(df[tier_col].dropna())]
+    groups = [pd.to_numeric(df.loc[df[tier_col] == t, value_col], errors="coerce").dropna().values for t in order]
+    groups = [g for g in groups if len(g) >= 2]
+    if len(groups) < 2:
+        return ""
+    try:
+        H, p = _kw(*groups)
+    except Exception:
+        return ""
+    N = sum(len(g) for g in groups); k = len(groups)
+    eps2 = max(0.0, (H - k + 1) / (N - k)) if N > k else float("nan")
+    _register_p("Kruskal-Wallis across tiers", value_col, float(H), int(N), float(p))
+    p_str = "p < 1e-4" if p < 1e-4 else f"p = {p:.3g}"
+    return f"Kruskal-Wallis across tiers: {p_str} | eps^2 = {eps2:.2f}"
+
+
+def _wilcoxon_ptm_iptm(df):
+    """Paired Wilcoxon signed-rank test of ipTM vs pTM across complexes."""
+    from scipy.stats import wilcoxon as _wil
+    if "ptm" not in df.columns or "iptm" not in df.columns:
+        return ""
+    sub = df.dropna(subset=["ptm", "iptm"])
+    if len(sub) < 10:
+        return ""
+    try:
+        _w, p = _wil(pd.to_numeric(sub["ptm"], errors="coerce"), pd.to_numeric(sub["iptm"], errors="coerce"))
+    except Exception:
+        return ""
+    med_d = float((pd.to_numeric(sub["iptm"], errors="coerce") - pd.to_numeric(sub["ptm"], errors="coerce")).median())
+    _register_p("Wilcoxon signed-rank (paired)", "ipTM vs pTM", float(_w), int(len(sub)), float(p))
+    p_str = "p < 1e-4" if p < 1e-4 else f"p = {p:.3g}"
+    return f"Wilcoxon ipTM vs pTM (paired): {p_str} | median d(ipTM-pTM) = {med_d:+.3f}"
+
+
+def _umap_tier_separation(df, xcol="UMAP_X", ycol="UMAP_Y", tier_col="degrader_tier", n_perm=199, cap=2000):
+    """Silhouette of tier labels in UMAP space with a label-permutation p-value.
+    Subsampled to `cap` points so the O(N^2) silhouette stays tractable."""
+    try:
+        from sklearn.metrics import silhouette_score
+    except Exception:
+        return ""
+    for c in (xcol, ycol, tier_col):
+        if c not in df.columns:
+            return ""
+    sub = df.dropna(subset=[xcol, ycol, tier_col])
+    if len(sub) < 30 or sub[tier_col].nunique() < 2:
+        return ""
+    rng = np.random.default_rng(0)
+    if len(sub) > cap:
+        sub = sub.iloc[rng.choice(len(sub), cap, replace=False)]
+    X = sub[[xcol, ycol]].to_numpy(float)
+    lab = sub[tier_col].astype("category").cat.codes.to_numpy()
+    try:
+        s0 = silhouette_score(X, lab)
+        cnt = sum(1 for _ in range(n_perm) if silhouette_score(X, rng.permutation(lab)) >= s0)
+    except Exception:
+        return ""
+    p = (cnt + 1) / (n_perm + 1)
+    p_str = "p < 0.005" if p < 0.005 else f"p = {p:.3g}"
+    _register_p("Silhouette label-permutation", "UMAP tier separation", float(s0), int(len(X)), float(p))
+    return f"Tier separation in UMAP (silhouette perm-test): {p_str} | s = {s0:.3f}"
+
+# MD-ready cohort — the "top-performing" MD-selected complexes, overlaid as gold stars on
 # tier plots (they may sit inside Tier_1A). Single source for the marker + the subset.
 _MD_STAR_KW = dict(marker="*", s=300, facecolor="#FFD400", edgecolor="black", linewidths=1.1, zorder=9)
 
 def _md_ready_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Rows flagged MD_Selected — the super-best cohort taken to MD."""
+    """Rows flagged MD_Selected — the top-performing cohort taken to MD."""
     if "MD_Selected" not in df.columns:
         return df.iloc[0:0]
     _m = df["MD_Selected"].astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])
@@ -298,34 +414,12 @@ def _md_ready_stars_cat(ax, df: pd.DataFrame, tier_order, valcol: str):
 
 
 def _auto_label_colour(bg, threshold: float = 0.5) -> str:
-    """Single source for every auto-contrast label colour in this module.
+    """The auto-contrast label colour, from utils — one luminance rule for every step's figures."""
+    return _utils_mod.auto_label_colour(CFG, bg, threshold)
 
-    Returns CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0] (near-black) on light fills and
-    CFG.VIS_BAR_LABEL_COLOURS_ON_DARK[0] (white) on dark fills, chosen from the WCAG
-    relative luminance of `bg` (a hex string or any Matplotlib colour). The single
-    luminance helper shared by every figure — one coefficient set and cutoff.
-    """
-    import matplotlib.colors as _mc
-    try:
-        r, g, b = _mc.to_rgb(bg)
-    except Exception:
-        return CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0]
-    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-    return (CFG.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0] if lum > threshold
-            else CFG.VIS_BAR_LABEL_COLOURS_ON_DARK[0])
-
-# Modern Plotting Theme (Publication Quality)
+# Modern Plotting Theme (Publication Quality) — typography and canvas from CFG, via utils.
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.3)
-plt.rcParams.update({
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"], # Nature preference
-    "axes.grid": True,
-    "grid.color": "#F0F0F0",
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "savefig.dpi": CFG.VIS_FIGURE_DPI,
-    "savefig.bbox": "tight"
-})
+_utils_mod.apply_figure_style(CFG)
 
 SEPARATOR = "-" * 80
 
@@ -563,7 +657,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
         df.loc[x.index, "Score_PCA_Data"] = score_pca
     else:
         reporter.log("  ! Skipping PCA: Insufficient data points (< 2).")
-        df.loc[x.index, "Score_PCA_Data"] = 50.0
+        df.loc[x.index, "Score_PCA_Data"] = CFG.SCORE_PCA_NEUTRAL
 
     # Weighted Score
     score_weighted = np.zeros(len(x))
@@ -1023,8 +1117,12 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
                            (CFG.TIER_ORDER[2], TIER_PALETTE[CFG.TIER_ORDER[2]])]:
             angle = CFG.TIER_ANGLE_MIN[tlbl]   # single source: tier angle threshold from CFG
             ax.axvline(angle, color=tcol, ls="--", lw=1.6, alpha=0.85, zorder=4)
-            ax.text(angle+0.3, yhi-0.002, f"≥{angle}°\n{tlbl}",
-                    fontsize=5.5, color=tcol, fontweight="bold", va="top")
+            ax.text(angle, yhi - 0.001, f"≥{angle:g}° {tlbl.replace('Tier_', '')}", rotation=90,
+                    rotation_mode="anchor",
+                    fontsize=7.0, color=tcol, fontweight="bold", va="center", ha="right",
+                    zorder=7,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white", alpha=0.85, ec=tcol,
+                              linewidth=0.5))
         ax.axhline(dv["_Y"].median(), color="#555", ls=":", lw=0.9, alpha=0.55, zorder=3)
         _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
         _tt_draw_thumbnails(fig, ax, pax, imgs)
@@ -1160,7 +1258,9 @@ _FIG_MAPPING = {
         "Figure_26c_PFAS_Carbon_Confidence.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
         # ── Two-criteria tier logic + dead-end feasibility (single 3-panel figure,
         #    filed in the catalytic folder) ──
-        "Figure_30_TwoCriteria_Tier_Logic.png": "04_Catalytic_Geometry_and_Mechanism/10_TwoCriteria_Tier_Logic.png",
+        "Figure_30a_Criterion_A_Gates_B.png": "04_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
+        "Figure_30b_Criterion_B_ECDF_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
+        "Figure_30c_SN2_DeadEnd_Gate.png": "04_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
 }
 
 
@@ -1214,17 +1314,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
 
-    # ── Global publication-quality rcParams ───────────────────────────────────
-    plt.rcParams.update({
-        "font.family": "DejaVu Sans",
-        "axes.titlesize": 13, "axes.titleweight": "bold",
-        "axes.labelsize": 11,
-        "xtick.labelsize": 9, "ytick.labelsize": 9,
-        "legend.fontsize": 8.5, "legend.framealpha": 0.92,
-        "axes.spines.top": False, "axes.spines.right": False,
-        "axes.grid": True,
-        "grid.color": "#EBEBEB", "grid.linewidth": 0.6,
-    })
+    # Typography and canvas: the pipeline's one definition (CFG → utils.apply_figure_style).
+    _utils_mod.apply_figure_style(CFG)
 
     def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
         """Auto-contrast label colour for hex_bg (delegates to _auto_label_colour)."""
@@ -1329,6 +1420,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _acc01 += _h01 + _gap01
         ax.set_xticks(range(len(_keys)))
         ax.set_xticklabels(_labels01, fontsize=9)
+        # Each tick label takes its own bar's role colour: the residue, its bar and the legend
+        # entry for its mechanistic role then carry one identity the eye can follow.
+        for _tl01, _c01 in zip(ax.get_xticklabels(), _colours01):
+            _tl01.set_color(_c01)
+            _tl01.set_fontweight("bold")
         ax.set_ylabel("Variants with residue mapped")
         ax.set_ylim(0, _n01 * 1.08 if _n01 else 1)
         # Legend: one entry per role group (in mechanistic order) + the all-variants line,
@@ -1566,7 +1662,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         _ymax02 = ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 200
         ax.annotate("Tiers converge\nnear 60% identity",
                     xy=(60, _ymax02 * 0.45),
-                    xytext=(70, _ymax02 * 0.60),
+                    xytext=(76, _ymax02 * 0.80),
                     fontsize=7.0, color="#444", style="italic",
                     arrowprops=dict(arrowstyle="->", color="#888", lw=0.9))
         # Tier_1A visibility annotation — arrow points to the Tier_1A KDE-curve median
@@ -1578,7 +1674,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax2.annotate(
                 f"{CFG.TIER_TOP}  (n={len(_tt_sub02):,})\nmedian identity {_tt_med_x:.0f}%",
                 xy=_tt_kde_med_xy, xycoords="data",
-                xytext=(0.55, 0.46), textcoords=ax2.transAxes,
+                xytext=(0.80, 0.40), textcoords=ax2.transAxes,
                 fontsize=7.5, ha="left", va="center",
                 color=TIER_PALETTE.get(CFG.TIER_TOP, "#2E7D52"),
                 fontweight="bold",
@@ -1984,6 +2080,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _leg10.set_zorder(20)
 
             plt.tight_layout()
+            _stat_box(ax, _kruskal_by_tier(df, "Boltz_Model_Confidence"), "lower centre")
             plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
@@ -2215,8 +2312,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax_right.set_xlabel("ipTM density", fontsize=7, labelpad=2)
             ax_top.set_axisbelow(True)
             ax_right.set_axisbelow(True)
-            ax_top.tick_params(axis="y", labelsize=6)
-            ax_right.tick_params(axis="x", labelsize=6)
+            ax_top.tick_params(axis="y", labelsize=7.0)
+            ax_right.tick_params(axis="x", labelsize=7.0)
             for _sp in list(ax_top.spines.values()) + list(ax_right.spines.values()):
                 _sp.set_visible(False)
 
@@ -2232,6 +2329,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                           title="Tier  (◆ = median pTM, ipTM)", title_fontsize=7.0,
                           bbox_to_anchor=(0.0, 1.0))
             plt.tight_layout()
+            _stat_box(ax, _wilcoxon_ptm_iptm(df), "lower right")
             plt.savefig(out_dir / "Figure_06_pTM_vs_ipTM_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
@@ -2278,7 +2376,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _sv17 = f17_plot.loc[f17_plot["degrader_tier"] == _t17s, "Active_Site_RMSD"]
                 if 0 < len(_sv17) <= 30:
                     _sn_max17 = max(_sn_max17, float(_sv17.max()))
-            _raw_max = float(f17_df["Active_Site_RMSD"].max())
             _re, _ra, _rd = CFG.RMSD_BAND_EXCELLENT, CFG.RMSD_BAND_ACCEPTABLE, CFG.RMSD_BAND_DIVERGED
             _violin_cap = _rd   # violin body capped at the diverged band (CFG)
             _raw_pct98  = float(f17_df["Active_Site_RMSD"].quantile(0.98)) if len(f17_df) > 0 else _rd
@@ -2414,7 +2511,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _zy = min(_zhi, y_ceil) * 0.98
                 ax.text(len(valid_tiers_f17) - 0.3, _zy,
                         f"n={_zn:,}  {_zlbl}",
-                        ha="center", va="top", fontsize=6.5, color=_zcol, fontweight="bold",
+                        ha="center", va="top", fontsize=7.0, color=_zcol, fontweight="bold",
                         rotation=90, zorder=25, clip_on=False,
                         bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=_zcol,
                                   alpha=1.0, linewidth=0.5))
@@ -2422,9 +2519,12 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Zone band legend (top-left) for the shaded quality bands
             from matplotlib.patches import Patch as _P6z
             _zone_legend = [
-                _P6z(facecolor="#D4EDDA", alpha=0.55, edgecolor="none", label=f"Excellent  (< 1.0 Å)  {pct_green:.0f}%"),
-                _P6z(facecolor="#FFF3CD", alpha=0.55, edgecolor="none", label=f"Acceptable  (1.0–2.0 Å)  {pct_yellow:.0f}%"),
-                _P6z(facecolor="#F8D7DA", alpha=0.55, edgecolor="none", label=f"Diverged  (> 2.0 Å)  {pct_red:.0f}%"),
+                _P6z(facecolor="#D4EDDA", alpha=0.55, edgecolor="none",
+                     label=f"Excellent  (< {CFG.RMSD_BAND_EXCELLENT:g} Å)  {pct_green:.0f}%"),
+                _P6z(facecolor="#FFF3CD", alpha=0.55, edgecolor="none",
+                     label=f"Acceptable  ({CFG.RMSD_BAND_EXCELLENT:g}–{CFG.RMSD_BAND_ACCEPTABLE:g} Å)  {pct_yellow:.0f}%"),
+                _P6z(facecolor="#F8D7DA", alpha=0.55, edgecolor="none",
+                     label=f"Diverged  (> {CFG.RMSD_BAND_ACCEPTABLE:g} Å)  {pct_red:.0f}%"),
             ]
             _tier_handles, _tier_labels = ax.get_legend_handles_labels()
             _combined_handles = _zone_legend + _tier_handles
@@ -2518,15 +2618,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _pv_flat_f7.append(_pv7)
                 _pv_idx_f7.append((_ii7, _jj7))
         _pv_arr = np.array(_pv_flat_f7)
-        _sort_idx7 = np.argsort(_pv_arr)
-        _m7 = len(_pv_arr)
-        _adj7 = np.ones(_m7)
-        _prev_adj = 1.0
-        for _rank7 in range(_m7 - 1, -1, -1):
-            _si7 = _sort_idx7[_rank7]
-            _adj7[_si7] = min(_prev_adj, _pv_arr[_si7] * _m7 / (_rank7 + 1))
-            _prev_adj = _adj7[_si7]
-        _adj7 = np.clip(_adj7, 0, 1)
+        # Benjamini-Hochberg from the library rather than a hand-rolled step-up: same correction,
+        # one fewer place for an off-by-one in the rank index to hide.
+        from scipy.stats import false_discovery_control
+        _adj7 = np.clip(false_discovery_control(np.asarray(_pv_arr, dtype=float), method="bh"), 0, 1)
         p_adj_mat_f7 = np.ones((_n_feat_f7, _n_feat_f7))
         for _k7, (_ii7, _jj7) in enumerate(_pv_idx_f7):
             p_adj_mat_f7[_ii7, _jj7] = _adj7[_k7]
@@ -2745,8 +2840,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     rng_b = np.random.default_rng(99)
                     # Vectorised: one (n_boot, n) resample draw, mean along axis 1.
                     _samples = rng_b.choice(np.asarray(vals), size=(n_boot, len(vals)), replace=True)
-                    _meds = np.mean(_samples, axis=1)
-                    return float(np.percentile(_meds, 2.5)), float(np.percentile(_meds, 97.5))
+                    _means = np.mean(_samples, axis=1)          # the panel plots tier MEANS
+                    return float(np.percentile(_means, 2.5)), float(np.percentile(_means, 97.5))
 
                 # Precompute per-tier bootstrap CIs for each metric (raw scale)
                 _f08_ci = {}  # (tier, metric) -> (lo_norm, hi_norm)
@@ -2868,7 +2963,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                 _nv_c = max(0.04, min(1.06, nv))
                                 _y_pos08 = _base_y + _y_nudge08[_di08] + _y_tops08[_ylev08[_di08]]
                                 ax08.text(_nv_c, _y_pos08, f"{rv:.2f}",
-                                          ha="center", va="bottom", fontsize=6.5,
+                                          ha="center", va="bottom", fontsize=7.0,
                                           color=col_f08, fontweight="bold", zorder=5,
                                           rotation=90,
                                           bbox=dict(boxstyle="round,pad=0.07", fc="white",
@@ -3273,7 +3368,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     fontsize=7.5, color=col, fontweight="bold", transform=ax.get_xaxis_transform())
             _zn11 = int(((plot_df["SN2_Attack_Angle"] >= lo) & (plot_df["SN2_Attack_Angle"] < hi)).sum())
             ax.text((lo + hi) / 2, 0.10, f"n={_zn11:,}",
-                    ha="center", va="center", fontsize=6.0, color=col, fontweight="bold",
+                    ha="center", va="center", fontsize=7.0, color=col, fontweight="bold",
                     rotation=90, zorder=10,
                     transform=ax.get_xaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.68))
@@ -3307,7 +3402,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                         va="bottom" if _oy > 0 else "top", zorder=7,
                         bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                         arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
-        # MD-ready overlay — the super-best MD-selected complexes (incl. those inside
+        # MD-ready overlay — the top-performing MD-selected complexes (incl. those inside
         # Tier_1A) marked as gold stars on their own tier's ECDF curve.
         _mdsel14 = plot_df[plot_df.get("MD_Selected", pd.Series(False, index=plot_df.index))
                            .astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])]
@@ -3343,7 +3438,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         _h11, _l11 = ax.get_legend_handles_labels()
         _leg14 = ax.legend(handles=[_hdr11] + _h11, labels=["Tier (●=median)"] + _l11,
                            loc="upper left", bbox_to_anchor=(0.01, 0.99),
-                           fontsize=6, framealpha=0.92, fancybox=True,
+                           fontsize=7.0, framealpha=0.92, fancybox=True,
                            ncol=max(2, (len(_h11) + 1) // 2))
         _leg14.set_zorder(20)
         # Thin horizontal grid lines at every 10% ECDF level for easy reading
@@ -3415,27 +3510,37 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         ax.axvspan(0, _nuc_cfg12[CFG.TIER_TOP], alpha=0.06, color="#009E73", label="_nolegend_")
         ax.axhspan(_ang_cfg12[CFG.TIER_TOP], 180, alpha=0.06, color="#009E73", label="_nolegend_")
 
-        for _idx12, tier_key in enumerate([CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]):
-            dist = _nuc_cfg12[tier_key]
-            col = TIER_PALETTE.get(tier_key, "#999")
+        """
+        The distance cut-offs are written UP their own vertical lines, not across the top. Tiers that
+        share a cut-off (Tier_1B and Tier_2A are both ≤ 3.2 Å) draw one line and carry one merged
+        label, so no label is ever displaced from the line it names.
+        """
+        _dist_groups12 = {}
+        for tier_key in [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]:
+            _dist_groups12.setdefault(_nuc_cfg12[tier_key], []).append(tier_key)
+
+        for dist, _tiers12 in _dist_groups12.items():
+            col = TIER_PALETTE.get(_tiers12[0], "#999")
             ax.axvline(x=dist, color=col, linestyle="--", alpha=0.65, linewidth=1.2)
-            ax.text(dist, 186 if _idx12 % 2 == 0 else 181, f"{tier_key}\n≤{dist}Å", color=col,
-                    fontsize=6.5, va="bottom", ha="center", alpha=0.90,
-                    bbox=dict(boxstyle="round,pad=0.15", fc="white", alpha=0.75, ec=col,
+            _lbl12 = "/".join(t.replace("Tier_", "") for t in _tiers12)
+            ax.text(dist, 182, f"{_lbl12} ≤{dist}Å", color=col,
+                    fontsize=7.0, rotation=90, rotation_mode="anchor",
+                    ha="left", va="center", alpha=0.95, zorder=7,
+                    bbox=dict(boxstyle="round,pad=0.18", fc="white", alpha=0.85, ec=col,
                               linewidth=0.5))
 
         for tier_key in [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]:
             angle = _ang_cfg12[tier_key]
             col = TIER_PALETTE.get(tier_key, "#999")
             ax.axhline(y=angle, color=col, linestyle=":", alpha=0.65, linewidth=1.2, zorder=1)
-            ax.text(0.02, angle, f"≥{angle}° ({tier_key})", color=col,
-                    fontsize=6.5, ha="left", va="bottom", alpha=0.90, zorder=6,
+            ax.text(0.012, angle + 0.8, f"≥{angle:g}°  {tier_key}", color=col,
+                    fontsize=7.0, ha="left", va="bottom", alpha=0.95, zorder=7,
                     transform=ax.get_yaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none",
                               alpha=0.70, linewidth=0))
 
         ax.set_xlim(0, 5.0)
-        ax.set_ylim(0, 195)
+        ax.set_ylim(0, 212)          # headroom above 180° for the rotated cut-off labels
         ax.set_yticks(range(0, 196, 20))
         _nuc_lbl = CFG.REF_ACTIVE_SITE_MAP["Nuc"]
         ax.set_xlabel(f'{_nuc_lbl["res"]}{_nuc_lbl["id"]} Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry',
@@ -3513,11 +3618,15 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _BDE_MAX = CFG.SCISSILE_CF_BDE_MAX
             _OCC_MAX = CFG.SN2_BACKSIDE_OCCL_MAX
             _tord = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
-            _figtc = plt.figure(figsize=(21, 6.4))
-            _gstc = _figtc.add_gridspec(1, 3, width_ratios=[1.2, 1.05, 1.05], wspace=0.145)
+            """
+            Three INDEPENDENT figures, not one three-panel strip. Each answers its own question, and
+            each carries its own axis labels and legend at a readable size — sharing a strip lets the
+            widest panel dictate the size of the others.
+            """
+            _figa = plt.figure(figsize=(13, 7))
 
-            # ── panel a : Criterion A (integrity) gates Criterion B (constellation) ──
-            _axa = _figtc.add_subplot(_gstc[0, 0])
+            # ── Figure 10 : Criterion A (integrity) gates Criterion B (constellation) ──
+            _axa = _figa.add_subplot(111)
             _A = pd.to_numeric(df["active_site_residues_correct"], errors="coerce") / 8.0
             _B = pd.to_numeric(df["catalytic_constellation_score"], errors="coerce")
             _sa = pd.DataFrame({"A": _A, "B": _B}).dropna()
@@ -3538,14 +3647,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _axa.set_xticks(range(len(_abins)))
             _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=8)
             _axa.set_ylim(0, 1.18)
-            _axa.set_xlabel("Criterion A — active-site integrity\n(fraction of the 8 catalytic residues correctly placed)", fontsize=10)
-            _axa.set_ylabel(f"Criterion B — catalytic constellation score\n(reactive-geometry match vs {CFG.REFERENCE_PDB_ID} crystal, 0–1)", fontsize=10)
+            _axa.set_xlabel("Active-site integrity  (fraction of the 8 catalytic residues placed)", fontsize=11)
+            _axa.set_ylabel(f"Catalytic constellation score  (0–1 vs {CFG.REFERENCE_PDB_ID} crystal)", fontsize=11)
             _axa.legend(loc="upper right", fontsize=7, ncol=2, framealpha=0.95, columnspacing=0.9, handletextpad=0.4)
             _axa.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axa.set_axisbelow(True)
-            _axa.text(-0.13, 1.02, "a", transform=_axa.transAxes, fontsize=17, fontweight="bold")
 
             # ── panel b : Criterion-B ECDF by tier + arrowed per-tier mean values ──
-            _axb = _figtc.add_subplot(_gstc[0, 1])
+            _figb = plt.figure(figsize=(12, 7))
+            _axb = _figb.add_subplot(111)
             _means = []
             for _t in _tord:
                 _v = pd.to_numeric(df.loc[df["degrader_tier"].eq(_t), "catalytic_constellation_score"],
@@ -3556,7 +3665,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _m = float(_v.mean()); _fr = float((_v <= _m).mean())
                 _axb.scatter([_m], [_fr], s=90, color=TIER_PALETTE.get(_t, "#999"), edgecolor="black", lw=0.8, marker="D", zorder=6)
                 _means.append((_t, _m, _fr))
-            _placetc = {"Tier_5_Decoy": (0.20, 0.90), "Tier_4": (0.20, 0.63), "Tier_3": (0.50, 0.11),
+            _placetc = {"Tier_5_Decoy": (0.46, 0.88), "Tier_4": (0.22, 0.60), "Tier_3": (0.50, 0.11),
                         "Tier_2B": (0.66, 0.04), "Tier_1A": (0.90, 0.28), "Tier_2A": (0.90, 0.42), "Tier_1B": (0.90, 0.56)}
             for _t, _m, _fr in _means:
                 _lx, _ly = _placetc.get(_t, (min(_m + 0.10, 0.94), min(_fr + 0.06, 0.96)))
@@ -3564,7 +3673,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                               xytext=(_lx, _ly), textcoords=_axb.transAxes, fontsize=8, fontweight="bold",
                               color=TIER_PALETTE.get(_t, "#999"), va="center", ha="center", zorder=8,
                               arrowprops=dict(arrowstyle="->", color=TIER_PALETTE.get(_t, "#999"), lw=1.0, alpha=0.85))
-            # MD-ready overlay: super-best MD-selected complexes on their tier's B-ECDF curve.
+            # MD-ready overlay: top-performing MD-selected complexes on their tier's B-ECDF curve.
             _mdb = _md_ready_df(df)
             for _, _mr in _mdb.iterrows():
                 _bx = pd.to_numeric(pd.Series([_mr.get("catalytic_constellation_score")]), errors="coerce").iloc[0]
@@ -3579,17 +3688,35 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             if len(_mdb):
                 _axb.scatter([], [], marker="*", s=140, facecolor="#FFD400", edgecolor="black",
                              linewidths=0.9, label=f"MD-ready (n={len(_mdb)})")
-            _axb.axvline(_BF, ls="--", color="#C0392B", lw=1.4, alpha=0.7)
-            _axb.set_xlabel("Criterion B — catalytic constellation score", fontsize=10)
-            _axb.set_ylabel("Cumulative fraction", fontsize=10)
-            _axb.legend(loc="upper left", ncol=max(len(_means) + (1 if len(_mdb) else 0), 1),
-                        fontsize=5.6, handlelength=0.9,
-                        handletextpad=0.25, columnspacing=0.5, framealpha=0.92, borderpad=0.3)
+            _axb.axvline(_BF, ls="--", color="#C0392B", lw=1.4, alpha=0.7,
+                         label=f"Criterion-B floor for {CFG.TIER_TOP} ({_BF:g})")
+            _axb.set_xlabel("Catalytic constellation score  (reactive-geometry match, 0–1)", fontsize=11)
+            _axb.set_ylabel("Cumulative fraction", fontsize=11)
+            """
+            The legend is stacked in one narrow column at the top left — the one corner no ECDF
+            crosses, since every tier is still flat at zero below a constellation score of ~0.17.
+            Strung out along a single row (one column per tier) the entries would shrink below
+            legibility and still collide. The criterion floor carries its own label rather than
+            being an unexplained red line.
+            """
+            _axb.legend(loc="upper left", ncol=1, fontsize=8.5, handlelength=1.5,
+                        handletextpad=0.5, framealpha=0.93, borderpad=0.5, labelspacing=0.35)
             _axb.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axb.set_axisbelow(True)
-            _axb.text(-0.13, 1.02, "b", transform=_axb.transAxes, fontsize=17, fontweight="bold")
 
-            # ── panel c : SN2 dead-end chemistry gate (penalised ligands + FA/DFA) ──
-            _axc = _figtc.add_subplot(_gstc[0, 2])
+            """
+            ── Figure 12 : the SN2 dead-end chemistry gate ──────────────────────────────────────
+            A scatter of BDE against occlusion cannot work here, and no amount of label-nudging
+            fixes it: the ligands SHARE coordinates. Five perfluoroalkyl sulfonates have the same
+            C–F bond-dissociation energy and the same backside occlusion, so they land on one dot,
+            and their names have to be stacked or fanned around it. The figure was spending all its
+            ink on the collision and none on the chemistry.
+
+            One row per ligand removes the collision by construction. Each ligand is a row; the two
+            criteria are read side by side against their own gate; and the verdict — dead end, or
+            feasible α-attack — is the row's colour. Nothing can overlap, and the question the
+            figure exists to answer (WHICH criterion killed this ligand) is now answerable at a
+            glance: a bar crossing into the shaded zone is the one that failed.
+            """
             _DEAD, _FEAS = "#D62728", "#1F77B4"
             _dd = df.dropna(subset=["scissile_cf_bde", "sn2_backside_occlusion"])
             _gg = _dd.groupby("Ligand_Name").agg(
@@ -3597,34 +3724,66 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 dead=("sn2_dead_end", lambda s: pd.to_numeric(s, errors="coerce").fillna(0).max())).reset_index()
             _gg["pen"] = (_gg["dead"] > 0) | (_gg["bde"] > _BDE_MAX) | (_gg["occ"] > _OCC_MAX)
             _keep = _gg[_gg["pen"] | _gg["Ligand_Name"].isin(["26_Fluoroacetate", "27_Difluoroacetate"])].copy()
+
+            _figc = plt.figure(figsize=(12, 7))
+            _gsc = _figc.add_gridspec(1, 2, width_ratios=[1.0, 1.0], wspace=0.06)
+            _axc = _figc.add_subplot(_gsc[0, 0])          # criterion 1 — bond strength
+            _axc2 = _figc.add_subplot(_gsc[0, 1], sharey=_axc)   # criterion 2 — backside access
+
             if len(_keep) >= 2:
                 _keep["lig"] = _keep["Ligand_Name"].str.replace(r"^\d+_", "", regex=True)
                 _keep["isdead"] = _keep["dead"] > 0
-                _axc.axhspan(_BDE_MAX, _keep.bde.max() + 3, color=_DEAD, alpha=0.05)
-                _axc.axvspan(_OCC_MAX, _keep.occ.max() + 0.4, color=_DEAD, alpha=0.05)
-                _keep["_gx"] = _keep["occ"].round(1); _keep["_gy"] = _keep["bde"].round(0)
-                for _gk, _grp in _keep.groupby(["_gx", "_gy"]):
-                    _yo = 10.0
-                    for _, _r in _grp.sort_values("lig").iterrows():
-                        _cc = _DEAD if _r["isdead"] else _FEAS
-                        _axc.scatter(_r["occ"], _r["bde"], s=85, color=_cc, edgecolor="w", lw=0.5, zorder=3)
-                        _axc.annotate(_r["lig"], (_r["occ"], _r["bde"]), xytext=(0, _yo), textcoords="offset points",
-                                      rotation=90, ha="center", va="bottom", fontsize=7, color=_cc, fontweight="bold")
-                        _yo += len(_r["lig"]) * 4.4 + 7
-                _axc.set_ylim(107.0, _keep.bde.max() + 12)
-            _axc.axhline(_BDE_MAX, ls="--", color=_DEAD, lw=1.3); _axc.axvline(_OCC_MAX, ls="--", color=_DEAD, lw=1.3)
-            _axc.set_xlabel("SN2 backside steric occlusion (Σ vdW, Å)", fontsize=10)
-            _axc.set_ylabel("Scissile C–F bond-dissociation energy (kcal/mol)", fontsize=10)
+                # order by the verdict, then by bond strength: the feasible controls sit together at
+                # the foot of the chart, the dead ends above them.
+                _keep = _keep.sort_values(["isdead", "bde", "occ"], ascending=[True, True, True])
+                _y = np.arange(len(_keep))
+                _cols = [_DEAD if _d else _FEAS for _d in _keep["isdead"]]
+
+                # left — scissile C–F BDE
+                _axc.axvspan(_BDE_MAX, _keep.bde.max() + 2.5, color=_DEAD, alpha=0.07, zorder=0)
+                _axc.hlines(_y, _keep.bde.min() - 2.0, _keep["bde"], color=_cols, lw=1.4, alpha=0.55, zorder=2)
+                _axc.scatter(_keep["bde"], _y, s=110, color=_cols, edgecolor="white", lw=0.8, zorder=3)
+                _axc.axvline(_BDE_MAX, ls="--", color=_DEAD, lw=1.4)
+                for _yy, _v in zip(_y, _keep["bde"]):
+                    _axc.annotate(f"{_v:.1f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
+                                  va="center", fontsize=8, color="#333333")
+                _axc.set_xlim(_keep.bde.min() - 2.0, _keep.bde.max() + 2.5)
+                _axc.set_xlabel(f"Scissile C–F BDE  (kcal/mol)   ·   gate > {_BDE_MAX:g}", fontsize=11)
+                _axc.set_yticks(_y)
+                _axc.set_yticklabels(_keep["lig"], fontsize=9.5, fontweight="bold")
+                for _tl, _cc in zip(_axc.get_yticklabels(), _cols):
+                    _tl.set_color(_cc)
+
+                # right — backside steric occlusion
+                _axc2.axvspan(_OCC_MAX, max(_keep.occ.max() + 0.35, _OCC_MAX + 0.35),
+                              color=_DEAD, alpha=0.07, zorder=0)
+                _axc2.hlines(_y, 0, _keep["occ"], color=_cols, lw=1.4, alpha=0.55, zorder=2)
+                _axc2.scatter(_keep["occ"], _y, s=110, color=_cols, edgecolor="white", lw=0.8, zorder=3)
+                _axc2.axvline(_OCC_MAX, ls="--", color=_DEAD, lw=1.4)
+                for _yy, _v in zip(_y, _keep["occ"]):
+                    _axc2.annotate(f"{_v:.2f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
+                                   va="center", fontsize=8, color="#333333")
+                _axc2.set_xlim(-0.05, max(_keep.occ.max() + 0.5, _OCC_MAX + 0.5))
+                _axc2.set_xlabel(f"Backside steric occlusion  (Σ vdW, Å)   ·   gate > {_OCC_MAX:g}", fontsize=11)
+                _axc2.tick_params(labelleft=False)
+                _axc.set_ylim(-0.8, len(_keep) - 0.2)
+
             _axc.legend(handles=[_L2Dtc([], [], marker="o", ls="", color=_DEAD, label="SN2 dead-end (flagged)"),
                                  _L2Dtc([], [], marker="o", ls="", color=_FEAS, label="feasible α-attack (control)"),
-                                 _L2Dtc([], [], ls="--", color=_DEAD, label=f"BDE×occ gate ({_BDE_MAX:g} · {_OCC_MAX:g})")],
-                        loc="lower center", ncol=3, fontsize=6.3, framealpha=0.95, columnspacing=0.7,
-                        handlelength=1.1, handletextpad=0.3, borderpad=0.3)
-            _axc.grid(True, color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0); _axc.set_axisbelow(True)
-            _axc.text(-0.13, 1.02, "c", transform=_axc.transAxes, fontsize=17, fontweight="bold")
+                                 _L2Dtc([], [], ls="--", color=_DEAD, label="gate (shaded = fails it)")],
+                        loc="lower right", fontsize=9, framealpha=0.95, handlelength=1.4,
+                        handletextpad=0.5, borderpad=0.5)
+            for _a in (_axc, _axc2):
+                _a.grid(True, axis="x", color="#CCCCCC", linewidth=0.6, alpha=0.75, zorder=0)
+                _a.set_axisbelow(True)
 
-            plt.savefig(out_dir / "Figure_30_TwoCriteria_Tier_Logic.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            plt.close(_figtc)
+            _figa.savefig(out_dir / "Figure_30a_Criterion_A_Gates_B.png",
+                          dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            _figb.savefig(out_dir / "Figure_30b_Criterion_B_ECDF_by_Tier.png",
+                          dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            _figc.savefig(out_dir / "Figure_30c_SN2_DeadEnd_Gate.png",
+                          dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.close(_figa); plt.close(_figb); plt.close(_figc)
     except Exception as e:
         reporter.log(f"  ! Two-criteria figure skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
@@ -3922,7 +4081,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 med = float(sub16.median())
                 n16 = len(sub16)
                 ax.text(i, med + 0.022, f"med={med:.2f}\nn={n16:,}",
-                        ha="center", va="bottom", fontsize=6.0, fontweight="bold",
+                        ha="center", va="bottom", fontsize=7.0, fontweight="bold",
                         zorder=7, color="#111",
                         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#ccc",
                                   linewidth=0.6, alpha=0.85))
@@ -3954,7 +4113,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ]:
                 ax.text(0.985, _zy14_start, _ztxt14,
                         ha="center", va="bottom", clip_on=True,
-                        fontsize=5.5, color=_zcol14, style="italic",
+                        fontsize=7.0, color=_zcol14, style="italic",
                         fontweight="bold", rotation=90, transform=ax.transAxes,
                         bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=_zec14,
                                   alpha=0.80, linewidth=0.5))
@@ -3981,7 +4140,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _leg16_h.append(_mdh16)
             _leg16 = ax.legend(handles=_leg16_h,
                                loc="lower left", bbox_to_anchor=(0.01, 0.01),
-                               fontsize=6, framealpha=0.92, fancybox=True, ncol=4,
+                               fontsize=7.0, framealpha=0.92, fancybox=True, ncol=4,
                                labelspacing=0.2, handlelength=0.8, handletextpad=0.3)
             _leg16.set_zorder(20)
 
@@ -3989,7 +4148,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _sk_txt = ", ".join(f"{t} (n={n})" for t, n in _skipped14)
                 ax.text(0.99, 0.015, f"n<4, shown as points (no KDE): {_sk_txt}",
                         transform=ax.transAxes, ha="right", va="bottom",
-                        fontsize=6.5, style="italic", color="#555", zorder=20)
+                        fontsize=7.0, style="italic", color="#555", zorder=20)
 
             plt.tight_layout()
             plt.savefig(out_dir / "Figure_15_Fluorine_Engagement_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4205,10 +4364,22 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                              "Interaction_Density_Norm"].dropna().values
                                   for t in valid_t20 if len(f20_df[f20_df["degrader_tier"]==t]) >= 3]
                     if len(_kw_groups) >= 2:
-                        _, _kw_p = _kw20(*_kw_groups)
-                        _pstr = ("p<0.001" if _kw_p < 0.001 else
-                                 f"p={_kw_p:.3f}")
-                        ax.text(0.01, 0.99, f"Kruskal–Wallis {_pstr}  (across tiers)",
+                        _kw_h, _kw_p = _kw20(*_kw_groups)
+                        # Same family as the other tests: it must be corrected WITH them, or the
+                        # FDR control is applied to an incomplete set.
+                        _register_p("Kruskal-Wallis across tiers", "Interaction_Density_Norm",
+                                    float(_kw_h), int(sum(len(g) for g in _kw_groups)), float(_kw_p))
+                        """
+                        The annotation is marked UNCORRECTED. The Benjamini-Hochberg q depends on the
+                        whole test family, which is complete only after every figure has run, so no q
+                        exists at draw time — and printing a bare p next to a significance claim reads
+                        as though the multiplicity had been accounted for. The corrected q_BH for this
+                        exact test is in 06_Statistical_Tests.csv, which is the reportable value.
+                        """
+                        _pstr = ("p<0.001" if _kw_p < 0.001 else f"p={_kw_p:.3f}")
+                        ax.text(0.01, 0.99,
+                                f"Kruskal–Wallis {_pstr} uncorrected  (across tiers; "
+                                f"BH q in 06_Statistical_Tests.csv)",
                                 transform=ax.transAxes, ha="left", va="top",
                                 fontsize=8, color="#333", style="italic")
                 except Exception:
@@ -4260,7 +4431,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _be_span = (_be_hi - _be_lo) if _be_hi > _be_lo else 1.0
                 for _mx, _my in zip(_be_mxs, _be_mys):
                     ax.text(_mx, _my - _be_span * 0.03, f"{_my:.3f}", ha="center", va="top",
-                            fontsize=6.5, fontweight="bold", color="#CC0000", zorder=9,
+                            fontsize=7.0, fontweight="bold", color="#CC0000", zorder=9,
                             bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="#CCCCCC",
                                       linewidth=0.5, alpha=0.85))
             if _be_hi > _be_lo:
@@ -4288,6 +4459,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                       ncol=len(_lh17b), fontsize=8, framealpha=0.92, fancybox=True,
                       columnspacing=1.2, handletextpad=0.5, borderaxespad=0.0).set_zorder(20)
             plt.tight_layout()
+            _stat_box(ax, _kruskal_by_tier(_bedata, _be_bind, tiers=existing_tiers), "lower left")
             plt.savefig(out_dir / "Figure_17b_Binding_Energetics.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
             reporter.log(f"  ! Figure 17b skipped: {e}")
@@ -4332,13 +4504,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _lig = _elite["Ligand_Name"].astype(str).str.replace(r"^\d+_", "", regex=True)
                 for _xx, _yy, _lg in zip(_elite["UMAP_X"], _elite["UMAP_Y"], _lig):
                     ax.annotate(_lg, (_xx, _yy), textcoords="offset points", xytext=(5, 4),
-                                fontsize=6.5, fontweight="bold", color="#1A1A1A", zorder=9)
+                                fontsize=7.0, fontweight="bold", color="#1A1A1A", zorder=9)
 
         ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", fontsize=10)
         ax.set_ylabel("UMAP Dimension 2", fontsize=10)
         ax.grid(False)
         ax.legend(loc="lower left", fontsize=8, framealpha=0.92)
         plt.tight_layout()
+        _stat_box(ax, _umap_tier_separation(_u), "lower left")
         plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
@@ -4491,10 +4664,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
     # --- Figure 20: Dual-Objective Tier Assessment — SN2 Geometry vs AI Confidence ---
     """
-    Replaces the broken Pareto-rank approach (Binding_Probability was ~constant 0.99).
-    New design: for each tier, compute % meeting SN2 ≥ 165° (geometry) and
-    % meeting Boltz_Model_Confidence ≥ 0.75 (AI) — showing where each tier sits
-    in the biologically meaningful substrate-vs-inhibitor space.
+    For each tier: the % meeting SN2 ≥ 165° (geometry) against the % meeting
+    Boltz_Model_Confidence ≥ 0.75 (AI), which places each tier in the biologically
+    meaningful substrate-vs-inhibitor space. Ranking on Binding_Probability cannot
+    do this — it is ~constant at 0.99 across the whole dataset and separates nothing.
     """
     if "SN2_Attack_Angle" in df.columns and "Boltz_Model_Confidence" in df.columns:
         try:
@@ -4569,11 +4742,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                         continue
                     if _pct_val >= 12:
                         ax19L.text(_pct_val / 2, _yi + _yo, f"{_pct_val:.0f}%",
-                                   va="center", ha="center", fontsize=6,
+                                   va="center", ha="center", fontsize=7.0,
                                    color="white", fontweight="bold", zorder=5)
                     else:
                         ax19L.text(_pct_val + 1.0, _yi + _yo, f"{_pct_val:.0f}%",
-                                   va="center", ha="left", fontsize=6,
+                                   va="center", ha="left", fontsize=7.0,
                                    color="#333", zorder=5)
 
             ax19L.set_yticks(_y19)
@@ -4591,14 +4764,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax19L.set_xlabel("Percentage of complexes (%)", fontsize=9)
             ax19L.tick_params(axis="x", labelsize=8)
             # Legend: single row, 70% font (7.5→5.25), inside bottom-right
-            ax19L.legend(loc="lower right", ncol=3, fontsize=5.25,
+            ax19L.legend(loc="lower right", ncol=3, fontsize=7.0,
                          framealpha=0.92, fancybox=True, borderpad=0.4,
                          handlelength=1.0, handletextpad=0.3, columnspacing=0.7)
             ax19L.invert_yaxis()
 
             # ── Right panel: scatter of tier medians in Conf × SN2 space ─────
             # Background hexbin of all complexes (shows density landscape)
-            _hb19 = ax19R.hexbin(_d19["Boltz_Model_Confidence"], _d19["SN2_Attack_Angle"],
+            ax19R.hexbin(_d19["Boltz_Model_Confidence"], _d19["SN2_Attack_Angle"],
                                   gridsize=40, cmap="Greys", mincnt=1, alpha=0.4, linewidths=0.2, zorder=1)
 
             # Substrate / inhibitor zone shading — bounds from CFG
@@ -4644,7 +4817,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ax19R.annotate(_t19, xy=(_cx, _cy),
                                xytext=(0.83, _laby),
                                ha="right", va="center",
-                               fontsize=6.5, color=_col19, fontweight="bold",
+                               fontsize=7.0, color=_col19, fontweight="bold",
                                arrowprops=dict(arrowstyle="-|>", color=_col19, lw=1.3,
                                                mutation_scale=15, shrinkA=3, shrinkB=5,
                                                connectionstyle="arc3,rad=0.12"),
@@ -4661,12 +4834,12 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                        style="italic", ha="center", va="center")
             ax19R.text(0.87, 8, "Inhibitor zone", color="#C04000", fontsize=7,
                        style="italic", ha="center", va="center")
-            ax19R.text(0.745, 95, f"Conf threshold = {CFG.SUBSTRATE_CONF_MIN:.2f}", color="#0072B2", fontsize=6.5,
+            ax19R.text(0.745, 95, f"Conf threshold = {CFG.SUBSTRATE_CONF_MIN:.2f}", color="#0072B2", fontsize=7.0,
                        ha="center", va="center", style="italic", rotation=90)
 
             # Legend: 3 columns, shrunk icons, fixed outside above the top-left corner
             ax19R.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
-                         ncol=3, fontsize=5.25, framealpha=0.90, fancybox=True,
+                         ncol=3, fontsize=7.0, framealpha=0.90, fancybox=True,
                          markerscale=0.45, handlelength=1.0, handletextpad=0.3,
                          columnspacing=0.8, labelspacing=0.3, borderpad=0.3)
 
@@ -4711,7 +4884,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 break
         if not _ctrl_mask.any() and "job_name" in df.columns:
             _ctrl_mask = df["job_name"].str.lower().str.contains("control|ctrl|deha4_ref|3r3u", na=False)
-        _n_controls = int(_ctrl_mask.sum())
         """
         Identify the two reference controls by their exact job-name patterns:
         3R3U  control: job_name contains '3r3u'  AND 'control'
@@ -4736,8 +4908,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _ctrl_3R3U_mask = _jn_lower.str.contains("3r3u", na=False)
             if not _ctrl_deha4_mask.any():
                 _ctrl_deha4_mask = _jn_lower.str.contains("deha4", na=False)
-        _n_3R3U  = int(_ctrl_3R3U_mask.sum())
-        _n_deha4 = int(_ctrl_deha4_mask.sum())
 
         # Y positions (top tier at top)
         tier_y_f2   = np.arange(len(tier_rows_f2) - 1, -1, -1)
@@ -4844,7 +5014,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     ax_f2.annotate(f"n={int(ni):,}",
                                    xy=(mid_x, yi),
                                    xytext=(mid_x, yi + 0.38),
-                                   ha="center", va="bottom", fontsize=6.5,
+                                   ha="center", va="bottom", fontsize=7.0,
                                    color=col_arr, fontweight="bold",
                                    arrowprops=dict(arrowstyle="->", color=col_arr,
                                                    lw=0.7, shrinkB=2),
@@ -4889,7 +5059,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             for (_clbl, _ccol), _off in zip(_items, _offs):
                 ax_f2.annotate(f"◀ {_clbl}", xy=(100, _cy),
                                xytext=(99, _cy + _off),
-                               ha="right", va="center", fontsize=6.8,
+                               ha="right", va="center", fontsize=7.0,
                                color=_ccol, fontweight="bold",
                                arrowprops=dict(arrowstyle="->", color=_ccol, lw=0.9,
                                                shrinkA=1, shrinkB=2),
@@ -4978,9 +5148,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     _phys21 = float(row21["_phys_pct21"])
                     _ai21   = float(row21["_ai_pct21"])
                     _gap21  = float(row21["_gap21"])
-                    _tier21 = (row21.get("degrader_tier", "")
-                               if "degrader_tier" in gems.columns else "")
-                    _col21  = TIER_PALETTE.get(_tier21, "#AA3377")
                     _y21    = _gi21
 
                     # Connecting line — width proportional to |gap|
@@ -4994,13 +5161,13 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     ax21.scatter(_phys21, _y21, color="#0072B2", s=130, zorder=4,
                                  marker="o", edgecolors="red", linewidths=1.2)
                     ax21.text(_phys21, _y21 + 0.34, f"{_phys21:.0f}%",
-                              va="bottom", ha="center", fontsize=5.5, color="#0072B2",
+                              va="bottom", ha="center", fontsize=7.0, color="#0072B2",
                               fontweight="bold", zorder=5)
                     # AI dot (golden diamond, no border)
                     ax21.scatter(_ai21, _y21, color="#E69F00", s=130, zorder=4,
                                  marker="D", edgecolors="none")
                     ax21.text(_ai21, _y21 - 0.34, f"{_ai21:.0f}%",
-                              va="top", ha="center", fontsize=5.5, color="#E69F00",
+                              va="top", ha="center", fontsize=7.0, color="#E69F00",
                               fontweight="bold", zorder=5)
 
                     # Value labels just outside the right dot
@@ -5501,7 +5668,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
                 ax.barh(yi, 1.0, left=left, height=_BH, color=col, edgecolor="white",
                         linewidth=0.8, zorder=3)
                 ax.text(left + 0.5, yi, _tshort(r["tier"]), ha="center", va="center",
-                        fontsize=6.3, fontweight="bold", color=_label_col(col), zorder=5)
+                        fontsize=7.0, fontweight="bold", color=_label_col(col), zorder=5)
                 _tier_seq.append(r["tier"])
                 left += 1
 
@@ -5977,7 +6144,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         )
         _oc25_order  = ["Substrate", "Borderline", "Reactive (low conf)",
                         "Non-reactive", "Potential Inhibitor"]
-        _oc25_colors = dict(CFG.OUTCOME_COLOUR)   # sourced from CFG § 8.9
 
         # ── Panel A (25a): hexbin landscape + tier scatter + rolling median ──
         fig25a, axA = plt.subplots(figsize=(14, 8))
@@ -6120,7 +6286,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 _bot = _bot + _vals
             for _xi, _n in enumerate(ct_df.sum(axis=1).values):
                 axB.text(xpos[_xi], 101.5, f"n={_n:,}", ha="center", va="bottom",
-                         fontsize=6.3, color=_bin_cols_25[_xi], fontweight="bold")
+                         fontsize=7.0, color=_bin_cols_25[_xi], fontweight="bold")
 
         _stack_at_25(_xB - _offB, _oc_pct25, _oc_ct25, lambda c: _oc25_colors_b.get(c, "#999"), "left")
         _stack_at_25(_xB + _offB, _tier_pct25, _tier_ct25, lambda t: TIER_PALETTE.get(t, "#999"), "right")
@@ -6251,7 +6417,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
             _labels25 = [_xlabel25(g) for g in _groups25]
             _pos25    = np.arange(len(_groups25))
-            _mw_by    = [_d25c[_d25c["_nC"] == g]["_mw"].dropna().values for g in _groups25]
 
             def _grp25(col):
                 return [_d25c[_d25c["_nC"] == g][col].dropna().values for g in _groups25]
@@ -6890,22 +7055,22 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     summary in the Figure-26c visual grammar: per-size-bin distribution of the effective
     mechanistic score (green boxes), the connected bin means (dark-orange size trend), the
     Tier_1A viability floor, and — on the right axis — the catalytic hit-rate (fraction
-    reaching Tier_2A+) and the mean catalytic-shell pocket_containment that drives the
-    demotion. The reliable size axis is ligand_max_extent with catalytic-anchored
-    pocket_containment, NOT the convex-hull pocket_occupancy proxy.
+    reaching Tier_2A+) and the mean pocket_containment_cavity that drives the demotion. The
+    reliable size axis is ligand_max_extent against the protein-aware cavity containment, NOT
+    the convex-hull pocket_occupancy proxy.
     """
     try:
         from matplotlib.patches import Patch as _P08
         _ext = _num("ligand_max_extent"); _eff = _num("mechanistic_score_effective")
-        _con = _num("pocket_containment")
+        _con = _num("pocket_containment_cavity")
         _torder = ["Tier_5_Decoy", "Tier_4", "Tier_3", "Tier_2B", "Tier_2A", "Tier_1B", "Tier_1A"]
         _tv = df["degrader_tier"].astype(str).map({t: i for i, t in enumerate(_torder)})
         sub = pd.DataFrame({"ext": _ext, "eff": _eff, "con": _con, "tv": _tv}).dropna(subset=["ext", "eff", "tv"])
-        if len(sub) >= 50:
+        if len(sub) >= CFG.VIS_DIAG_MIN_N_FOR_BINNING:
             _hi = float(np.nanpercentile(sub["ext"], 99))
             _bins = np.linspace(float(sub["ext"].min()), _hi, 13)
             sub["_b"] = pd.cut(sub["ext"], _bins, include_lowest=True)
-            _NFLOOR08 = 30
+            _NFLOOR08 = CFG.VIS_DIAG_MIN_N_PER_BIN
             _grpo = [g for g, d in sub.groupby("_b", observed=True) if len(d) >= _NFLOOR08]
             _pos = np.arange(len(_grpo))
             _cent = [iv.mid for iv in _grpo]
@@ -7016,8 +7181,9 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             if not _LP09:
                 reporter.log(f"  ! Diag 09 skipped: ligand SMILES not found ({_smi09})")
                 raise RuntimeError("ligand properties unavailable")
-            _PROD_LO, _PROD_HI, _READY, _SENT = 2.5, 3.5, 3.5, 20.0
-            _ANG_MIN = 150.0
+            _PROD_LO, _PROD_HI = CFG.VIS_DIAG_PROD_LO_A, CFG.VIS_DIAG_PROD_HI_A
+            _READY, _SENT = CFG.VIS_DIAG_READY_DIST_A, CFG.VIS_DIAG_DIST_SENTINEL_A
+            _ANG_MIN = CFG.VIS_DIAG_ANGLE_MIN_DEG
             _MECH_MIN = CFG.TIER_MECH_MIN["Tier_2A"]
             _d09 = df.copy()
             _d09["_nC"] = _d09[_lcol09].map(lambda l: _LP09.get(str(l), {}).get("nC"))
@@ -7100,7 +7266,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                           _P09(facecolor=_BAND09, alpha=0.22, label="8-residue spread (IQR)"),
                           _rln09, _rcl09, _mln09, _hln09]
                 axL.legend(handles=_leg09, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=8,
-                           fontsize=6.3, framealpha=0.95, columnspacing=0.8, handletextpad=0.35)
+                           fontsize=7.0, framealpha=0.95, columnspacing=0.8, handletextpad=0.35)
                 plt.tight_layout()
                 _o = out_dir / "09_Reactive_Engagement.png"
                 fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7729,7 +7895,9 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "04_Catalytic_Geometry_and_Mechanism/10_TwoCriteria_Tier_Logic.png",
+        "04_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
+        "04_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
+        "04_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
         "  Title   : Two-criteria tier logic + dead-end feasibility (single 3-panel figure)",
         "  Panel a : Criterion A (active-site integrity, fraction of the 8 catalytic residues correctly",
         "            placed) vs Criterion B (catalytic constellation score) violins per A-bin, with the",
@@ -7791,6 +7959,9 @@ def write_figure_descriptions(out_dir: Path):
         _txt = _txt.replace(_old_fp, _new_fp)
     desc_path = _aux_dir(out_dir) / "05_Figure_Descriptions.txt"
     desc_path.write_text(_txt, encoding="utf-8")
+    _stats_path = _write_statistical_tests(out_dir)
+    if _stats_path is not None:
+        print(f"  Statistical Tests (BH-corrected) Saved: {_stats_path}", flush=True)
     return desc_path
 
 

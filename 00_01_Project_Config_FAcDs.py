@@ -164,6 +164,14 @@ class CFG:
     # SECTION 1: PROJECT IDENTITY & BOLTZ-2 PREDICTION ENGINE  (Step 02)
     # ===============================================================================
     PROJECT_NAME: str   = "PFAS-27"   # project identifier (used in CLI banners, e.g. Step 06)
+    """
+    Pipeline version — the single source of truth every step reports and every run stamps into its
+    outputs. A result is only reproducible if the code that produced it can be named, and a bare
+    timestamp cannot do that: two runs on the same day can straddle a change to the tier gates.
+    Bump the MINOR component when a change moves the numbers (a gate, a weight, a metric definition)
+    and the PATCH component for anything that cannot.
+    """
+    PIPELINE_VERSION: str = "2.1.0"   # 2.1.0 — protein-aware pocket containment, attacking-oxygen NAC, BDE elite ceiling, cradle-aware Šidák, active-site pLDDT gate
 
     # -------------------------------------------------------------------------------
     # Step 1.1: Executable & model
@@ -186,6 +194,7 @@ class CFG:
     # -------------------------------------------------------------------------------
     BOLTZ_RETRY_MAX: int     = 2   # max retries after GPU failure before abandoning job
     BOLTZ_RETRY_SLEEP: int   = 6   # seconds to wait between retry attempts
+    CONTROL_RESIDUE_MATCH_RADIUS: float = 6.0   # Å — search radius when matching a control's catalytic residue onto its structural counterpart (Cα-anchored nearest same-type residue)
     BOLTZ_PREDICT_TIMEOUT_S: int = 3600  # per-prediction wall-clock ceiling; a single co-fold never approaches this, so a breach means a frozen GPU/CUDA driver → kill and retry rather than stall the pipeline
     BOLTZ_POLL_INTERVAL: int = 5   # seconds between job-status poll cycles
 
@@ -700,7 +709,7 @@ class CFG:
     only for a complete anchor set AND an ideal 180° SN2 trajectory). The score is
     holistic: five binary anchor checks (weight 0.70 total) plus a graded SN2
     attack-angle term (weight 0.30), so a pose with intact catalytic machinery but a
-    non-productive attack angle can no longer read a perfect 1.00 — the angle is
+    non-productive attack angle cannot read a perfect 1.00 — the angle is
     folded into mech, not scored separately. The angle term is Šidák multiplicity-
     corrected for the scissile C–F count: credit (1-p1)^n with p1=(1-cos δ)/2 and
     δ=180-angle, so a clean anti-attack on a mono-F carbon outscores the same angle
@@ -753,7 +762,7 @@ class CFG:
     # Graded chemical-feasibility factor (feasibility_factor) — continuous, never a veto.
     FEASIBILITY_FLOOR: float     = 0.50    # lowest the feasibility multiplier can reach (a recalcitrant but real substrate such as TFA is down-ranked, not buried — QM/MM is the true arbiter)
     FEAS_BDE_LO: float           = 120.0   # kcal/mol; scissile C–F BDE ≤ this → no BDE penalty (FA 109.9, DFA 119.5 pass)
-    FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. TFA (127.5) lands graded (~0.38), not the floor, so a strong-binding variant can still surface it
+    FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. TFA (127.5) lands graded (~0.38), not the floor, so it still ranks as a lead — but the Tier_1A bond-strength ceiling (TIER_ELITE_BDE_MAX, §8.5) caps it at Tier_1B regardless of its pose
     FEAS_BETA_PER_F: float       = 0.35    # per-β-fluorine penalty: f_beta = 1/(1 + this·β_F) (FA/DFA β=0; PFAS β≥2)
 
     # -------------------------------------------------------------------------------
@@ -765,36 +774,93 @@ class CFG:
     raw geometry). Both engage only past a chemistry/steric threshold, so genuine
     substrates are unpenalised and the demotion is graded, never a hard class veto.
 
-      Chemistry  : penalty = CHEM_PEN_W_BDE·max(0, BDE − SCISSILE_CF_BDE_MAX)
-                           + CHEM_PEN_W_OCCL·max(0, occlusion − SN2_BACKSIDE_OCCL_MAX)
-                   TFA (BDE 127.5, occl 2.94) carries ~0.24 at a poor SN2 angle → Tier_2B;
-                   the penalty fades only for a near-linear angle (CHEM_PEN_ANGLE_* below), so
-                   only a ≥175° TFA pose clears the tier gate, with competence setting its
-                   within-tier rank; a poor-angle pose (e.g. the DeHa4 control, ~159°) keeps the
-                   full penalty. A substrate below the BDE/occlusion cutoffs receives no term.
-      Containment: penalty = CONTAIN_PEN_W·max(0, CONTAIN_PEN_TARGET − pocket_containment)
-                   FAcD is a small-substrate (haloacetate) hydrolase (Wackett 2022; Chan
-                   2011): the pocket fully holds ≤C4 (containment ≈ 1.0); longer PFAS spill
-                   out and are demoted in proportion. Per-pose, catalytic-anchored geometry,
-                   so a genuine wide-pocket homolog that truly contains a longer chain is
-                   spared. Long-PFAS hydrolytic-SN2 hits remain EXPLORATORY, not degraders.
+      Chemistry  : penalty = CHEM_PEN_W_BDE·max(0, BDE − SCISSILE_CF_BDE_MAX)          [no fade]
+                           + CHEM_PEN_W_OCCL·max(0, occlusion − SN2_BACKSIDE_OCCL_MAX) [angle-faded]
+                   The two terms answer different questions and therefore behave differently.
+                   Backside occlusion is a STERIC obstruction of the attack trajectory: an
+                   enzyme that organises the substrate into a near-linear near-attack geometry
+                   has, by construction, cleared that trajectory, so the occlusion term fades to
+                   zero as the angle approaches 180° (CHEM_PEN_ANGLE_* below).
+                   The C–F bond dissociation energy is an INTRINSIC property of the bond being
+                   broken. No approach geometry lowers it: a perfect 180° trajectory onto a
+                   127 kcal/mol C–F still has to break a 127 kcal/mol C–F. The BDE term is
+                   therefore flat in angle, and a substrate whose scissile C–F exceeds
+                   TIER_ELITE_BDE_MAX cannot hold the elite tier at any angle (§8.5) — it may
+                   still surface as a lower-tier discovery lead, where Step-07 QM/MM is the
+                   arbiter of whether the barrier is in fact surmountable.
+      Containment: penalty = CONTAIN_PEN_W·max(0, CONTAIN_PEN_TARGET − pocket_containment_cavity)
+                   FAcD is a small-substrate (haloacetate) hydrolase (Wackett 2022; Chan 2011),
+                   but the penalty must express the POCKET, not the ligand: the cavity metric is
+                   measured against the protein the ligand is actually docked into (§5.2c), so a
+                   genuine wide-pocket homolog that really does enclose a longer chain is spared
+                   and the same ligand can score differently in different enzymes. Long-PFAS
+                   hydrolytic-SN2 hits remain EXPLORATORY, not degraders.
     """
     CHEM_PEN_W_BDE: float    = 0.025   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
     CHEM_PEN_W_OCCL: float   = 0.13    # penalty per Å of backside occlusion above SN2_BACKSIDE_OCCL_MAX
     CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-fluorine on the attack-carbon chain: β-fluorination inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-fluorine (β_F=0) receives no β term and is governed by the α-BDE/occlusion penalty above
-    # The α-chemistry penalty (BDE + backside occlusion) FADES with a near-ideal SN2 angle:
-    # full at/below CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. A
-    # substrate the enzyme organises into a near-perfect near-attack conformation (angle → 180°)
-    # is surfaced as a discovery lead even if its intrinsic C–F is hard — a CF3 substrate such as
-    # TFA clears the tier gate only from a ≥175° pose, with competence setting its within-tier
-    # rank, while a mediocre-angle pose (e.g. the DeHa4 control, ~159°) keeps the full penalty.
-    # The β-fluorination and containment penalties do NOT fade (a perfluoro chain / oversized
-    # ligand is not rescued by a single-frame angle). Step-07 QM/MM remains the final arbiter.
-    CHEM_PEN_ANGLE_FULL: float = 175.0   # ° SN2 angle at/below which the α-chemistry penalty applies in full
-    CHEM_PEN_ANGLE_NONE: float = 180.0   # ° SN2 angle at/above which the α-chemistry penalty is fully waived
-    CONTAINMENT_RADIUS: float = 5.0    # Å; ligand heavy atoms within this of the carboxylate anchor count as pocket-contained
-    CONTAIN_PEN_TARGET: float = 0.85   # containment at/above this → no penalty (FA/DFA/PFBA ≈ 1.0)
-    CONTAIN_PEN_W: float      = 1.00   # penalty per unit of containment shortfall below the target
+    # The angle fade applies to the backside-occlusion term ONLY: full at/below
+    # CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. The BDE,
+    # β-fluorination and containment terms do not fade — none of them is a trajectory
+    # obstruction that a good angle can relieve. Step-07 QM/MM remains the final arbiter.
+    CHEM_PEN_ANGLE_FULL: float = 175.0   # ° SN2 angle at/below which the occlusion penalty applies in full
+    CHEM_PEN_ANGLE_NONE: float = 180.0   # ° SN2 angle at/above which the occlusion penalty is fully waived
+
+    # -------------------------------------------------------------------------------
+    # Step 5.2c: Pocket containment — TWO protein-aware measurements
+    # -------------------------------------------------------------------------------
+    """
+    Containment asks whether the ENZYME holds the ligand, so both measurements are made
+    against protein coordinates. They answer two different questions and are reported
+    side by side for every pose.
+
+    (A) pocket_containment_cavity — does the protein cavity enclose the ligand?
+        Each ligand heavy atom casts BURIAL_RAYS rays over the sphere; a ray is blocked when
+        a protein heavy atom obstructs it within BURIAL_PROBE_A. The atom's buriedness is the
+        blocked fraction, and the atom counts as contained at/above BURIAL_MIN. The metric is
+        the mean over ligand heavy atoms. This is the term the tier gate penalises: it is the
+        physical 'can this enzyme hold this molecule' question, and it varies with the protein,
+        so a wide-pocket homolog is not punished for the ligand's intrinsic length.
+
+    (B) pocket_containment_site8 — how much of the ligand sits inside the catalytic
+        constellation? Fraction of ligand heavy atoms within SITE8_SHELL_A of any heavy atom
+        of the eight mapped active-site residues (§2.5). This measures catalytic ENGAGEMENT,
+        not cavity fit: a long tail leaving the shell says the tail is outside the reactive
+        machinery, which is a mechanistic statement rather than a size penalty. Reported and
+        plotted; it does not gate.
+    """
+    BURIAL_RAYS: int          = 42     # rays per ligand heavy atom (icosphere-like Fibonacci sphere)
+    BURIAL_PROBE_A: float     = 8.0    # Å; ray length searched for a blocking protein atom
+    BURIAL_RAY_CLEARANCE: float = 1.8  # Å; a protein heavy atom within this of the ray axis blocks it
+    """
+    BURIAL_MIN is calibrated on the corpus, not assumed. Measured mean contained-atom fraction over
+    5 poses per ligand at four candidate thresholds:
+
+        buriedness ≥      0.50    0.70    0.80    0.90
+        fluoroacetate     1.00    0.92    0.76    0.64
+        difluoroacetate   1.00    1.00    0.97    0.67
+        TFA               1.00    1.00    1.00    0.71
+        PFBA  (C4)        1.00    0.99    0.63    0.26
+        PFHxA (C6)        1.00    0.99    0.85    0.21
+        PFOA  (C8)        1.00    0.91    0.66    0.08
+        PFTeDA(C14)       0.76    0.36    0.15    0.02
+        PFODA (C18)       0.62    0.35    0.12    0.03
+
+    At 0.50 the metric saturates — every pose reads 1.00 and it discriminates nothing. At 0.80 and
+    above it goes non-monotonic in size (fluoroacetate 0.76 falls BELOW PFHxA 0.85): those thresholds
+    are measuring how deep a small ligand sits, not whether the pocket holds it. 0.70 keeps the
+    native substrates high, holds the mid-chain PFCAs near 0.9, and separates the genuinely oversized
+    C14+ chains that spill out of any pocket.
+    """
+    BURIAL_MIN: float         = 0.70   # buriedness at/above which a ligand heavy atom counts as cavity-contained
+    SITE8_SHELL_A: float      = 5.0    # Å; ligand heavy atom within this of an active-site residue atom is engaged
+    CONTAIN_PEN_TARGET: float = 0.85   # cavity containment at/above this → no penalty
+    CONTAIN_PEN_W: float      = 1.00   # penalty per unit of cavity-containment shortfall below the target
+
+    # -------------------------------------------------------------------------------
+    # Step 5.2d: Angle multiplicity (Šidák exponent, §5.5)
+    # -------------------------------------------------------------------------------
+    ANGLE_MULTIPLICITY_OXYGENS: int = 2   # the attacking Oδ is the better of the aspartate's two oxygens — always a best-of-2
 
     # -------------------------------------------------------------------------------
     # Step 5.3: Reactive-centre gating — α-carbon attack + bidentate carboxylate clamp
@@ -858,7 +924,7 @@ class CFG:
                           scissile_cf_bde: float = 0.0,
                           backside_occlusion: float = 0.0,
                           beta_f_count: int = 0,
-                          scissile_f_count: int = 1) -> float:
+                          angle_multiplicity: int = 1) -> float:
         """
         Single source of truth for the holistic mechanistic score (0–1) — the raw geometry
         term behind the tier-gate key (TIER_MECH_MIN, via mechanistic_score_effective). Five
@@ -885,10 +951,18 @@ class CFG:
         if dist_base_acid <= self.MECH_BA_GATE:  s += self.MECH_W_BA
         if clamp_ok:                             s += self.MECH_W_CLAMP
         if stabilised:                           s += self.MECH_W_STAB
-        # Šidák multiplicity-corrected attack-angle credit (removes poly-F best-of-N inflation)
+        """
+        Šidák multiplicity-corrected attack-angle credit. The exponent is the number of
+        INDEPENDENT chances the pose had at a near-linear angle, which the caller computes
+        (§5.5): the two aspartate oxygens always, times the fluorines on the scissile carbon
+        only when the leaving F was NOT fixed by the fluoride cradle. A cradle-resolved
+        leaving group is a single deterministic choice and carries no best-of-N inflation, so
+        raising the exponent to the fluorine count there would penalise a poly-fluorinated
+        substrate twice for a selection it never made.
+        """
         _delta = max(0.0, 180.0 - float(angle))
         _p1    = (1.0 - math.cos(math.radians(_delta))) / 2.0
-        _n     = max(1, int(scissile_f_count))
+        _n     = max(1, int(angle_multiplicity))
         _q     = max(0.0, min(1.0, (1.0 - _p1) ** _n))
         s += self.MECH_W_ANGLE * _q
         if steric_clashes > 0:
@@ -1123,7 +1197,7 @@ class CFG:
     # Step 8.2: Attack angle minimum thresholds (°, lower bound)
     # -------------------------------------------------------------------------------
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). Surfaces a chemotype-clean set of native-substrate (FA/DFA) elite candidates on diverse enzymes; perfluoroalkyl (β-fluorinated) chains are kept out of Tier_1A by the β-feasibility + containment mech penalties, not by this angle gate, while an α-CF3 substrate with no β-fluorine (TFA) is governed by the angle-faded α-chemistry penalty (§5.2b).
+        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). Surfaces a chemotype-clean set of native-substrate (FA/DFA) elite candidates on diverse enzymes. Perfluoroalkyl (β-fluorinated) chains are kept out of Tier_1A by the β-feasibility + containment penalties, not by this angle gate. An α-CF3 substrate (TFA, scissile C–F 127.5) is barred from Tier_1A by the bond-strength ceiling TIER_ELITE_BDE_MAX (§8.5) at ANY angle — geometry cannot repeal thermochemistry — and is capped at Tier_1B as a discovery lead for Step-07 QM/MM.
         "Tier_1B": 165.0,
         "Tier_2A":    155.0,   # = NAC_ANGLE_STRICT
         "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
@@ -1179,15 +1253,43 @@ class CFG:
     MECH_ELITE_CONSTELLATION: float = 0.74   # constellation that compensates a mech in [LO, HI) for Tier_1A (RMSD ≲ 0.35 Å, crystal-grade)
 
     """
+    Elite bond-strength ceiling (Tier_1A, downgrade-only). Geometry cannot repeal thermochemistry:
+    a scissile C–F above TIER_ELITE_BDE_MAX is a bond the enzyme is not expected to break in a
+    single hydrolytic SN2 step, and no attack angle — however close to 180° — lowers that bond's
+    dissociation energy. Such a pose is capped at Tier_1B and remains a discovery lead whose
+    barrier Step-07 QM/MM adjudicates; it is barred from the elite tier the headline claim rests on.
+    The ceiling sits above the α-CF3 class (127.5 kcal/mol) so trifluoroacetate is capped, while
+    the mono/di-fluoro native substrates (≈ 109.5 / 119.5) are untouched.
+    """
+    TIER_ELITE_BDE_MAX: float       = 123.0  # kcal/mol; scissile C–F above this cannot hold Tier_1A at any angle (= SCISSILE_CF_BDE_MAX)
+
+    """
     Top-tier confidence guard. The catalytic machinery for Tier_1A is enforced by the tier
     ladder itself — all eight catalytic residues mapped to the correct type at catalytic
     distances with the fluoride cradle engaging the leaving F (Chan 2011). Global sequence
     identity is therefore NOT a tier gate: a distant homolog with a valid active site keeps
-    its tier. The only residual risk for the headline claim is an unconfident predicted fold,
-    so a Tier_1A hit whose Boltz confidence is below this floor is demoted ONE notch to
-    Tier_1B (still elite geometry, still reviewed); the geometric tier is retained in a column.
+    its tier. The residual risk is an unconfident predicted fold.
+
+    The confidence that matters is LOCAL. Every geometric quantity the elite tier rests on — the
+    SN2 angle, the nucleophile distance, the triad relay, the fluoride cradle — is measured on the
+    eight catalytic residues and on nothing else. A GLOBAL confidence score averages those eight
+    residues with hundreds of loop and surface residues the tier decision never touches: a protein
+    with a crisply resolved active site and disordered termini is punished for the termini, while a
+    globally confident fold with a smeared active site sails through. The gate therefore keys on
+    active_site_plddt — the mean Boltz pLDDT over exactly the eight mapped residues.
+
+    TIER_ELITE_AS_PLDDT_MIN = 90 is the conventional 'very high confidence' pLDDT band (the
+    AlphaFold/Boltz interpretation scale), not a corpus-fitted number. Measured on this corpus, the
+    active-site pLDDT of the current Tier_1A set runs 92.1–98.9 (median 97.9) against a corpus 1st
+    percentile of 90.1, so the floor disqualifies a genuinely smeared active site without pruning
+    the well-resolved elite set. A Tier_1A hit below it is demoted ONE notch to Tier_1B (still elite
+    geometry, still reviewed); the geometric tier is retained in its own column.
+
+    TIER_ELITE_CONF_MIN stays as the FALLBACK for a pose that carries no per-residue confidence, so
+    such a pose is still checked rather than waved through.
     """
-    TIER_ELITE_CONF_MIN: float = 0.85   # Boltz confidence floor for the Tier_1A top label
+    TIER_ELITE_AS_PLDDT_MIN: float = 90.0   # active-site pLDDT (0–100) floor for the Tier_1A top label
+    TIER_ELITE_CONF_MIN: float = 0.85       # global Boltz confidence floor — fallback when active_site_plddt is absent
 
     # -------------------------------------------------------------------------------
     # Step 8.4a: Catalytic-constellation (Criterion B) per-tier floors (0–1, lower bound)
@@ -1393,6 +1495,48 @@ class CFG:
     WATERMAP_SITE_RADIUS: float     = 5.0   # Å  radius to include WaterMap hydration sites
     WATERMAP_BLOCKADE_RADIUS: float = 3.0   # Å  cylinder radius for nucleophile-runway blockade check
     WATERMAP_MATCH_RADIUS: float    = 1.5   # Å  MD water ↔ WaterMap site assignment distance
+    """
+    Fold-integrity guard on the frame→reference superposition. The WaterMap sites are computed in
+    one reference frame and carried into each trajectory frame by a rigid Kabsch transform. A rigid
+    transform exists between ANY two point sets, so a frame whose fold has drifted, unfolded, or
+    whose atom correspondence has broken still returns a rotation — and the sites it carries land
+    at arbitrary positions. Above this Cα RMSD the frame's WaterMap term is withheld rather than
+    trusted. 3.0 Å is a loose fold-identity bound: normal thermal breathing of a folded protein
+    stays well below it, so only genuinely broken frames are rejected.
+    """
+    MD_FOLD_RMSD_MAX: float         = 3.0   # Å  Cα RMSD above which a frame's WaterMap mapping is discarded
+    """
+    Counter-ion capping of the reactive centre. A PFAS carboxylate pairs strongly with Na⁺, and the
+    FAcD active site is an anion trap (Asp nucleophile, Asp acid, substrate carboxylate). System
+    Builder's ion-exclusion region keeps counter-ions out at BUILD time, but one can diffuse in during
+    the run, coordinate the nucleophile Oδ or the ligand head, and screen the charge the SN2 depends
+    on — while the NAC distance and angle still look perfectly productive.
+
+    A frame is capped when a cation sits within this distance of either. 3.0 Å is the inner-sphere
+    bound: direct Na⁺–carboxylate-O coordination is ~2.4 Å, whereas a solvent-separated ion pair sits
+    beyond ~4.5 Å and does not screen the site. Capped frames are flagged in the per-frame CSV,
+    counted in the stats (Frames_Cation_Capped / Cation_Capped_Pct), and barred from QM/MM frame
+    selection — a QM region containing a Na⁺ on the nucleophile computes that ion pair's barrier,
+    not the enzyme's.
+    """
+    CATION_CAP_DIST: float          = 3.0   # Å  cation ↔ nucleophile Oδ / ligand carboxylate O: inner-sphere coordination
+
+    """
+    NPT equilibration verification (Step 07, from the Desmond <job>.ene stream).
+
+    Every quantity Step 07 reports — NAC occupancy, strict-NAC dwell, MM-GBSA — is an equilibrium
+    average. An average taken over a system that is still relaxing is not an average of anything, and
+    nothing else in the pipeline would notice: a drifting box produces perfectly well-formed NAC
+    statistics. The box VOLUME is the slow coordinate (the barostat is still working on it long after
+    the thermostat has settled), so equilibration is declared from V and T is a separate thermostat
+    sanity check. Frames before the equilibration time are excluded from the sampled statistics.
+    """
+    MD_EQUIL_SKIP_FRAC: float          = 0.20   # leading fraction of the run treated as relaxation when forming the production-window reference
+    MD_EQUIL_BLOCKS: int               = 200    # volume is block-averaged into this many blocks before the settled test — an equilibrated NPT box still spikes instantaneously (measured: 0.02 % of points exceed 1 % of the mean), so a point-wise test would reject a settled trajectory
+    MD_EQUIL_V_TOL_PCT: float          = 1.0    # %  block-mean box volume within this of the production mean counts as settled
+    MD_EQUIL_V_DRIFT_MAX_PCT_NS: float = 0.05   # %/ns  residual volume drift above this = not equilibrated (a box still shrinking or swelling)
+    MD_EQUIL_TARGET_T: float           = 300.0  # K  the thermostat set point
+    MD_EQUIL_T_TOL_K: float            = 3.0    # K  mean temperature may deviate from the set point by at most this
 
     # -------------------------------------------------------------------------------
     # Step 9.3: Frame scoring weights (QM/MM frame selection only)
@@ -1443,8 +1587,22 @@ class CFG:
     are rejected by QSite with frozen cuts, hence B3LYP for the residue-selective
     QM/MM coordinate scan.
     """
-    QSITE_FUNCTIONAL: str   = "b3lyp"        # DFT functional (QSite frozen-cut compatible; canonical Jaguar dftname)
-    QSITE_BASIS_SET: str    = "6-31+G(d,p)"  # basis set
+    """
+    DFT functional. Plain B3LYP carries no dispersion term, and that IS a real limitation here: the
+    substrate is polyfluorinated and the C–F···π contacts holding it against the Trp/Tyr cradle are
+    dispersion-bound, so the barrier is computed without them.
+
+    It cannot be fixed by switching functional. QSite's frozen-orbital cuts — required for a
+    residue-selective QM region — reject dispersion-corrected and meta-GGA functionals outright;
+    Jaguar aborts with "ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts:
+    DFT(b3lyp-d3)" (verified against a real QM/MM input, 13 July 2026). Dispersion would require
+    abandoning the frozen-cut QM region, which is a larger change than it buys. The limitation is
+    declared in the paper rather than hidden.
+    """
+    QSITE_FUNCTIONAL: str   = "b3lyp"        # DFT functional (the only family QSite frozen cuts accept)
+    QSITE_BASIS_SET: str    = "6-31+G(d,p)"  # basis for single-point energies (the relaxed scan
+                                             # runs QSITE_SCAN_BASIS, which is non-diffuse for SCF
+                                             # stability — see §10.2)
     QSITE_CHARGE: int       = -1             # default QM region charge (anionic carboxylate/sulfonate PFAS)
     """
     Neutral ligands (alcohols, non-ionised at pH 8) override the default charge.
@@ -1454,6 +1612,22 @@ class CFG:
         "FTOH": 0,   # fluorotelomer alcohols (6:2-FTOH, 8:2-FTOH) — neutral at pH 8
     })
     QSITE_MULT: int         = 1              # spin multiplicity (closed-shell singlet)
+    """
+    Explicit force field for the MM half of the QM/MM Hamiltonian, emitted verbatim into &mmkey.
+
+    The MM region should use the same potential as the trajectory it is scoring: the Desmond system
+    was built and propagated under OPLS4, and the frame QSite receives is a snapshot of that surface.
+    A classical region that silently falls back to an older OPLS evaluates the protein environment on
+    a different potential from the one that produced the geometry, and the barrier then carries an
+    energetic discontinuity that is not chemistry. This is not hypothetical — PrepWizard was found
+    defaulting to OPLS_2005 while everything downstream ran OPLS4.
+
+    Left EMPTY on purpose. The numeric force-field codes are not documented in this installation, and
+    an unverified integer written into a QM/MM input either aborts the scan or silently selects the
+    wrong potential — the very failure the flag exists to prevent. Confirm the code for the installed
+    QSite release against one short scan, set it here (e.g. "ff=16"), and every job emits it.
+    """
+    QSITE_MM_FF: str        = ""             # e.g. "ff=16"; empty → QSite release default (logged each run)
     '''
     Solvation: the extracted frame carries its explicit TIP3P water box in the MM
     region, so no implicit-solvation keyword is emitted (an implicit model would
@@ -1473,7 +1647,9 @@ class CFG:
     """
     QSITE_IMPVERSION: str   = "huge"         # Jaguar &gen impversion (memory/architecture tier; tune per cluster). igeopt=1 (relaxed scan) and mmqm=1 (QM/MM) are required mode flags for this calculation and stay fixed in the writer.
     QSITE_RUN: bool         = True
-    QSITE_PROCS: int        = 4              # CPUs per QSite job (qsite -PARALLEL)
+    QSITE_PROCS: int        = 10             # CPUs per QSite job (qsite -PARALLEL). Jaguar's SCF
+                                            # scales usefully to ~8-16 cores; 3 concurrent jobs at 10
+                                            # leaves headroom on a 32-core box
     QSITE_PROGRESS_INTERVAL_SEC: int = 20    # heartbeat cadence while a QSite job runs (live progress, prevents "frozen" look)
     # --- Step 10.1: Post-scan QM/MM plotting / rendering (Step 07 figures) ---
     HARTREE_TO_KCAL: float  = 627.509474     # Eh → kcal mol⁻¹ (relative scan energies)
@@ -1481,8 +1657,55 @@ class CFG:
     QSITE_RENDER_TIMEOUT_SEC: int = 600      # hard timeout for each headless Maestro render call
 
     # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
-    QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 reproduces the legacy single best-frame (lower-bound) behaviour
-    QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap (legacy).
+    QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 scans only the single best frame, which reports a lower bound rather than an ensemble
+    QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap.
+    """
+    The QM/MM system around the reaction centre. The droplet is the MM shell the QSite job keeps
+    around the QM region; the QM waters are the few molecules close enough to the reactive centre
+    that leaving them classical would misdescribe the fluoride's first solvation shell.
+    """
+    """
+    The MM solvation droplet kept around the QM region. The periodic water box is trimmed to this
+    radius around the ligand, which leaves the droplet with a FREE SURFACE: QSite has no periodic
+    boundary and exposes no frozen-shell or boundary-potential keyword (its `&mmkey` section takes
+    MMIM keywords such as `use_nb_cutoff`; nothing in the QSite API, the Jaguar binaries or the
+    shipped examples provides an atom freeze). The surface waters are therefore unrestrained during
+    the relaxed scan.
+
+    The radius is the control that matters. At 8 Å the free surface sits directly on the reaction
+    centre's first and second solvation shells, where any splaying distorts the electrostatics the
+    QM region feels. At 15 Å the surface is two solvation shells away from the ligand — far enough
+    that its relaxation cannot reach the scissile bond over the short scan — and the cost is MM-only
+    (a few thousand extra classical waters), which is negligible beside the DFT.
+    """
+    QSITE_DROPLET_RADIUS: float = 15.0       # Å  MM droplet retained around the QM region
+    """
+    The droplet's boundary, in three zones around the ligand. QSite reads them from a per-atom
+    property on the structure (`i_i_constraint`), and Jaguar reports back exactly how many atoms it
+    took as frozen and as constrained — verified against a live QM/MM job (13 July 2026), where the
+    property values map as 0 = free, 1 = FROZEN, 2 = CONSTRAINED.
+
+    Without it the droplet has a free surface: the periodic box is cut to a finite ball of water,
+    nothing holds the outermost molecules, and they relax into vacuum during the scan — distorting
+    the electrostatics the QM region sits in. Freezing the outer shell removes that surface, while
+    the buffer stays restrained (not rigid) so the solvation shell around the reaction centre can
+    still respond to the reaction.
+    """
+    QSITE_FREE_RADIUS: float   = 5.0         # Å  ≤ this from the ligand: fully mobile
+    QSITE_BUFFER_RADIUS: float = 8.0         # Å  ≤ this: restrained; beyond: frozen (the surface)
+    QSITE_QM_WATER_RADIUS: float = 3.5       # Å  a water within this of the reactive centre goes QM
+    QSITE_QM_WATER_MAX: int = 3              # cap on QM waters (each adds electrons to the SCF)
+    """
+    SCF accuracy grid for the relaxed scan. 1 is the fast/robust grid; 2-3 densify the integration
+    grid, which matters for an anionic leaving group (F⁻ has a diffuse, slowly-decaying density) at
+    a cost the scan can ill afford — each point is already ~3 h. Raise it for a final single-point
+    re-evaluation of the barrier rather than for the scan itself.
+    """
+    QSITE_SCF_IACC: int = 1
+    QSITE_SCAN_BASIS: str = "6-31G**"        # basis for the relaxed scan points: the scan is many
+                                             # SCF cycles, so it runs a cheaper basis than the
+                                             # single-point QSITE_BASIS_SET
+    SOLVENT_SPHERE_SAMPLE_FRAMES: int = 12   # frames sampled when measuring the solvent sphere
 
     # --- Step 10.3: Defluorination verdict — the concrete "does it defluorinate?" gate (Step 07) ---
     """
@@ -1502,8 +1725,6 @@ class CFG:
     # --- Step 10.4: Defluorination figure parameters (Step 07 reaction-profile,
     #     MM-GBSA-decomposition, and landscape plots) — all colours + thresholds
     #     here so no Step-07 figure hard-codes them (SSOT). ---
-    DEFLUOR_ENGAGE_CONTACT_A: float     = 4.0    # Å  catalytic residue ≤ this to warhead C = engaged (green bar)
-    DEFLUOR_ENGAGE_NEAR_A: float        = 6.0    # Å  ≤ this = near (amber); above = out of contact (red)
     DEFLUOR_FLUORIDE_CHARGE_MIN: float  = -1.2   # Mulliken-charge window low bound when parsing the departing-F charge
     DEFLUOR_FLUORIDE_CHARGE_MAX: float  = -0.4   # window high bound (rejects O / still-bonded F so only near-fluoride is tracked)
     DEFLUOR_FIG_COLOUR: dict = field(default_factory=lambda: {
@@ -1514,14 +1735,19 @@ class CFG:
         "gate":       "#22C55E",   # competence-quadrant shading (landscape)
         "gate_line":  "#16A34A",   # gate threshold lines
         "gate_text":  "#15803D",   # gate annotation text
-        "ensemble":   "#94A3B8",   # whole-trajectory MM-GBSA bars
-        "reactive":   "#2563EB",   # strict-NAC MM-GBSA bars
         "scatter":    "#3B82F6",   # landscape default marker (no propensity colour)
         "edge":       "#334155",   # marker / bar edge
-        "engage_ok":  "#16A34A",   # residue within contact distance
-        "engage_mid": "#F59E0B",   # residue near contact
-        "engage_far": "#DC2626",   # residue out of contact
+        "zone_relaxed": "#74C476", # NAC dashboard: relaxed SN2 zone (distance × angle)
+        "zone_strict":  "#006D2C", # NAC dashboard: strict SN2 zone
+        "warhead":      "#D55E00", # NAC dashboard: nucleophile → warhead-C trace and its criterion line
+        "tail":         "#0072B2", # NAC dashboard: cradle → ligand-F trace and its criterion line
+        "kde":          "#111111", # NAC dashboard: density contours over the scatter
+        "legend_edge":  "#E2E8F0", # legend frame
     })
+    # Comparative residue-engagement heatmap (11_): colour ramp and the colour a missing residue
+    # takes — a homolog that has no such residue must read as absent, never as a distance.
+    ENGAGE_HEATMAP_CMAP: str = "RdYlGn_r"
+    ENGAGE_HEATMAP_NAN: str  = "#E5E7EB"
 
     # ===============================================================================
     # SECTION 11: CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 07)
@@ -1580,6 +1806,37 @@ class CFG:
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
     VIS_NAC_DIST_WARN_MAX: float = 5.0   # Å — dashboard caution band: NAC_DIST_RELAXED ≤ dist < this → orange, ≥ this → red
+    """
+    Typography and canvas — ONE definition for every figure the pipeline draws, applied through
+    utils.apply_figure_style(). The point sizes carry the hierarchy on their own: axis labels are
+    set in plain weight, since bolding every label emphasises nothing. Weight is spent only where
+    it must be read against a filled bar (the value written inside it) or where a tick label
+    doubles as a legend (a colour-coded role or tier name).
+    """
+    """
+    Thresholds the DIAGNOSTIC figures judge by. They live here so a figure cannot disagree with the
+    gate it is drawn to illustrate. The reactive-engagement panel calls a candidate 'ready' by the
+    same nucleophile distance and attack angle used everywhere else, and a distance at or beyond the
+    sentinel means the measurement is absent, not that the contact is long.
+    """
+    VIS_DIAG_READY_DIST_A: float   = 3.5    # Å  nucleophile-C distance at/below which a pose is 'ready'
+    VIS_DIAG_ANGLE_MIN_DEG: float  = 150.0  # °  backside attack angle required alongside it
+    VIS_DIAG_PROD_LO_A: float      = 2.5    # Å  productive window, lower edge (shading only)
+    VIS_DIAG_PROD_HI_A: float      = 3.5    # Å  productive window, upper edge
+    VIS_DIAG_DIST_SENTINEL_A: float = 20.0  # Å  at/above this a distance means 'not measured'
+    VIS_DIAG_MIN_N_PER_BIN: int    = 30     # a bin below this many complexes is not plotted
+    VIS_DIAG_MIN_N_FOR_BINNING: int = 50    # below this many rows the binned panel is not attempted
+    SCORE_PCA_NEUTRAL: float       = 50.0   # the neutral PCA score assigned when PCA cannot run
+                                            # (mid-scale of 0-100 — never a silent zero)
+    VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
+    VIS_FONT_AXIS_LABEL: float  = 11.0   # x/y axis labels — plain weight
+    VIS_FONT_TICK: float        = 9.0    # tick labels
+    VIS_FONT_LEGEND: float      = 8.5    # legend entries
+    VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
+    VIS_GRID_COLOUR: str        = "#EBEBEB"
+    VIS_GRID_LINEWIDTH: float   = 0.6
+    VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
+    VIS_LEGEND_FRAME_ALPHA: float = 0.92
     VIS_PFAS_FCOUNT_BINS: list = field(default_factory=lambda: [0, 8, 13, 18, 24, float("inf")])  # total-fluorine-count bin edges for the PFAS chain-length size figure (Step 03)
     # Bin labels paired with VIS_PFAS_FCOUNT_BINS (must have len(bins)-1 entries; kept beside the
     # edges so they never drift apart). Multi-line for legend, short for axis ticks.
@@ -1614,6 +1871,14 @@ class CFG:
     Active-site RMSD-to-crystal quality bands (Å) for Step 03 figure shading.
     ≤EXCELLENT green · ≤ACCEPTABLE amber · ≤DIVERGED vermillion · above → severe.
     """
+    """
+    Geometry helpers used while READING structures, not while judging them. The C–O cut-off simply
+    asks 'are these two atoms bonded' (a C–O bond is 1.21-1.43 Å; 1.6 Å separates bonded from
+    non-bonded with room to spare), and the degeneracy tolerance decides when two principal axes of
+    a pocket are too close in length to be told apart.
+    """
+    BOND_CO_MAX_A: float          = 1.6    # Å  above this, a C and an O are not bonded
+    PCA_DEGENERACY_TOL: float     = 0.15   # relative gap below which two axes are degenerate
     RMSD_BAND_EXCELLENT: float  = 1.0   # Å  ≤ this → excellent
     RMSD_BAND_ACCEPTABLE: float = 2.0   # Å  ≤ this → acceptable
     RMSD_BAND_DIVERGED: float   = 3.0   # Å  ≤ this → diverged (above → severe)
@@ -1792,7 +2057,46 @@ class CFG:
     # PrepWizard protocol — Sastry et al. (2013) — see header §15.
     PREPWIZARD_PROPKA_PH: float      = 8.0  # protein protonation pH (FAcD physiological context)
     PREPWIZARD_EPIK_PH: float        = 8.0  # PFAS ligand protonation pH via Epik
+    """
+    Catalytic protonation, enforced by ROLE after PrepWizard.
+
+    PropKa assigns protonation per structure from a pKa prediction, and it does so without knowing
+    which residue is the nucleophile. That is not a tuning parameter — it decides whether the
+    chemistry can happen at all, and a pKa heuristic gets it wrong: across the three MD systems the
+    SAME catalytic aspartate was given different charges, and every catalytic histidine came out as
+    HIP (+1), a 'base' with no lone pair to accept a proton.
+
+    The consequence is measurable, not theoretical. A controlled experiment (two systems identical
+    but for ONE hydrogen, same build, same 5-stage Desmond relaxation) gave:
+        HIP (+1)  : attack angle 150° → 98°   — the reactive pose is destroyed during relaxation
+        HID (0)   : attack angle 150° → 170°  at 3.77 Å — a pose that passes relaxed NAC
+    So the state each catalytic residue takes is fixed here by the MECHANISM it must perform, and
+    PREPWIZARD_ENFORCE_PROTONATION applies it after PrepWizard, before anything is simulated.
+
+    Each entry: the hydrogens to REMOVE so the residue takes its required state. Deleting the proton
+    is what changes the state — Desmond's force-field templates read the charged (ASP) or neutral
+    (ASH) form from the hydrogens present.
+    """
+    PREPWIZARD_ENFORCE_PROTONATION: bool = True
+    CATALYTIC_PROTONATION_POLICY: dict = field(default_factory=lambda: {
+        "Nuc":  {"state": "deprotonated", "charge": -1, "strip_H": ("HD2", "HE2"),
+                 "why": "it attacks the warhead carbon; a neutral COOH cannot"},
+        "Acid": {"state": "deprotonated", "charge": -1, "strip_H": ("HD2", "HE2"),
+                 "why": "the dyad aspartate polarises the histidine; it accepts charge"},
+        "Base": {"state": "neutral HID",  "charge": 0,  "strip_H": ("HE2",),
+                 "why": "Nd1-H points at the dyad; the Ne2 lone pair takes the proton"},
+    })
     PREPWIZARD_RMSD_RESTRAIN: float  = 0.3  # Å — RMSD restraint for clash-resolving minimisation
+    """
+    PrepWizard's restrained-minimisation force field. Its own default is OPLS_2005 — a different
+    force field from the one every downstream stage uses (the Desmond system build, the MD production
+    run, WaterMap and Prime MM-GBSA all run the OPLS4 family, exposed by prepwizard as 'S-OPLS').
+    Left at the default, the structure is minimised on one potential and then simulated on another,
+    so the prepared geometry the MD starts from is not a minimum of the MD's own potential and
+    relaxes the moment the simulation begins. The only two values prepwizard accepts are S-OPLS and
+    OPLS_2005.
+    """
+    PREPWIZARD_FORCEFIELD: str       = "S-OPLS"   # OPLS4-family; matches Desmond/WaterMap/Prime
 
     # -------------------------------------------------------------------------------
     # Step 15.2: Parallelism
@@ -1901,6 +2205,19 @@ class CFG:
     # -------------------------------------------------------------------------------
     # Written by one stage, read by another — centralised so the producer and
     # consumer filename cannot drift apart.
+    """
+    File-name masks. Every one of these is a CONTRACT between two steps — 05 globs what 03 wrote,
+    07 globs what 06 wrote — and a mask spelled out at the call site is a contract only one side
+    can see. A rename then breaks the consumer silently (an empty glob reads as 'nothing to do',
+    not as an error).
+    """
+    GLOB_RANKED_CSV:    str = "7_Boltz2_FAcDs_Ranked_*.csv"   # 02 writes → 05/07 read
+    SUFFIX_RAW_PDB:     str = "_RAW.pdb"                      # 05 internal (pre-prep structure)
+    SUFFIX_PLIP_LOG:    str = "_PLIP.log"                     # 05 internal (interaction run log)
+    SUFFIX_SID_EAF:     str = "_SID-out.eaf"                  # Desmond SID → 06 reads
+    SUFFIX_MMGBSA_CSV:  str = "-out-prime-mmgbsa.csv"         # Prime → 06 reads
+    SUFFIX_CMS_OUT:     str = "-out.cms"                      # Desmond → 06/07 read
+    SUFFIX_NAC_DATA:    str = "_NAC_Data.csv"                 # 07 writes → 07 figures read
     FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
     FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes → 07 reads
     FILE_VALIDATED_MASTER: str = "03_Final_Validated_Master.csv" # 03 writes → 04 reads
@@ -1917,19 +2234,180 @@ class CFG:
     """
     MMGBSA_RUN: bool        = True           # run thermal_mmgbsa.py in Step 06
     """
-    Frame subsampling. 0 = every frame (matches the bare manual command, but on a
-    100k-frame trajectory Prime per frame is intractable — strongly prefer a
-    stride). N>0 appends `-step_size N`, e.g. 1000 → ~100 frames from 100k.
+    Frame subsampling for Prime. 0 or 1 = every frame; N>1 appends `-step_size N`, scoring
+    every Nth frame. Prime cost is linear in the number of structures, so this is the only
+    knob that changes MM-GBSA wall-clock by an order of magnitude.
+
+    Why a stride costs almost nothing statistically: a long MD run samples frames far more
+    finely than the ~0.1–1 ns decorrelation time of a bound pose, so neighbouring frames are
+    near-duplicates rather than independent samples. The precision of ⟨ΔG_bind⟩ is set by the
+    number of INDEPENDENT samples (N_eff ≈ T_total / 2τ) — a function of the trajectory's
+    LENGTH, not of how finely it is sliced. Any stride whose spacing stays below τ therefore
+    discards redundancy, not information, and leaves ⟨ΔG_bind⟩, its spread and the ranking
+    statistically indistinguishable. Step 06 derives and prints the resulting frame spacing
+    from the trajectory itself, so this value can be changed freely without touching code.
     """
-    MMGBSA_STEP_SIZE: int   = 0
+    MMGBSA_STEP_SIZE: int   = 10
     MMGBSA_LIGAND_ASL: str  = "res.ptype LIG"   # ASL passed to thermal_mmgbsa via its -lig_asl flag so Prime scores the correct molecule (matches Step 07's --lig LIG convention). A heavily fluorinated PFAS can be misassigned as solvent by auto-detection; empty string "" reverts to auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
     MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/MolecularDynamics/ (path derived, not hardcoded)
     SCHRODINGER_SCRATCH_SUBDIR: str = "_Schrodinger_Scratch"  # job scratch dir under the run's MolecularDynamics working folder (large disk); keeps Prime's hundreds-of-GB per-subjob staging off /tmp on the OS disk
-    SCHRODINGER_SCRATCH_COOLDOWN_SEC: int = 5  # settle pause after all jobs finish (let the job server flush/copy outputs back to the working folders) before the scratch dir is deleted
+    SCHRODINGER_SCRATCH_COOLDOWN_SEC: int = 60  # settle window after the last job finishes: the job server is still flushing/copying outputs back to the working folders, so wait before deleting the scratch dir
+    """
+    End-of-run housekeeping for the two Schrödinger directories.
+
+    _Schrodinger_Scratch (SCHRODINGER_SCRATCH_SUBDIR) is the CLIENT's TMPDIR — pure transient
+    working space, deleted after the settle window above.
+
+    _Schrodinger_JobServer (SCHRODINGER_JOBSERVER_SUBDIR) is NOT scratch: it is the job-server
+    daemon's home (jobdb.sqlite, filestore/, logs/, bin/). Deleting it under a live daemon is
+    what produces 'Error locating localhost job server config' and kills every submission. What
+    actually GROWS inside it is the per-job filestore and logs, so the safe cleanup is to delete
+    COMPLETED JOBS from the server (`jsc delete`), leaving the daemon and its database intact.
+    Removing the whole directory is only ever safe with the server stopped and idle; it is
+    off by default (the next run recreates it, but it costs a server restart).
+    """
+    SCHRODINGER_JOBSERVER_PURGE_COMPLETED: bool = True   # `jsc delete` finished jobs → frees filestore/logs, daemon stays up
+    SCHRODINGER_JOBSERVER_REMOVE_WHEN_IDLE: bool = False # stop the idle server and delete its whole home dir (only when nothing is queued)
     SCHRODINGER_JOBSERVER_SUBDIR: str = "_Schrodinger_JobServer"  # working-disk directory (at the project root) that becomes the Schrödinger job server's scratch `tmpdir`. A Prime MM-GBSA / QSite run stages hundreds of GB of per-subjob scratch under the server's tmpdir (the localhost entry of $SCHRODINGER/schrodinger.hosts); its /tmp default (OS disk) is what overflows and kills the job (rc=1, copy_file_range: no space left on device). ensure_jobserver_on_working_disk (00_03) points that tmpdir here and applies it LIVE via `jsc admin reload-hosts` — no server stop, no killed job. Env vars (SCHRODINGER_TMPDIR/TMPDIR) alone do NOT move an already-running server's scratch.
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
+    """
+    Failed Prime minimisations. A small PFAS ligand cannot bind at −1000 kcal/mol; frames that
+    far outside the ensemble are minimisation artefacts (a blown-up structure), not physics. They
+    are a fraction of a percent but they wreck an axis and drag the arithmetic mean, so the per-job
+    figure scales to the ROBUST core (percentile clip) and flags them explicitly rather than
+    silently deleting them. Frames beyond K × IQR from the quartiles are counted as failures.
+    """
+    MMGBSA_DG_OUTLIER_IQR_K: float = 3.0   # Tukey fence multiplier used to FLAG failed minimisations
+    MMGBSA_PLOT_CLIP_PCT: float = 0.5      # per-job figure y-axis spans this to (100 − this) percentile
+    """
+    Statistics for the cross-rank comparison. MD frames are NOT independent: neighbouring frames
+    are the same configuration re-measured, so a t-test or Mann-Whitney over ~10⁴ frames returns
+    p ≈ 0 for any difference whatsoever and is meaningless. The defensible test is a MOVING-BLOCK
+    BOOTSTRAP — resample contiguous blocks longer than the correlation time, so each block is
+    effectively one independent draw — giving a confidence interval on the median. Effect size is
+    reported as Cliff's delta, which needs no distributional assumption and is unmoved by outliers.
+    """
+    MMGBSA_BOOTSTRAP_N: int = 2000          # bootstrap resamples for the median confidence interval
+    MMGBSA_BOOTSTRAP_BLOCK: int = 50        # FLOOR on frames per block; the actual block is derived per series
+    MMGBSA_BOOTSTRAP_BLOCK_TAU_MULT: float = 2.0   # block = this × the series' measured autocorrelation time τ
+                                                   # (a fixed block shorter than τ leaves the blocks correlated and
+                                                   #  yields a falsely narrow CI — the interval must reflect N_eff)
+    MMGBSA_BOOTSTRAP_CI: float = 95.0       # confidence level (%)
+    MMGBSA_LEGEND_MAX_ROWS: int = 3         # legend column count is DERIVED from this: ncol = ceil(entries / rows),
+                                            # so the columns stay balanced as entries are added or candidates change
+    MMGBSA_TIME_WINDOW_NS: float = 100.0    # width of the time windows the ΔG distribution is resolved into
+                                            # (panel B): shows drift, stability and any change of binding mode
+                                            # across the trajectory, which a single pooled violin hides
+    MMGBSA_RANK_PALETTE: tuple = ("#0072B2", "#D55E00", "#009E73", "#CC79A7",
+                                  "#E69F00", "#56B4E9")   # colour-blind-safe, one per compared rank
+    # Grid colours for the twin-axis panel: the two axes carry different quantities, so their
+    # gridlines are coloured to match the axis they belong to and cannot be misread as one another.
+    MMGBSA_GRID_LEFT: str  = "#4C72B0"   # bottom/left axis  (time course)
+    MMGBSA_GRID_RIGHT: str = "#937860"   # top/right axis    (cumulative fraction)
+    """
+    Ink palette — every non-candidate mark colour in Step 06's figures. The candidate colours come
+    from MMGBSA_RANK_PALETTE; these are the neutrals and accents used for medians, means, outlier
+    flags, strokes and legend proxies. Kept here so a restyle is one edit, never a hunt through the
+    plotting code.
+    """
+    MMGBSA_INK: dict = field(default_factory=lambda: {
+        "dark":    "#111111",   # medians, in-figure text, box edges
+        "light":   "#FFFFFF",   # box fills and the stroke behind outlined text
+        "outline": "#222222",   # bar edges, zero line
+        "muted":   "#555555",   # legend proxy marks, whiskers in proxies
+        "soft":    "#333333",   # secondary annotation text
+        "faint":   "#BBBBBB",   # band proxies, note borders
+        "ghost":   "#999999",   # the mean line, where it is a secondary reading
+        "mean":    "#D55E00",   # mean marker/line (it is an accent, not a candidate colour)
+        "warn":    "#CC3311",   # failed minimisations, outlier counts
+        "series":  "#0072B2",   # the single-series per-rank profile (no candidate to colour by)
+        "hist":    "#1B9E77",   # the per-rank profile's histogram
+    })
+    """
+    ── Step 07: the reactive-pose figures (MM-GBSA decomposition · machinery engagement) ──
+    Both figures compare the whole trajectory against the frames in which the pose is reactive, so
+    every constant that decides what is DRAWN lives here rather than in the plotting code.
+
+    The occupancy criterion is not a new number: a residue 'holds contact' when it is within
+    THRESHOLD_SALT_BRIDGE of the warhead carbon — the outermost of the four criterion bands the
+    figure already draws — so the percentage written in each bar is judged by the same cut-off the
+    band shows.
+    """
+    DEFLUOR_COMPONENT_MIN_KCAL: float = 0.5     # an MM-GBSA term is plotted only if it reaches this
+                                                # magnitude in at least one candidate; below it the
+                                                # term is numerically dead and the box is empty
+    DEFLUOR_COMPONENT_TICK_KCAL: float = 5.0    # ΔG axis tick step: the components span 60 down to
+                                                # 1 kcal/mol, so the axis must resolve the small ones
+    DEFLUOR_ENGAGE_Y_MIN_TOP: float = 10.0      # floor on the engagement axis ceiling (the ceiling
+                                                # itself is taken from the data), so the criterion
+                                                # bands always have room
+    """
+    The four criterion bands, in the order the engagement figure stacks them: reactive contact,
+    H-bond range, relaxed NAC, electrostatic range. The ramp runs green → amber → red, so a bar's
+    height alone says whether the residue sits where the mechanism works or is merely in
+    electrostatic reach.
+    """
+    DEFLUOR_BAND_COLOURS: tuple = ("#2E9E5B", "#7FBF3F", "#E8A33D", "#D1495B")
+    DEFLUOR_BAND_ALPHA: float = 0.13            # band fill: under the bars, still four distinct bands
+    """
+    Ligand abbreviations for every figure in the pipeline. The full names ('Difluoroacetate') are
+    long enough to push a legend across a panel, and the abbreviations are the names actually used
+    in the chemistry. A ligand not listed here keeps its full name rather than being mangled.
+    """
+    VIS_LIGAND_SHORT: dict = field(default_factory=lambda: {
+        "fluoroacetate":    "FA",
+        "difluoroacetate":  "DFA",
+        "trifluoroacetate": "TFA",
+        "tfa":              "TFA",
+    })
+    """
+    Prime subjob parallelism. The target is GLOBAL_MAX_WORKERS (cpu_count − PREP_CPU_RESERVE),
+    exactly like every other step; MMGBSA_MAX_NJOBS = 0 means 'no extra ceiling'. Step 06 only
+    drops below that target when the disk holding the Schrödinger scratch cannot hold one
+    ~MMGBSA_SCRATCH_GB_PER_SUBJOB staging copy per subjob within MMGBSA_SCRATCH_HEADROOM_FRAC
+    of its free space — the condition that fills the disk and kills the job.
+    """
+    """
+    Tokens the SID-out.eaf Result vector carries per trajectory frame. Step 06's completion gate is
+    EAF_TOKENS_PER_FRAME · traj_frames: 1 is the standard per-frame scalar series. If a SID analysis
+    writes k > 1 tokens per frame, a partial EAF can still reach traj_frames tokens and be misjudged
+    complete under a bare per-frame test; scaling the threshold by the true k closes that gap.
+    """
+    EAF_TOKENS_PER_FRAME: int = 1
+    MMGBSA_MAX_NJOBS: int = 0                      # 0 = no ceiling beyond GLOBAL_MAX_WORKERS
+    MMGBSA_SCRATCH_GB_PER_SUBJOB: float = 22.0     # measured staging footprint of one Prime subjob (full complexes copy)
+    MMGBSA_SCRATCH_HEADROOM_FRAC: float = 0.75     # fraction of the scratch disk's free space the run may occupy
+    """
+    Sharded MM-GBSA. A bare thermal_mmgbsa.py run is serial where it hurts: ONE process
+    reads every trajectory frame (one core, hours, and its RSS grows ~0.36 GB per 1000
+    frames — ~40 GB by frame 100k) and only then hands the whole ensemble to Prime, so the
+    other cores idle throughout. Step 06 instead splits the trajectory into contiguous frame
+    shards (-start_frame/-end_frame) and runs MMGBSA_SHARD_CONCURRENCY of them at once, each
+    with its own Prime subjobs. Reading is then parallel, one shard minimises while the next
+    still reads, no core is left idle, and per-process memory is bounded by the shard size.
+    Shards are disjoint and cover the full trajectory, so every frame is still scored — this
+    is a scheduling change, not a subsampling one. Shard CSVs are concatenated into the
+    single per-job CSV the rest of the step already reads.
+    Set MMGBSA_SHARD_FRAMES = 0 to fall back to one plain serial thermal_mmgbsa run.
+    """
+    MMGBSA_SHARD_FRAMES: int = 2000        # trajectory frames per shard (0 = no sharding)
+    MMGBSA_SHARD_PRIME_NJOBS: int = 6      # Prime subjobs inside one shard
+    MMGBSA_SHARD_CONCURRENCY: int = 0      # shards in flight (0 = auto: GLOBAL_MAX_WORKERS // MMGBSA_SHARD_PRIME_NJOBS, then clamped to free RAM)
+    """
+    Memory budget for the shard plan: a shard costs one reader plus its MMGBSA_SHARD_PRIME_NJOBS
+    Prime subjobs, and Prime is the dominant term (measured ~1.8 GB × 30 subjobs ≈ 54 GB — enough
+    to exhaust a 60 GB box on its own and push it into swap). Step 06 shrinks the shard
+    concurrency until reader + Prime fit in free RAM. Raise MMGBSA_RAM_HEADROOM_FRAC (or lower
+    MMGBSA_PRIME_RAM_GB) to run more subjobs and accept some swapping; lower it to be safer.
+    A reader's RSS is a base plus growth with the frames it reads, so a stride shrinks it.
+    """
+    MMGBSA_READER_RAM_BASE_GB: float = 3.6          # reader RSS before any frames are read
+    MMGBSA_READER_RAM_PER_1K_FRAMES_GB: float = 0.36  # reader RSS growth per 1000 frames read
+    MMGBSA_PRIME_RAM_GB: float = 1.8                # measured peak RSS of ONE Prime subjob
+    MMGBSA_RAM_HEADROOM_FRAC: float = 0.85          # fraction of free RAM the run may occupy
+    MMGBSA_SHARD_SUBDIR: str = "_MMGBSA_Shards"   # per-shard logs and Prime outputs live here, out of the job folder's glob path
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.
     "mean" = arithmetic ⟨ΔGᵢ⟩ (default; the standard thermal MM-GBSA estimate — MD
@@ -1981,7 +2459,7 @@ class CFG:
     MD_RANK_COL: str     = "MD_Rank"              # int (1..N over selected), NaN otherwise
 
     # ===============================================================================
-    # SECTION 14: SSOT File Naming Extensions
+    # SECTION 19: SSOT FILE-NAMING EXTENSIONS
     # ===============================================================================
     """
     Standard suffixes appended to file basenames for downstream tasks.
