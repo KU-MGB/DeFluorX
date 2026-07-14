@@ -24,7 +24,7 @@ It combines four evidence streams into the master ranking + figures:
 All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 July 2026 <────────────────────────────────────────────────────────
+Date   : 15 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_MD_QMMM_Defluorination_FAcDs.py
@@ -1809,7 +1809,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
                         textcoords="offset points", zorder=6)
         if _col.notna().any():
             cb = fig.colorbar(sc, ax=ax, pad=0.02)
-            cb.set_label("Defluorination propensity  (normalised, best = 1)", fontsize=9)
+            cb.set_label("Defluorination propensity  (log-scaled, best = 1)", fontsize=9)
         ax.set_xlabel("Catalytic persistence — longest continuous strict-NAC dwell (ns)")
         ax.set_ylabel(ylab)
         clean_spines(ax)
@@ -2331,14 +2331,12 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
                 best_d = d; best_dg = site['dG']
         """
         The weight is a Boltzmann-like occupancy of the WaterMap site, so the exponent must be
-        DIMENSIONLESS. `np.exp(best_dg)` with dG in kcal/mol is not: it implicitly divides by 1 kcal/mol,
-        which at 300 K is an effective temperature of ~503 K (RT = 0.596 kcal/mol). A water held by
-        -2 kcal/mol was being weighted as though it were held by -3.4 RT instead of -3.4... the numbers
-        happen to be close, but the quantity was not a Boltzmann factor at all, and it silently rescaled
-        with any change of energy unit.
+        DIMENSIONLESS. exp(dG) with dG in kcal/mol is not: it implicitly divides by 1 kcal/mol rather than
+        by RT, which at 300 K would mean an effective temperature near 503 K, and it silently rescales with
+        any change of energy unit.
 
-        dG/RT is dimensionless, and RT is the same RT the rest of the pipeline uses (CFG, 300 K).
-        The exponent is clipped because a strongly stabilised site can otherwise overflow exp().
+        dG/RT is dimensionless, and RT is the same RT the rest of the pipeline uses (CFG, 300 K). The
+        exponent is clipped because a strongly stabilised site can otherwise overflow exp().
         """
         _rt_wm = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         _z_wm = float(np.clip(best_dg / _rt_wm, -60.0, 60.0))
@@ -2380,18 +2378,36 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
         if lig_xyz.size == 0:
             st.write(str(path))
             return "full (no ligand atoms found — not trimmed)"
-        _water_res = {r.strip().upper() for r in CFG.SOLVENT_RESTYPES}
+        '''
+        Counter-ions are trimmed on the SAME radius as the water (CFG.COUNTERION_RESTYPES). Trimming
+        only the water would leave every Na+/Cl- in the box behind with its hydration shell deleted:
+        a bare point charge in the frozen MM shell, screened by vacuum instead of by bulk water, and
+        polarising the QM Hamiltonian from wherever it happened to diffuse. Ions inside the droplet
+        keep their water and are kept with it.
+
+        Distances go through the minimum-image convention. In the normal path this changes nothing —
+        center_cms has already wrapped every atom into a primary cell centred on the ligand, so each
+        atom lies within half a box length of it and the minimum image IS the atom itself. That is a
+        property of the centring, not of this function, and a droplet cut on raw Cartesian distances
+        would silently lose a solvation lobe the moment the centring did not hold. The convention is
+        applied here so the trim is correct on its own terms.
+        '''
+        _trim_res = ({r.strip().upper() for r in CFG.SOLVENT_RESTYPES} |
+                     {r.strip().upper() for r in CFG.COUNTERION_RESTYPES})
+        _box = getattr(cms_model, "box", None)
         _mol_atoms = defaultdict(list)
         for a in st.atom:
-            if a.pdbres.strip().upper() in _water_res:
+            if a.pdbres.strip().upper() in _trim_res:
                 _mol_atoms[a.molecule_number].append(a.index)
-        _del = []
+        _del, _n_ion_cut = [], 0
         for _mol, _aidxs in _mol_atoms.items():
             _coords = np.array([st.atom[i].xyz for i in _aidxs])
-            _dmin = np.min(np.linalg.norm(
-                _coords[:, None, :] - lig_xyz[None, :, :], axis=2))
+            _dmin = float(np.min(_mic_dists_2d(_coords, lig_xyz, _box)))
             if _dmin > radius:
                 _del.extend(_aidxs)
+                if st.atom[_aidxs[0]].pdbres.strip().upper() not in {
+                        r.strip().upper() for r in CFG.SOLVENT_RESTYPES}:
+                    _n_ion_cut += 1
         if _del:
             st.deleteAtoms(_del)
         """
@@ -2413,8 +2429,10 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
         _free_r = float(CFG.QSITE_FREE_RADIUS)
         _buf_r = float(CFG.QSITE_BUFFER_RADIUS)
         _n_free = _n_con = _n_frz = 0
-        for a in st.atom:
-            _d = float(np.min(np.linalg.norm(lig_xyz - np.array(a.xyz), axis=1)))
+        _all_xyz = np.array([a.xyz for a in st.atom], dtype=float)
+        _d_all = _mic_dists_2d(_all_xyz, lig_xyz, _box).min(axis=1)
+        for a, _d in zip(st.atom, _d_all):
+            _d = float(_d)
             if _d <= _free_r:
                 _v = 0
             elif _d <= _buf_r:
@@ -2426,7 +2444,8 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
             _n_con += _v == 2
             _n_frz += _v == 1
         st.write(str(path))
-        return (f"droplet r={radius:.1f} Å (removed {len(_del)} solvent atoms; boundary: "
+        return (f"droplet r={radius:.1f} Å (removed {len(_del)} solvent/ion atoms, "
+                f"{_n_ion_cut} counter-ion(s); boundary: "
                 f"{_n_free} free ≤{_free_r:g} Å, {_n_con} restrained ≤{_buf_r:g} Å, "
                 f"{_n_frz} frozen beyond)")
     except Exception as exc:
@@ -2467,7 +2486,12 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     inp_path = mae_path.parent / f"{job_name}_QSite_SN2.in"
 
     # ── Read structure (needed for charge, ligand molid, and cut resolution) ──
-    st = next(structure.StructureReader(str(mae_path)))
+    # A truncated or empty .mae yields no structure: raise the reason rather than a bare
+    # StopIteration from inside a generator, and close the handle either way.
+    with structure.StructureReader(str(mae_path)) as _r:
+        st = next(iter(_r), None)
+    if st is None:
+        raise ValueError(f"QSite input structure is empty or unreadable: {mae_path}")
     lig_mol = next(
         (m.number for m in st.molecule
          if any(a.pdbres.strip() == lig_resname for a in m.atom)), None)
@@ -3027,12 +3051,20 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
                          "endpoint, not a saddle the reaction passes through. No TS resolved (a steric "
                          "wall or a scan window that stops short of it). Barrier reported as NaN.")
             return _empty
+        if _imax == 0:
+            """
+            The maximum is the FIRST scan point, so there is no reactant well inside the window to
+            measure a barrier FROM: the scan either starts past the transition state or falls
+            monotonically along this coordinate. Guarding it here also removes a latent crash —
+            min(e[:0]) on the empty slice raises ValueError, which the enclosing handler would have
+            turned into a bare NaN with no explanation of why.
+            """
+            console_info("    [!] QSite scan is at its maximum on the FIRST point — no reactant well "
+                         "inside the scan window, so no barrier can be measured from it (the scan "
+                         "starts past the TS, or is downhill throughout). Reported as NaN.")
+            return _empty
         _react = min(e[:_imax])          # reactant well: strictly before the TS, never the product
         _imin = e.index(_react)
-        if _imax <= _imin:
-            console_info("    [!] QSite scan has no maximum after the reactant minimum — no barrier "
-                         "resolved. Reported as NaN.")
-            return _empty
         _energy_kcal = [round(x - _react, 3) for x in e]   # relative to the reactant minimum
         """
         The reaction coordinate is READ from the output, never rebuilt by index: nofail=1 means a
@@ -3087,7 +3119,16 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
     """The direct 'did it defluorinate' figure: the QM/MM potential-energy surface
     along the SN2 reaction coordinate (Nu_O···C compression), with the activation
     barrier ΔE‡ and reaction energy ΔE_rxn marked, and — where parseable — the
-    departing-fluoride Mulliken charge dropping toward −1 (F becoming free F⁻)."""
+    departing-fluoride Mulliken charge dropping toward −1 (F becoming free F⁻).
+
+    Called from process_single_job, which runs inside the ThreadPoolExecutor, so the
+    figure is built under PLOT_LOCK. Pyplot's figure registry is global state: two ranks
+    plotting concurrently can interleave into one another's figure, and a savefig on the
+    CURRENT figure can then write a different candidate's PES under this candidate's name.
+    Nothing raises — the file is written and looks plausible — so the lock is the only
+    thing standing between the QM/MM phase and a mislabelled reaction profile. The save
+    goes through the figure object rather than the pyplot global for the same reason.
+    """
     try:
         x = profile.get("coord") or []
         y = profile.get("energy_kcal") or []
@@ -3095,50 +3136,52 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
             return
         n = min(len(x), len(y))
         x, y = x[:n], y[:n]
-        _C = getattr(CFG, "DEFLUOR_FIG_COLOUR", {})
-        fig, ax = plt.subplots(figsize=(8.5, 5.5))
-        ax.plot(x, y, "-o", color=_C.get("pes", "#1D4ED8"), lw=2, ms=4, zorder=3, label="QM/MM PES")
-        _imax = int(np.argmax(y))
-        ax.scatter([x[_imax]], [y[_imax]], s=120, color=_C.get("ts", "#DC2626"), zorder=5, label="transition state")
-        ax.scatter([x[-1]], [y[-1]], s=90, color=_C.get("product", "#16A34A"), zorder=5, label="product")
-        ax.annotate(f"ΔE‡ = {profile.get('QSite_Barrier_kcal', float('nan')):.1f} kcal/mol",
-                    (x[_imax], y[_imax]), xytext=(6, 8), textcoords="offset points",
-                    fontsize=9, color=_C.get("ts", "#DC2626"), fontweight="bold")
-        ax.annotate(f"ΔE_rxn = {profile.get('QSite_dErxn_kcal', float('nan')):.1f}",
-                    (x[-1], y[-1]), xytext=(6, -12), textcoords="offset points",
-                    fontsize=9, color=_C.get("product", "#16A34A"), fontweight="bold")
-        ax.set_xlabel("Reaction coordinate — Nu(O)···C distance (Å), reactant → product",
-                      fontweight="bold")
-        ax.set_ylabel("Relative QM/MM energy (kcal/mol)")
-        ax.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
-        clean_spines(ax)
-        _fq = profile.get("f_charge") or []
-        if len(_fq) >= 3:
-            _fc = _C.get("f_charge", "#B45309")
-            ax2 = ax.twinx()
-            _xf = [x[min(int(i * (n - 1) / (len(_fq) - 1)), n - 1)] for i in range(len(_fq))]
-            ax2.plot(_xf, _fq, "--s", color=_fc, lw=1.4, ms=3, alpha=0.85, label="departing-F charge")
-            ax2.set_ylabel("Mulliken charge on departing F (→ −1 = fluoride)", color=_fc)
-            ax2.tick_params(axis="y", labelcolor=_fc)
-        # C–F cleavage verdict (make the "did the bond break" answer unmistakable).
-        _fq_final = (_fq[-1] if len(_fq) >= 1 else None)
-        _scf = profile.get("scissile_f_label", "scissile C–F")
-        if _fq_final is not None and _fq_final <= -0.5:
-            ax.text(0.5, 0.02, f"C–F CLEAVED — {_scf} F → {_fq_final:+.2f} e (free fluoride)",
-                    transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
-                    color=_C.get("product", "#16A34A"),
-                    bbox=dict(boxstyle="round,pad=0.3", fc="#E8F7EE", ec=_C.get("product", "#16A34A"), alpha=0.95))
-        elif _fq_final is not None:
-            ax.text(0.5, 0.02, f"C–F intact — {_scf} F charge {_fq_final:+.2f} e (bond not broken)",
-                    transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
-                    color=_C.get("ts", "#DC2626"),
-                    bbox=dict(boxstyle="round,pad=0.3", fc="#FDECEA", ec=_C.get("ts", "#DC2626"), alpha=0.95))
-        # figure title removed (user request); legend top-left
-        ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
-        plt.close(fig)
+        _C = CFG.DEFLUOR_FIG_COLOUR
+        with PLOT_LOCK:
+            fig, ax = plt.subplots(figsize=(8.5, 5.5))
+            try:
+                ax.plot(x, y, "-o", color=_C["pes"], lw=2, ms=4, zorder=3, label="QM/MM PES")
+                _imax = int(np.argmax(y))
+                ax.scatter([x[_imax]], [y[_imax]], s=120, color=_C["ts"], zorder=5, label="transition state")
+                ax.scatter([x[-1]], [y[-1]], s=90, color=_C["product"], zorder=5, label="product")
+                ax.annotate(f"ΔE‡ = {profile.get('QSite_Barrier_kcal', float('nan')):.1f} kcal/mol",
+                            (x[_imax], y[_imax]), xytext=(6, 8), textcoords="offset points",
+                            fontsize=9, color=_C["ts"], fontweight="bold")
+                ax.annotate(f"ΔE_rxn = {profile.get('QSite_dErxn_kcal', float('nan')):.1f}",
+                            (x[-1], y[-1]), xytext=(6, -12), textcoords="offset points",
+                            fontsize=9, color=_C["product"], fontweight="bold")
+                ax.set_xlabel("Reaction coordinate — Nu(O)···C distance (Å), reactant → product",
+                              fontweight="bold")
+                ax.set_ylabel("Relative QM/MM energy (kcal/mol)")
+                ax.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
+                clean_spines(ax)
+                _fq = profile.get("f_charge") or []
+                if len(_fq) >= 3:
+                    _fc = _C["f_charge"]
+                    ax2 = ax.twinx()
+                    _xf = [x[min(int(i * (n - 1) / (len(_fq) - 1)), n - 1)] for i in range(len(_fq))]
+                    ax2.plot(_xf, _fq, "--s", color=_fc, lw=1.4, ms=3, alpha=0.85, label="departing-F charge")
+                    ax2.set_ylabel("Mulliken charge on departing F (→ −1 = fluoride)", color=_fc)
+                    ax2.tick_params(axis="y", labelcolor=_fc)
+                # C–F cleavage verdict (make the "did the bond break" answer unmistakable).
+                _fq_final = (_fq[-1] if len(_fq) >= 1 else None)
+                _scf = profile.get("scissile_f_label", "scissile C–F")
+                if _fq_final is not None and _fq_final <= CFG.QSITE_F_CHARGE_CLEAVED:
+                    ax.text(0.5, 0.02, f"C–F CLEAVED — {_scf} F → {_fq_final:+.2f} e (free fluoride)",
+                            transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
+                            color=_C["product"],
+                            bbox=dict(boxstyle="round,pad=0.3", fc=_C["cleaved_bg"], ec=_C["product"], alpha=0.95))
+                elif _fq_final is not None:
+                    ax.text(0.5, 0.02, f"C–F intact — {_scf} F charge {_fq_final:+.2f} e (bond not broken)",
+                            transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
+                            color=_C["ts"],
+                            bbox=dict(boxstyle="round,pad=0.3", fc=_C["intact_bg"], ec=_C["ts"], alpha=0.95))
+                ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+            finally:
+                plt.close(fig)
         console_info(f"    QSite reaction profile saved : {out_path.name}")
     except Exception as _e:
         console_info(f"    [!] QSite reaction-profile plot failed ({_e}).")
@@ -4024,10 +4067,10 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     """
     AN UNVERIFIABLE GATE IS NOT A PASSED GATE.
 
-    The test used to read `if MD_Equilibrated and _ca_vals and not _ca_ok`. When _ca_vals is EMPTY — no
-    WaterMap reference, so no Kabsch superposition and every Fold_RMSD_A is NaN — the `and _ca_vals`
+    A test written `if MD_Equilibrated and _ca_vals and not _ca_ok` fails open: when _ca_vals is EMPTY —
+    no WaterMap reference, so no Kabsch superposition and every Fold_RMSD_A is NaN — the `and _ca_vals`
     short-circuits and the structural half of the verdict is skipped in silence. A trajectory whose fold
-    was never checked was being reported as equilibrated, which is the one outcome the check exists to
+    is never checked would then be reported as equilibrated, which is the one outcome this check exists to
     prevent.
 
     Missing evidence is now its own state: MD_Equilibrated becomes None (UNKNOWN), never True. None is
@@ -4095,6 +4138,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         # fraction). ns_per_frame = total simulated ns / analysed frames (uniform stride).
         **_nac_dwell_stats([r.get("NAC_Strict_Pass", 0) for r in sampled],
                            ((sim_span / 1000.0) / total) if total else 0.0),
+        # The stride the dwell was measured at. A run of consecutive ANALYSED frames is only
+        # evidence of continuous residence when every frame was analysed: at stride > 1 the
+        # ligand may leave and re-enter the reactive geometry between two samples and the whole
+        # interval still counts as one unbroken dwell, biasing it upward in units of stride × dt.
+        # The verdict gates on this, so the stride travels with it.
+        "MD_Analysis_Stride":       int(stride),
         "Sim_Total_ns":             round(sim_span / 1000.0, 2),
         "MD_Avg_NAC_Dist_A":        _mean_col("NAC_Distance_A"),
         "MD_Min_NAC_Dist_A":        _min_col("NAC_Distance_A"),
@@ -4174,23 +4223,44 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                              f"MM-GBSA stride's sampled frames).")
 
             def _nac_vs_global(col):
+                """Mean over the scored strict-NAC frames, the global mean, and the NAC sample's
+                size and dispersion. n and SD are returned rather than discarded: they are what
+                decides whether the difference between the two means can be claimed at all."""
                 _s = pd.to_numeric(_mdf[col], errors="coerce")
                 _g = float(_s.mean())
                 _v = [float(_s.iloc[_row_of_frame[f] if _row_of_frame is not None else f])
                       for f in _nac_scored]
                 _v = [x for x in _v if x == x]
-                return (float(np.mean(_v)) if _v else np.nan), (_g if _g == _g else np.nan)
+                _sd = float(np.std(_v, ddof=1)) if len(_v) >= 2 else np.nan
+                return ((float(np.mean(_v)) if _v else np.nan),
+                        (_g if _g == _g else np.nan), len(_v), _sd)
 
             _dgc = getattr(CFG, "MMGBSA_DG_COLUMN", "r_psp_MMGBSA_dG_Bind")
             if _dgc not in _mdf.columns:
                 _c = [c for c in _mdf.columns if re.search(r"dg.?bind", c, re.I)]
                 _dgc = _c[0] if _c else None
             if _dgc is not None:
-                _nac, _glob = _nac_vs_global(_dgc)
+                _nac, _glob, _n_nac, _sd_nac = _nac_vs_global(_dgc)
                 stats["MMGBSA_dG_Global_Mean_kcal"] = round(_glob, 2) if _glob == _glob else np.nan
                 stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
-                stats["MMGBSA_NAC_Penalty_kcal"]    = (round(_nac - _glob, 2)
-                                                       if _nac == _nac and _glob == _glob else np.nan)
+                stats["MMGBSA_dG_NAC_SD_kcal"]      = round(_sd_nac, 2) if _sd_nac == _sd_nac else np.nan
+                stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
+                '''
+                The penalty is the difference of two means, and it is only reportable if the NAC mean
+                is. Prime's per-frame ΔG_bind scatter runs to several kcal/mol, so below
+                CFG.MMGBSA_NAC_MIN_FRAMES the difference is dominated by the sampling noise of the
+                smaller sample. The mean and SD above are kept — they are the evidence — but the
+                penalty itself is withheld rather than printed to two decimals from one frame.
+                '''
+                if _n_nac >= int(CFG.MMGBSA_NAC_MIN_FRAMES) and _nac == _nac and _glob == _glob:
+                    stats["MMGBSA_NAC_Penalty_kcal"] = round(_nac - _glob, 2)
+                else:
+                    stats["MMGBSA_NAC_Penalty_kcal"] = np.nan
+                    if 0 < _n_nac < int(CFG.MMGBSA_NAC_MIN_FRAMES):
+                        console_info(f"    [!] NAC-conditioned MM-GBSA has only {_n_nac} scored "
+                                     f"strict-NAC frame(s) (< CFG.MMGBSA_NAC_MIN_FRAMES = "
+                                     f"{int(CFG.MMGBSA_NAC_MIN_FRAMES)}) — mean reported, "
+                                     f"penalty withheld.")
             # Energy-component decomposition (the "which forces" breakdown).
             _components = {"Coulomb": r"coulomb", "vdW": r"vdw|van.?der.?waals",
                            "Covalent": r"covalent", "H-bond": r"h.?bond",
@@ -4333,15 +4403,59 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
                     stats[_fk] = _prof.get(_fk, np.nan)
         if _barriers:
-            _imin = int(np.argmin(_barriers))
-            stats["QSite_Barrier_kcal"]      = round(float(np.min(_barriers)), 2)   # min = most accessible TS
-            stats["QSite_Barrier_Mean_kcal"] = round(float(np.mean(_barriers)), 2)
-            stats["QSite_Barrier_SD_kcal"]   = round(float(np.std(_barriers)), 2) if len(_barriers) > 1 else 0.0
-            stats["QSite_dErxn_kcal"]        = round(float(_derxns[_imin]), 2)
-            stats["QSite_N_Frames_Scored"]   = len(_barriers)
-            print(f"  [Rank {rank}] QM/MM ΔE‡ = {stats['QSite_Barrier_kcal']:.1f} "
-                  f"(mean {stats['QSite_Barrier_Mean_kcal']:.1f} ± {stats['QSite_Barrier_SD_kcal']:.1f}, "
-                  f"n={len(_barriers)}) | ΔE_rxn = {stats['QSite_dErxn_kcal']:.1f} kcal/mol", flush=True)
+            '''
+            The reported barrier is the RATE-WEIGHTED ENSEMBLE barrier,
+
+                ΔE‡_ens = −RT · ln ⟨ exp(−ΔE‡ᵢ / RT) ⟩ ,
+
+            not the minimum over the scored frames. A minimum is an extreme-value statistic, not a
+            property of the ensemble: its downward bias grows with the number of frames that happened
+            to parse, so a candidate with four failed scans and one lucky low barrier would outrank a
+            candidate with five consistent ones. The bias compounds with the frame SELECTION that
+            precedes this, which already favours the most TS-like geometry — taking a minimum
+            afterwards maximises the same quantity twice and reports the result as a barrier.
+
+            The exponential average is the right correction because it is what the RATE actually
+            averages: the observable is ⟨k⟩ ∝ ⟨exp(−ΔE‡/RT)⟩, and inverting that gives the effective
+            barrier the ensemble would exhibit. It is well behaved at both limits — for frames of
+            equal barrier it returns that barrier exactly, and when one frame lies far below the rest
+            it returns approximately min + RT·ln(N), i.e. it re-applies precisely the penalty that
+            the best-of-N search removed. ΔE_rxn is averaged with the SAME Boltzmann weights, so the
+            two halves of the verdict describe one ensemble rather than one frame each.
+
+            The minimum is still reported, as QSite_Barrier_Min_kcal, and the number of frames that
+            were ATTEMPTED is recorded next to the number that were SCORED — a silent parse failure
+            is otherwise indistinguishable from a frame that was never run.
+            '''
+            _RT_q  = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+            _b_arr = np.asarray(_barriers, dtype=float)
+            _d_arr = np.asarray(_derxns,   dtype=float)
+            # Shift by the minimum before exponentiating: exp(-ΔE/RT) underflows for ΔE ≳ 200 kcal,
+            # and the shift cancels exactly in the log, so this is algebra, not an approximation.
+            _b_min = float(np.min(_b_arr))
+            _w     = np.exp(-(_b_arr - _b_min) / _RT_q)
+            _b_ens = _b_min - _RT_q * float(np.log(np.mean(_w)))
+            _wsum  = float(np.sum(_w))
+            _d_ens = float(np.sum(_w * _d_arr) / _wsum) if _wsum > 0 else float(np.mean(_d_arr))
+
+            stats["QSite_Barrier_kcal"]        = round(_b_ens, 2)   # rate-weighted ensemble ΔE‡
+            stats["QSite_Barrier_Min_kcal"]    = round(_b_min, 2)   # most accessible single frame
+            stats["QSite_Barrier_Mean_kcal"]   = round(float(np.mean(_b_arr)), 2)
+            stats["QSite_Barrier_SD_kcal"]     = (round(float(np.std(_b_arr, ddof=1)), 2)
+                                                  if len(_b_arr) > 1 else np.nan)
+            stats["QSite_dErxn_kcal"]          = round(_d_ens, 2)
+            stats["QSite_N_Frames_Scored"]     = int(len(_b_arr))
+            stats["QSite_N_Frames_Attempted"]  = int(len(_sel))
+
+            _sd_txt = ("n/a" if len(_b_arr) < 2
+                       else f"{stats['QSite_Barrier_SD_kcal']:.1f}")
+            print(f"  [Rank {rank}] QM/MM ΔE‡(ensemble) = {_b_ens:.1f} kcal/mol "
+                  f"(min {_b_min:.1f}, mean {stats['QSite_Barrier_Mean_kcal']:.1f} ± {_sd_txt}, "
+                  f"scored {len(_b_arr)}/{len(_sel)} frames) | "
+                  f"ΔE_rxn = {stats['QSite_dErxn_kcal']:.1f} kcal/mol", flush=True)
+            if len(_b_arr) < len(_sel):
+                console_info(f"    [!] {len(_sel) - len(_b_arr)} of {len(_sel)} QM/MM frame(s) did not "
+                             f"yield a barrier — the ensemble average is over the {len(_b_arr)} that did.")
 
     print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats
@@ -4747,7 +4861,9 @@ def main():
 
         What survives is the ORDERING: for two candidates treated identically, a lower ΔE‡ and a higher
         NAC persistence give a higher propensity, and that is the only claim made of it.
-        Defluor_Propensity_Norm rescales it to the best candidate (0–1) for readability.
+        Defluor_Propensity_Norm rescales it onto 0–1 for readability. The rescaling is min-max in
+        LOG space, because the raw quantity is a Boltzmann factor spanning many orders of magnitude;
+        Defluor_Propensity_Log10 carries the value it is derived from.
 
         Is_Defluorinating is the boolean gate: strict persistence AND real dwell AND a surmountable
         barrier AND a non-uphill SN2 product. Thresholds are CFG (SSOT). A missing barrier yields
@@ -4761,22 +4877,69 @@ def main():
             _bar = _r.get("QSite_Barrier_kcal", np.nan)
             _prop.append(_p_strict(_r) * float(np.exp(-float(_bar) / _RT)) if _bar == _bar else np.nan)
         df_master["Defluor_Propensity"] = _prop
-        _valid = [p for p in _prop if p == p]
-        _mx = max(_valid) if _valid else np.nan
+
+        '''
+        The normalisation is done in LOG space, because the quantity being normalised is a Boltzmann
+        factor. exp(-ΔE‡/RT) with RT = 0.596 kcal/mol moves about seven orders of magnitude for every
+        10 kcal/mol of barrier, so a linear p / max(p) rounds every candidate but the leader to
+        0.0000 — an 18 kcal/mol barrier already prints as zero against a 12 kcal/mol one — and the
+        landscape figure that uses this as its colour channel becomes a single bright point on a
+        uniformly dark field. Ordering is identical either way; log scaling is what makes the
+        SPACING between candidates visible, which is the column's only purpose.
+
+        Logs are taken analytically rather than from the exponentiated value: log10(p) is
+        log10(p_strict) − ΔE‡ / (RT · ln 10), which stays finite where exp(-ΔE‡/RT) would underflow
+        to exactly zero and take log10 to −inf. A candidate with no strict-NAC population has a
+        genuinely zero propensity and is floored at the bottom of the scale rather than dropped.
+        '''
+        _ln10 = float(np.log(10.0))
+        _logp = []
+        for _, _r in df_master.iterrows():
+            _bar = _r.get("QSite_Barrier_kcal", np.nan)
+            _ps  = _p_strict(_r)
+            if _bar != _bar:
+                _logp.append(np.nan)                       # no barrier → no claim
+            elif _ps <= 0.0:
+                _logp.append(-np.inf)                      # no strict-NAC population → floor
+            else:
+                _logp.append(float(np.log10(_ps)) - float(_bar) / (_RT * _ln10))
+        _fin = [v for v in _logp if v == v and np.isfinite(v)]
+        _lo, _hi = (min(_fin), max(_fin)) if _fin else (np.nan, np.nan)
+        _span = (_hi - _lo) if (_fin and _hi > _lo) else 0.0
+        df_master["Defluor_Propensity_Log10"] = [
+            round(v, 3) if (v == v and np.isfinite(v)) else np.nan for v in _logp]
         df_master["Defluor_Propensity_Norm"] = [
-            round(p / _mx, 4) if (p == p and _mx == _mx and _mx > 0) else np.nan for p in _prop]
+            np.nan if v != v else
+            (0.0 if not np.isfinite(v) else
+             (1.0 if _span <= 0.0 else round((v - _lo) / _span, 4)))
+            for v in _logp]
 
         def _verdict(r):
+            """
+            The turnover claim. Every leg must be MEASURED and must PASS: a quantity that could not
+            be computed withholds the verdict, it does not satisfy it. A missing ΔE_rxn is not a
+            downhill ΔE_rxn — the thermodynamic leg asserts the SN2 product is not uphill, and an
+            absent number is no evidence that it isn't. The barrier and the reaction energy are
+            treated identically for that reason; both come from the same QSite parse, and if that
+            parse gave only one of them the surviving number cannot carry the other's claim.
+            """
             _sv  = float(r.get("Strict_Viability_Pct", 0) or 0)
             _dw  = float(r.get("NAC_Dwell_Max_ns", 0) or 0)
             _bar = r.get("QSite_Barrier_kcal", np.nan)
             _der = r.get("QSite_dErxn_kcal", np.nan)
+            _std = int(r.get("MD_Analysis_Stride", 1) or 1)
+            if _std > 1:
+                # The dwell leg cannot be evaluated on sub-sampled frames, and a defluorination
+                # verdict must not be able to change with an I/O performance flag.
+                return 0, f"Dwell unmeasurable at stride {_std} — re-run at stride 1"
             if _bar != _bar:
                 return 0, "Barrier pending"
+            if _der != _der:
+                return 0, "Reaction energy pending"
             _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
                    and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
                    and float(_bar) <= CFG.DEFLUOR_BARRIER_MAX_KCAL
-                   and (_der != _der or float(_der) <= CFG.DEFLUOR_DERXN_MAX_KCAL))
+                   and float(_der) <= CFG.DEFLUOR_DERXN_MAX_KCAL)
             return (1, "Defluorination-competent") if _ok else (0, "Binds, not competent")
         _v = [_verdict(r) for _, r in df_master.iterrows()]
         df_master["Is_Defluorinating"] = [x[0] for x in _v]

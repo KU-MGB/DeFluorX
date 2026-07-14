@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only — no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 July 2026 <────────────────────────────────────────────────────────
+Date   : 15 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_FAcDs.py
@@ -965,6 +965,25 @@ class CFG:
     A mono-fluoro substrate is unchanged by construction; a CF3 pose is deflated in proportion to how
     mediocre it is, and a genuinely near-ideal CF3 pose (≈178°) barely moves — which is the intent.
     The tier ladder gates on this effective angle; the raw angle stays reported.
+
+    THE ASSUMPTION, STATED. (1-p1)^n treats the n C–F bonds as independent draws from a uniform
+    distribution on the sphere. Neither condition holds exactly for the pose being scored: the
+    carboxylate is clamped bidentately by two arginines, so the head group is fixed and the CF3 is a
+    one-dimensional rotor about the Cα–COO⁻ axis — the C–F vectors sweep a CONE, not a sphere, and
+    they are rigidly correlated at 120° of azimuth. The true number of independent chances is
+    therefore below n.
+
+    THE DIRECTION OF THAT ERROR IS THE CONSERVATIVE ONE, which is why the simple null is kept. Fewer
+    effective chances means less deflation: at an observed 155°, n = 3 gives an effective 137.0° and
+    n = 2 gives 144.8°. A rotor-appropriate null would thus score TFA HIGHER — moving it back toward
+    the very false positive this correction exists to prevent. The independence null is the harsher
+    assumption, not the flattering one, so a violation of it cannot manufacture the control result.
+
+    The correction is in any case anchored empirically rather than analytically: it exists because TFA
+    was MEASURED to out-angle the native substrate in all five diffusion samples on an enzyme known
+    not to turn it over. The analytic null sets the SIZE of the deflation, not its justification. A
+    rotor-appropriate or sample-derived null would be a refinement; it is not a correction, and it
+    must be declared as an assumption in any manuscript that quotes the effective angle.
     """
     def sn2_effective_angle(self, angle: float, scissile_f_count: int = 1) -> float:
         import math
@@ -1632,6 +1651,24 @@ class CFG:
         "T3P",   # Desmond internal name for TIP3P
     )
 
+    '''
+    Mobile counter-ions added by the System Builder to neutralise the box. They are trimmed on the
+    SAME radius as the water, and for the same reason: an ion left behind when its hydration shell is
+    deleted stops being a solvated ion and becomes a bare point charge sitting in the frozen MM shell,
+    where QSite's MM charges polarise the QM Hamiltonian directly. In the MD it was screened by bulk
+    water (ε ≈ 78); in the droplet it would be screened by vacuum (ε ≈ 1). The error that introduces
+    at an anionic SN2 centre is large, and it varies between candidates purely according to where the
+    ions happened to diffuse — which is noise dressed as chemistry. Ions INSIDE the droplet are kept:
+    they retain their water and are physically part of the local electrostatics.
+
+    Structural metal ions are deliberately NOT listed here — they are cofactors, not counter-ions, and
+    are never trimmed. FAcD has none, but the distinction must not be left to chance.
+    '''
+    COUNTERION_RESTYPES: tuple = (
+        "NA", "NA+", "SOD", "K", "K+", "POT", "LI", "CS", "RB",
+        "CL", "CL-", "CLA", "BR", "IOD", "F-",
+    )
+
     # -------------------------------------------------------------------------------
     # Step 9.2: WaterMap integration
     # -------------------------------------------------------------------------------
@@ -1889,11 +1926,30 @@ class CFG:
     #     here so no Step-07 figure hard-codes them (SSOT). ---
     DEFLUOR_FLUORIDE_CHARGE_MIN: float  = -1.2   # Mulliken-charge window low bound when parsing the departing-F charge
     DEFLUOR_FLUORIDE_CHARGE_MAX: float  = -0.4   # window high bound (rejects O / still-bonded F so only near-fluoride is tracked)
+    '''
+    Mulliken charge on the departing fluorine at or below which the C–F bond is declared
+    cleaved. A free fluoride is −1 e; a covalent C–F fluorine sits near −0.25 e. Half-way
+    is the point past which the charge can only be explained by the bond having broken.
+    '''
+    QSITE_F_CHARGE_CLEAVED: float = -0.5   # e  ≤ this on the departing F → free fluoride
+
+    '''
+    Minimum number of strict-NAC frames that must be scored by Prime before the NAC-conditioned
+    MM-GBSA penalty is reported. Prime's per-frame ΔG_bind scatter is several kcal/mol, so a mean
+    over one or two frames carries an uncertainty larger than the penalty it is being used to claim.
+    Below this count the mean and its dispersion are still recorded — they are the evidence — but the
+    PENALTY is withheld rather than published to two decimal places from a sample that cannot support
+    them.
+    '''
+    MMGBSA_NAC_MIN_FRAMES: int = 3   # < this many scored strict-NAC frames → penalty withheld
+
     DEFLUOR_FIG_COLOUR: dict = field(default_factory=lambda: {
         "pes":        "#1D4ED8",   # QM/MM potential-energy-surface line
         "ts":         "#DC2626",   # transition state (barrier peak)
         "product":    "#16A34A",   # product well
         "f_charge":   "#B45309",   # departing-fluoride Mulliken-charge curve
+        "cleaved_bg": "#E8F7EE",   # verdict box fill — C-F cleaved
+        "intact_bg":  "#FDECEA",   # verdict box fill — C-F intact
         "gate":       "#22C55E",   # competence-quadrant shading (landscape)
         "gate_line":  "#16A34A",   # gate threshold lines
         "gate_text":  "#15803D",   # gate annotation text
@@ -2528,6 +2584,22 @@ class CFG:
     the bottom of the range, which is how a metric becomes a flat line at zero and nobody notices.
     """
     SENTINEL_UNDEFINED: float = 999.0
+    '''
+    Any value at or above this is a sentinel, not a measurement. It sits below SENTINEL_UNDEFINED so a
+    single comparison separates "measured" from "could not be measured" without testing for an exact
+    float. Geometry helpers return the sentinel when their construction is degenerate, and the callers
+    that consume them gate on this bound rather than on a literal.
+    '''
+    SENTINEL_VALID_MAX: float = 990.0   # < this → a real measurement; ≥ this → a sentinel
+
+    '''
+    Seeds are pinned so a re-run reproduces the previous one exactly. They are deliberately SEPARATE
+    constants rather than one shared value: they seed unrelated generators (a conformer embedding, a
+    manifold projection, a bootstrap sample), and collapsing them onto one number would silently change
+    every one of them the moment any single one had to be re-tuned.
+    '''
+    RDKIT_EMBED_SEED: int = 0xF00D   # ETKDG conformer embedding for the ligand template (02)
+    ANALYSIS_SEED: int    = 42       # UMAP projection, subsampling and bootstraps in the figures (03)
     """
     Columns where a SMALLER number is BETTER, so 0.0 is the optimum and can never stand in for 'missing'.
     A missing value in one of these is filled with SENTINEL_UNDEFINED, not with zero: filling an absent

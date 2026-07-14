@@ -12,7 +12,7 @@ Restricting both phases to the ~10 MD-ready complexes keeps this step cheap
 instead of converting/preparing the entire predicted library.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 July 2026 <────────────────────────────────────────────────────────
+Date   : 15 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 05_TopN_and_PDB_Preparation_FAcDs.py
@@ -1005,7 +1005,10 @@ out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
 _AA = {'ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE',
        'PRO','SER','THR','TRP','TYR','VAL','HID','HIE','HIP','ASH','HOH','NA','CL','SPC','T3P'}
 
-st = next(structure.StructureReader(prepared))
+with structure.StructureReader(prepared) as _r:
+    st = next(iter(_r), None)
+if st is None:
+    print('EMPTY_STRUCTURE %s' % prepared); sys.exit(5)
 lig = None
 for mol in st.molecule:
     if not ({a.pdbres.strip() for a in mol.atom} & _AA) and len(mol.atom) > 2:
@@ -1056,7 +1059,10 @@ vals = [float(c) for c in charges]
 with (out_dir / (stem + '_ESP_charges.csv')).open('w', newline='') as fh:
     w = csv.writer(fh); w.writerow(['atom_label', 'esp_charge']); w.writerows(zip(labels, vals))
 
-st = next(structure.StructureReader(lig_mae))
+with structure.StructureReader(lig_mae) as _r:
+    st = next(iter(_r), None)
+if st is None:
+    print('EMPTY_STRUCTURE %s' % lig_mae); sys.exit(5)
 if len(st.atom) != len(vals):
     print('ATOM_COUNT_MISMATCH %d vs %d' % (len(st.atom), len(vals))); sys.exit(4)
 for a, q in zip(st.atom, vals):
@@ -1123,7 +1129,7 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
     if not CFG.ESP_KEEP_SCRATCH:
         _n = 0
         for _g in _ESP_SCRATCH_GLOBS:
-            for _f in out_dir.glob(_g):
+            for _f in sorted(out_dir.glob(_g)):
                 try:
                     _f.unlink(); _n += 1
                 except OSError:
@@ -1443,7 +1449,7 @@ def _plip_cfg_cutoffs():
 
 
 """
-ANGLE CRITERIA — the half of the definition that was being thrown away.
+ANGLE CRITERIA — the half of the definition that a distance-only clamp cannot enforce.
 
 A hydrogen bond is not "an N or O within 3.5 Å"; a halogen bond is not "a halogen within 3.5 Å". Both
 are defined by GEOMETRY: a donor angle that says the interaction points the right way, and an acceptor

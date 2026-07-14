@@ -15,7 +15,7 @@ re-run, not the ligand/protein list. Only the canonical directory layout and
 job-naming scheme are supported.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 July 2026 <────────────────────────────────────────────────────────
+Date   : 15 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_FAcDs.py
@@ -255,6 +255,7 @@ import time
 import threading
 import multiprocessing
 import csv
+import fcntl
 import traceback
 import urllib.request
 import urllib.parse
@@ -1019,18 +1020,41 @@ def get_cached_alignment_for_protein(protein_id: str) -> Optional[Dict]:
     return CACHED_ALIGNMENTS.get(str(protein_id))
 
 def update_alignment_stats(csv_path: Path, data: Dict):
-    """Appends a newly computed alignment directly to the designated on-disk cache file."""
+    """Append a newly computed alignment to the on-disk cache file, under an exclusive file lock.
+
+    This runs inside multiprocessing.Pool workers, and the _PERSISTED_PROTEINS guard that decides
+    WHETHER to write cannot deduplicate across them: it is a plain module-level set, so every forked
+    worker carries its own copy and none of them sees the others' writes. Two workers holding jobs for
+    the same protein therefore both reach this function, and an unlocked append from separate
+    processes can interleave two rows into one line.
+
+    The lock is on the file rather than in memory because the writers are PROCESSES — a threading.Lock
+    would not be shared across the fork. flock is advisory but every writer here goes through this
+    function, which is what makes it sufficient.
+
+    Row-level duplication remains possible (two workers may each write the same protein once) and is
+    harmless by design: save_alignment_cache_final rebuilds this file wholesale from the authoritative
+    per-job summaries at the end of the run, emitting exactly one row per protein. What the lock buys
+    is that the live-feedback file is never TORN mid-run.
+    """
     if "protein" in data:
         CACHED_ALIGNMENTS[data["protein"]] = data
 
     keys = sorted(data.keys())
-    file_exists = csv_path.exists()
     try:
         with open(csv_path, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(data)
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                # Under the lock: another worker may have created the file (and its header)
+                # between the exists() check and the open.
+                f.seek(0, os.SEEK_END)
+                writer = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+                if f.tell() == 0:
+                    writer.writeheader()
+                writer.writerow(data)
+                f.flush()
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception as e:
         if logger: logger.debug(f"Cache synchronisation deferred: {e}")
 
@@ -1418,7 +1442,7 @@ def rdkit_mol_from_smiles_with_3d(smiles: str) -> Chem.Mol:
     isomers = list(EnumerateStereoisomers(mol, options=opts))
     if isomers: mol = isomers[0]
     params = AllChem.ETKDGv3()
-    params.randomSeed = 0xF00D
+    params.randomSeed = int(CFG.RDKIT_EMBED_SEED)
     res = AllChem.EmbedMolecule(mol, params)
     if res == -1:
         params.useRandomCoords = True
@@ -2612,7 +2636,7 @@ def _derive_flippin_lodge(nuc_np, c_node, c_pos, neigh_fn, sym_fn, pos_fn, is_le
     _spect = [p for p in (pos_fn(n) for n in _heavy + _hyd) if p is not None]
     if len(_spect) >= 2:
         _fl = calculate_flippin_lodge(nuc_np, c_pos, _spect[0], _spect[1])
-        if _fl < 990.0:
+        if _fl < CFG.SENTINEL_VALID_MAX:
             return round(_fl, 1)
     return None
 
@@ -6953,7 +6977,7 @@ def main():
             Numeric aux geometries must get a NUMERIC sentinel, never the "NA"
             string: pandas re-parses "NA" as NaN on the next read, which would
             re-open the gap in the downstream ranked CSV. 999.0 marks "undefined"
-            (consistent with the `< 990.0` validity guard in the SN2 analysis).
+            (consistent with the CFG.SENTINEL_VALID_MAX guard in the SN2 analysis).
             """
             fill_dict["flippin_lodge_offset"]        = 999.0
             fill_dict["burgi_dunitz_angle"]          = 999.0

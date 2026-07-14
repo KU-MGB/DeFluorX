@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,864 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,942 lines &nbsp; "]
         UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,381 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
         CFG --- UTL --- ENV
@@ -200,8 +200,8 @@ flowchart TD
     M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~700 lines &nbsp; "] --> M2
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
-        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,999 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,305 lines &nbsp; "]
+        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~7,176 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,326 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,657 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -210,7 +210,7 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~3,633 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~3,639 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
@@ -218,7 +218,7 @@ flowchart TD
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
         M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Desmond SID → *_SID-out.eaf (frame-count validated) &nbsp; \n &nbsp; Per-frame ΔG_bind + energy components + plots &nbsp; \n &nbsp; Disk-safe scratch · phase-aware heartbeat · WARN status &nbsp; \n &nbsp; 📄 ~2,265 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,868 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~5,012 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
@@ -1170,7 +1170,7 @@ the result far more than the water model does.
     3.  **WaterMap thermodynamic integration** — reads the hydration-site reports to calculate ΔG-weighted water blockade scores on the SN2 reaction runway. **Every frame is superimposed (Kabsch, on Cα) onto the structure the WaterMap sites were computed in before a single site distance is taken, and the sites are carried across with the protein.** This is not optional: the protein diffuses and tumbles through the periodic box — measured on this project's own trajectory, the Cα centroid moves 30–45 Å over 1 µs while the fold stays rigid (2–3 Å RMSD once superimposed) — so comparing an MD coordinate against a static site coordinate compares two unrelated frames. Sites are read only from atoms carrying `r_watermap_deltaG`; a WaterMap *input* file (which contains the protein, not the sites) is rejected rather than being read as thousands of zero-ΔG "sites". If the sites cannot be aligned, WaterMap scoring is disabled for that rank rather than reported wrongly.
     4.  **Conformation frame scoring** — ranks all frames using a multi-parameter scoring function to locate the ideal conformation.
     5.  **PBC-corrected frame extraction** — the chosen frame is snapped into the CMS model, then `make_whole_cms` + `center_cms` repair periodic-boundary wrapping (reconnect split molecules and re-centre the box on the protein+ligand) before the full system is written to `<Rank>/<job>_Ideal_Final.maegz`. This removes the "protein at the box edge / water box on one side" artefact produced by writing a raw wrapped frame.
-    6.  **QSite input generation** — a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The scan runs the non-diffuse `QSITE_SCAN_BASIS` (6-31G**) for SCF stability — a diffuse basis on a large QM region drives near-linear-dependence and aborts scan points — and emits `mulken=1`, without which Jaguar writes **no charge table at all** and the departing-fluoride charge cannot be parsed. Residues with no Cβ (glycine) and prolines (whose Cα–Cβ cut would sever the pyrrolidine ring) are dropped from the QM region rather than aborting the job. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His277, Acid Asp134, StabH His155 sidechains + ligand — these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3 — verified directly against a real QM/MM input: Jaguar aborts with `ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts: DFT(b3lyp-d3)`. **This is a declared limitation, not an oversight:** the substrate is polyfluorinated and the C–F···π contacts against the Trp/Tyr cradle are dispersion-bound, so the barrier is computed without them; dispersion would require abandoning the frozen-cut QM region altogether. No implicit-solvation keyword is emitted — the extracted frame keeps its explicit TIP3P box in the MM region, so adding implicit solvation would double-count.
+    6.  **QSite input generation** — a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The scan runs the non-diffuse `QSITE_SCAN_BASIS` (6-31G**) for SCF stability — a diffuse basis on a large QM region drives near-linear-dependence and aborts scan points — and emits `mulken=1`, without which Jaguar writes **no charge table at all** and the departing-fluoride charge cannot be parsed. Residues with no Cβ (glycine) and prolines (whose Cα–Cβ cut would sever the pyrrolidine ring) are dropped from the QM region rather than aborting the job. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His277, Acid Asp134, StabH His155 sidechains + ligand — these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3 — verified directly against a real QM/MM input: Jaguar aborts with `ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts: DFT(b3lyp-d3)`. **This is a declared limitation, not an oversight:** the substrate is polyfluorinated and the C–F···π contacts against the Trp/Tyr cradle are dispersion-bound, so the barrier is computed without them; dispersion would require abandoning the frozen-cut QM region altogether. No implicit-solvation keyword is emitted — the extracted frame is trimmed to an explicit-solvent DROPLET in the MM region — water and counter-ions beyond 15 Å of the ligand are deleted, the surface is frozen and the shell inside it restrained, so the QM/MM runs in a finite cluster with a vacuum boundary (outer dielectric = 1), not in a periodic box, so adding implicit solvation would double-count.
     7.  **Automated QSite execution** — unless disabled, `$SCHRODINGER/qsite` is launched on each generated input, with all output written to a per-candidate folder `<Rank>/<job>_QSite_SN2/`. Execution is **idempotent**: if that folder already exists the whole QSite step is skipped (mirroring the PDB-preparation cache), so re-runs do not resubmit completed jobs. A live scan-point heartbeat reports progress.
     8.  **QM/MM defluorination figures** — once a scan finishes, the relaxed-scan energies are parsed into the SN2 reaction profile: a per-job figure (`<job>_QSite_Reaction_Profile.png`) showing the potential-energy surface along the reaction coordinate together with the departing-fluoride Mulliken charge (→ ≈ −0.9 as F leaves — the C–F-cleavage proof). A profile CSV is persisted and reloaded into the cross-rank `12_Defluorination_Landscape.png`. **A scan that resolves no transition state (monotonically downhill from the first point) reports its barrier as NaN, never as 0.0** — a fabricated zero would read as 'barrierless', the strongest possible claim, from a scan that simply failed. Best-effort headless Maestro renders of the QM-region structures are also attempted.
     9.  **WaterMap ↔ SN2 + dashboards** — each per-job dashboard gains a WaterMap panel (displaceable active-site waters), and a combined `11_WaterMap_SN2_Context.png` relates hydration ΔG to SN2 viability with an ΔH/−TΔS decomposition.
@@ -1246,6 +1246,28 @@ As the final computational analysis step, the following design architectures are
 </details>
 
 ---
+
+### ⚠️ Declared scope limitations
+
+These are deliberate scope decisions, stated so that they are not mistaken for oversights.
+
+**The screen models a monomeric active site.** Every Boltz-2 prediction is one protein chain plus one
+ligand (`02_Production_FAcDs.py`, YAML builder), so the whole downstream chain — pocket containment,
+Prime MM-GBSA, the Desmond trajectory and the QM/MM droplet — measures a monomer. Fluoroacetate
+dehalogenase is a physiological **homodimer**, and the dimer is not merely a packing artefact: FAcD
+displays **half-of-sites reactivity**, in which the two protomers are non-equivalent and only one binds
+substrate at a time — a property that has no meaning in a monomer (Chan *et al.*, *Biochemistry* 2011;
+Kuo *et al.*). Cross-protomer contributions to the active site and to substrate affinity are therefore
+outside what this pipeline measures. For a comparative screen across ~1,000 homologues, where the
+question is which enzymes present a competent SN2 geometry to a fluorinated substrate, the monomeric
+model is the defensible unit of comparison and the cost of dimerising every candidate is prohibitive.
+It does mean that **absolute** binding free energies and barriers carry a systematic error of unknown
+sign, and that any half-of-sites cooperativity is invisible. Rankings are internally consistent because
+every candidate is treated identically; absolute values are not to be quoted as such.
+
+**The QM/MM barrier is electronic (ΔE‡), not free-energetic (ΔG‡)**, and **dispersion is absent from
+the QM region** — both are detailed in the QSite step of the script catalogue above, along with why
+neither can be fixed without abandoning the frozen-orbital cuts the residue-selective QM region needs.
 
 ### 🔬 Reproducibility
 
@@ -1976,6 +1998,6 @@ University of Copenhagen, Denmark
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
-<sub>Last updated: 10 June 2026</sub>
+<sub>Last updated: 15 July 2026</sub>
 
 </div>

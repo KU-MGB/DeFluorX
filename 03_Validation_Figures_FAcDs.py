@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, and pocket-fit / multi-mo
 diagnostics).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 10 July 2026 <────────────────────────────────────────────────────────
+Date   : 15 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py
@@ -836,7 +836,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     if len(x) >= 5:
         try:
             reporter.log("  -> Computing UMAP Manifold for Chemical Space Map...")
-            reducer = umap.UMAP(n_neighbors=min(15, len(x)-1), min_dist=0.1, random_state=42)
+            reducer = umap.UMAP(n_neighbors=min(15, len(x)-1), min_dist=0.1, random_state=int(CFG.ANALYSIS_SEED))
             umap_map = reducer.fit_transform(x_scaled)
             df.loc[x.index, "UMAP_X"] = umap_map[:, 0]
             df.loc[x.index, "UMAP_Y"] = umap_map[:, 1]
@@ -1193,6 +1193,11 @@ def _tt_style(ax, xlabel, ylabel, title=None):
 def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["UMAP_X","UMAP_Y"]).copy()
+        # dropna can empty the frame outright; .min()/.max() on it return NaN, which then
+        # becomes an axis limit and takes the figure down with no usable error.
+        if dv.empty:
+            reporter.log("  ! Figure 18b skipped: no rows with UMAP coordinates")
+            return
         dv["_X"] = dv["UMAP_X"]; dv["_Y"] = dv["UMAP_Y"]
         pax = pa.copy(); pax["_X"] = pa["UMAP_X"]; pax["_Y"] = pa["UMAP_Y"]
         xy  = np.vstack([dv["_X"].values, dv["_Y"].values])
@@ -1241,6 +1246,9 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         dv["_X"] = pd.to_numeric(dv[CFG.COL_SN2],      errors="coerce")
         dv["_Y"] = pd.to_numeric(dv[CFG.COL_CONF], errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
+        if dv.empty:
+            reporter.log("  ! Figure 13b skipped: no rows with both axes present")
+            return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa[CFG.COL_SN2],      errors="coerce")
         pax["_Y"] = pd.to_numeric(pa[CFG.COL_CONF], errors="coerce")
@@ -1284,6 +1292,9 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
 def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=[CFG.COL_CONF,"iptm"]).copy()
+        if dv.empty:
+            reporter.log("  ! Figure 05b skipped: no rows with both confidence and ipTM")
+            return
         dv["_X"] = dv[CFG.COL_CONF]; dv["_Y"] = dv["iptm"]
         pax = pa.copy()
         pax["_X"] = pa[CFG.COL_CONF]; pax["_Y"] = pa["iptm"]
@@ -1320,6 +1331,9 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         dv["_X"] = pd.to_numeric(dv["Interaction_Density_Norm"], errors="coerce")
         dv["_Y"] = pd.to_numeric(dv["num_interactions"],          errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
+        if dv.empty:
+            reporter.log("  ! Figure 14b skipped: no rows with both interaction metrics")
+            return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa["Interaction_Density_Norm"], errors="coerce")
         pax["_Y"] = pd.to_numeric(pa["num_interactions"],          errors="coerce")
@@ -4692,7 +4706,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                       linewidth=0.5, alpha=0.85))
             if _be_hi > _be_lo:
                 ax.set_ylim(_be_lo, _be_hi)
-            ax.set_ylabel("Binding probability  (sigmoid of SN2 geometry)", fontsize=11, color=CFG.VIS_ACCENT["axis_left"])
+            ax.set_ylabel("Binding probability  (sigmoid of interaction density, cross-PAE, confidence)", fontsize=11, color=CFG.VIS_ACCENT["axis_left"])
             ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=9)
             ax.set_xticks(range(len(existing_tiers)))
             ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=9)
@@ -6484,7 +6498,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _cb25 = fig25a.colorbar(_hb25, ax=axA, pad=0.01, aspect=30, shrink=0.85)
         _cb25.set_label("Count per hex", fontsize=9)
         _cb25.ax.tick_params(labelsize=8)
-        _samp_A25 = _d25.sample(min(3000, len(_d25)), random_state=42)
+        _samp_A25 = _d25.sample(min(3000, len(_d25)), random_state=int(CFG.ANALYSIS_SEED))
         for _t25a in sorted(TIER_ORDER_LOGIC, key=lambda t: t == CFG.TIER_TOP):
             _is_pa25a = (_t25a == CFG.TIER_TOP)
             # Tier_1A is crucial and rare → plot ALL of its points (never sampled)
@@ -10078,7 +10092,7 @@ def write_figure_descriptions(out_dir: Path):
         "05_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
         "  Title   : Binding energetics — binding probability by tier",
         "  Type    : Binding-probability violin per tier (red median bar)",
-        "  Look for: how binding probability (sigmoid of SN2 geometry, computed in Step 02) varies",
+        "  Look for: how binding probability (sigmoid of interaction density, cross-PAE and",
         "            across tiers. Product inhibition is assessed downstream by the Step-06 MM-GBSA stage.",
         "",
         "=" * 80,
@@ -10273,7 +10287,7 @@ def main():
     rama_dir.mkdir(parents=True, exist_ok=True)
     diag_dir.mkdir(parents=True, exist_ok=True)
 
-    np.random.seed(42)
+    np.random.seed(int(CFG.ANALYSIS_SEED))
 
     reporter = _make_reporter(out_dir)
 

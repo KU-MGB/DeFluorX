@@ -2,7 +2,7 @@
 # =============================================================================
 # FAcDs Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-# Date   : 10 July 2026
+# Date   : 15 July 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_FAcDs.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
@@ -326,7 +326,16 @@ _fmt_elapsed() {
     fi
 }
 
+# run_step [--optional] "NN  Name" cmd...
+#
+# --optional marks a step whose failure must NOT halt the pipeline. It has to be a flag
+# ON run_step, because `run_step ... || true` at the call site cannot work: the FAIL path
+# below calls `exit`, which terminates the shell from inside the function regardless of
+# the caller's `||` context. The `|| true` was therefore inert, and a step written to be
+# tolerant of failure would halt the whole run — the opposite of what it said.
 run_step() {
+    local optional=0
+    if [ "$1" = "--optional" ]; then optional=1; shift; fi
     local name="$1"; shift
     # Extract leading numeric prefix as step number (base-10 safe)
     local step_num _digits="${name%%[^0-9]*}"
@@ -373,6 +382,11 @@ run_step() {
         status="WARN"
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
         _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) — completed with warnings (exit ${exit_code}); pipeline continues."
+        _sync_staging_log
+    elif (( optional )); then
+        status="WARN"
+        STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
+        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) — optional step failed (exit ${exit_code}); pipeline continues."
         _sync_staging_log
     else
         status="FAIL"
@@ -491,8 +505,8 @@ run_step "00a  Environment check" \
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
-run_step "00b  Environment export" \
-    python 00_03_Environment_FAcDs.py --export || true
+run_step --optional "00b  Environment export" \
+    python 00_03_Environment_FAcDs.py --export
 
 run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \
