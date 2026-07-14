@@ -86,6 +86,75 @@ SEPARATOR_LIGHT = "─" * 80   # step / subsection       (───)
 SEPARATOR_DASH  = "-" * 80   # info line / minor break  (---)
 
 
+class _ConsoleRuleFilter:
+    """A stdout wrapper that collapses consecutive separator rules.
+
+    The logs grow triple rules — ═══ / ─── / ═══ stacked with nothing between them — because a caller
+    prints a rule and then invokes a helper that prints its own. Chasing every call site is endless
+    and the next new print re-introduces it, so the rule is enforced where the text is actually
+    emitted: a separator that immediately follows another separator, with only blank lines between,
+    is dropped. The heavier rule wins, so a section boundary is never demoted to a subsection one.
+
+    Nothing else is touched: any line that is not a rule passes through byte for byte.
+    """
+
+    _RULES = {SEPARATOR_HEAVY: 3, SEPARATOR_LIGHT: 2, SEPARATOR_DASH: 1}
+
+    def __init__(self, stream):
+        self._stream = stream
+        self._pending_rule = None      # rule waiting to be emitted (weight, text)
+        self._last_was_rule = False
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+    def _emit(self, text):
+        self._stream.write(text)
+
+    def write(self, data):
+        for _line in data.splitlines(keepends=True):
+            _bare = _line.strip()
+            _w = self._RULES.get(_bare)
+            if _w is not None:
+                # print() emits the text and its newline as SEPARATE writes, so a buffered rule must
+                # carry its own newline or it is glued onto whatever line is emitted next.
+                _norm = _bare + "\n"
+                if self._last_was_rule:
+                    # Already inside a rule run: keep the heaviest, print nothing yet.
+                    if self._pending_rule is None or _w > self._pending_rule[0]:
+                        self._pending_rule = (_w, _norm)
+                    continue
+                self._last_was_rule = True
+                self._pending_rule = (_w, _norm)
+                continue
+            if not _bare:
+                # Blank lines inside a rule run do not end it — they are what makes the stacks look
+                # like separate rules when they are not.
+                if self._last_was_rule:
+                    continue
+                self._emit(_line)
+                continue
+            if self._pending_rule is not None:
+                self._emit(self._pending_rule[1])
+                self._pending_rule = None
+            self._last_was_rule = False
+            self._emit(_line)
+
+    def flush(self):
+        if self._pending_rule is not None:
+            self._emit(self._pending_rule[1])
+            self._pending_rule = None
+            self._last_was_rule = False
+        self._stream.flush()
+
+
+def install_console_rule_filter() -> None:
+    """Collapse stacked separator rules for the rest of this process's output."""
+    import sys as _sys
+    if not isinstance(_sys.stdout, _ConsoleRuleFilter):
+        _sys.stdout = _ConsoleRuleFilter(_sys.stdout)
+
+
 def safe_name(s: str) -> str:
     """Sanitises strings for secure usage as filenames, thereby preventing path-injection vulnerabilities."""
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in s)[:200]
@@ -261,6 +330,87 @@ class ReportManager:
 # SECTION 4: MATPLOTLIB UTILITIES
 # =============================================================================
 
+def apply_figure_style(cfg) -> None:
+    """The pipeline's one typography and canvas definition, applied to matplotlib's rcParams.
+
+    Every step that draws a figure calls this instead of setting its own font family, point sizes
+    and grid colour: a figure from Step 06 must be indistinguishable in style from one out of Step
+    03, and a restyle must be one edit in CFG rather than a hunt through three plotting scripts.
+
+    Weight is deliberately absent from the axis labels. Bolding every label emphasises nothing; the
+    point sizes (VIS_FONT_AXIS_LABEL > VIS_FONT_TICK > VIS_FONT_LEGEND > VIS_FONT_ANNOT) already
+    carry the hierarchy. Weight is spent only where a label must survive being read against a filled
+    bar, and that is set at the call site, not here.
+    """
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": list(cfg.VIS_FONT_FAMILY),
+        "axes.labelsize": cfg.VIS_FONT_AXIS_LABEL,
+        "axes.labelweight": "normal",
+        "axes.titlesize": cfg.VIS_FONT_AXIS_LABEL + 2.0,
+        "xtick.labelsize": cfg.VIS_FONT_TICK,
+        "ytick.labelsize": cfg.VIS_FONT_TICK,
+        "legend.fontsize": cfg.VIS_FONT_LEGEND,
+        "legend.framealpha": cfg.VIS_LEGEND_FRAME_ALPHA,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.color": cfg.VIS_GRID_COLOUR,
+        "grid.linewidth": cfg.VIS_GRID_LINEWIDTH,
+        "savefig.dpi": cfg.VIS_FIGURE_DPI,
+        "savefig.bbox": "tight",
+    })
+
+
+def write_json_atomic(path, payload: dict) -> None:
+    """Write a JSON file so a reader never sees a half-written one.
+
+    The write goes to a temporary file beside the target and is then renamed over it — rename is
+    atomic within a filesystem, so a run killed mid-write leaves either the old file or the new
+    one, never a truncated hybrid another step would parse as truth.
+    """
+    import json
+    from pathlib import Path as _Path
+    path = _Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _tmp = path.with_suffix(path.suffix + ".tmp")
+    _tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    _tmp.replace(path)
+
+
+def auto_label_colour(cfg, bg, threshold: float = 0.5) -> str:
+    """The contrast colour for a label written ON a filled mark, from the fill's luminance.
+
+    Returns near-black on a light fill and white on a dark one, judged by WCAG relative
+    luminance. One coefficient set and one cutoff for the whole pipeline: a value written inside a
+    bar must stay legible whatever colour that bar happens to take, and hardcoding white works
+    until the first pale fill.
+    """
+    import matplotlib.colors as _mc
+    try:
+        r, g, b = _mc.to_rgb(bg)
+    except Exception:
+        return cfg.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0]
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (cfg.VIS_BAR_LABEL_COLOURS_ON_LIGHT[0] if lum > threshold
+            else cfg.VIS_BAR_LABEL_COLOURS_ON_DARK[0])
+
+
+def style_axes(ax, cfg, xlabel: str = "", ylabel: str = "") -> None:
+    """Axis labels, grid and draw order, exactly as every other figure in the pipeline has them.
+
+    The labels are set in plain weight at CFG.VIS_FONT_AXIS_LABEL; the grid sits BEHIND the data.
+    """
+    if xlabel:
+        ax.set_xlabel(xlabel, labelpad=6)
+    if ylabel:
+        ax.set_ylabel(ylabel, labelpad=6)
+    ax.grid(True, alpha=cfg.VIS_GRID_ALPHA, color=cfg.VIS_GRID_COLOUR,
+            linewidth=cfg.VIS_GRID_LINEWIDTH)
+    ax.set_axisbelow(True)
+
+
 def clean_spines(ax) -> None:
     """
     Academic-style axes: remove top/right spines, thin the remaining borders.
@@ -343,7 +493,7 @@ def _rama_classify(phi: float, psi: float) -> str:
 
 
 def _rama_stats(angles: list[tuple]) -> dict[str, Any]:
-    """Calculate percentages of residues in favored, allowed, and outlier regions."""
+    """Calculate percentages of residues in favoured, allowed, and outlier regions."""
     total = len(angles)
     counts = {"Favored": 0, "Allowed": 0, "Outlier": 0}
     for _, _, phi, psi in angles:
@@ -808,8 +958,10 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     DOI: https://doi.org/10.1021/ja00245a028
 
     Measures the angle between the Nu–C vector projected onto the R1–C–R2 plane
-    and the bisector of R1–C–R2.  Ideal value = 0° (eclipsed, minimises steric
-    clash between the incoming nucleophile and the R substituents).
+    and the bisector of R1–C–R2.  Ideal value = 0° (the nucleophile approaches ALONG the
+    bisector — equidistant from both substituents — which minimises steric clash with them.
+    This is a BISECTING arrangement, not an eclipsed one: eclipsing a substituent would
+    maximise the clash).
 
     AUXILIARY / REFERENCE metric only — NOT a tier gate. Reports the in-plane
     (lateral) component of the nucleophile approach, complementing the backside
@@ -943,7 +1095,7 @@ def compute_ligand_properties(smiles_file) -> dict:
 
 
 # =============================================================================
-# SECTION: SCHRÖDINGER JOB-SERVER SCRATCH LOCATION
+# SECTION 8: SCHRÖDINGER JOB-SERVER SCRATCH LOCATION
 # =============================================================================
 def _fs_device(path: Path) -> "int | None":
     """st_dev of the nearest existing ancestor of `path` (identifies its mounted
@@ -973,25 +1125,29 @@ def ensure_jobserver_on_working_disk(
     jobserver_subdir: str = "_Schrodinger_JobServer",
     echo=None,
 ) -> bool:
-    """Force ALL Schrödinger job scratch onto the working disk — live, without
-    stopping the server or killing a running job.
+    """Force ALL Schrödinger job scratch onto the working disk so 06/07 run
+    entirely on the USB with no manual jsc setup.
 
-    The huge per-subjob scratch a Prime MM-GBSA / QSite run stages (the multi-GB
-    complexes copies, hundreds of GB on a 100k-frame trajectory) lands in the job
-    server's ``tmpdir``, NOT its server directory. That ``tmpdir`` is the
-    ``localhost`` entry of ``$SCHRODINGER/schrodinger.hosts``; when it is ``/tmp``
-    (the default) the OS disk fills and the job dies with a silent
-    ``copy_file_range: no space left on device`` (rc=1) after hours.
+    A Prime MM-GBSA / QSite run stages hundreds of GB of per-subjob scratch (the
+    multi-GB complexes copies × a 100k-frame trajectory) under the job server's
+    LOCAL-SERVER-DIR. When that dir is ``/tmp`` (the default) the OS disk fills and
+    the job dies with a silent ``copy_file_range: no space left on device`` (rc=1)
+    after hours.
 
-    The fix is to point that ``tmpdir`` at the working disk and apply it with
-    ``jsc admin reload-hosts <server-address>`` — which a RUNNING server accepts
-    for its NEXT jobs, so nothing is stopped and no live job is lost. (This is why
-    the earlier stop-and-relocate approach was wrong: it needed an idle server that
-    never comes, and it moved the small server dir, not the scratch tmpdir.)
+    Step 0 (authoritative): relocate the server's local-server-dir to the working
+    disk with ``jsc local-server-dir --set`` — the only lever that actually moves
+    it. That command needs the server stopped, so this is done via stop→set→start,
+    but ONLY when the server is IDLE (no ``Running`` job in ``jsc list``) — a busy
+    server is never stopped, so a live Desmond MD or another user's job is safe; in
+    that case the function warns and leaves the server alone.
 
-    Returns True when the hosts ``tmpdir`` is on the working-disk filesystem
-    (already, or set this call) so scratch-heavy jobs are safe to launch; False
-    only if the hosts file cannot be read/written.
+    Steps 1-3 (fallback): point the ``localhost`` hosts ``tmpdir`` at the working
+    disk and ``jsc admin reload-hosts``. NOTE this does NOT move a RUNNING daemon's
+    scratch (verified) — it only helps a freshly-started server — so it is a
+    best-effort fallback for when step 0 could not run (server busy / no jsc).
+
+    Returns True when scratch is on the working-disk filesystem (server-dir
+    relocated, or hosts tmpdir already/now on it); False if neither could be set.
 
     Parameters
     ----------
@@ -1046,6 +1202,121 @@ def ensure_jobserver_on_working_disk(
         hp.write_text(new)
 
     target.mkdir(parents=True, exist_ok=True)
+
+    # 0. AUTHORITATIVE fix — relocate the job server's LOCAL-SERVER-DIR to the
+    #    working disk. This is where Prime MM-GBSA / QSite subjobs actually stage
+    #    their hundreds of GB; the hosts `tmpdir` + `reload-hosts` route (steps 1-3
+    #    below) does NOT move it on an already-running daemon (verified: the running
+    #    server keeps its launch-time dir on /tmp regardless of reload). The only
+    #    lever is `jsc local-server-dir --set` — which requires the server stopped.
+    #    Do it automatically, but ONLY when the server is IDLE: never stop a server
+    #    that has a RUNNING job (it would kill e.g. a live Desmond MD).
+    def _jsc(*args, timeout=120):
+        try:
+            return subprocess.run([jsc, *args], capture_output=True, text=True, timeout=timeout)
+        except Exception:
+            return None
+
+    def _server_up() -> bool:
+        """True only when the local job server can actually ACCEPT a submission.
+
+        A `jobserverd` process in /proc is NOT proof: the daemon can be alive while its
+        registration in the server dir is stale or gone, and Prime then dies at submit time
+        with 'Local job submission requires a locally running job server'. Ask the client
+        the same way Prime does — `jsc list` — and trust only a clean reply.
+        """
+        r = _jsc("list", timeout=60)
+        if r is None:
+            return False
+        """
+        Judge the MESSAGE, not the exit code: `jsc list` exits 1 merely because there are no
+        jobs to list ("No active jobs were found."), which is a perfectly healthy server. Only
+        the explicit 'server not running' / 'Error locating ... server' text means it is down.
+        """
+        return not _re.search(r"not running|Error locating|requires a locally running",
+                              f"{r.stdout}\n{r.stderr}", _re.I)
+
+    def _server_dir() -> str:
+        r = _jsc("local-server-dir")
+        return (r.stdout.strip().splitlines() or [""])[0].strip() if r else ""
+
+    def _server_dir_on_disk() -> bool:
+        d = _server_dir()
+        return bool(d) and anchor_dev is not None and _fs_device(Path(d)) == anchor_dev
+
+    def _running_jobs() -> int:
+        r = _jsc("list")
+        # Count ANY non-terminal job, not just "Running": a job in Submitted / Queued /
+        # Incorporating / Waiting / Launched / Started would also be killed by a server restart.
+        _active = r"\b(Running|Submitted|Queued|Incorporating|Waiting|Launched|Started|Active)\b"
+        return sum(1 for ln in r.stdout.splitlines() if _re.search(_active, ln)) if r else 0
+
+    def _jobserverd_tmp() -> str:
+        # The daemon creates every job's WORKING directory under its own
+        # $SCHRODINGER_TMPDIR / $TMPDIR ($TMPDIR/$USER/jobs). local-server-dir only moves the
+        # jobdb, NOT the per-job working dirs — so this env, read from the live daemon, is what
+        # decides whether Prime/Desmond subjobs land on the working disk or on /tmp.
+        try:
+            for _pid in os.listdir("/proc"):
+                if not _pid.isdigit():
+                    continue
+                try:
+                    if Path(f"/proc/{_pid}/comm").read_text().strip() != "jobserverd":
+                        continue
+                    _env = Path(f"/proc/{_pid}/environ").read_bytes().split(b"\0")
+                except Exception:
+                    continue
+                _kv = dict(e.split(b"=", 1) for e in _env if b"=" in e)
+                for _key in (b"SCHRODINGER_TMPDIR", b"TMPDIR"):
+                    if _kv.get(_key):
+                        return _kv[_key].decode("utf-8", "replace")
+                return ""   # daemon running but neither var set → it defaults to /tmp
+        except Exception:
+            pass
+        return ""
+
+    def _daemon_tmp_on_disk() -> bool:
+        d = _jobserverd_tmp()
+        return bool(d) and anchor_dev is not None and _fs_device(Path(d)) == anchor_dev
+
+    if os.path.isfile(jsc):
+        """
+        Liveness FIRST. Scratch being configured correctly is worthless if the server cannot
+        accept a submission: every Prime subjob then fails rc=1 at hand-off, after the frames
+        have already been read. Probe with the client, not with /proc.
+        """
+        _up = _server_up()
+        if _up and _server_dir_on_disk() and _daemon_tmp_on_disk():
+            say("[job-server] ✔ server is up, and local-server-dir + daemon TMPDIR are both on "
+                "the working disk.")
+            return True
+        if not _up:
+            say("[job-server] local job server is DOWN — starting it. Prime and QSite cannot "
+                "submit any subjob without it.")
+        # A stopped server has no running jobs, so the stop→set→start path below is safe.
+        _busy = _running_jobs() if _up else 0
+        if _busy == 0:
+            # Force the working-disk scratch into this process's env so the RESTARTED daemon
+            # inherits it and runs every subjob there instead of /tmp. This is the real fix:
+            # local-server-dir alone leaves the daemon's TMPDIR at /tmp, which is where a
+            # 21-GB-per-subjob Prime MM-GBSA silently overflows the OS disk.
+            for _k in ("SCHRODINGER_TMPDIR", "TMPDIR"):
+                _v = os.environ.get(_k, "")
+                if not (_v and anchor_dev is not None and _fs_device(Path(_v)) == anchor_dev):
+                    os.environ[_k] = str(target)
+            _jsc("local-server-stop"); time.sleep(2)
+            _jsc("local-server-dir", "--set", str(target)); time.sleep(1)
+            _jsc("local-server-start"); time.sleep(2)   # inherits the USB TMPDIR set above
+            if _server_up() and _server_dir_on_disk() and _daemon_tmp_on_disk():
+                say(f"[job-server] ✔ server started, scratch → working disk (local-server-dir + "
+                    f"daemon TMPDIR relocated via stop→set→start; server idle so no job lost).")
+                return True
+            say("[job-server] relocation did not fully verify; trying hosts-tmpdir fallback.")
+        else:
+            say(f"[job-server] ⚠ {_busy} job(s) RUNNING (incl. any Desmond) — NOT restarting the "
+                f"server (would kill them). Daemon TMPDIR = '{_jobserverd_tmp() or '/tmp (default)'}'; "
+                f"jobs keep using it until the server is idle and this runs again. Free the server to "
+                f"move scratch onto the working disk ({target}).")
 
     # 1. Already on the working disk (user-local first, then global)? Then done.
     for hp in (user_hosts, global_hosts):

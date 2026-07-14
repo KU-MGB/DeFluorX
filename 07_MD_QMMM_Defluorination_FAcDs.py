@@ -4275,6 +4275,9 @@ def _resolve_work_dir(raw: str) -> Path:
 
 
 def main():
+    # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
+    # and the log grows triple bars with nothing between them.
+    _utils_mod.install_console_rule_filter()
     parser = argparse.ArgumentParser(
         description="PFAS-27 MD Thermodynamics & QM/MM Engine")
     parser.add_argument("run_dir",  nargs="?", default=None,

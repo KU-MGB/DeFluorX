@@ -5085,6 +5085,9 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
 
 
 def main():
+    # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
+    # and the log grows triple bars with nothing between them.
+    _utils_mod.install_console_rule_filter()
     # -------------------------------------------------------------------------------
     # Step 10.1: Command Line Argument Parsing Sequence
     # -------------------------------------------------------------------------------

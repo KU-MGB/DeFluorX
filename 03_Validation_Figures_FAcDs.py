@@ -304,8 +304,113 @@ which is the value to quote.
 _PVALUES: list = []
 
 
-def _register_p(test: str, panel: str, stat: float, n: int, p: float) -> None:
-    _PVALUES.append({"test": test, "panel": panel, "statistic": stat, "n": n, "p_raw": p})
+def _register_p(test: str, panel: str, stat: float, n: int, p: float, **extra) -> None:
+    """Register one test into the family. extra carries effect size, group ns, medians — whatever the
+    test can honestly report. A p-value with no effect size is half a result: at n = 58,056 almost
+    anything is 'significant', and the number that decides whether it MATTERS is the effect size."""
+    _row = {"test": test, "panel": panel, "statistic": stat, "n": n, "p_raw": p}
+    _row.update(extra)
+    _PVALUES.append(_row)
+
+
+def _statistical_battery(df: pd.DataFrame, reporter) -> None:
+    """The full statistical battery, registered into the same BH-corrected family as the figures.
+
+    The file was only ever recording the handful of tests a panel happened to run, which left the
+    reader to take the paper's central claims on trust. Every claim the ranking rests on is now tested
+    explicitly and corrected together:
+
+      · Kruskal-Wallis across tiers for each metric  — does the metric separate the tiers at all?
+      · Mann-Whitney, degraders vs non-degraders     — with rank-biserial r, the effect SIZE. At
+                                                       n = 58,056 a p-value is nearly free; r is not.
+      · Elite (Tier_1A) vs everything else           — the specific claim the headline makes.
+      · Spearman rho between the ranking metrics     — are the pillars independent, or restating each
+                                                       other? A screen built on three correlated
+                                                       metrics has one metric and two echoes.
+
+    Every test lands in 06_Statistical_Tests.csv with its q_BH, so the multiplicity is paid for once,
+    across the whole family, rather than per figure.
+    """
+    from scipy.stats import kruskal as _kw, mannwhitneyu as _mw, spearmanr as _sr
+
+    _metrics = [c for c in (
+        "mechanistic_score_effective", "mechanistic_score", "competence_score",
+        "SN2_Attack_Angle", "sn2_attack_angle_effective", "Dist_Nucleophile",
+        "Binding_Affinity_Score", "Interaction_Density_Norm", "Boltz_Model_Confidence",
+        "active_site_plddt", "catalytic_constellation_score", "identity_pct",
+        "pocket_containment_cavity", "pocket_containment_site8", "total_fluorine_count",
+    ) if c in df.columns]
+    if not _metrics or CFG.COL_TIER not in df.columns:
+        return
+
+    _tier = df[CFG.COL_TIER].astype(str)
+    _hq = set(getattr(CFG, "TIER_HIGH_QUALITY", []) or
+              [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]])
+    _is_deg = _tier.isin(_hq)
+    _is_elite = _tier.eq(CFG.TIER_TOP)
+
+    def _rb(_a, _b, _u):
+        """Rank-biserial r from the Mann-Whitney U: the probability that a random member of A exceeds
+        a random member of B, rescaled to [-1, 1]. Unlike p, it does not inflate with n."""
+        _n = len(_a) * len(_b)
+        return (2.0 * _u / _n - 1.0) if _n else float("nan")
+
+    for _m in _metrics:
+        _v = pd.to_numeric(df[_m], errors="coerce")
+
+        # 1) Does it separate the tiers at all?
+        _groups = [_v[_tier == _t].dropna().to_numpy()
+                   for _t in CFG.TIER_ORDER if (_tier == _t).sum() >= 3]
+        _groups = [g for g in _groups if len(g) >= 3]
+        if len(_groups) >= 2:
+            try:
+                _h, _p = _kw(*_groups)
+                _n_tot = int(sum(len(g) for g in _groups))
+                # epsilon-squared: the share of rank variance the tier explains.
+                _eps2 = (float(_h) - len(_groups) + 1) / (_n_tot - len(_groups)) if _n_tot > len(_groups) else float("nan")
+                _register_p("Kruskal-Wallis across tiers", _m, float(_h), _n_tot, float(_p),
+                            effect_size=round(_eps2, 4), effect_type="epsilon^2",
+                            n_groups=len(_groups))
+            except Exception:
+                pass
+
+        # 2) Degraders vs non-degraders, with the effect size.
+        for _lbl, _mask in (("Degraders vs non-degraders", _is_deg),
+                            (f"{CFG.TIER_TOP} vs rest", _is_elite)):
+            _a = _v[_mask].dropna().to_numpy()
+            _b = _v[~_mask].dropna().to_numpy()
+            if len(_a) < 3 or len(_b) < 3:
+                continue
+            try:
+                _u, _p = _mw(_a, _b, alternative="two-sided")
+                _register_p(f"Mann-Whitney U — {_lbl}", _m, float(_u), len(_a) + len(_b), float(_p),
+                            effect_size=round(_rb(_a, _b, float(_u)), 4),
+                            effect_type="rank-biserial r", n_group_a=len(_a), n_group_b=len(_b),
+                            median_a=round(float(np.median(_a)), 4),
+                            median_b=round(float(np.median(_b)), 4))
+            except Exception:
+                pass
+
+    # 3) Are the ranking metrics independent, or restating one another?
+    _corr = [c for c in ("mechanistic_score_effective", "competence_score",
+                         "Binding_Affinity_Score", "Boltz_Model_Confidence",
+                         "Interaction_Density_Norm", "SN2_Attack_Angle") if c in df.columns]
+    for _i in range(len(_corr)):
+        for _j in range(_i + 1, len(_corr)):
+            _x = pd.to_numeric(df[_corr[_i]], errors="coerce")
+            _y = pd.to_numeric(df[_corr[_j]], errors="coerce")
+            _ok = _x.notna() & _y.notna()
+            if int(_ok.sum()) < 20:
+                continue
+            try:
+                _rho, _p = _sr(_x[_ok], _y[_ok])
+                _register_p("Spearman correlation", f"{_corr[_i]} vs {_corr[_j]}",
+                            float(_rho), int(_ok.sum()), float(_p),
+                            effect_size=round(float(_rho), 4), effect_type="Spearman rho")
+            except Exception:
+                pass
+
+    reporter.log(f"  Statistical battery: {len(_PVALUES)} tests registered (BH-corrected together)")
 
 
 def _write_statistical_tests(out_dir):
@@ -5621,6 +5726,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _diag_dir.mkdir(parents=True, exist_ok=True)
     generate_additional_figures(df, _diag_dir, reporter)
 
+    # The extended-analysis panels write 08_Extended_Analysis. Wired here, into the run itself: they
+    # were rendering only when invoked by hand, so a full 03 run produced no folder 08 and its log
+    # said nothing about them.
+    generate_extended_figures(df, out_dir, reporter)
+
 
     # savefig routing is installed/restored by the _redirect_savefig context
     # manager around this call, so no manual restore is needed here.
@@ -7634,6 +7744,7 @@ The prototypes' raw filenames (Figure_1_…, Figure_05C_…, mixed numbering and
 replaced by the pipeline's convention — sequential 01-08 with descriptive names.
 """
 # Imports this section needs and the rest of 03 does not.
+import re
 import gemmi
 import scipy.stats as _sc_stats
 from scipy.stats import chi2_contingency, mannwhitneyu, t as _t_dist
@@ -9904,6 +10015,13 @@ def write_figure_descriptions(out_dir: Path):
         _txt = _txt.replace(_old_fp, _new_fp)
     desc_path = _aux_dir(out_dir) / "05_Figure_Descriptions.txt"
     desc_path.write_text(_txt, encoding="utf-8")
+    # The battery runs LAST, so its tests join the same family as the ones the figures registered and
+    # the Benjamini-Hochberg correction is paid once, across all of them.
+    try:
+        _statistical_battery(df, reporter)
+    except Exception as _e:                                   # noqa: BLE001
+        reporter.log(f"  ! Statistical battery skipped: {type(_e).__name__}: {_e}")
+
     _stats_path = _write_statistical_tests(out_dir)
     if _stats_path is not None:
         print(f"  Statistical Tests (BH-corrected) Saved: {_stats_path}", flush=True)
@@ -9915,6 +10033,9 @@ def write_figure_descriptions(out_dir: Path):
 # =============================================================================
 
 def main():
+    # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
+    # and the log grows triple bars with nothing between them.
+    _utils_mod.install_console_rule_filter()
     parser = argparse.ArgumentParser(
         description="Boltz-2 Master Validation & Dendrogram Framework",
         usage="%(prog)s <run_folder>  (e.g. Boltz-2_Run_20260309T085406Z)"

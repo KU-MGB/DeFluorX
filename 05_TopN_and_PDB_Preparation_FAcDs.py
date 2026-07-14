@@ -2939,6 +2939,9 @@ available; they are module-level names for clarity.
 
 
 def main():
+    # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
+    # and the log grows triple bars with nothing between them.
+    _utils_mod.install_console_rule_filter()
     _t0 = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Merged Top-N selection + CIF->PDB generation/preparation (MD-ready cohort only)")
