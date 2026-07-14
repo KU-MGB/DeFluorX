@@ -7791,15 +7791,15 @@ def _xn_calculate_angle(p1: gemmi.Position, p2: gemmi.Position, p3: gemmi.Positi
     return float(np.degrees(angle))
 
 def _xn_is_ligand_residue(residue: gemmi.Residue) -> bool:
-    """Classifica come ligando tutto cio' che non e' proteina standard o acqua."""
+    """Anything that is not a standard amino acid or water is treated as the ligand."""
     name = residue.name.strip().upper()
     return name not in _xn_STANDARD_AA and name not in _xn_WATER_NAMES
 
 def _xn_iter_atoms_from_cif(cif_path: Path) -> Tuple[List[_xn_AtomRecord], List[_xn_AtomRecord]]:
     """
-    Estrae atomi di ligando e proteina da un CIF Boltz-2.
+    Split a Boltz-2 CIF into its ligand atoms and its protein atoms.
 
-    Qualunque eccezione di parsing viene propagata al chiamante, che saltera' il
+    A parse failure is propagated to the caller, which skips the
     singolo modello senza interrompere l'intero batch.
     """
     doc = gemmi.cif.read_file(str(cif_path))
@@ -7824,7 +7824,10 @@ def _xn_iter_atoms_from_cif(cif_path: Path) -> Tuple[List[_xn_AtomRecord], List[
     return ligand_atoms, protein_atoms
 
 def _xn_find_reactive_cf_pairs(lig_atoms: Sequence[_xn_AtomRecord]) -> List[Tuple[_xn_AtomRecord, _xn_AtomRecord]]:
-    """Trova tutte le coppie C-F del ligando con distanza inferiore a 1.7 A."""
+    """Every bonded C–F pair in the ligand (closer than the C–F bond cutoff).
+
+    The scissile bond is one of these: the α-carbon holds the fluorine that leaves.
+    """
     carbons = [a for a in lig_atoms if a.atom.element.name == "C"]
     fluorines = [a for a in lig_atoms if a.atom.element.name == "F"]
     pairs: List[Tuple[_xn_AtomRecord, _xn_AtomRecord]] = []
