@@ -2962,6 +2962,19 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
                          "transition state on the sampled coordinate. Barrier reported as NaN, "
                          "not 0.0: the scan did not resolve a TS.")
             return _empty
+        """
+        A transition state is a MAXIMUM the reaction passes THROUGH: the energy must come back down on
+        the far side. If the highest point is the last point sampled, the scan is still climbing when
+        it ends — a steric wall, a scan window that stops short of the saddle, or a coordinate that
+        simply does not cross one. Reporting e[-1] − e[reactant] as a barrier there invents a ΔE‡ for a
+        reaction the scan never showed happening, and an invented barrier is worse than no barrier: it
+        would be carried forward as a turnover number.
+        """
+        if _imax >= len(e) - 1:
+            console_info("    [!] QSite scan is still climbing at the last point — the maximum is an "
+                         "endpoint, not a saddle the reaction passes through. No TS resolved (a steric "
+                         "wall or a scan window that stops short of it). Barrier reported as NaN.")
+            return _empty
         _react = min(e[:_imax])          # reactant well: strictly before the TS, never the product
         _imin = e.index(_react)
         if _imax <= _imin:
@@ -3245,15 +3258,22 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             except Exception as _te:
                 console_info(f"      [!] TGZ extract failed ({_tgz.name}): {_te}")
 
-    _cms_flat = list(job_folder.glob("*-out.cms"))
-    _trj_flat = list(job_folder.glob("*_trj"))
+    """
+    Both the flat and the recursive search are ordered by SEGMENT NUMBER, because cms_path is taken as
+    _cms_flat[-1] — the final stage of the run. Filesystem order is arbitrary on Linux, so an unsorted
+    flat glob would hand '[-1]' whichever segment the directory happened to list last and call it the
+    final one, silently analysing a mid-run stage.
+    """
+    def _seg_key(p: Path, suffix: str) -> int:
+        _m = re.search(r'_(\d+)' + re.escape(suffix), p.name)
+        return int(_m.group(1)) if _m else 0
+
+    _cms_flat = sorted(job_folder.glob("*-out.cms"), key=lambda p: _seg_key(p, '-out.cms'))
+    _trj_flat = sorted(job_folder.glob("*_trj"), key=lambda p: _seg_key(p, '_trj'))
 
     if not _cms_flat or not _trj_flat:
         _auto_extract_tgz(job_folder)
         # Recursively collect all *-out.cms / *_trj from extracted stage subdirs
-        def _seg_key(p: Path, suffix: str) -> int:
-            _m = re.search(r'_(\d+)' + re.escape(suffix), p.name)
-            return int(_m.group(1)) if _m else 0
         _cms_flat = sorted(job_folder.glob("**/*-out.cms"),
                            key=lambda p: _seg_key(p, '-out.cms'))
         _trj_flat = sorted(job_folder.glob("**/*_trj"),
@@ -3286,7 +3306,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             continue
         # Accept *_wm.maegz or *wm*.maegz anywhere in the dir tree (depth ≤ 2)
         for _pat in ("*_wm.maegz", "*wm*.maegz", "*.maegz"):
-            _hits = list(_wmd.glob(_pat)) + list(_wmd.glob(f"**/{_pat}"))
+            _hits = sorted(_wmd.glob(_pat)) + sorted(_wmd.glob(f"**/{_pat}"))
             if _hits:
                 wm_maegz = _hits[0]; break
         if wm_maegz:
@@ -4368,12 +4388,14 @@ def main():
 
     # ── Ranked CSV (7_Boltz2_FAcDs_Ranked_*.csv or any *_Ranked*.csv) ──────────
     prod_dir     = work_dir.parent / "1_Boltz2_Production"
-    ranked_csvs  = (list(prod_dir.glob("7_Boltz2_FAcDs_Ranked_*.csv")) or
-                    list(prod_dir.glob("*_Ranked*.csv")))
+    ranked_csvs  = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
+                    sorted(prod_dir.glob("*_Ranked*.csv")))
     if not ranked_csvs:
         console_info(f"{ConsoleColours.FAIL}Error: No ranked CSV found in {prod_dir}{ConsoleColours.ENDC}")
         sys.exit(1)
-    ranked_csv_path = sorted(ranked_csvs, key=lambda x: x.stat().st_mtime)[-1]
+    # Newest wins; the name breaks a tie, so two files written in the same second cannot swap places
+    # between runs.
+    ranked_csv_path = sorted(ranked_csvs, key=lambda x: (x.stat().st_mtime, x.name))[-1]
     console_info(f"Ranked CSV       : {ranked_csv_path.name}")
     df_ranked = pd.read_csv(ranked_csv_path, low_memory=False)
 

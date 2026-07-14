@@ -131,6 +131,8 @@ from Bio import SeqIO
 from Bio.PDB import PDBParser as _PDBParser
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit import RDLogger
+RDLogger.DisableLog('rdApp.*')
 DEFAULT_BASE_PATH = Path.cwd()
 
 
@@ -249,7 +251,7 @@ def index_existing_files(directory: Path, suffix: str) -> dict:
                 If it's a control ID, it is not indexed for renaming
                 because multiple controls share this ID.
                 """
-                if idx == "0000000":
+                if idx == CFG.CONTROL_JOB_PREFIX:
                     continue
                 index[idx] = f
         except Exception as e:
@@ -831,7 +833,10 @@ def load_reference_data(input_data_dir: Path):
 
     # 1. Load FASTA
     if SeqIO:
-        for f in list(input_data_dir.glob("*.fasta")) + list(input_data_dir.glob("*.fa")):
+        # Sorted: two FASTAs carrying the same sequence ID would otherwise overwrite each other in
+        # seq_map in whatever order the filesystem listed them, so the surviving sequence could differ
+        # between runs on identical input.
+        for f in sorted(input_data_dir.glob("*.fasta")) + sorted(input_data_dir.glob("*.fa")):
             try:
                 for r in SeqIO.parse(str(f), "fasta"):
                     fasta_count += 1
@@ -1505,7 +1510,7 @@ def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C):
             _append_auxiliary_log("PLIP", base_name, log_path)
             return "Failed"
 
-        xml_files = list(tmp_dir.glob("*.xml"))
+        xml_files = sorted(tmp_dir.glob("*.xml"))
         if not xml_files:
             return "Failed"
 
@@ -1979,12 +1984,20 @@ class SoftwareManager:
         _found_lig = False
         # Try filename-based name lookup: e.g. '25_TFA' in stem → name='TFA'
         if smi_map:
+            """
+            The stem is scanned for EVERY ligand key it contains, not just the first. Taking the first
+            match and breaking silently would pick one ligand out of an ambiguous filename and give no
+            sign that another was equally valid — the kind of choice that is only ever discovered when
+            the wrong ligand turns up in a result table.
+            """
             _parts = pdb_path.stem.split("_")
-            for _i, _p in enumerate(_parts[:-1]):
-                _candidate = f"{_p}_{_parts[_i + 1]}"
-                if _candidate in smi_map:
-                    res_name = _parts[_i + 1]   # e.g. 'TFA'
-                    break
+            _matches = [_parts[_i + 1] for _i, _p in enumerate(_parts[:-1])
+                        if f"{_p}_{_parts[_i + 1]}" in smi_map]
+            if _matches:
+                res_name = _matches[0]          # e.g. 'TFA'
+                if len(_matches) > 1:
+                    console_info(f"  [!] {pdb_path.name}: filename matches {len(_matches)} ligand keys "
+                                 f"({', '.join(_matches)}); using '{_matches[0]}'. Check the naming.")
         try:
             with open(pdb_path, "r") as f:
                 for line in f:
@@ -2217,7 +2230,7 @@ def prep_and_convert_phase(args):
     _md_jobs = load_md_selected_jobs(prod_dir)
     if _md_jobs:
         jobs = [(jn, cif) for (jn, cif) in jobs
-                if jn in _md_jobs or jn.startswith("0000000")]
+                if jn in _md_jobs or jn.startswith(CFG.CONTROL_JOB_PREFIX)]
 
     _utils_mod.print_script_banner(
         "05_TopN_and_PDB_Preparation_FAcDs.py",
@@ -2502,13 +2515,12 @@ def topn_extraction_phase(args):
 
     TIER_ORDER = CFG.TIER_ORDER
 
-    # Separate controls from candidates (controls always extracted independently)
-    def _is_control(row):
-        jn = str(row.get("job_name", ""))
-        return jn.startswith("0000000")
-
-    df_controls  = df[df.apply(_is_control, axis=1)].copy()
-    df_candidates = df[~df.apply(_is_control, axis=1)].copy()
+    # Separate controls from candidates (controls always extracted independently). The test is a
+    # prefix on one column, so it is a vectorised string op computed once, not a Python callback run
+    # per row and then run again for the complement.
+    _is_control = df["job_name"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
+    df_controls   = df[_is_control].copy()
+    df_candidates = df[~_is_control].copy()
 
     # SECTION 18 gate: when the ranked CSV carries MD_Selected, extract exactly that
     # cohort and skip the interactive tier prompt (non-interactive and reproducible,

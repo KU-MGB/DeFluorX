@@ -2405,6 +2405,10 @@ class CFG:
     # Step 16.1: CSV Column Names
     # -------------------------------------------------------------------------------
     # Registry for all master CSV columns to prevent hardcoding string keys.
+    # Controls are emitted by 02 with a reserved zero job index, so a job name beginning with this
+    # prefix IS a control. Kept here because several steps test for it and a literal "0000000" in
+    # three scripts is three places to get it wrong.
+    CONTROL_JOB_PREFIX: str = "0000000"
     COL_TIER:     str = "degrader_tier"
     COL_PROT:     str = "Protein_Name"
     COL_LIG:      str = "Ligand_Name"

@@ -341,9 +341,9 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
     from scipy.stats import kruskal as _kw, mannwhitneyu as _mw, spearmanr as _sr
 
     _metrics = [c for c in (
-        "mechanistic_score_effective", "mechanistic_score", "competence_score",
-        "SN2_Attack_Angle", "sn2_attack_angle_effective", "Dist_Nucleophile",
-        "Binding_Affinity_Score", "Interaction_Density_Norm", "Boltz_Model_Confidence",
+        "mechanistic_score_effective", CFG.COL_MECH_S, "competence_score",
+        CFG.COL_SN2, "sn2_attack_angle_effective", "Dist_Nucleophile",
+        "Binding_Affinity_Score", "Interaction_Density_Norm", CFG.COL_CONF,
         "active_site_plddt", "catalytic_constellation_score", "identity_pct",
         "pocket_containment_cavity", "pocket_containment_site8", "total_fluorine_count",
     ) if c in df.columns]
@@ -400,8 +400,8 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
 
     # 3) Are the ranking metrics independent, or restating one another?
     _corr = [c for c in ("mechanistic_score_effective", "competence_score",
-                         "Binding_Affinity_Score", "Boltz_Model_Confidence",
-                         "Interaction_Density_Norm", "SN2_Attack_Angle") if c in df.columns]
+                         "Binding_Affinity_Score", CFG.COL_CONF,
+                         "Interaction_Density_Norm", CFG.COL_SN2) if c in df.columns]
     for _i in range(len(_corr)):
         for _j in range(_i + 1, len(_corr)):
             _x = pd.to_numeric(df[_corr[_i]], errors="coerce")
@@ -434,7 +434,7 @@ def _write_statistical_tests(out_dir):
     return _path
 
 
-def _kruskal_by_tier(df, value_col, tier_col="degrader_tier", tiers=None):
+def _kruskal_by_tier(df, value_col, tier_col=CFG.COL_TIER, tiers=None):
     """Kruskal–Wallis across tiers with epsilon-squared effect size. Returns annotation or ''."""
     from scipy.stats import kruskal as _kw
     if value_col not in df.columns or tier_col not in df.columns:
@@ -473,7 +473,7 @@ def _wilcoxon_ptm_iptm(df):
     return f"Wilcoxon ipTM vs pTM (paired): {p_str} | median d(ipTM-pTM) = {med_d:+.3f}"
 
 
-def _umap_tier_separation(df, xcol="UMAP_X", ycol="UMAP_Y", tier_col="degrader_tier", n_perm=199, cap=2000):
+def _umap_tier_separation(df, xcol="UMAP_X", ycol="UMAP_Y", tier_col=CFG.COL_TIER, n_perm=199, cap=2000):
     """Silhouette of tier labels in UMAP space with a label-permutation p-value.
     Subsampled to `cap` points so the O(N^2) silhouette stays tractable."""
     try:
@@ -519,7 +519,7 @@ def _md_ready_stars_cat(ax, df: pd.DataFrame, tier_order, valcol: str):
     _md = _md_ready_df(df)
     _pos = {t: i for i, t in enumerate(tier_order)}
     _drawn = 0
-    for _t, _grp in _md.groupby("degrader_tier"):
+    for _t, _grp in _md.groupby(CFG.COL_TIER):
         if _t not in _pos:
             continue
         _vals = pd.to_numeric(_grp[valcol], errors="coerce").dropna().values
@@ -669,15 +669,15 @@ def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.Data
         df = df.drop_duplicates(subset=["job_name"], keep="last")
 
     tier_map = CFG.TIER_RANK
-    df["tier_numeric"] = df["degrader_tier"].map(tier_map).fillna(0)
+    df["tier_numeric"] = df[CFG.COL_TIER].map(tier_map).fillna(0)
 
     col_map = {
         "binding_likelihood_computed": "Binding_Probability",
         "Binding_Probability_Score": "Binding_Probability",
         "custom_affinity_score": "Chemical_Affinity_Score",
-        "confidence_score": "Boltz_Model_Confidence",
-        "interaction_density": "Interaction_Density_Norm",
-        "sn2_attack_angle": "SN2_Attack_Angle",
+        "confidence_score": CFG.COL_CONF,
+        CFG.COL_IDENS: "Interaction_Density_Norm",
+        "sn2_attack_angle": CFG.COL_SN2,
         "Active_Site_RMSD_to_Control": "Active_Site_RMSD",
     }
     df.rename(columns=col_map, inplace=True)
@@ -687,7 +687,7 @@ def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.Data
     # a circular, guaranteed tier separation (target leakage). It is used only to
     # orient the PC1 sign after projection and to colour points post hoc.
     candidate_features = [
-        "Boltz_Model_Confidence", "iptm", "mean_plddt",
+        CFG.COL_CONF, "iptm", "mean_plddt",
         "Interaction_Density_Norm", "Chemical_Affinity_Score", "Binding_Probability",
         "count_hydrogen_bond", "count_salt_bridge"
     ]
@@ -754,7 +754,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
         # tier label. PCA sign is mathematically arbitrary; fixing it against an input feature
         # keeps the "high PC1 = better" reading for the exploratory map without rotating the
         # latent space to the human-assigned category (no target leakage).
-        check_col = next((c for c in ("mechanistic_score", "competence_score") if c in x.columns), features[0])
+        check_col = next((c for c in (CFG.COL_MECH_S, "competence_score") if c in x.columns), features[0])
         corr, _ = spearmanr(pcs[:, 0], df.loc[x.index, check_col])
 
         score_pca = MinMaxScaler(feature_range=(0, 100)).fit_transform(pcs[:, 0].reshape(-1, 1)).flatten()
@@ -802,8 +802,8 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     # to the is_degrader flag) — then run the fast 2-objective non-dominated sort on the viable
     # subset only. Non-viable poses are held off the front (rank 999), so no inhibitor surfaces
     # as an optimal degrader while the O(N log N) scalability is preserved.
-    if "Boltz_Model_Confidence" in df.columns and "Binding_Probability" in df.columns:
-        _mech_obj = next((c for c in ("mechanistic_score_effective", "mechanistic_score") if c in df.columns), None)
+    if CFG.COL_CONF in df.columns and "Binding_Probability" in df.columns:
+        _mech_obj = next((c for c in ("mechanistic_score_effective", CFG.COL_MECH_S) if c in df.columns), None)
         if _mech_obj:
             _viable = pd.to_numeric(df[_mech_obj], errors="coerce").fillna(0.0) >= CFG.TIER_MECH_MIN["Tier_2A"]
         elif "is_degrader" in df.columns:
@@ -817,7 +817,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
         )
         df["Pareto_Rank"] = 999
         if _viable.any():
-            _pr = calculate_pareto_fronts(df.loc[_viable], ["Boltz_Model_Confidence", "Binding_Probability"], [True, True])
+            _pr = calculate_pareto_fronts(df.loc[_viable], [CFG.COL_CONF, "Binding_Probability"], [True, True])
             df.loc[_viable, "Pareto_Rank"] = _pr
     else:
         df["Pareto_Rank"] = 0
@@ -856,20 +856,32 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     """
     reporter.section("Step 2/6 — Conflict & Opportunity Analysis  [analysis, no figure folder]")
 
-    def classify(row):
-        tier = row.get("degrader_tier", CFG.TIER_DECOY)
-        conf = row.get("Boltz_Model_Confidence", 0.0)
+    """
+    The classification is four mutually exclusive tests on two columns, so it is expressed as vector
+    masks rather than a Python callback invoked once per row: np.select evaluates the same conditions
+    in the same order (first match wins, as in the original if-chain) across the whole frame at once.
+    On 58,000 rows the row-wise apply was the single slowest statement in this step.
+    """
+    _high_quality = [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]
+    _hi, _lo = CFG.CONFLICT_CONF_HIGH, CFG.CONFLICT_CONF_LOW
 
-        _high_quality = [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]
-        _hi = CFG.CONFLICT_CONF_HIGH
-        _lo = CFG.CONFLICT_CONF_LOW
-        if tier in _high_quality and conf >= _hi: return "Consensus High"
-        if tier in [CFG.TIER_POOR, CFG.TIER_DECOY, "Error"] and conf < _lo: return "Consensus Low"
-        if tier in _high_quality and conf < _hi: return "Hidden Gem"
-        if tier in [CFG.TIER_POOR, CFG.TIER_DECOY] and conf >= _hi: return "Decoy"
-        return "Ambiguous"
+    _tier = df[CFG.COL_TIER] if CFG.COL_TIER in df.columns else pd.Series(CFG.TIER_DECOY, index=df.index)
+    _conf = (pd.to_numeric(df[CFG.COL_CONF], errors="coerce").fillna(0.0)
+             if CFG.COL_CONF in df.columns else pd.Series(0.0, index=df.index))
 
-    df["Conflict_Category"] = df.apply(classify, axis=1)
+    _is_hq = _tier.isin(_high_quality)
+    _is_lowtier = _tier.isin([CFG.TIER_POOR, CFG.TIER_DECOY])
+
+    df["Conflict_Category"] = np.select(
+        [
+            _is_hq & (_conf >= _hi),
+            _tier.isin([CFG.TIER_POOR, CFG.TIER_DECOY, "Error"]) & (_conf < _lo),
+            _is_hq & (_conf < _hi),
+            _is_lowtier & (_conf >= _hi),
+        ],
+        ["Consensus High", "Consensus Low", "Hidden Gem", "Decoy"],
+        default="Ambiguous",
+    )
 
     gems = df[df["Conflict_Category"] == "Hidden Gem"].sort_values("Pareto_Rank")
     gems.to_csv(_aux_dir(out_dir) / "04_ACTION_Rescue_Hidden_Gems.csv", index=False)
@@ -1032,7 +1044,7 @@ def _tt_make_composite(img_arr, label_str: str, colour_hex: str) -> np.ndarray:
 
 def _tt_draw_scatter(ax, df):
     for tier in [t for t in reversed(CFG.TIER_ORDER) if t != CFG.TIER_TOP]:
-        sub = df[df["degrader_tier"] == tier]
+        sub = df[df[CFG.COL_TIER] == tier]
         if sub.empty: continue
         ax.scatter(sub["_X"], sub["_Y"],
                    c=TIER_PALETTE.get(tier, CFG.VIS_INK["paler"]),
@@ -1096,11 +1108,11 @@ def _tt_draw_thumbnails(fig, ax, pa, imgs):
         sx, sy = row["_X"], row["_Y"]
         img    = imgs[local_i]
         if img is None: continue
-        prot = str(row.get("Protein_Name", "")).replace("_Control","").split("_")[0][:11]
-        lig  = str(row.get("Ligand_Name", ""))
+        prot = str(row.get(CFG.COL_PROT, "")).replace("_Control","").split("_")[0][:11]
+        lig  = str(row.get(CFG.COL_LIG, ""))
         lig  = lig[:13] + "…" if len(lig) > 13 else lig
-        sn2  = row.get("SN2_Attack_Angle",        float("nan"))
-        conf = row.get("Boltz_Model_Confidence",   float("nan"))
+        sn2  = row.get(CFG.COL_SN2,        float("nan"))
+        conf = row.get(CFG.COL_CONF,   float("nan"))
         ipt  = row.get("iptm",                     float("nan"))
         idn  = row.get("Interaction_Density_Norm", float("nan"))
         label = (f"{prot}  ·  {lig}\n"
@@ -1125,7 +1137,7 @@ def _tt_draw_thumbnails(fig, ax, pa, imgs):
 
 
 def _tt_legend_handles(df):
-    n_tt = len(df[df["degrader_tier"] == CFG.TIER_TOP])
+    n_tt = len(df[df[CFG.COL_TIER] == CFG.TIER_TOP])
     # Symbol-type header entries so the reader understands both glyphs
     h = [
         Line2D([0],[0], marker="o", color="w",
@@ -1139,7 +1151,7 @@ def _tt_legend_handles(df):
                markersize=11, label=f"{CFG.TIER_TOP} ★ gold (TFA duplicate)"),
     ]
     for t in [t for t in CFG.TIER_ORDER if t != CFG.TIER_TOP]:
-        sub = df[df["degrader_tier"] == t]
+        sub = df[df[CFG.COL_TIER] == t]
         if sub.empty:
             continue
         h.append(Line2D([0],[0], marker="o", color="w",
@@ -1215,13 +1227,13 @@ def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
 # ── Figure 13b — SN2 Angle × Confidence + PA Landscape ───────────────────────
 def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
     try:
-        dv = df.dropna(subset=["SN2_Attack_Angle","Boltz_Model_Confidence"]).copy()
-        dv["_X"] = pd.to_numeric(dv["SN2_Attack_Angle"],      errors="coerce")
-        dv["_Y"] = pd.to_numeric(dv["Boltz_Model_Confidence"], errors="coerce")
+        dv = df.dropna(subset=[CFG.COL_SN2,CFG.COL_CONF]).copy()
+        dv["_X"] = pd.to_numeric(dv[CFG.COL_SN2],      errors="coerce")
+        dv["_Y"] = pd.to_numeric(dv[CFG.COL_CONF], errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
         pax = pa.copy()
-        pax["_X"] = pd.to_numeric(pa["SN2_Attack_Angle"],      errors="coerce")
-        pax["_Y"] = pd.to_numeric(pa["Boltz_Model_Confidence"], errors="coerce")
+        pax["_X"] = pd.to_numeric(pa[CFG.COL_SN2],      errors="coerce")
+        pax["_Y"] = pd.to_numeric(pa[CFG.COL_CONF], errors="coerce")
         ylo = dv["_Y"].quantile(0.01) - 0.005
         yhi = dv["_Y"].max() + 0.005
         fig, ax = _tt_new_fig()
@@ -1261,10 +1273,10 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
 # ── Figure 05b — Confidence × ipTM + PA Landscape ────────────────────────────
 def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
     try:
-        dv = df.dropna(subset=["Boltz_Model_Confidence","iptm"]).copy()
-        dv["_X"] = dv["Boltz_Model_Confidence"]; dv["_Y"] = dv["iptm"]
+        dv = df.dropna(subset=[CFG.COL_CONF,"iptm"]).copy()
+        dv["_X"] = dv[CFG.COL_CONF]; dv["_Y"] = dv["iptm"]
         pax = pa.copy()
-        pax["_X"] = pa["Boltz_Model_Confidence"]; pax["_Y"] = pa["iptm"]
+        pax["_X"] = pa[CFG.COL_CONF]; pax["_Y"] = pa["iptm"]
         xlo,xhi = dv["_X"].quantile(0.01)-0.01, dv["_X"].max()+0.005
         ylo,yhi = dv["_Y"].quantile(0.01)-0.01, dv["_Y"].max()+0.005
         fig, ax = _tt_new_fig()
@@ -1430,7 +1442,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     """
     reporter.section("Step 4/6 — Main Validation Figure Suite (Publication Quality)  [writes folders 02–06]")
 
-    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
+    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
 
     # Typography and canvas: the pipeline's one definition (CFG → utils.apply_figure_style).
     _utils_mod.apply_figure_style(CFG)
@@ -1563,10 +1575,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         reporter.log(f"  ! Skipped Figure 01: Alignment_Stats.csv not found at {_aln_csv}")
 
     # --- Figure 02: Tier Distribution + Model Selection (pie inset) ---
-    if "degrader_tier" in df.columns:
+    if CFG.COL_TIER in df.columns:
         total_complexes = len(df)
         model_col = "best_model_name" if "best_model_name" in df.columns else None
-        counts6 = [len(df[df["degrader_tier"] == t]) for t in existing_tiers]
+        counts6 = [len(df[df[CFG.COL_TIER] == t]) for t in existing_tiers]
 
         # Adaptive figure height: scale with the tallest bar so the pie doesn't float
         _max_cnt6 = max(counts6) if counts6 else 1
@@ -1712,7 +1724,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         # Grade band background shading — sourced from CFG § 8.8
         grade_bands = list(CFG.GRADE_BANDS)
         # Per-protein grade counts (one row per unique protein)
-        _prot_dedup02 = id_plot.drop_duplicates(subset=["Protein_Name"]) if "Protein_Name" in id_plot.columns else id_plot
+        _prot_dedup02 = id_plot.drop_duplicates(subset=[CFG.COL_PROT]) if CFG.COL_PROT in id_plot.columns else id_plot
         _n_total_prot02 = len(_prot_dedup02)
         for lo, hi, col, lbl in grade_bands:
             ax.axvspan(lo, hi, alpha=0.20, color=col, zorder=0)
@@ -1733,7 +1745,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         tier_hist_labels = []
         tier_hist_colors = []
         for tier in existing_tiers:
-            sub_t = id_plot[id_plot["degrader_tier"] == tier]
+            sub_t = id_plot[id_plot[CFG.COL_TIER] == tier]
             if sub_t.empty:
                 continue
             tier_hist_data.append(sub_t["identity_pct"].values)
@@ -1750,11 +1762,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         """
         from scipy.stats import gaussian_kde as _gkde
         _kde_tiers_valid = [t for t in existing_tiers
-                            if len(id_plot[id_plot["degrader_tier"] == t]) >= 10]
+                            if len(id_plot[id_plot[CFG.COL_TIER] == t]) >= 10]
         _ridge_step = 0.008   # vertical offset per tier index
         _tt_kde_med_xy = None   # captured KDE-median dot position of the top tier (on ax2)
         for _tier_idx, tier in enumerate(_kde_tiers_valid):
-            sub_t = id_plot[id_plot["degrader_tier"] == tier]
+            sub_t = id_plot[id_plot[CFG.COL_TIER] == tier]
             kde_x = np.linspace(0, 100, 400)
             try:
                 kde_y = _gkde(sub_t["identity_pct"])(kde_x)
@@ -1828,7 +1840,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         # Tier_1A visibility annotation — arrow points to the Tier_1A KDE-curve median
         # (a visible dot), not the near-invisible count bar. Drawn on the KDE axis and
         # lifted above the ridge lines with an opaque box so it never hides behind them.
-        _tt_sub02 = id_plot[id_plot["degrader_tier"] == CFG.TIER_TOP]
+        _tt_sub02 = id_plot[id_plot[CFG.COL_TIER] == CFG.TIER_TOP]
         if len(_tt_sub02) > 0 and _tt_kde_med_xy is not None:
             _tt_med_x = float(_tt_sub02["identity_pct"].median())
             ax2.annotate(
@@ -1926,7 +1938,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     making cross-figure reading intuitive.  Absolute counts are annotated inside wide
     segments; narrow segments get small external labels.
     """
-    if "identity_pct" in df.columns and "degrader_tier" in df.columns:
+    if "identity_pct" in df.columns and CFG.COL_TIER in df.columns:
         try:
             f11_df = df.dropna(subset=["identity_pct"]).copy()
             f11_df["identity_pct"] = pd.to_numeric(f11_df["identity_pct"], errors="coerce").clip(0, 100)
@@ -1943,7 +1955,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             grade_colors = dict(CFG.GRADE_COLOUR_FULL)
             f11_df["Grade"] = pd.cut(f11_df["identity_pct"], bins=grade_cuts,
                                      labels=grade_lbls, right=False)
-            ct11 = pd.crosstab(f11_df["degrader_tier"], f11_df["Grade"])
+            ct11 = pd.crosstab(f11_df[CFG.COL_TIER], f11_df["Grade"])
             ct11 = ct11.reindex(index=[t for t in existing_tiers if t in ct11.index],
                                 columns=grade_lbls, fill_value=0)
             ct11_pct = ct11.div(ct11.sum(axis=1), axis=0).fillna(0) * 100
@@ -2059,7 +2071,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _grades11 = list(ct11.columns)
                 _pct11 = ct11.div(ct11.sum(axis=1), axis=0) * 100.0
                 _star_seen11 = 0
-                for _t11, _grp11 in _md11.groupby(_md11["degrader_tier"].astype(str)):
+                for _t11, _grp11 in _md11.groupby(_md11[CFG.COL_TIER].astype(str)):
                     if _t11 not in _tier_row11:
                         continue
                     for _g11, _sub11 in _grp11.groupby(_grp11["Grade"].astype(str)):
@@ -2108,8 +2120,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     if _md_col in df.columns:
         _sel = df[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])
         _pa = df[_sel].reset_index(drop=True)
-    elif "degrader_tier" in df.columns:
-        _pa = df[df["degrader_tier"] == CFG.TIER_TOP].reset_index(drop=True)
+    elif CFG.COL_TIER in df.columns:
+        _pa = df[df[CFG.COL_TIER] == CFG.TIER_TOP].reset_index(drop=True)
     else:
         _pa = pd.DataFrame()
     # Rank-sort so the capped thumbnail set (CFG.VIS_MAX_THUMBNAILS) takes the best
@@ -2117,8 +2129,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     if not _pa.empty:
         if "Scientific_Rank" in _pa.columns:
             _pa = _pa.sort_values("Scientific_Rank", ascending=True).reset_index(drop=True)
-        elif "Boltz_Model_Confidence" in _pa.columns:
-            _pa = _pa.sort_values("Boltz_Model_Confidence", ascending=False).reset_index(drop=True)
+        elif CFG.COL_CONF in _pa.columns:
+            _pa = _pa.sort_values(CFG.COL_CONF, ascending=False).reset_index(drop=True)
     _imgs = []
     try:
         if not _pa.empty:
@@ -2137,8 +2149,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     y-axis). Overlaid connected dot-lines show per-tier median pTM and ipTM on the same
     scale (both 0–1), making agreement and divergence between the three AI metrics visible.
     """
-    _has_conf  = "Boltz_Model_Confidence" in df.columns and "degrader_tier" in df.columns
-    _has_ptm   = "ptm" in df.columns and "iptm" in df.columns and "degrader_tier" in df.columns
+    _has_conf  = CFG.COL_CONF in df.columns and CFG.COL_TIER in df.columns
+    _has_ptm   = "ptm" in df.columns and "iptm" in df.columns and CFG.COL_TIER in df.columns
     if _has_conf or _has_ptm:
         try:
             fig, ax = plt.subplots(figsize=(13, 7))
@@ -2160,7 +2172,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
             # Boltz Confidence — box plots (primary, fills the background)
             if _has_conf:
-                sns.boxplot(data=df, x="degrader_tier", y="Boltz_Model_Confidence",
+                sns.boxplot(data=df, x=CFG.COL_TIER, y=CFG.COL_CONF,
                             order=existing_tiers, palette=TIER_PALETTE, linewidth=1.2,
                             flierprops=dict(marker="o", markersize=2, alpha=0.25),
                             width=0.55, zorder=2, ax=ax)
@@ -2168,7 +2180,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 tier_order_f10 = list(existing_tiers)
                 medians_f10 = []
                 for i, tier in enumerate(tier_order_f10):
-                    med = df.loc[df["degrader_tier"] == tier, "Boltz_Model_Confidence"].median()
+                    med = df.loc[df[CFG.COL_TIER] == tier, CFG.COL_CONF].median()
                     medians_f10.append(float(med) if not np.isnan(med) else float("nan"))
                     if not np.isnan(med):
                         ax.text(i, med + 0.003, f"{med:.3f}", ha="center", va="bottom",
@@ -2190,7 +2202,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ptm_xs, ptm_meds, ptm_lo, ptm_hi = [], [], [], []
                 iptm_xs, iptm_meds, iptm_lo, iptm_hi = [], [], [], []
                 for tier in existing_tiers:
-                    sub = df.loc[df["degrader_tier"] == tier].dropna(subset=["ptm", "iptm"])
+                    sub = df.loc[df[CFG.COL_TIER] == tier].dropna(subset=["ptm", "iptm"])
                     if len(sub) < 3:
                         continue
                     x_pos = tier_x[tier]
@@ -2220,7 +2232,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Y-axis zoom: start just below data minimum
             all_vals_f10 = []
             if _has_conf:
-                all_vals_f10.extend(df["Boltz_Model_Confidence"].dropna().tolist())
+                all_vals_f10.extend(df[CFG.COL_CONF].dropna().tolist())
             if _has_ptm:
                 all_vals_f10.extend(df["ptm"].dropna().tolist())
                 all_vals_f10.extend(df["iptm"].dropna().tolist())
@@ -2308,7 +2320,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _leg10.set_zorder(20)
 
             plt.tight_layout()
-            _stat_box(ax, _kruskal_by_tier(df, "Boltz_Model_Confidence"), "lower centre")
+            _stat_box(ax, _kruskal_by_tier(df, CFG.COL_CONF), "lower centre")
             plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
@@ -2328,7 +2340,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     Per-tier median diamonds summarise cluster positions.
     This is fundamentally more informative than paired box plots.
     """
-    if "ptm" in df.columns and "iptm" in df.columns and "degrader_tier" in df.columns:
+    if "ptm" in df.columns and "iptm" in df.columns and CFG.COL_TIER in df.columns:
         try:
             f18_df = df.dropna(subset=["ptm", "iptm"]).copy()
             f18_df["ptm"]  = pd.to_numeric(f18_df["ptm"],  errors="coerce")
@@ -2406,7 +2418,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             This keeps tier colours distinguishable while showing the density of the bulk.
             """
             for tier in sorted(existing_tiers, key=lambda t: t == CFG.TIER_TOP):
-                sub18 = f18_df[f18_df["degrader_tier"] == tier]
+                sub18 = f18_df[f18_df[CFG.COL_TIER] == tier]
                 if sub18.empty:
                     continue
                 ptm_vals  = sub18["ptm"].values
@@ -2444,7 +2456,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                markersize=9, markeredgewidth=1.0,
                                label="Tier median  (◆ diamond)"))
             for tier in existing_tiers:
-                sub18 = f18_df[f18_df["degrader_tier"] == tier]
+                sub18 = f18_df[f18_df[CFG.COL_TIER] == tier]
                 if len(sub18) < 2:
                     continue
                 mx18, my18 = float(sub18["ptm"].median()), float(sub18["iptm"].median())
@@ -2470,10 +2482,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
             # Marginal distributions — KDE lines (smoother than histograms)
             from scipy.stats import gaussian_kde as _gkde18
-            existing_tiers18 = [t for t in existing_tiers if t in f18_df["degrader_tier"].values]
+            existing_tiers18 = [t for t in existing_tiers if t in f18_df[CFG.COL_TIER].values]
             _kde_x18 = np.linspace(_lo18, _hi18, 300)
             for tier in existing_tiers18:
-                sub18_m = f18_df[f18_df["degrader_tier"] == tier]
+                sub18_m = f18_df[f18_df[CFG.COL_TIER] == tier]
                 _min_kde = 1 if tier == CFG.TIER_TOP else 10
                 if len(sub18_m) < _min_kde:
                     continue
@@ -2499,7 +2511,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     pass
             # Annotate Tier_1A KDE peak on both marginal axes
             _tt_col_f05 = TIER_PALETTE.get(CFG.TIER_TOP, CFG.VIS_ACCENT["green"])
-            _tt_sub_f05 = f18_df[f18_df["degrader_tier"] == CFG.TIER_TOP]
+            _tt_sub_f05 = f18_df[f18_df[CFG.COL_TIER] == CFG.TIER_TOP]
             if len(_tt_sub_f05) >= 2:
                 try:
                     _kde_tt_ptm  = _gkde18(_tt_sub_f05["ptm"].values)(_kde_x18)
@@ -2585,7 +2597,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                      f"All column names tried: {_rmsd17_aliases}. "
                      f"Partial matches in CSV (containing 'rmsd'/'active_site'): {_rmsd_candidates}. "
                      f"Full column list: {list(df.columns)}")
-    if _rmsd17_col and "degrader_tier" in df.columns:
+    if _rmsd17_col and CFG.COL_TIER in df.columns:
         try:
             if _rmsd17_col != "Active_Site_RMSD":
                 df = df.rename(columns={_rmsd17_col: "Active_Site_RMSD"})
@@ -2598,10 +2610,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             small-n tier has a value beyond that so its dots always land inside the axes.
             """
             f17_plot = f17_df.copy()
-            valid_tiers_f17 = [t for t in existing_tiers if t in f17_plot["degrader_tier"].values]
+            valid_tiers_f17 = [t for t in existing_tiers if t in f17_plot[CFG.COL_TIER].values]
             _sn_max17 = 0.0
             for _t17s in valid_tiers_f17:
-                _sv17 = f17_plot.loc[f17_plot["degrader_tier"] == _t17s, "Active_Site_RMSD"]
+                _sv17 = f17_plot.loc[f17_plot[CFG.COL_TIER] == _t17s, "Active_Site_RMSD"]
                 if 0 < len(_sv17) <= 30:
                     _sn_max17 = max(_sn_max17, float(_sv17.max()))
             _re, _ra, _rd = CFG.RMSD_BAND_EXCELLENT, CFG.RMSD_BAND_ACCEPTABLE, CFG.RMSD_BAND_DIVERGED
@@ -2630,14 +2642,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax.axhline(y=_re, color=_cbc["high"], linestyle="--", alpha=0.7, linewidth=1.1)
             ax.axhline(y=_ra, color=_cbc["below"], linestyle="--", alpha=0.7, linewidth=1.1)
             # Violin plot — uses clipped data so bodies remain within the continuous axis
-            sns.violinplot(data=f17_plot, x="degrader_tier", y="Active_Site_RMSD",
+            sns.violinplot(data=f17_plot, x=CFG.COL_TIER, y="Active_Site_RMSD",
                            order=valid_tiers_f17, palette=TIER_PALETTE,
                            inner="quartile", cut=0, linewidth=1.1, ax=ax, zorder=3)
             # Connected median trend across tiers (markers joined by a line; value
             # labels boxed just below each node) — mirrors the Fig 16 penalty line.
             _med_xs17, _med_ys17, _med_raw17 = [], [], []
             for _im17, _tier17m in enumerate(valid_tiers_f17):
-                _med17m = f17_df.loc[f17_df["degrader_tier"] == _tier17m,
+                _med17m = f17_df.loc[f17_df[CFG.COL_TIER] == _tier17m,
                                      "Active_Site_RMSD"].median()
                 if np.isnan(_med17m):
                     continue
@@ -2655,10 +2667,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                       ec=CFG.VIS_ACCENT["alert"], alpha=0.9, linewidth=0.6))
             # Very sparse strip for large-n tiers only
             _large_n_tiers17 = [t for t in valid_tiers_f17
-                                 if len(f17_plot[f17_plot["degrader_tier"] == t]) > 30]
+                                 if len(f17_plot[f17_plot[CFG.COL_TIER] == t]) > 30]
             if _large_n_tiers17:
-                _f17_large = f17_plot[f17_plot["degrader_tier"].isin(_large_n_tiers17)]
-                sns.stripplot(data=_f17_large, x="degrader_tier", y="Active_Site_RMSD",
+                _f17_large = f17_plot[f17_plot[CFG.COL_TIER].isin(_large_n_tiers17)]
+                sns.stripplot(data=_f17_large, x=CFG.COL_TIER, y="Active_Site_RMSD",
                               order=valid_tiers_f17, color="black", alpha=0.04,
                               size=1.5, jitter=True, ax=ax, zorder=2)
             """
@@ -2666,7 +2678,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             so every value is visible — avoids them being lost inside the violin body
             """
             for _i17, _tier17 in enumerate(valid_tiers_f17):
-                _sub17 = f17_plot.loc[f17_plot["degrader_tier"] == _tier17, "Active_Site_RMSD"].dropna()
+                _sub17 = f17_plot.loc[f17_plot[CFG.COL_TIER] == _tier17, "Active_Site_RMSD"].dropna()
                 if len(_sub17) <= 30:
                     _col17 = TIER_PALETTE.get(_tier17, CFG.VIS_INK["faint"])
                     _jit17 = np.random.default_rng(42).uniform(-0.12, 0.12, size=len(_sub17))
@@ -2675,7 +2687,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                linewidths=0.8, alpha=0.88, zorder=7)
             # Outlier scatter: actual RMSD values above 3 Å (unclipped)
             for _ti, tier in enumerate(valid_tiers_f17):
-                sub_f6 = f17_df[f17_df["degrader_tier"] == tier]
+                sub_f6 = f17_df[f17_df[CFG.COL_TIER] == tier]
                 _out = sub_f6[sub_f6["Active_Site_RMSD"] > _violin_cap]["Active_Site_RMSD"].values
                 if len(_out) == 0:
                     continue
@@ -2709,7 +2721,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Build two-line x-tick labels: tier name + n / median stats (using unclipped values)
             _xtick_labels17 = []
             for _tier17 in valid_tiers_f17:
-                _sub17 = f17_df.loc[f17_df["degrader_tier"] == _tier17,
+                _sub17 = f17_df.loc[f17_df[CFG.COL_TIER] == _tier17,
                                     "Active_Site_RMSD"].dropna()
                 if len(_sub17) > 0:
                     _med17 = float(_sub17.median())
@@ -2771,14 +2783,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
     # --- Figure 08: Feature Correlation Matrix (Spearman ρ) ---
     _corr_col_labels = {
-        "Boltz_Model_Confidence":      "Conf",
+        CFG.COL_CONF:      "Conf",
         "iptm":                        "ipTM",
         "Binding_Probability":         "BindP",
         "Interaction_Density_Norm":    "IntDen",
         "Chemical_Affinity_Score":     "ChemAff",
         "tier_numeric":                "Tier",
         "Pareto_Rank":                 "Pareto",
-        "SN2_Attack_Angle":            "SN2°",
+        CFG.COL_SN2:            "SN2°",
         "identity_pct":                "SeqID%",
         "SN2_Trajectory_Deviation_A":  "TrajDev",
         "soft_catalytic_score":        "SoftCat",
@@ -2789,9 +2801,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         if _alias in df.columns and "tier_numeric" not in df.columns:
             df["tier_numeric"] = pd.to_numeric(df[_alias], errors="coerce")
     # Last-resort: derive numeric rank from the categorical degrader_tier string
-    if "tier_numeric" not in df.columns and "degrader_tier" in df.columns:
+    if "tier_numeric" not in df.columns and CFG.COL_TIER in df.columns:
         _tier_rank_map = {t: i for i, t in enumerate(TIER_ORDER_LOGIC)}
-        df["tier_numeric"] = df["degrader_tier"].map(_tier_rank_map)
+        df["tier_numeric"] = df[CFG.COL_TIER].map(_tier_rank_map)
     corr_cols = [c for c in _corr_col_labels if c in df.columns]
     if len(corr_cols) >= 2:
         from scipy import stats as _sp_stats
@@ -3000,21 +3012,21 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     Raw mean values annotate each dot for quantitative readability.
     """
     _f08_metric_map = {
-        "Boltz_Model_Confidence": "AI Confidence", "mechanistic_score": "Mech. Score",
+        CFG.COL_CONF: "AI Confidence", CFG.COL_MECH_S: "Mech. Score",
         "Binding_Probability": "Binding Prob.", "identity_pct": "Seq. Identity (%)",
-        "SN2_Attack_Angle": "SN2 Angle (°)", "Active_Site_RMSD": "RMSD (Å, inv.)",
+        CFG.COL_SN2: "SN2 Angle (°)", "Active_Site_RMSD": "RMSD (Å, inv.)",
         "SN2_Trajectory_Deviation_A": "SN2 Traj. Dev. (Å)",
         "soft_catalytic_score": "Soft Catalytic Score",
     }
     _f08_invert = {"Active_Site_RMSD", "SN2_Trajectory_Deviation_A"}
-    _f08_cols = [c for c in _f08_metric_map if c in df.columns and "degrader_tier" in df.columns]
+    _f08_cols = [c for c in _f08_metric_map if c in df.columns and CFG.COL_TIER in df.columns]
     if len(_f08_cols) >= 2:
         try:
             _diag08_parts = []
             for _t08d in existing_tiers:
-                _s08d = df[df["degrader_tier"] == _t08d]
+                _s08d = df[df[CFG.COL_TIER] == _t08d]
                 _v08d = pd.to_numeric(
-                    _s08d["mechanistic_score"] if "mechanistic_score" in _s08d.columns
+                    _s08d[CFG.COL_MECH_S] if CFG.COL_MECH_S in _s08d.columns
                     else pd.Series(dtype=float), errors="coerce").dropna()
                 if len(_v08d):
                     _diag08_parts.append(f"{_t08d}:{float(_v08d.mean()):.2f}(n={len(_v08d)})")
@@ -3023,7 +3035,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             pass  # Fig08 diag suppressed
             _f08_rows = []
             for tier in existing_tiers:
-                sub = df[df["degrader_tier"] == tier]
+                sub = df[df[CFG.COL_TIER] == tier]
                 if sub.empty:
                     continue
                 row = {"Tier": tier}
@@ -3078,7 +3090,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     mx_raw = float(_f08_df[disp].max())
                     _inv = col in _f08_invert
                     for tier in tiers_f08:
-                        sub_ci = df[df["degrader_tier"] == tier]
+                        sub_ci = df[df[CFG.COL_TIER] == tier]
                         raw_vals = pd.to_numeric(sub_ci[col], errors="coerce").dropna().values
                         if len(raw_vals) >= 2:
                             lo_r, hi_r = _bsci(raw_vals)
@@ -3281,7 +3293,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         reporter.log(f"  ! Figure 10 skipped: columns not found: {_mech_missing}. "
                      f"Partial matches in CSV: {_mech_candidates}. "
                      f"Full column list: {list(df.columns)}")
-    if "Halide_Stabilisation" in df.columns and "Carboxylate_Clamp" in df.columns and "degrader_tier" in df.columns:
+    if "Halide_Stabilisation" in df.columns and "Carboxylate_Clamp" in df.columns and CFG.COL_TIER in df.columns:
         try:
             mech_df = df.copy()
             mech_df["HS"] = mech_df["Halide_Stabilisation"].map(
@@ -3292,7 +3304,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
             state_order = ["Stabilised\nClamped", "Stabilised\nUnclamped",
                            "Unstabilised\nClamped", "Unstabilised\nUnclamped"]
-            cross = pd.crosstab(mech_df["degrader_tier"], mech_df["Mech_State"])
+            cross = pd.crosstab(mech_df[CFG.COL_TIER], mech_df["Mech_State"])
             cross = cross.reindex(index=[t for t in existing_tiers if t in cross.index],
                                   columns=[s for s in state_order if s in cross.columns], fill_value=0)
 
@@ -3344,9 +3356,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 11: Mechanistic Score — Mean±CI dot plot ---
-    if "mechanistic_score" in df.columns and "degrader_tier" in df.columns:
+    if CFG.COL_MECH_S in df.columns and CFG.COL_TIER in df.columns:
         from scipy import stats as _scipy_stats
-        f13_data = df.dropna(subset=["mechanistic_score"])
+        f13_data = df.dropna(subset=[CFG.COL_MECH_S])
         fig, ax = plt.subplots(figsize=(13, 8))
         _mfs, _mfm = CFG.MECH_FP_BAND_STRONG, CFG.MECH_FP_BAND_MODERATE   # CFG single source
         _cbc = CFG.CONF_BAND_COLOURS
@@ -3370,13 +3382,13 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                           alpha=0.85, linewidth=0.6))
         ax.axhline(y=_mfs, color=_cbc["high"], linestyle="--", linewidth=1.2, alpha=0.7)
         ax.axhline(y=_mfm, color=_cbc["below"], linestyle=":", linewidth=1.0, alpha=0.7)
-        sns.stripplot(data=f13_data, x="degrader_tier", y="mechanistic_score",
+        sns.stripplot(data=f13_data, x=CFG.COL_TIER, y=CFG.COL_MECH_S,
                       order=existing_tiers, palette=TIER_PALETTE, alpha=0.15, size=3.0,
                       jitter=0.28, ax=ax, zorder=1)
         _f10_stats = {}
         for _t10 in existing_tiers:
-            _v10 = f13_data.loc[f13_data["degrader_tier"] == _t10,
-                                 "mechanistic_score"].dropna()
+            _v10 = f13_data.loc[f13_data[CFG.COL_TIER] == _t10,
+                                 CFG.COL_MECH_S].dropna()
             if len(_v10) >= 2:
                 _f10_stats[_t10] = {
                     "mean": float(_v10.mean()),
@@ -3455,7 +3467,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                  label="Tier mean (◆)"),
             _L10([0],[0], color="black", linewidth=2.0, label="95% confidence interval"),
         ]
-        _mdh10 = _md_ready_stars_cat(ax, df, existing_tiers, "mechanistic_score")
+        _mdh10 = _md_ready_stars_cat(ax, df, existing_tiers, CFG.COL_MECH_S)
         if _mdh10 is not None:
             _lh10.append(_mdh10)
         ax.legend(handles=_lh10, loc="lower left", fontsize=8.5,
@@ -3480,16 +3492,16 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         ("Halide\nstabilisation",      "Has_Halide_Stabilisation", "bool"),
         ("Carboxylate\nclamp",         "Has_Carboxylate_Clamp",    "bool"),
         ("SN2 alignment\n(angle/180°)", "sn2_alignment_score",     "angle"),
-        ("Mechanistic\nscore",         "mechanistic_score",        "score"),
+        ("Mechanistic\nscore",         CFG.COL_MECH_S,        "score"),
     ]
     _fp_avail = [(lbl, col, kind) for (lbl, col, kind) in _fp_feats if col in df.columns]
-    if _fp_avail and "degrader_tier" in df.columns:
+    if _fp_avail and CFG.COL_TIER in df.columns:
         fig = None
         try:
-            _fp_tiers = [t for t in existing_tiers if (df["degrader_tier"] == t).any()]
+            _fp_tiers = [t for t in existing_tiers if (df[CFG.COL_TIER] == t).any()]
             _fp_rows, _fp_n = [], []
             for _ft in _fp_tiers:
-                _fp_sub = df[df["degrader_tier"] == _ft]
+                _fp_sub = df[df[CFG.COL_TIER] == _ft]
                 _fp_n.append(len(_fp_sub))
                 _fp_row = []
                 for _lbl, _col, _kind in _fp_avail:
@@ -3575,9 +3587,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 plt.close(fig)
 
     # --- Figure 12: SN2 Attack Angle — ECDF by Tier ---
-    if "SN2_Attack_Angle" in df.columns and "degrader_tier" in df.columns:
-        plot_df = df[df["SN2_Attack_Angle"] > 0].copy()
-        valid_tiers_f14 = [t for t in existing_tiers if t in plot_df["degrader_tier"].values]
+    if CFG.COL_SN2 in df.columns and CFG.COL_TIER in df.columns:
+        plot_df = df[df[CFG.COL_SN2] > 0].copy()
+        valid_tiers_f14 = [t for t in existing_tiers if t in plot_df[CFG.COL_TIER].values]
         fig, ax = plt.subplots(figsize=(12, 7))
         # Shade tier quality zones + count labels inside each zone band.
         # Zone lower bounds derive from CFG.TIER_ANGLE_MIN (single source); the upper
@@ -3591,7 +3603,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax.axvspan(lo, hi, alpha=0.07, color=col)
             ax.text((lo + hi) / 2, 1.025, f"≥{lo}°", ha="center", va="bottom",
                     fontsize=7.5, color=col, fontweight="bold", transform=ax.get_xaxis_transform())
-            _zn11 = int(((plot_df["SN2_Attack_Angle"] >= lo) & (plot_df["SN2_Attack_Angle"] < hi)).sum())
+            _zn11 = int(((plot_df[CFG.COL_SN2] >= lo) & (plot_df[CFG.COL_SN2] < hi)).sum())
             ax.text((lo + hi) / 2, 0.10, f"n={_zn11:,}",
                     ha="center", va="center", fontsize=7.0, color=col, fontweight="bold",
                     rotation=90, zorder=10,
@@ -3601,7 +3613,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         # loop in alternating vertical bands so clustered medians never overlap.
         _med_pts = []
         for tier in valid_tiers_f14:
-            tier_angles = np.sort(plot_df.loc[plot_df["degrader_tier"] == tier, "SN2_Attack_Angle"].values)
+            tier_angles = np.sort(plot_df.loc[plot_df[CFG.COL_TIER] == tier, CFG.COL_SN2].values)
             ecdf_y = np.arange(1, len(tier_angles) + 1) / len(tier_angles)
             col = TIER_PALETTE.get(tier, CFG.VIS_INK["faint"])
             ax.step(tier_angles, ecdf_y, where="post", color=col, linewidth=2.5,
@@ -3632,8 +3644,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         _mdsel14 = plot_df[plot_df.get("MD_Selected", pd.Series(False, index=plot_df.index))
                            .astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])]
         for _, _mr in _mdsel14.iterrows():
-            _ma = float(_mr["SN2_Attack_Angle"]); _mt = _mr["degrader_tier"]
-            _ta = np.sort(plot_df.loc[plot_df["degrader_tier"] == _mt, "SN2_Attack_Angle"].values)
+            _ma = float(_mr[CFG.COL_SN2]); _mt = _mr[CFG.COL_TIER]
+            _ta = np.sort(plot_df.loc[plot_df[CFG.COL_TIER] == _mt, CFG.COL_SN2].values)
             if len(_ta) == 0:
                 continue
             _myv = float(np.interp(_ma, _ta, np.arange(1, len(_ta) + 1) / len(_ta)))
@@ -3675,12 +3687,12 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         plt.close()
 
     # --- Figure 13a: SN2 Mechanism Geometry Scatter ---
-    if "Dist_Nucleophile" in df.columns and "SN2_Attack_Angle" in df.columns:
+    if "Dist_Nucleophile" in df.columns and CFG.COL_SN2 in df.columns:
         _n_raw9 = len(df)
         plot_df12 = df[
             (df["Dist_Nucleophile"] > 0) &
             (df["Dist_Nucleophile"] < 5.0) &   # plot display window (Å), not a scientific gate
-            (df["SN2_Attack_Angle"] >= 0)
+            (df[CFG.COL_SN2] >= 0)
         ].copy()
         n_excluded12 = _n_raw9 - len(plot_df12)
         plot_df12["Stabilised"] = plot_df12.get("halide_stabilisation_score",
@@ -3690,11 +3702,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         fig, ax = plt.subplots(figsize=(12, 8))
         markers12 = {"Aromatic Shield": "o", "Unstabilised": "X"}
         plot_df12_sorted = plot_df12.copy()
-        plot_df12_sorted["_tier_ord"] = plot_df12_sorted["degrader_tier"].map(
+        plot_df12_sorted["_tier_ord"] = plot_df12_sorted[CFG.COL_TIER].map(
             {t: i for i, t in enumerate(reversed(existing_tiers))})
         plot_df12_sorted = plot_df12_sorted.sort_values("_tier_ord")
-        sns.scatterplot(data=plot_df12_sorted, x="Dist_Nucleophile", y="SN2_Attack_Angle",
-                        hue="degrader_tier", hue_order=existing_tiers, style="Status",
+        sns.scatterplot(data=plot_df12_sorted, x="Dist_Nucleophile", y=CFG.COL_SN2,
+                        hue=CFG.COL_TIER, hue_order=existing_tiers, style="Status",
                         markers=markers12, palette=TIER_PALETTE, alpha=0.60, s=55, ax=ax)
         if ax.get_legend():
             ax.get_legend().remove()
@@ -3707,14 +3719,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _XX12, _YY12 = np.meshgrid(_xi12, _yi12)
             _grid12 = np.vstack([_XX12.ravel(), _YY12.ravel()])
             for _zi12, tier in enumerate(existing_tiers):
-                _td12 = plot_df12[plot_df12["degrader_tier"] == tier]
+                _td12 = plot_df12[plot_df12[CFG.COL_TIER] == tier]
                 if len(_td12) < 30:
                     continue
                 _col12 = TIER_PALETTE.get(tier, CFG.VIS_INK["faint"])
                 try:
                     _kde12 = _gkde12a(np.vstack([
                         _td12["Dist_Nucleophile"].values,
-                        _td12["SN2_Attack_Angle"].values
+                        _td12[CFG.COL_SN2].values
                     ]))
                     _ZZ12 = _kde12(_grid12).reshape(_XX12.shape)
                     _ZZ12 = _ZZ12 / _ZZ12.max()
@@ -3780,7 +3792,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         handles12, labels12 = ax.get_legend_handles_labels()
         clean_labels12, clean_handles12 = [], []
         for h12, l12 in zip(handles12, labels12):
-            if l12 in ("degrader_tier", "Status"):
+            if l12 in (CFG.COL_TIER, "Status"):
                 continue
             clean_handles12.append(h12)
             clean_labels12.append(l12)
@@ -3839,15 +3851,15 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     try:
         from matplotlib.lines import Line2D as _L2Dtc
         _need_tc = ["active_site_residues_correct", "catalytic_constellation_score",
-                    "degrader_tier", "scissile_cf_bde", "sn2_backside_occlusion",
-                    "sn2_dead_end", "Ligand_Name"]
+                    CFG.COL_TIER, "scissile_cf_bde", "sn2_backside_occlusion",
+                    "sn2_dead_end", CFG.COL_LIG]
         if not all(_c in df.columns for _c in _need_tc):
             reporter.log("  ! Two-criteria figure skipped: required columns absent")
         else:
             _BF = CFG.TIER_CONSTELLATION_MIN["Tier_1A"]
             _BDE_MAX = CFG.SCISSILE_CF_BDE_MAX
             _OCC_MAX = CFG.SN2_BACKSIDE_OCCL_MAX
-            _tord = [t for t in TIER_ORDER_LOGIC if t in df["degrader_tier"].unique()]
+            _tord = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
             """
             Three INDEPENDENT figures, not one three-panel strip. Each answers its own question, and
             each carries its own axis labels and legend at a readable size — sharing a strip lets the
@@ -3887,7 +3899,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _axb = _figb.add_subplot(111)
             _means = []
             for _t in _tord:
-                _v = pd.to_numeric(df.loc[df["degrader_tier"].eq(_t), "catalytic_constellation_score"],
+                _v = pd.to_numeric(df.loc[df[CFG.COL_TIER].eq(_t), "catalytic_constellation_score"],
                                    errors="coerce").dropna().sort_values()
                 if len(_v) < 5:
                     continue
@@ -3907,10 +3919,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _mdb = _md_ready_df(df)
             for _, _mr in _mdb.iterrows():
                 _bx = pd.to_numeric(pd.Series([_mr.get("catalytic_constellation_score")]), errors="coerce").iloc[0]
-                _bt = _mr.get("degrader_tier")
+                _bt = _mr.get(CFG.COL_TIER)
                 if pd.isna(_bx):
                     continue
-                _bv = pd.to_numeric(df.loc[df["degrader_tier"].eq(_bt), "catalytic_constellation_score"],
+                _bv = pd.to_numeric(df.loc[df[CFG.COL_TIER].eq(_bt), "catalytic_constellation_score"],
                                     errors="coerce").dropna().sort_values().values
                 if len(_bv) == 0:
                     continue
@@ -3949,11 +3961,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             """
             _DEAD, _FEAS = CFG.VIS_ACCENT_DEEP["red_bright"], CFG.VIS_ACCENT["blue"]
             _dd = df.dropna(subset=["scissile_cf_bde", "sn2_backside_occlusion"])
-            _gg = _dd.groupby("Ligand_Name").agg(
+            _gg = _dd.groupby(CFG.COL_LIG).agg(
                 bde=("scissile_cf_bde", "median"), occ=("sn2_backside_occlusion", "median"),
                 dead=("sn2_dead_end", lambda s: pd.to_numeric(s, errors="coerce").fillna(0).max())).reset_index()
             _gg["pen"] = (_gg["dead"] > 0) | (_gg["bde"] > _BDE_MAX) | (_gg["occ"] > _OCC_MAX)
-            _keep = _gg[_gg["pen"] | _gg["Ligand_Name"].isin(["26_Fluoroacetate", "27_Difluoroacetate"])].copy()
+            _keep = _gg[_gg["pen"] | _gg[CFG.COL_LIG].isin(["26_Fluoroacetate", "27_Difluoroacetate"])].copy()
 
             _figc = plt.figure(figsize=(12, 7))
             _gsc = _figc.add_gridspec(1, 2, width_ratios=[1.0, 1.0], wspace=0.06)
@@ -3961,7 +3973,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _axc2 = _figc.add_subplot(_gsc[0, 1], sharey=_axc)   # criterion 2 — backside access
 
             if len(_keep) >= 2:
-                _keep["lig"] = _keep["Ligand_Name"].str.replace(r"^\d+_", "", regex=True)
+                _keep["lig"] = _keep[CFG.COL_LIG].str.replace(r"^\d+_", "", regex=True)
                 _keep["isdead"] = _keep["dead"] > 0
                 # order by the verdict, then by bond strength: the feasible controls sit together at
                 # the foot of the chart, the dead ends above them.
@@ -4026,20 +4038,20 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     engagement ratio per tier on the right y-axis, revealing whether richer interaction
     profiles correlate with higher fluorine utilisation.
     """
-    _has_int   = bool(present_int_cols) and "degrader_tier" in df.columns
+    _has_int   = bool(present_int_cols) and CFG.COL_TIER in df.columns
     _has_f16   = ("interacting_fluorine_count" in df.columns and
-                  "total_fluorine_count" in df.columns and "degrader_tier" in df.columns)
+                  "total_fluorine_count" in df.columns and CFG.COL_TIER in df.columns)
     if _has_int or _has_f16:
         try:
             # Pre-compute tier count for dynamic figure height
-            n_tiers_f13 = len([t for t in existing_tiers if t in df["degrader_tier"].values]) if "degrader_tier" in df.columns else 6
+            n_tiers_f13 = len([t for t in existing_tiers if t in df[CFG.COL_TIER].values]) if CFG.COL_TIER in df.columns else 6
             fig, (ax, ax_hm) = plt.subplots(1, 2, figsize=(20, max(5.5, n_tiers_f13 * 0.95 + 2.5)),
                                              gridspec_kw={"width_ratios": [3, 2], "wspace": 0.35})
             ax_r15 = ax.twinx()   # right y-axis for fluorine engagement line
 
             # Left axis: stacked bar chart — one bar per tier, stacked by bond type
             if _has_int:
-                tier_int = df.groupby("degrader_tier")[[present_int_cols[k] for k in present_int_cols]].mean()
+                tier_int = df.groupby(CFG.COL_TIER)[[present_int_cols[k] for k in present_int_cols]].mean()
                 tier_int = tier_int.reindex([t for t in existing_tiers if t in tier_int.index])
                 tier_int.columns = [int_label_map.get(k, k) for k in present_int_cols]
                 tier_int = tier_int.fillna(0)
@@ -4097,9 +4109,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 f16_df = f16_df.dropna(subset=["FER"])
                 fer_xs, fer_meds, fer_lo_ci, fer_hi_ci = [], [], [], []
                 for i, tier in enumerate(existing_tiers):
-                    if tier not in f16_df["degrader_tier"].values:
+                    if tier not in f16_df[CFG.COL_TIER].values:
                         continue
-                    vals = f16_df.loc[f16_df["degrader_tier"] == tier, "FER"].dropna()
+                    vals = f16_df.loc[f16_df[CFG.COL_TIER] == tier, "FER"].dropna()
                     if len(vals) < 2:
                         continue
                     med_v = float(vals.median())
@@ -4231,7 +4243,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         _fig_14b_tt_interactions(df, _pa, _imgs, out_dir, reporter)
 
     # --- Figure 15: Fluorine Engagement Ratio by Tier (box + strip + median trend line) ---
-    if "interacting_fluorine_count" in df.columns and "total_fluorine_count" in df.columns and "degrader_tier" in df.columns:
+    if "interacting_fluorine_count" in df.columns and "total_fluorine_count" in df.columns and CFG.COL_TIER in df.columns:
         try:
             f16_df = df.copy()
             f16_df["FER"] = np.where(
@@ -4239,7 +4251,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 f16_df["interacting_fluorine_count"] / f16_df["total_fluorine_count"],
                 np.nan)
             f16_df = f16_df.dropna(subset=["FER"])
-            valid_t16 = [t for t in existing_tiers if t in f16_df["degrader_tier"].values]
+            valid_t16 = [t for t in existing_tiers if t in f16_df[CFG.COL_TIER].values]
             fig, ax = plt.subplots(figsize=(12, 7))
 
             ax.axhspan(0.75, 1.01, alpha=0.07, color=CFG.VIS_ACCENT["green"], zorder=0)
@@ -4251,7 +4263,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # KDE violin + IQR box overlay (no boxplot — keeps figure clean)
             _skipped14 = []   # tiers with too few points for a KDE violin (kept visible via a note)
             for _ti14, tier14 in enumerate(valid_t16):
-                _vals14 = f16_df.loc[f16_df["degrader_tier"] == tier14, "FER"].dropna().values
+                _vals14 = f16_df.loc[f16_df[CFG.COL_TIER] == tier14, "FER"].dropna().values
                 if len(_vals14) < 4:
                     # Too few complexes for a stable KDE — draw the raw points so the
                     # tier is not silently omitted, and record it for the caption.
@@ -4287,7 +4299,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Per-tier median statistics badge
             _med16_xs, _med16_ys = [], []
             for i, tier in enumerate(valid_t16):
-                sub16 = f16_df.loc[f16_df["degrader_tier"] == tier, "FER"].dropna()
+                sub16 = f16_df.loc[f16_df[CFG.COL_TIER] == tier, "FER"].dropna()
                 if len(sub16) == 0:
                     continue
                 med = float(sub16.median())
@@ -4301,7 +4313,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                         marker="D", markersize=6, markeredgecolor=CFG.VIS_INK["dark"],
                         markeredgewidth=0.7, label="FER trend (median)")
             for i, tier in enumerate(valid_t16):
-                sub16 = f16_df.loc[f16_df["degrader_tier"] == tier, "FER"].dropna()
+                sub16 = f16_df.loc[f16_df[CFG.COL_TIER] == tier, "FER"].dropna()
                 if len(sub16) == 0:
                     continue
                 med = float(sub16.median())
@@ -4391,13 +4403,13 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     it saturates near 0.99 across all tiers and carries no per-tier structure. Product
     inhibition is assessed downstream by the Step-06 MM-GBSA stage.
     """
-    _qual_col  = next((c for c in ["soft_catalytic_score", "SN2_Attack_Angle", "mechanistic_score"] if c in df.columns), None)
+    _qual_col  = next((c for c in ["soft_catalytic_score", CFG.COL_SN2, CFG.COL_MECH_S] if c in df.columns), None)
     _qual_lbl  = {"soft_catalytic_score": "Soft catalytic score  (SN2-geometry composite)",
-                  "SN2_Attack_Angle": "SN2 attack angle (°)",
-                  "mechanistic_score": "Mechanistic score"}.get(_qual_col, str(_qual_col))
-    _qual_fmt  = "{:.1f}" if _qual_col == "SN2_Attack_Angle" else "{:.3f}"
-    _has_bind  = _qual_col is not None and "degrader_tier" in df.columns
-    _has_dens  = "Interaction_Density_Norm" in df.columns and "degrader_tier" in df.columns
+                  CFG.COL_SN2: "SN2 attack angle (°)",
+                  CFG.COL_MECH_S: "Mechanistic score"}.get(_qual_col, str(_qual_col))
+    _qual_fmt  = "{:.1f}" if _qual_col == CFG.COL_SN2 else "{:.3f}"
+    _has_bind  = _qual_col is not None and CFG.COL_TIER in df.columns
+    _has_dens  = "Interaction_Density_Norm" in df.columns and CFG.COL_TIER in df.columns
     if _has_bind or _has_dens:
         try:
             from scipy import stats as _sc_stats12
@@ -4410,11 +4422,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 _qv12 = pd.to_numeric(f12_data[_qual_col], errors="coerce").dropna()
                 _qlo12, _qhi12 = float(_qv12.quantile(0.01)), float(_qv12.quantile(0.99))
                 _qpad12 = (_qhi12 - _qlo12) * 0.08 or 0.02
-                sns.violinplot(data=f12_data, x="degrader_tier", y=_qual_col, order=existing_tiers,
+                sns.violinplot(data=f12_data, x=CFG.COL_TIER, y=_qual_col, order=existing_tiers,
                                palette=TIER_PALETTE, inner="box", linewidth=1.2, cut=0,
                                alpha=0.75, ax=ax)
                 for i, tier in enumerate(existing_tiers):
-                    med = f12_data.loc[f12_data["degrader_tier"] == tier, _qual_col].median()
+                    med = f12_data.loc[f12_data[CFG.COL_TIER] == tier, _qual_col].median()
                     if not np.isnan(med):
                         # Red median line across the violin width
                         ax.hlines(med, i - 0.22, i + 0.22, colors=CFG.VIS_ACCENT["alert"],
@@ -4434,11 +4446,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Right axis: per-tier mean active-site contact density connected dot-line
             if _has_dens:
                 f20_df = df.dropna(subset=["Interaction_Density_Norm"]).copy()
-                valid_tiers_f20 = [t for t in existing_tiers if t in f20_df["degrader_tier"].values]
+                valid_tiers_f20 = [t for t in existing_tiers if t in f20_df[CFG.COL_TIER].values]
                 pip_xs, pip_meds, pip_lo_ci, pip_hi_ci = [], [], [], []
                 for tier in valid_tiers_f20:
                     x_pos = existing_tiers.index(tier) if tier in existing_tiers else 0
-                    vals  = f20_df.loc[f20_df["degrader_tier"] == tier, "Interaction_Density_Norm"].dropna()
+                    vals  = f20_df.loc[f20_df[CFG.COL_TIER] == tier, "Interaction_Density_Norm"].dropna()
                     if len(vals) < 2:
                         continue
                     mean_v = float(vals.mean())
@@ -4499,10 +4511,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 17: Active-site contact density by tier ---
-    if "Interaction_Density_Norm" in df.columns and "degrader_tier" in df.columns:
+    if "Interaction_Density_Norm" in df.columns and CFG.COL_TIER in df.columns:
         try:
             f20_df = df.dropna(subset=["Interaction_Density_Norm"]).copy()
-            valid_t20 = [t for t in existing_tiers if t in f20_df["degrader_tier"].values]
+            valid_t20 = [t for t in existing_tiers if t in f20_df[CFG.COL_TIER].values]
             if not f20_df.empty and valid_t20:
                 fig, ax = plt.subplots(figsize=(12, 6.5))
                 _dens_all = pd.to_numeric(f20_df["Interaction_Density_Norm"],
@@ -4521,15 +4533,15 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ax.axhspan(0.0, _z_lo20, alpha=0.06, color=CFG.VIS_ACCENT["vermillion"], zorder=0)
                 ax.axhline(_z_hi20, color=CFG.VIS_ACCENT["green"], linestyle="--", alpha=0.55, linewidth=1.0)
                 ax.axhline(_z_lo20, color=CFG.VIS_ACCENT["vermillion"], linestyle=":", alpha=0.55, linewidth=1.0)
-                sns.boxplot(data=f20_df, x="degrader_tier", y="Interaction_Density_Norm",
+                sns.boxplot(data=f20_df, x=CFG.COL_TIER, y="Interaction_Density_Norm",
                             order=valid_t20, palette=TIER_PALETTE, linewidth=1.2,
                             showfliers=False, ax=ax)
-                sns.stripplot(data=f20_df, x="degrader_tier", y="Interaction_Density_Norm",
+                sns.stripplot(data=f20_df, x=CFG.COL_TIER, y="Interaction_Density_Norm",
                               order=valid_t20, color="black", alpha=0.10, size=2.0, jitter=True, ax=ax)
                 # Per-tier mean trend line (diamond markers) over the median boxes.
                 _mean20_xs, _mean20_ys = [], []
                 for i, tier in enumerate(valid_t20):
-                    sub20 = f20_df.loc[f20_df["degrader_tier"] == tier, "Interaction_Density_Norm"].dropna()
+                    sub20 = f20_df.loc[f20_df[CFG.COL_TIER] == tier, "Interaction_Density_Norm"].dropna()
                     if len(sub20) == 0:
                         continue
                     _mean20_xs.append(i)
@@ -4540,7 +4552,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                             markeredgecolor="white", markeredgewidth=0.7,
                             label="Mean trend")
                 for i, tier in enumerate(valid_t20):
-                    sub20 = f20_df.loc[f20_df["degrader_tier"] == tier, "Interaction_Density_Norm"].dropna()
+                    sub20 = f20_df.loc[f20_df[CFG.COL_TIER] == tier, "Interaction_Density_Norm"].dropna()
                     if len(sub20) == 0:
                         continue
                     med = float(sub20.median())
@@ -4584,9 +4596,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 # Kruskal-Wallis significance note
                 try:
                     from scipy.stats import kruskal as _kw20
-                    _kw_groups = [f20_df.loc[f20_df["degrader_tier"] == t,
+                    _kw_groups = [f20_df.loc[f20_df[CFG.COL_TIER] == t,
                                              "Interaction_Density_Norm"].dropna().values
-                                  for t in valid_t20 if len(f20_df[f20_df["degrader_tier"]==t]) >= 3]
+                                  for t in valid_t20 if len(f20_df[f20_df[CFG.COL_TIER]==t]) >= 3]
                     if len(_kw_groups) >= 2:
                         _kw_h, _kw_p = _kw20(*_kw_groups)
                         # Same family as the other tests: it must be corrected WITH them, or the
@@ -4627,7 +4639,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     inhibition is not plotted here; it is assessed downstream by the Step-06 MM-GBSA stage.
     """
     _be_bind = "Binding_Probability" if "Binding_Probability" in df.columns else None
-    _be_has_bind = _be_bind is not None and "degrader_tier" in df.columns
+    _be_has_bind = _be_bind is not None and CFG.COL_TIER in df.columns
     if _be_has_bind:
         fig = None
         try:
@@ -4638,12 +4650,12 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # clipped at the frame (binding probability is tightly clustered).
             _be_max = float(_bedata[_be_bind].max())
             _be_hi = min(1.0, _be_max + max(0.0015, (_be_max - _be_lo) * 0.08))
-            sns.violinplot(data=_bedata, x="degrader_tier", y=_be_bind, order=existing_tiers,
+            sns.violinplot(data=_bedata, x=CFG.COL_TIER, y=_be_bind, order=existing_tiers,
                            palette=TIER_PALETTE, inner="box", linewidth=1.2, cut=0,
                            alpha=0.75, ax=ax)
             _be_mxs, _be_mys = [], []
             for _i, _t in enumerate(existing_tiers):
-                _m = _bedata.loc[_bedata["degrader_tier"] == _t, _be_bind].median()
+                _m = _bedata.loc[_bedata[CFG.COL_TIER] == _t, _be_bind].median()
                 if not np.isnan(_m):
                     _be_mxs.append(_i); _be_mys.append(float(_m))
             # Single connected median trend (diamonds joined) — no per-violin bars.
@@ -4701,8 +4713,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         fig, ax = plt.subplots(figsize=(11, 7.5))
         _u = df.dropna(subset=["UMAP_X", "UMAP_Y"]).copy()
         _ux, _uy = _u["UMAP_X"].values, _u["UMAP_Y"].values
-        _cmetric = next((c for c in ("competence_score", "mechanistic_score",
-                                     "Boltz_Model_Confidence") if c in _u.columns), None)
+        _cmetric = next((c for c in ("competence_score", CFG.COL_MECH_S,
+                                     CFG.COL_CONF) if c in _u.columns), None)
         if _cmetric:
             _cvals = pd.to_numeric(_u[_cmetric], errors="coerce").fillna(0.0).values
             hb = ax.hexbin(_ux, _uy, C=_cvals, reduce_C_function=np.mean,
@@ -4718,14 +4730,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _elite = _u[_u[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])]
             _elite_lbl = f"MD-ready hits (n={len(_elite)})"
         else:
-            _elite = _u[_u["degrader_tier"] == CFG.TIER_TOP]
+            _elite = _u[_u[CFG.COL_TIER] == CFG.TIER_TOP]
             _elite_lbl = f"{CFG.TIER_TOP} hits (n={len(_elite)})"
         if not _elite.empty:
             ax.scatter(_elite["UMAP_X"], _elite["UMAP_Y"], marker="*", s=185,
                        color=CFG.VIS_ACCENT["star"], edgecolors="black", linewidths=0.9,
                        zorder=8, label=_elite_lbl)
-            if "Ligand_Name" in _elite.columns:
-                _lig = _elite["Ligand_Name"].astype(str).str.replace(r"^\d+_", "", regex=True)
+            if CFG.COL_LIG in _elite.columns:
+                _lig = _elite[CFG.COL_LIG].astype(str).str.replace(r"^\d+_", "", regex=True)
                 for _xx, _yy, _lg in zip(_elite["UMAP_X"], _elite["UMAP_Y"], _lig):
                     ax.annotate(_lg, (_xx, _yy), textcoords="offset points", xytext=(5, 4),
                                 fontsize=7.0, fontweight="bold", color=CFG.VIS_INK["ink_pure"], zorder=9)
@@ -4746,13 +4758,13 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     reporter.section("  Folder 06_PFAS_Scope_and_Synthesis — synthesis + publication assembly")
     # --- Figure 19: Candidate Radar: 18a (top-5 hits) + 18b (one per tier) ---
     _radar_labels = {
-        "Boltz_Model_Confidence":   "AI Conf.",
+        CFG.COL_CONF:   "AI Conf.",
         "iptm":                     "ipTM",
         "Interaction_Density_Norm": "Int.Den",
         "mean_plddt":               "pLDDT",
         "Binding_Probability":      "Bind.Prob",
-        "SN2_Attack_Angle":         "SN2(°)",
-        "mechanistic_score": "Mech",
+        CFG.COL_SN2:         "SN2(°)",
+        CFG.COL_MECH_S: "Mech",
         "Active_Site_RMSD":         "RMSD(Å)",
         "identity_pct":             "Seq.ID%",
         "SN2_Trajectory_Deviation_A": "Traj.Dev",
@@ -4778,7 +4790,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         _, ax_r = plt.subplots(figsize=(9, 9), subplot_kw=dict(polar=True))
         colours_r = [CFG.VIS_BAND["high"], CFG.VIS_RADAR_SERIES[1], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["magenta"], CFG.VIS_ACCENT["blue"],
                      CFG.VIS_ACCENT["sky"], CFG.VIS_ACCENT["yellow"], CFG.VIS_ACCENT["green"], CFG.VIS_ACCENT["vermillion"], CFG.VIS_ACCENT["magenta"]]
-        lname_col = next((c for c in ["Ligand_Name", "ligand"] if c in rows_df.columns), None)
+        lname_col = next((c for c in [CFG.COL_LIG, "ligand"] if c in rows_df.columns), None)
 
         _ring_levels = [0.2, 0.4, 0.6, 0.8, 1.0]
         _ring_angles = np.linspace(0, 2 * np.pi, 300)
@@ -4793,7 +4805,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _raw  = str(rows_df.iloc[i][lname_col]) if lname_col else f"Hit {i+1}"
             # Strip leading "26_" style number prefix
             _clean = _re18.sub(r"^\d+_", "", _raw)
-            tier  = str(rows_df.iloc[i].get("degrader_tier", ""))
+            tier  = str(rows_df.iloc[i].get(CFG.COL_TIER, ""))
             if label_mode == "rank":
                 _rank_val = int(rows_df.iloc[i].get("Scientific_Rank", i + 1))
                 lname_lbl = f"{_clean}  (Rank {_rank_val})"
@@ -4853,7 +4865,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         metrics_r = [m for m in _radar_labels if m in df.columns]
         if metrics_r:
             worst_tier = existing_tiers[-1] if existing_tiers else None
-            worst_avg  = (df[df["degrader_tier"] == worst_tier].mean(numeric_only=True).to_frame().T
+            worst_avg  = (df[df[CFG.COL_TIER] == worst_tier].mean(numeric_only=True).to_frame().T
                           if worst_tier else pd.DataFrame())
 
             """
@@ -4872,14 +4884,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _pa18a = _md_ready_df(df).copy()
             _radar_src = "MD-selected cohort"
             if _pa18a.empty:
-                _pa18a = df[df["degrader_tier"] == CFG.TIER_TOP].copy()
+                _pa18a = df[df[CFG.COL_TIER] == CFG.TIER_TOP].copy()
                 _radar_src = f"top {CFG.TIER_TOP} ranks (no MD selection in this run)"
             _sort_col18a = "Scientific_Rank" if "Scientific_Rank" in _pa18a.columns \
-                           else "Boltz_Model_Confidence"
+                           else CFG.COL_CONF
             _asc18a = _sort_col18a == "Scientific_Rank"
             _pa18a  = _pa18a.sort_values(_sort_col18a, ascending=_asc18a)
             if _pa18a.empty:
-                _pa18a = df.sort_values("Boltz_Model_Confidence", ascending=False).head(8)
+                _pa18a = df.sort_values(CFG.COL_CONF, ascending=False).head(8)
             # Cap plotted hits so the radar stays readable (top-N by ranking key).
             _pa18a = _pa18a.head(CFG.VIS_RADAR_MAX_HITS)
             _draw_radar(_pa18a, worst_avg, metrics_r,
@@ -4890,9 +4902,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # --- 18b: One representative per tier (best Boltz confidence per tier) ---
             reps_b = []
             for t in existing_tiers:
-                sub_t = df[df["degrader_tier"] == t]
+                sub_t = df[df[CFG.COL_TIER] == t]
                 if not sub_t.empty:
-                    reps_b.append(sub_t.sort_values("Boltz_Model_Confidence", ascending=False).iloc[[0]])
+                    reps_b.append(sub_t.sort_values(CFG.COL_CONF, ascending=False).iloc[[0]])
             rep_df = pd.concat(reps_b) if reps_b else df.head(len(existing_tiers))
             _draw_radar(rep_df, pd.DataFrame(), metrics_r,
                         out_dir / "Figure_19b_Radar_TierReps.png",
@@ -4909,26 +4921,26 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     meaningful substrate-vs-inhibitor space. Ranking on Binding_Probability cannot
     do this — it is ~constant at 0.99 across the whole dataset and separates nothing.
     """
-    if "SN2_Attack_Angle" in df.columns and "Boltz_Model_Confidence" in df.columns:
+    if CFG.COL_SN2 in df.columns and CFG.COL_CONF in df.columns:
         try:
 
-            _d19 = df[["SN2_Attack_Angle", "Boltz_Model_Confidence", "degrader_tier"]].copy()
-            _d19["SN2_Attack_Angle"]      = pd.to_numeric(_d19["SN2_Attack_Angle"],      errors="coerce")
-            _d19["Boltz_Model_Confidence"] = pd.to_numeric(_d19["Boltz_Model_Confidence"], errors="coerce")
+            _d19 = df[[CFG.COL_SN2, CFG.COL_CONF, CFG.COL_TIER]].copy()
+            _d19[CFG.COL_SN2]      = pd.to_numeric(_d19[CFG.COL_SN2],      errors="coerce")
+            _d19[CFG.COL_CONF] = pd.to_numeric(_d19[CFG.COL_CONF], errors="coerce")
             _d19 = _d19.dropna()
-            _tiers19 = [t for t in TIER_ORDER_LOGIC if t in _d19["degrader_tier"].unique()]
+            _tiers19 = [t for t in TIER_ORDER_LOGIC if t in _d19[CFG.COL_TIER].unique()]
 
             # Per-tier metrics
             _rows19 = []
             for _t19 in _tiers19:
-                _sub = _d19[_d19["degrader_tier"] == _t19]
+                _sub = _d19[_d19[CFG.COL_TIER] == _t19]
                 _n   = len(_sub)
-                _pct_sn2  = float((_sub["SN2_Attack_Angle"] >= CFG.SUBSTRATE_ANGLE_MIN).mean() * 100)
-                _pct_conf = float((_sub["Boltz_Model_Confidence"] >= CFG.SUBSTRATE_CONF_MIN).mean() * 100)
-                _pct_both = float(((_sub["SN2_Attack_Angle"] >= CFG.SUBSTRATE_ANGLE_MIN) & (_sub["Boltz_Model_Confidence"] >= CFG.SUBSTRATE_CONF_MIN)).mean() * 100)
-                _pct_inh  = float((_sub["SN2_Attack_Angle"] < CFG.INHIBITOR_ANGLE_MAX).mean() * 100)
-                _med_sn2  = float(_sub["SN2_Attack_Angle"].median())
-                _med_conf = float(_sub["Boltz_Model_Confidence"].median())
+                _pct_sn2  = float((_sub[CFG.COL_SN2] >= CFG.SUBSTRATE_ANGLE_MIN).mean() * 100)
+                _pct_conf = float((_sub[CFG.COL_CONF] >= CFG.SUBSTRATE_CONF_MIN).mean() * 100)
+                _pct_both = float(((_sub[CFG.COL_SN2] >= CFG.SUBSTRATE_ANGLE_MIN) & (_sub[CFG.COL_CONF] >= CFG.SUBSTRATE_CONF_MIN)).mean() * 100)
+                _pct_inh  = float((_sub[CFG.COL_SN2] < CFG.INHIBITOR_ANGLE_MAX).mean() * 100)
+                _med_sn2  = float(_sub[CFG.COL_SN2].median())
+                _med_conf = float(_sub[CFG.COL_CONF].median())
                 _rows19.append({"tier": _t19, "n": _n,
                                 "pct_substrate": _pct_both,
                                 "pct_sn2_ok": _pct_sn2,
@@ -5010,7 +5022,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 
             # ── Right panel: scatter of tier medians in Conf × SN2 space ─────
             # Background hexbin of all complexes (shows density landscape)
-            ax19R.hexbin(_d19["Boltz_Model_Confidence"], _d19["SN2_Attack_Angle"],
+            ax19R.hexbin(_d19[CFG.COL_CONF], _d19[CFG.COL_SN2],
                                   gridsize=40, cmap="Greys", mincnt=1, alpha=0.4, linewidths=0.2, zorder=1)
 
             # Substrate / inhibitor zone shading — bounds from CFG
@@ -5023,15 +5035,15 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             # Tier median diamonds with IQR error bars — collect positions first
             _tier_pts19 = []   # (tier, cx, cy, colour)
             for _t19 in _tiers19:
-                _sub = _d19[_d19["degrader_tier"] == _t19]
+                _sub = _d19[_d19[CFG.COL_TIER] == _t19]
                 if _sub.empty:
                     continue
-                _cx = float(_sub["Boltz_Model_Confidence"].median())
-                _cy = float(_sub["SN2_Attack_Angle"].median())
-                _ex_lo = _cx - float(_sub["Boltz_Model_Confidence"].quantile(0.25))
-                _ex_hi = float(_sub["Boltz_Model_Confidence"].quantile(0.75)) - _cx
-                _ey_lo = _cy - float(_sub["SN2_Attack_Angle"].quantile(0.25))
-                _ey_hi = float(_sub["SN2_Attack_Angle"].quantile(0.75)) - _cy
+                _cx = float(_sub[CFG.COL_CONF].median())
+                _cy = float(_sub[CFG.COL_SN2].median())
+                _ex_lo = _cx - float(_sub[CFG.COL_CONF].quantile(0.25))
+                _ex_hi = float(_sub[CFG.COL_CONF].quantile(0.75)) - _cx
+                _ey_lo = _cy - float(_sub[CFG.COL_SN2].quantile(0.25))
+                _ey_hi = float(_sub[CFG.COL_SN2].quantile(0.75)) - _cy
                 _col19 = TIER_PALETTE.get(_t19, CFG.VIS_INK["faint"])
                 ax19R.errorbar(_cx, _cy,
                                xerr=[[_ex_lo], [_ex_hi]],
@@ -5099,7 +5111,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     A thin vertical divider at the "favourable total" position separates the two sides.
     Segment labels show % only for segments ≥ 5%.  Y-axis labels include tier n-count.
     """
-    if "Conflict_Category" in df.columns and "degrader_tier" in df.columns:
+    if "Conflict_Category" in df.columns and CFG.COL_TIER in df.columns:
         cat_colours_f2 = {
             "Consensus High": CFG.VIS_ACCENT["green"], "Hidden Gem": CFG.VIS_ACCENT["magenta"],
             CFG.TIER_DECOY: CFG.VIS_ACCENT["vermillion"], "Consensus Low": CFG.VIS_INK["grey"], "Ambiguous": CFG.VIS_ACCENT["amber"]}
@@ -5107,13 +5119,13 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         cat_order_f2 = ["Consensus High", "Hidden Gem", "Ambiguous", "Consensus Low", "Decoy"]
         present_cats_f2 = [c for c in cat_order_f2 if c in df["Conflict_Category"].unique()]
 
-        ct_f2 = pd.crosstab(df["degrader_tier"], df["Conflict_Category"])
+        ct_f2 = pd.crosstab(df[CFG.COL_TIER], df["Conflict_Category"])
         tier_rows_f2 = [t for t in existing_tiers if t in ct_f2.index]
         ct_f2 = ct_f2.reindex(index=tier_rows_f2, columns=present_cats_f2, fill_value=0)
         tier_n_f2   = ct_f2.sum(axis=1)
         # Grand total = all rows with a valid degrader_tier (not filtered by Conflict_Category)
         _total_rows_f2 = len(df)
-        grand_total    = int(df["degrader_tier"].notna().sum())
+        grand_total    = int(df[CFG.COL_TIER].notna().sum())
         pct_f2         = ct_f2.div(tier_n_f2, axis=0).fillna(0) * 100
         # Detect control cases — generic mask first, then specific 3R3U / DeHa4
         _ctrl_mask = pd.Series(False, index=df.index)
@@ -5268,8 +5280,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         """
         def _lig_short_f20(_idx):
             _ln = ""
-            if "Ligand_Name" in df.columns:
-                _ln = str(df.at[_idx, "Ligand_Name"])
+            if CFG.COL_LIG in df.columns:
+                _ln = str(df.at[_idx, CFG.COL_LIG])
             if (not _ln or _ln.lower() == "nan") and "job_name" in df.columns:
                 _jn = str(df.at[_idx, "job_name"])
                 _ln = _jn.split("Control_", 1)[1] if "Control_" in _jn else _jn
@@ -5285,7 +5297,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             if not (_cmask.any() and "job_name" in df.columns):
                 continue
             for _cidx in df.index[_cmask]:
-                _ctier = df.at[_cidx, "degrader_tier"]
+                _ctier = df.at[_cidx, CFG.COL_TIER]
                 if _ctier not in tier_rows_f2:
                     continue
                 _ctrl_by_tier_f20.setdefault(_ctier, []).append(
@@ -5327,8 +5339,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     A large gap means strong mechanistic geometry but undervalued by AI — the
     "hidden gem" story in a single visual stroke.
     """
-    _phys_col21_abs = next((c for c in ["SN2_Attack_Angle", "Scientific_Rank", "Pareto_Rank"] if c in df.columns), None)
-    _ai_col21_abs   = next((c for c in ["Boltz_Model_Confidence", "Ensemble_Data_Rank"] if c in df.columns), None)
+    _phys_col21_abs = next((c for c in [CFG.COL_SN2, "Scientific_Rank", "Pareto_Rank"] if c in df.columns), None)
+    _ai_col21_abs   = next((c for c in [CFG.COL_CONF, "Ensemble_Data_Rank"] if c in df.columns), None)
     if "Conflict_Category" in df.columns and _phys_col21_abs and _ai_col21_abs:
         try:
             gems = df[df["Conflict_Category"] == "Hidden Gem"].copy()
@@ -5346,8 +5358,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 gems["_ai_pct21"]   = (gems["_ai_pct21"]   - _ai_min21)   / _ai_rng21   * 100
                 gems["_gap21"]      = gems["_phys_pct21"] - gems["_ai_pct21"]
 
-                lname_col21 = next((c for c in ["complex_id", "Ligand_Name", "ligand",
-                                                "Protein_Name", "protein"]
+                lname_col21 = next((c for c in ["complex_id", CFG.COL_LIG, "ligand",
+                                                CFG.COL_PROT, "protein"]
                                     if c in gems.columns), None)
 
                 # ── Horizontal dual-dot lollipop chart ──────────────────────────
@@ -5425,14 +5437,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ax21.set_yticks(_y_pos21)
                 ax21.set_yticklabels(_gem_labels21, fontsize=8.5)
                 for _tick21, (_, row21) in zip(ax21.get_yticklabels(), gems_s21.iterrows()):
-                    _t21 = (row21.get("degrader_tier", "")
-                            if "degrader_tier" in gems.columns else "")
+                    _t21 = (row21.get(CFG.COL_TIER, "")
+                            if CFG.COL_TIER in gems.columns else "")
                     _tick21.set_color(TIER_PALETTE.get(_t21, CFG.VIS_INK["dark"]))
 
                 ax21.set_xlim(-1, _x_hi21 + 2)
-                _x21_phys_lbl = ("SN2 Attack Angle" if _phys_col21_abs == "SN2_Attack_Angle"
+                _x21_phys_lbl = ("SN2 Attack Angle" if _phys_col21_abs == CFG.COL_SN2
                                  else "Physics Rank")
-                _x21_ai_lbl   = ("Boltz Confidence" if _ai_col21_abs == "Boltz_Model_Confidence"
+                _x21_ai_lbl   = ("Boltz Confidence" if _ai_col21_abs == CFG.COL_CONF
                                  else "AI Rank")
                 ax21.set_xlabel(
                     f"Normalised Score  ({_x21_phys_lbl} / {_x21_ai_lbl})  "
@@ -5470,10 +5482,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ]
                 # Add tier entries if multiple tiers
                 _tier_in_gems = [t for t in existing_tiers
-                                 if "degrader_tier" in gems.columns and
-                                 t in gems["degrader_tier"].values]
+                                 if CFG.COL_TIER in gems.columns and
+                                 t in gems[CFG.COL_TIER].values]
                 _lh21 += [_L21([0],[0], color=TIER_PALETTE.get(t,CFG.VIS_INK["faint"]), linewidth=3,
-                                label=f'{t}  (n={len(gems[gems["degrader_tier"]==t]):,})')
+                                label=f'{t}  (n={len(gems[gems[CFG.COL_TIER]==t]):,})')
                           for t in _tier_in_gems]
                 ax21.legend(handles=_lh21, loc="lower right", fontsize=8,
                             framealpha=0.92, fancybox=True, ncol=2,
@@ -5510,18 +5522,18 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         used — it is built from Binding_Probability (near-constant ≈ 0.99) and confidence,
         so it would make the Physics circle a second copy of the AI circle.
         """
-        _phys_col22 = next((c for c in ["soft_catalytic_score", "mechanistic_score", "SN2_Attack_Angle"] if c in df.columns), None)
-        _ai_col22   = next((c for c in ["Boltz_Model_Confidence", "iptm", "ptm"] if c in df.columns), None)
+        _phys_col22 = next((c for c in ["soft_catalytic_score", CFG.COL_MECH_S, CFG.COL_SN2] if c in df.columns), None)
+        _ai_col22   = next((c for c in [CFG.COL_CONF, "iptm", "ptm"] if c in df.columns), None)
         _tier_strong22 = {CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2]}
 
-        if _phys_col22 and _ai_col22 and "degrader_tier" in df.columns:
+        if _phys_col22 and _ai_col22 and CFG.COL_TIER in df.columns:
             _n22 = len(df)
             _phys_vals22   = pd.to_numeric(df[_phys_col22], errors="coerce")
             _phys_thresh22 = float(_phys_vals22.quantile(0.67))   # top tercile of catalytic geometry (higher = better)
             _set_A = set(df.index[_phys_vals22 >= _phys_thresh22])
             _ai_thresh22   = float(pd.to_numeric(df[_ai_col22], errors="coerce").quantile(0.67))
             _set_B = set(df.index[pd.to_numeric(df[_ai_col22], errors="coerce") >= _ai_thresh22])
-            _set_C = set(df.index[df["degrader_tier"].isin(_tier_strong22)])
+            _set_C = set(df.index[df[CFG.COL_TIER].isin(_tier_strong22)])
 
             _ctrl_3R3U_idx22  = None
             _ctrl_deha4_idx22 = None
@@ -5572,7 +5584,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                                    edgecolor=CFG.VIS_INK["soft"], linewidth=2.0,
                                    linestyle=":", zorder=4))
 
-            _set_PA22 = set(df.index[df["degrader_tier"] == CFG.TIER_TOP])
+            _set_PA22 = set(df.index[df[CFG.COL_TIER] == CFG.TIER_TOP])
             _n_PA22   = len(_set_PA22)
             _tt_cx22, _tt_cy22, _r_PA22, _tt_col22 = _cx_C, _cy_C, 0.50, CFG.VIS_ACCENT["magenta"]
             if _n_PA22 > 0:
@@ -5736,8 +5748,8 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         tier_order = [t for t in CFG.TIER_ORDER if t in TIER_PALETTE]
         tier_colors = {t: TIER_PALETTE.get(t, CFG.VIS_INK["faint"]) for t in tier_order}
         d["tier_rank"] = d["tier"].map(CFG.TIER_RANK).fillna(0)
-        d["prot"] = d[CFG.COL_PROT] if CFG.COL_PROT in d.columns else d.get("Protein_Name", d.get("protein", ""))
-        d["lig"] = d[CFG.COL_LIG] if CFG.COL_LIG in d.columns else d.get("Ligand_Name", d.get("ligand", ""))
+        d["prot"] = d[CFG.COL_PROT] if CFG.COL_PROT in d.columns else d.get(CFG.COL_PROT, d.get("protein", ""))
+        d["lig"] = d[CFG.COL_LIG] if CFG.COL_LIG in d.columns else d.get(CFG.COL_LIG, d.get("ligand", ""))
         d["Ensemble_Score"] = pd.to_numeric(
             d.get("Ensemble_Score", 0), errors="coerce"
         ).fillna(0)
@@ -5998,7 +6010,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         # non-sequitur — a complex could sit in the top band and still land in a low tier, with the
         # penalty that demoted it invisible to the reader.
         _mech_col_24 = ("mechanistic_score_effective"
-                        if "mechanistic_score_effective" in d.columns else "mechanistic_score")
+                        if "mechanistic_score_effective" in d.columns else CFG.COL_MECH_S)
 
         """
         ── DECISION FUNNEL ────────────────────────────────────────────────────────────────────────
@@ -6019,7 +6031,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _dn24 = _num24("Dist_Nucleophile", np.inf)
         _nbv24, _bav24 = _num24("dist_nuc_base_internal", np.inf), _num24("dist_base_acid_internal", np.inf)
         _angv24 = _num24("sn2_attack_angle_effective",
-                         np.nan) if "sn2_attack_angle_effective" in d.columns else _num24("SN2_Attack_Angle", np.nan)
+                         np.nan) if "sn2_attack_angle_effective" in d.columns else _num24(CFG.COL_SN2, np.nan)
         _mv24 = _num24(_mech_col_24, np.nan)
 
         _LOOSE = CFG.TIER_ORDER[3]          # Tier_2B — the loosest degrader rung
@@ -6393,7 +6405,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Figure 26a–25e — PFAS chain-length selectivity saved as five separate PNGs."""
     try:
-        _req25 = ["total_fluorine_count", "SN2_Attack_Angle", "Boltz_Model_Confidence", "degrader_tier"]
+        _req25 = ["total_fluorine_count", CFG.COL_SN2, CFG.COL_CONF, CFG.COL_TIER]
         _miss25 = [c for c in _req25 if c not in df.columns]
         if _miss25:
             reporter.log(f"  ! Figure 26 skipped: missing columns {_miss25}")
@@ -6406,7 +6418,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         for _c25 in _req25[:-1]:
             _d25[_c25] = pd.to_numeric(_d25[_c25], errors="coerce")
         _d25 = _d25.dropna(subset=_req25)
-        _d25 = _d25[_d25["degrader_tier"].isin(TIER_ORDER_LOGIC)]
+        _d25 = _d25[_d25[CFG.COL_TIER].isin(TIER_ORDER_LOGIC)]
         if len(_d25) < 30:
             reporter.log("  ! Figure 26 skipped: insufficient data after filtering")
             return
@@ -6423,8 +6435,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _d25 = _d25.dropna(subset=["_size_bin"])
 
         # Mechanistic outcome classification
-        _ang25  = _d25["SN2_Attack_Angle"]
-        _conf25 = _d25["Boltz_Model_Confidence"]
+        _ang25  = _d25[CFG.COL_SN2]
+        _conf25 = _d25[CFG.COL_CONF]
         _SA25, _IA25, _SC25 = CFG.SUBSTRATE_ANGLE_MIN, CFG.INHIBITOR_ANGLE_MAX, CFG.SUBSTRATE_CONF_MIN
         _d25["_outcome"] = np.where(
             (_ang25 >= _SA25) & (_conf25 >= _SC25), "Substrate",
@@ -6446,7 +6458,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         axA.axhline(CFG.SUBSTRATE_ANGLE_MIN, color=CFG.VIS_ACCENT["green"], lw=1.2, ls="--", alpha=0.7, zorder=2)
         axA.axhline(CFG.INHIBITOR_ANGLE_MAX, color=CFG.VIS_ACCENT["vermillion"], lw=1.2, ls="--", alpha=0.7, zorder=2)
         _hb25 = axA.hexbin(
-            _d25["total_fluorine_count"], _d25["SN2_Attack_Angle"],
+            _d25["total_fluorine_count"], _d25[CFG.COL_SN2],
             gridsize=50, mincnt=1, cmap="YlOrRd", alpha=0.65, zorder=1, linewidths=0.2
         )
         _cb25 = fig25a.colorbar(_hb25, ax=axA, pad=0.01, aspect=30, shrink=0.85)
@@ -6457,11 +6469,11 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _is_pa25a = (_t25a == CFG.TIER_TOP)
             # Tier_1A is crucial and rare → plot ALL of its points (never sampled)
             _src25a = _d25 if _is_pa25a else _samp_A25
-            _ts25 = _src25a[_src25a["degrader_tier"] == _t25a]
+            _ts25 = _src25a[_src25a[CFG.COL_TIER] == _t25a]
             if _ts25.empty:
                 continue
             axA.scatter(
-                _ts25["total_fluorine_count"], _ts25["SN2_Attack_Angle"],
+                _ts25["total_fluorine_count"], _ts25[CFG.COL_SN2],
                 color=TIER_PALETTE.get(_t25a, CFG.VIS_INK["faint"]),
                 alpha=0.85 if _is_pa25a else 0.45,
                 s=60 if _is_pa25a else 14,
@@ -6469,10 +6481,10 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 linewidths=0.8 if _is_pa25a else 0,
                 zorder=5 if _is_pa25a else 3, label=_t25a
             )
-        _roll25 = _d25[["total_fluorine_count", "SN2_Attack_Angle"]].sort_values("total_fluorine_count")
+        _roll25 = _d25[["total_fluorine_count", CFG.COL_SN2]].sort_values("total_fluorine_count")
         if len(_roll25) >= 20:
             _win25 = max(20, len(_roll25) // 40)
-            _roll25["_med"] = _roll25["SN2_Attack_Angle"].rolling(
+            _roll25["_med"] = _roll25[CFG.COL_SN2].rolling(
                 window=_win25, center=True, min_periods=5).median()
             axA.plot(_roll25["total_fluorine_count"], _roll25["_med"],
                      color="black", lw=2.2, zorder=6, label="Rolling median SN2")
@@ -6482,7 +6494,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         # being acted on.
         _md25 = _md_ready_df(_d25)
         if not _md25.empty:
-            axA.scatter(_md25["total_fluorine_count"], _md25["SN2_Attack_Angle"],
+            axA.scatter(_md25["total_fluorine_count"], _md25[CFG.COL_SN2],
                         label=f"MD-selected (n={len(_md25)})",
                         **({**_MD_STAR_KW, "s": 340}))
         axA.text(0.99, 0.92, f"SUBSTRATE ZONE  (SN2 ≥ {CFG.SUBSTRATE_ANGLE_MIN:.0f}°)",
@@ -6534,7 +6546,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _oc_pct25 = _oc_ct25.div(_oc_ct25.sum(axis=1), axis=0) * 100
 
         _tier_ct25 = (
-            _d25.groupby(["_size_bin", "degrader_tier"], observed=True)
+            _d25.groupby(["_size_bin", CFG.COL_TIER], observed=True)
             .size().unstack(fill_value=0)
         )
         _tier_ct25 = _tier_ct25.reindex(columns=[t for t in TIER_ORDER_LOGIC if t in _tier_ct25.columns])
@@ -6678,7 +6690,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         if not _LP25:
             reporter.log(f"  ! Figure 26c skipped: ligand SMILES not found ({_smi25})")
             raise RuntimeError("ligand properties unavailable")
-        _lcol25 = next((c for c in [CFG.COL_LIG, "Ligand_Name", "ligand"]
+        _lcol25 = next((c for c in [CFG.COL_LIG, CFG.COL_LIG, "ligand"]
                         if c in df.columns), None)
         if _lcol25 is None:
             reporter.log("  ! Figure 26c skipped: ligand column not found in data")
@@ -6690,7 +6702,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         it has no spread to show a size trend (it is a gate, not a graded competence axis).
         """
         _soft_c25 = "soft_catalytic_score" if "soft_catalytic_score" in df.columns else None
-        _conf_c25 = "Boltz_Model_Confidence" if "Boltz_Model_Confidence" in df.columns else None
+        _conf_c25 = CFG.COL_CONF if CFG.COL_CONF in df.columns else None
         _deg_c25  = "is_degrader" if "is_degrader" in df.columns else None
         if _soft_c25 is None and _deg_c25 is None:
             reporter.log("  ! Figure 26c skipped: no catalytic-competence column (soft_catalytic_score / is_degrader)")
@@ -6858,7 +6870,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     _fit_col   = CFG.OUTCOME_COLOUR.get("Substrate", CFG.VIS_ACCENT_DEEP["teal"])
     _nofit_col = CFG.OUTCOME_COLOUR.get("Potential Inhibitor", CFG.VIS_ACCENT_DEEP["orange_deepest"])
 
-    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df.get("degrader_tier", pd.Series()).unique()]
+    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df.get(CFG.COL_TIER, pd.Series()).unique()]
 
     def _num(col: str) -> pd.Series:
         """Coerce a column to numeric, returning an all-NaN series if absent."""
@@ -6921,7 +6933,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     """
     try:
         asv, lv = _num("active_site_volume"), _num("ligand_volume")
-        sub = pd.DataFrame({"asv": asv, "lv": lv, "tier": df.get("degrader_tier")}).dropna(subset=["asv", "lv"])
+        sub = pd.DataFrame({"asv": asv, "lv": lv, "tier": df.get(CFG.COL_TIER)}).dropna(subset=["asv", "lv"])
         sub = sub[(sub["asv"] > 0) & (sub["lv"] > 0)]
         if len(sub) >= 5:
             fig, ax = plt.subplots(figsize=(8.4, 7.0))
@@ -7039,10 +7051,10 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         if _two02:
             sub = pd.DataFrame({"cav": _num("pocket_containment_cavity"),
                                 "s8": _num("pocket_containment_site8"),
-                                "lig": df.get("Ligand_Name")}).dropna(subset=["cav", "s8", "lig"])
+                                "lig": df.get(CFG.COL_LIG)}).dropna(subset=["cav", "s8", "lig"])
         else:
             sub = pd.DataFrame({"occ": _num("pocket_occupancy"),
-                                "lig": df.get("Ligand_Name")}).dropna(subset=["occ", "lig"])
+                                "lig": df.get(CFG.COL_LIG)}).dropna(subset=["occ", "lig"])
         sub["_nC"] = sub["lig"].map(lambda l: _LP02.get(str(l), {}).get("nC"))
         sub = sub.dropna(subset=["_nC"])
         if not _LP02:
@@ -7173,7 +7185,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     """
     try:
         cons = _num("model_degrader_consensus")
-        sub = pd.DataFrame({"cons": cons, "tier": df.get("degrader_tier")}).dropna(subset=["cons"])
+        sub = pd.DataFrame({"cons": cons, "tier": df.get(CFG.COL_TIER)}).dropna(subset=["cons"])
         tiers = [t for t in existing_tiers if (sub["tier"] == t).sum() >= 2]
         if len(sub) >= 5 and tiers:
             stats = _per_tier_stats({t: sub.loc[sub["tier"] == t, "cons"] for t in tiers})
@@ -7229,7 +7241,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     raw confidence-vs-consensus scatter cannot show (it collapses onto horizontal bands).
     """
     try:
-        conf = _num("Boltz_Model_Confidence")
+        conf = _num(CFG.COL_CONF)
         cons = _num("model_degrader_consensus")
         sub = pd.DataFrame({"conf": conf, "cons": cons}).dropna()
         _levels = sorted(sub["cons"].unique())
@@ -7284,14 +7296,14 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     fig = None
     try:
         _qc_panels = []
-        if "Boltz_Model_Confidence" in df.columns and "competence_score" in df.columns:
-            _qc_panels.append(("Boltz_Model_Confidence", "competence_score",
+        if CFG.COL_CONF in df.columns and "competence_score" in df.columns:
+            _qc_panels.append((CFG.COL_CONF, "competence_score",
                                "Boltz model confidence", "Catalytic competence score", None))
-        _func_c = "mechanistic_score" if "mechanistic_score" in df.columns else (
+        _func_c = CFG.COL_MECH_S if CFG.COL_MECH_S in df.columns else (
             "soft_catalytic_score" if "soft_catalytic_score" in df.columns else None)
         if _func_c and "competence_score" in df.columns:
             _func_lbl = ("Mechanistic score (geometry / machinery)"
-                         if _func_c == "mechanistic_score"
+                         if _func_c == CFG.COL_MECH_S
                          else "Soft catalytic score (geometry / machinery)")
             _qc_panels.append((_func_c, "competence_score",
                                _func_lbl, "Catalytic competence score", None))
@@ -7312,7 +7324,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 _yv = _num(_yc)
                 if _mode == "invert":
                     _yv = (1.0 - _yv).clip(0, 1)
-                _pdat = pd.DataFrame({"x": _xv, "y": _yv, "tier": df.get("degrader_tier")}).dropna(subset=["x", "y"])
+                _pdat = pd.DataFrame({"x": _xv, "y": _yv, "tier": df.get(CFG.COL_TIER)}).dropna(subset=["x", "y"])
                 for _t in existing_tiers:
                     _d = _pdat[_pdat["tier"] == _t]
                     if _d.empty:
@@ -7371,7 +7383,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         _ext = _num("ligand_max_extent"); _eff = _num("mechanistic_score_effective")
         _con = _num("pocket_containment_cavity")
         _torder = ["Tier_5_Decoy", "Tier_4", "Tier_3", "Tier_2B", "Tier_2A", "Tier_1B", "Tier_1A"]
-        _tv = df["degrader_tier"].astype(str).map({t: i for i, t in enumerate(_torder)})
+        _tv = df[CFG.COL_TIER].astype(str).map({t: i for i, t in enumerate(_torder)})
         sub = pd.DataFrame({"ext": _ext, "eff": _eff, "con": _con, "tv": _tv}).dropna(subset=["ext", "eff", "tv"])
         if len(sub) >= CFG.VIS_DIAG_MIN_N_FOR_BINNING:
             _hi = float(np.nanpercentile(sub["ext"], 99))
@@ -7476,8 +7488,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         from matplotlib.ticker import MultipleLocator as _MLoc09
         _D8_09 = ["Dist_Nucleophile", "Dist_Base", "Dist_Acid", "Dist_Clamp1", "Dist_Clamp2",
                   "Dist_Stabiliser_H", "Dist_Stabiliser_W", "Dist_Stabiliser_Y"]
-        _lcol09 = next((c for c in [CFG.COL_LIG, "Ligand_Name", "ligand"] if c in df.columns), None)
-        _need09 = _D8_09 + ["SN2_Attack_Angle", "mechanistic_score_effective", "degrader_tier"]
+        _lcol09 = next((c for c in [CFG.COL_LIG, CFG.COL_LIG, "ligand"] if c in df.columns), None)
+        _need09 = _D8_09 + [CFG.COL_SN2, "mechanistic_score_effective", CFG.COL_TIER]
         if _lcol09 is None or not all(c in df.columns for c in _need09):
             reporter.log("  ! Diag 07 skipped: reactive-geometry / ligand columns absent")
         else:
@@ -7496,10 +7508,10 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _d09["_nC"] = _d09[_lcol09].map(lambda l: _LP09.get(str(l), {}).get("nC"))
             _d8_09 = _d09[_D8_09].apply(pd.to_numeric, errors="coerce").mask(lambda s: s >= _SENT)
             _dnuc09 = _d8_09["Dist_Nucleophile"]
-            _ang09 = _num("SN2_Attack_Angle")
+            _ang09 = _num(CFG.COL_SN2)
             _eff09 = _num("mechanistic_score_effective")
             _torder09 = ["Tier_5_Decoy", "Tier_4", "Tier_3", "Tier_2B", "Tier_2A", "Tier_1B", "Tier_1A"]
-            _tv09 = _d09["degrader_tier"].astype(str).map({t: i for i, t in enumerate(_torder09)})
+            _tv09 = _d09[CFG.COL_TIER].astype(str).map({t: i for i, t in enumerate(_torder09)})
             _dnraw09 = pd.to_numeric(_d09["Dist_Nucleophile"], errors="coerce")
             _ready09 = ((_dnraw09 <= _READY) & (_ang09 >= _ANG_MIN) & (_eff09 >= _MECH_MIN)).astype(float)
             _reach09 = (_dnraw09 <= _READY).astype(float)
@@ -7926,7 +7938,7 @@ def _xn__nuc_distance(df: pd.DataFrame) -> pd.Series:
     return _xn__num(df, col)
 
 _xn_PILLAR_ALIASES = {
-    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', 'Boltz_Model_Confidence'],
+    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', CFG.COL_CONF],
     'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
     'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
     'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
@@ -8264,12 +8276,57 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     """
     jobs_dir = prod_dir / '4_Prediction_Jobs'
     target = _aux_dir(out_dir) / 'boltz_qc_multimodel_variance.csv'
-    if target.exists():
-        return target
     if not jobs_dir.exists():
         reporter.log(f'  ! Multi-model variance: {jobs_dir} not found; cannot compute.')
         return target
     job_folders = sorted((p for p in jobs_dir.iterdir() if p.is_dir()))
+    n_jobs = len(job_folders)
+    _all_ids = {p.name for p in job_folders}
+
+    """
+    An existing CSV is REUSED, but only after it is checked against the job folders it claims to
+    describe. `exists()` alone is not a validation: a file truncated by a killed run, or one written
+    before more predictions were added, would be trusted for ever and the uncertainty panels drawn
+    from a corpus that is not the corpus.
+
+    Three things are checked — the schema, the coverage, and whether any geometry actually resolved
+    (an all-NaN table is the failure mode this build had, and it looks complete from the outside).
+    Whatever it already covers is KEPT: only the complexes missing from it are parsed, so a build
+    interrupted at 40,000 of 58,056 resumes from 40,000 rather than starting again.
+    """
+    _done_ids: set = set()
+    _prior = None
+    if target.exists():
+        try:
+            _prior = pd.read_csv(target, low_memory=False)
+        except Exception as _e:                                  # noqa: BLE001
+            reporter.log(f'  ! Existing variance CSV unreadable ({type(_e).__name__}); rebuilding.')
+            _prior = None
+
+    if _prior is not None:
+        _needed = {'complex_id', 'model_name', 'sn2_distance_A', 'sn2_angle_deg'}
+        if not _needed.issubset(_prior.columns):
+            reporter.log('  ! Existing variance CSV has the wrong schema; rebuilding.')
+            _prior = None       # rejected: it must not be carried into the rebuilt table
+        elif int(_prior['sn2_distance_A'].notna().sum()) == 0:
+            reporter.log('  ! Existing variance CSV has NO resolved geometry (every row NaN); rebuilding.')
+            _prior = None       # rejected: concatenating it back would restore the rows just rejected
+        else:
+            # A complex counts as done only when all 5 of its models are present; a half-written
+            # complex from a killed run is re-parsed rather than half-trusted.
+            _per = _prior.groupby('complex_id')['model_name'].nunique()
+            _done_ids = set(_per[_per >= 5].index) & _all_ids
+            _prior = _prior[_prior['complex_id'].isin(_done_ids)]
+            if _done_ids >= _all_ids:
+                _geo = _prior['sn2_distance_A'].notna().mean()
+                reporter.log(f'  ✔ Variance CSV already complete for all {n_jobs:,} complexes '
+                             f'(geometry {_geo:.1%}) — reusing, nothing recomputed.')
+                reporter.log(f'      {target.resolve()}')
+                return target
+            reporter.log(f'  ⧗ Variance CSV covers {len(_done_ids):,}/{n_jobs:,} complexes — '
+                         f'resuming; only the {n_jobs - len(_done_ids):,} missing will be parsed.')
+
+    job_folders = [p for p in job_folders if p.name not in _done_ids]
     n_jobs = len(job_folders)
 
     """
@@ -8313,6 +8370,23 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             else:
                 reporter.log(_milestone)
 
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    def _flush(rows_so_far: list) -> None:
+        """Write everything resolved so far — the prior rows plus the new ones — atomically.
+
+        A build this long must be able to die without losing the hours it already paid for. The write
+        goes to a temporary file and is renamed over the target, because rename is atomic within a
+        filesystem: a run killed mid-write leaves either the old complete file or the new one, never a
+        truncated hybrid that the next run would read as truth and resume from.
+        """
+        _out = pd.DataFrame(rows_so_far)
+        if _prior is not None and len(_prior):
+            _out = pd.concat([_prior, _out], ignore_index=True)
+        _tmp = target.with_suffix('.csv.tmp')
+        _out.to_csv(_tmp, index=False)
+        _tmp.replace(target)
+
     rows: list = []
     _n_geom_fail = 0
     with cf.ProcessPoolExecutor(max_workers=_n_proc) as _ex:
@@ -8323,15 +8397,16 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             _done += 1
             if _done % 50 == 0 or _done == n_jobs:
                 _tick(_done)
+            if _done % 5000 == 0:
+                _flush(rows)
 
     # Close the bar's line, so the summary below is not written over the last frame of it.
     if _tty:
         sys.stdout.write('\n')
         sys.stdout.flush()
 
-    var_df = pd.DataFrame(rows)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    var_df.to_csv(target, index=False)
+    _flush(rows)
+    var_df = pd.read_csv(target, low_memory=False)
 
     """
     The geometry failures are REPORTED, not swallowed. A silent `except: nan` here is what let the
@@ -8404,8 +8479,8 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         # (nucleophile distance, SN2 attack angle) by tier from the ranked CSV instead.
         reporter.log('  ! Figure 01C: variance CSV unavailable — plotting geometry-only (nucleophile distance + SN2 angle) from ranked CSV.')
         _dist = _xn__nuc_distance(df).where(lambda s: s < 20.0)  # drop ~999/1000 Å "no nucleophile" sentinel
-        _ang = _xn__num(df, _xn__col(df, 'SN2_Attack_Angle'))
-        _tcol = _xn__col(df, 'degrader_tier')
+        _ang = _xn__num(df, _xn__col(df, CFG.COL_SN2))
+        _tcol = _xn__col(df, CFG.COL_TIER)
         if _tcol is None or _dist.empty or _ang.empty:
             reporter.log('  ! Figure 01C skipped: geometry columns unavailable.')
             return
@@ -8474,7 +8549,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     if id_col is None or 'sn2_angle_deg' not in vdf.columns or 'sn2_distance_A' not in vdf.columns:
         reporter.log("  ! Figure 01C skipped: variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
         return
-    if 'degrader_tier' not in vdf.columns:
+    if CFG.COL_TIER not in vdf.columns:
         reporter.log("  ! Figure 01C skipped: variance CSV lacks 'degrader_tier'.")
         return
     vdf['sn2_distance_A'] = pd.to_numeric(vdf['sn2_distance_A'], errors='coerce')
@@ -8485,7 +8560,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         if g_valid.empty:
             continue
         best_row = g_valid.loc[g_valid['sn2_distance_A'].idxmin()]
-        per_complex.append({'complex_id': cid, 'best_geo_tier': g['degrader_tier'].iloc[0], 'abs_distance': float(best_row['sn2_distance_A']), 'abs_angle': float(best_row['sn2_angle_deg']), 'distance_std': float(g['sn2_distance_A'].std(ddof=1)), 'angle_std': float(g['sn2_angle_deg'].std(ddof=1))})
+        per_complex.append({'complex_id': cid, 'best_geo_tier': g[CFG.COL_TIER].iloc[0], 'abs_distance': float(best_row['sn2_distance_A']), 'abs_angle': float(best_row['sn2_angle_deg']), 'distance_std': float(g['sn2_distance_A'].std(ddof=1)), 'angle_std': float(g['sn2_angle_deg'].std(ddof=1))})
     cdf = pd.DataFrame(per_complex)
     if cdf.empty:
         reporter.log('  ! Figure 01C skipped: no complexes after geometric tiering.')
@@ -8525,7 +8600,7 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
                ('Binding_Affinity_Score', 'Binding Affinity'),
                ('Catalytic_Competence_Score', 'Catalytic Competence'),
                ('Evolutionary_Fingerprint_Score', 'Evolutionary Fingerprint')]
-    tcol = _xn__col(df, 'degrader_tier')
+    tcol = _xn__col(df, CFG.COL_TIER)
     if tcol is None:
         return
     tiers = [t for t in TIER_ORDER_LOGIC if t in set(df[tcol].dropna())]
@@ -8566,9 +8641,9 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Create Tier_1A enzyme × ligand heatmap for lab validation targets."""
     import matplotlib.colors as mcolors
     import re
-    enzyme_col = 'Protein_Name' if 'Protein_Name' in df.columns else next((c for c in df.columns if c.lower() == 'job_name'), None)
-    ligand_col = 'Ligand_Name' if 'Ligand_Name' in df.columns else next((c for c in df.columns if c.lower() in ('ligand', 'ligand_name')), None)
-    tier_col = 'degrader_tier' if 'degrader_tier' in df.columns else None
+    enzyme_col = CFG.COL_PROT if CFG.COL_PROT in df.columns else next((c for c in df.columns if c.lower() == 'job_name'), None)
+    ligand_col = CFG.COL_LIG if CFG.COL_LIG in df.columns else next((c for c in df.columns if c.lower() in ('ligand', 'ligand_name')), None)
+    tier_col = CFG.COL_TIER if CFG.COL_TIER in df.columns else None
     if not enzyme_col or not ligand_col or (not tier_col):
         if reporter:
             reporter.log('  ! Figure 06A skipped: required columns missing')
@@ -8710,7 +8785,7 @@ def _xo_get_col(df, name, fallbacks=[]):
     return None
 
 _xo_PILLAR_ALIASES = {
-    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', 'Boltz_Model_Confidence'],
+    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', CFG.COL_CONF],
     'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
     'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
     'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
@@ -8734,7 +8809,7 @@ def _xo__num(df: pd.DataFrame, col: str | None) -> pd.Series:
         return pd.Series(dtype=float)
     return pd.to_numeric(df[col], errors='coerce')
 
-def _xo__tiers_present(df: pd.DataFrame, tier_col: str='degrader_tier') -> list[str]:
+def _xo__tiers_present(df: pd.DataFrame, tier_col: str=CFG.COL_TIER) -> list[str]:
     """Return the canonical tier ordering restricted to tiers actually present."""
     if tier_col not in df.columns:
         return []
@@ -8800,7 +8875,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         return
     aff_col = _xo__col(df, 'custom_affinity_score', 'Chemical_Affinity_Score', 'custom_affinity_calc')
     pocket_col = _xo__col(df, 'Pocket_Tightness_Score', 'pocket_enclosure_ratio')
-    dens_col = _xo__col(df, 'interaction_density', 'Interaction_Density_Norm', 'interaction_density_calc')
+    dens_col = _xo__col(df, CFG.COL_IDENS, 'Interaction_Density_Norm', 'interaction_density_calc')
     tiers = _xo__tiers_present(df)
     if not tiers:
         reporter.log('  ! Figure 02A skipped: no tiers present.')
@@ -8809,14 +8884,14 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     fig, ax = plt.subplots(figsize=(10, 6))
     deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
     non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
-    sns.violinplot(data=df, x='degrader_tier', y=ba_col, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax, zorder=2)
+    sns.violinplot(data=df, x=CFG.COL_TIER, y=ba_col, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax, zorder=2)
 
     """
     The per-tier MEAN affinity, traced across the tiers. The violins carry the distributions;
     the line carries the point — affinity does NOT order the tiers, and a reader should be able
     to see that without integrating seven shapes by eye.
     """
-    _means2 = [float(pd.to_numeric(df.loc[df['degrader_tier'] == _t, ba_col],
+    _means2 = [float(pd.to_numeric(df.loc[df[CFG.COL_TIER] == _t, ba_col],
                                    errors='coerce').mean()) for _t in tiers]
     ax.plot(range(len(tiers)), _means2, color=CFG.VIS_ACCENT["bad"], lw=2.2, marker='D', ms=6,
             mec='white', mew=0.8, zorder=8, label='Mean affinity (trend)')
@@ -8841,7 +8916,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         df_norm['_nrm'] = _xo__minmax(df_norm[tcol])
         xs, means, cis = ([], [], [])
         for t in tiers:
-            vals = df_norm.loc[df_norm['degrader_tier'] == t, '_nrm'].dropna().values
+            vals = df_norm.loc[df_norm[CFG.COL_TIER] == t, '_nrm'].dropna().values
             mval, cval = _mean_ci(vals)
             if np.isfinite(mval):
                 xs.append(xpos[t])
@@ -8862,7 +8937,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         if mcol is None or mcol not in df.columns:
             return None
         v = pd.to_numeric(df[mcol], errors='coerce')
-        is_deg = df['degrader_tier'].isin(_xo_ELITE_TIERS)
+        is_deg = df[CFG.COL_TIER].isin(_xo_ELITE_TIERS)
         a = v[is_deg].dropna().values
         b = v[~is_deg].dropna().values
         if len(a) < 2 or len(b) < 2:
@@ -8913,7 +8988,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         if mcol is None or mcol not in df.columns:
             return None
         v = pd.to_numeric(df[mcol], errors='coerce')
-        is_deg = df['degrader_tier'].isin(_xo_ELITE_TIERS)
+        is_deg = df[CFG.COL_TIER].isin(_xo_ELITE_TIERS)
         a = v[is_deg].dropna().values
         b = v[~is_deg].dropna().values
         if len(a) < 2 or len(b) < 2:
@@ -8922,7 +8997,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         return (float(p), float(r))
     if idc is not None:
-        sns.violinplot(data=df, x='degrader_tier', y=idc, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
+        sns.violinplot(data=df, x=CFG.COL_TIER, y=idc, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
         for _coll in ax1.collections:
             _coll.set_alpha(0.6)
         ax1.set_xlabel('Catalytic degrader tier')
@@ -8937,7 +9012,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
             stat_text += 'Sequence Identity: n/a'
         _xo__annotate(ax1, stat_text, loc='lower left')
     if evo is not None:
-        sns.violinplot(data=df, x='degrader_tier', y=evo, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax2, zorder=2)
+        sns.violinplot(data=df, x=CFG.COL_TIER, y=evo, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax2, zorder=2)
         for _coll in ax2.collections:
             _coll.set_alpha(0.6)
 
@@ -8964,7 +9039,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
                 df_norm['_nrm'] = _xo__minmax(df_norm[tcol])
             xs, means, cis = ([], [], [])
             for t in tiers:
-                vals = df_norm.loc[df_norm['degrader_tier'] == t, '_nrm'].dropna().values
+                vals = df_norm.loc[df_norm[CFG.COL_TIER] == t, '_nrm'].dropna().values
                 mval, cval = _mean_ci(vals)
                 if np.isfinite(mval):
                     xs.append(xpos[t])
@@ -9007,7 +9082,7 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
         df['FER_computed'] = pd.to_numeric(df[inter], errors='coerce') / pd.to_numeric(df[tot], errors='coerce')
     else:
         df['FER_computed'] = np.nan
-    rows = [(_xo__col(df, 'SN2_Attack_Angle') if '_xo__col' in globals() else _xo_get_col(df, 'SN2_Attack_Angle'), 'SN2 attack angle (°)', m_all), ('nuc_dist', 'Nucleophile distance (Å)', m_all), ('FER_computed', 'Fluorine Engagement Ratio', m_all)]
+    rows = [(_xo__col(df, CFG.COL_SN2) if '_xo__col' in globals() else _xo_get_col(df, CFG.COL_SN2), 'SN2 attack angle (°)', m_all), ('nuc_dist', 'Nucleophile distance (Å)', m_all), ('FER_computed', 'Fluorine Engagement Ratio', m_all)]
     fig, axes = plt.subplots(3, 1, figsize=(8.5, 12), sharex=True)
     x_all = pd.to_numeric(df[fcol], errors='coerce')
     # Drop the "no nucleophile found" sentinel (~999/1000 Å) so the panel shows real
@@ -9060,9 +9135,9 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
     if fcol is None:
         return
-    tiers = _xo__tiers_present(df) if '_xo__tiers_present' in globals() else sorted(df['degrader_tier'].dropna().unique())
+    tiers = _xo__tiers_present(df) if '_xo__tiers_present' in globals() else sorted(df[CFG.COL_TIER].dropna().unique())
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.violinplot(data=df, x='degrader_tier', y=fcol, order=tiers, hue='degrader_tier', palette=TIER_PALETTE if 'TIER_PALETTE' in globals() else None, legend=False, cut=0, inner='box', ax=ax)
+    sns.violinplot(data=df, x=CFG.COL_TIER, y=fcol, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE if 'TIER_PALETTE' in globals() else None, legend=False, cut=0, inner='box', ax=ax)
     degrader_tiers = [t for t in tiers if t in _xo_ELITE_TIERS] if '_xo_ELITE_TIERS' in globals() else [t for t in tiers if t in ['Tier_1A', 'Tier_1B']]
     non_degrader_tiers = [t for t in tiers if t not in degrader_tiers]
     xpos = {t: i for i, t in enumerate(tiers)}
@@ -9073,7 +9148,7 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     reader to compare seven of them by eye; the trend line states the claim the figure exists to
     make — chain length rises monotonically as the tier falls — in one stroke.
     """
-    _means7 = [float(df.loc[df['degrader_tier'] == _t, fcol].mean()) for _t in tiers]
+    _means7 = [float(df.loc[df[CFG.COL_TIER] == _t, fcol].mean()) for _t in tiers]
     _xs7 = list(range(len(tiers)))
     ax.plot(_xs7, _means7, color=CFG.VIS_ACCENT["bad"], lw=2.2, marker='D', ms=6,
             mec='white', mew=0.8, zorder=8, label='Mean (trend)')
@@ -9082,8 +9157,8 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     ax.set_xlabel('Catalytic degrader tier')
     ax.set_ylabel('Total fluorine count')
     # figure title removed (user request)
-    df_deg = df[df['degrader_tier'].isin(degrader_tiers)][fcol].dropna()
-    df_non = df[df['degrader_tier'].isin(non_degrader_tiers)][fcol].dropna()
+    df_deg = df[df[CFG.COL_TIER].isin(degrader_tiers)][fcol].dropna()
+    df_non = df[df[CFG.COL_TIER].isin(non_degrader_tiers)][fcol].dropna()
     if len(df_deg) > 0 and len(df_non) > 0:
         stat, p = mannwhitneyu(df_deg, df_non, alternative='two-sided')
         n1, n2 = (len(df_deg), len(df_non))

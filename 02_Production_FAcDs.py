@@ -511,8 +511,8 @@ CATALYTIC_TRIAD_KEYS = CFG.CATALYTIC_TRIAD_KEYS
 # -------------------------------------------------------------------------------
 # Mapping dictionary to convert internal variable names into user-friendly CSV column headers.
 COLUMN_RENAMING_MAP = {
-    "protein": "Protein_Name",
-    "ligand": "Ligand_Name",
+    "protein": CFG.COL_PROT,
+    "ligand": CFG.COL_LIG,
     # Role-based generic names: VALUE = distance to the per-protein dynamically-
     # mapped residue (±5 resolver), not a fixed 3R3U number; mapped residue per
     # role is in the Mapped_* columns / Active_Site_Triad_Map (refs: CFG §2.5).
@@ -525,8 +525,8 @@ COLUMN_RENAMING_MAP = {
     "dist_Carb1":  "Dist_Clamp1",
     "dist_Carb2":  "Dist_Clamp2",
     "binding_likelihood_computed": "Binding_Probability_Score",
-    "confidence_score": "Boltz_Model_Confidence",
-    "sn2_attack_angle": "SN2_Attack_Angle",
+    "confidence_score": CFG.COL_CONF,
+    "sn2_attack_angle": CFG.COL_SN2,
     "sn2_trajectory_dev": "SN2_Trajectory_Deviation_A",
     "Mapped_to_Control_All": "Full_Sequence_Alignment_Map",
     "Mapped_to_Control_Cat_Triad": "Active_Site_Triad_Map",
@@ -549,16 +549,16 @@ COLUMNS_TO_DROP = [
 DEFAULT_METRICS = {
     "status": "Unknown",
     "elapsed_seconds": 0.0,
-    "degrader_tier": CFG.TIER_DECOY,
+    CFG.COL_TIER: CFG.TIER_DECOY,
     "is_degrader": False,
     "ActiveSite_Conservation_Score": 0.0,
-    "mechanistic_score": 0.0,
+    CFG.COL_MECH_S: 0.0,
     "Active_Site_RMSD": 999.0,
     "Identity_to_Control": 0.0,
     "Halide_Stabilisation": False,
     "Carboxylate_Clamp": False,
     "catalytic_dist_A": 999.0,
-    "interaction_density": 0.0,
+    CFG.COL_IDENS: 0.0,
     "custom_affinity_score": 0.0,
     "binding_likelihood_computed": 0.0,
     "confidence_score": 0.0,
@@ -3108,7 +3108,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         if not lig_coords:
                     results.update({
-                        "catalytic_dist_A": 999.0, "degrader_tier": CFG.TIER_DECOY, "is_degrader": False,
+                        "catalytic_dist_A": 999.0, CFG.COL_TIER: CFG.TIER_DECOY, "is_degrader": False,
                         "residues_within_6A": "None", "constraint_check": "Ligand absence indicated",
                         "scientific_meaning": "No validated ligand atoms identified within structure.",
                         "Interaction_Density_Norm": 0.0, "Interaction_Density_Calc": "0.00",
@@ -3478,7 +3478,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             scissile_cf_bde, backside_occlusion, beta_f_count,
             angle_multiplicity=n_angle_choices,
         )
-        results["mechanistic_score"] = round(mech_score, 2)
+        results[CFG.COL_MECH_S] = round(mech_score, 2)
 
         """
         Gated continuous competence score (CFG §5.5) — the Scientific-ranking key. Every
@@ -3758,7 +3758,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         close_residues = [k for k, d in dists.items() if d <= CATALYTIC_DIST_CUTOFF]
         results.update({
-            "catalytic_dist_A": round(min(dists.values()), 2), "degrader_tier": tier,
+            "catalytic_dist_A": round(min(dists.values()), 2), CFG.COL_TIER: tier,
             "is_degrader": is_degrader, "residues_within_6A": ";".join(close_residues) if close_residues else "None",
             "constraint_check": constraint, "scientific_meaning": meaning
         })
@@ -3775,7 +3775,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         logger.error(f"check_catalytic_geometry FAILED for {getattr(cif_path, 'name', cif_path)}: "
                      f"{type(e).__name__}: {e}", exc_info=True)
         results.update({"catalytic_dist_A": 999.0, "error": f"{type(e).__name__}: {e}",
-                        "degrader_tier": "Error"})
+                        CFG.COL_TIER: "Error"})
         return results
 
 # -------------------------------------------------------------------------------
@@ -3804,7 +3804,7 @@ def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smile
     and folded into the ranking as a down-rank weight, so a single-frame hit sorts below a
     reproducible one without hiding its true geometry.
     """
-    best_model, best_meta = "model_0", {"degrader_tier": CFG.TIER_DECOY}
+    best_model, best_meta = "model_0", {CFG.COL_TIER: CFG.TIER_DECOY}
     TIER_SCORES = CFG.TIER_SCORE
     json_files = sorted(list(br_dir.rglob("confidence_*.json")))
     tasks = []
@@ -3829,7 +3829,7 @@ def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smile
             confidence. Angle is rounded to 0.1° so sub-noise differences do not flip
             the choice away from a more competent equal-angle pose.
             '''
-            return (TIER_SCORES.get(r[1].get("degrader_tier", CFG.TIER_DECOY), 0),
+            return (TIER_SCORES.get(r[1].get(CFG.COL_TIER, CFG.TIER_DECOY), 0),
                     round(float(r[1].get("sn2_attack_angle", 0.0) or 0.0), 1),
                     float(r[1].get("competence_score", 0.0) or 0.0), r[2])
         best_model, best_geom, best_conf = max(results, key=_rank_key)
@@ -4200,12 +4200,12 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         (still elite geometry, still reviewed); the geometric tier is preserved in its own column.
         The global score is retained as the fallback when the local value is unavailable.
         """
-        data["geometric_tier"] = data.get("degrader_tier", CFG.TIER_DECOY)
-        if data.get("degrader_tier") == CFG.TIER_ORDER[0]:
+        data["geometric_tier"] = data.get(CFG.COL_TIER, CFG.TIER_DECOY)
+        if data.get(CFG.COL_TIER) == CFG.TIER_ORDER[0]:
             _as_plddt = float(data.get("active_site_plddt", 0.0) or 0.0)
             if _as_plddt > 0.0:
                 if _as_plddt < CFG.TIER_ELITE_AS_PLDDT_MIN:
-                    data["degrader_tier"] = CFG.TIER_ORDER[1]
+                    data[CFG.COL_TIER] = CFG.TIER_ORDER[1]
                     data["elite_demotion"] = (
                         f"low_active_site_plddt({_as_plddt:g}<{CFG.TIER_ELITE_AS_PLDDT_MIN:g})")
                 else:
@@ -4215,7 +4215,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 # rather than waving the pose through unchecked.
                 _conf = float(data.get("confidence_score", 0.0) or 0.0)
                 if _conf < CFG.TIER_ELITE_CONF_MIN:
-                    data["degrader_tier"] = CFG.TIER_ORDER[1]
+                    data[CFG.COL_TIER] = CFG.TIER_ORDER[1]
                     data["elite_demotion"] = f"low_confidence(<{CFG.TIER_ELITE_CONF_MIN:g})"
                 else:
                     data["elite_demotion"] = "none"
@@ -4273,7 +4273,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             lig_heavy_atoms = max(1, res_inter.get("ligand_heavy_atoms", 1))
 
             interaction_density = num_int / lig_heavy_atoms
-            data["interaction_density"] = round(interaction_density, 4)
+            data[CFG.COL_IDENS] = round(interaction_density, 4)
             data["interaction_density_calc"] = f"{num_int} (Ints) / {lig_heavy_atoms} (HeavyAtoms) = {interaction_density:.2f}"
 
             iptm_v = data.get("iptm") or 0.0
@@ -4322,7 +4322,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
             scientific_meaning = data.get("scientific_meaning", "No significant documented interactions.")
             constraint = data.get("constraint_check", "Fail")
-            tier = data.get("degrader_tier", CFG.TIER_DECOY)
+            tier = data.get(CFG.COL_TIER, CFG.TIER_DECOY)
 
             base_justification = generate_rich_justification(
                 tier=tier, meaning=scientific_meaning, constraint=constraint,
@@ -4412,14 +4412,14 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 """
                 _cfloors = CFG.TIER_CONSTELLATION_MIN
                 _order   = CFG.TIER_ORDER
-                _cur_t   = data.get("degrader_tier", CFG.TIER_DECOY)
+                _cur_t   = data.get(CFG.COL_TIER, CFG.TIER_DECOY)
                 _ceiling = next((_t for _t in _order if _t in _cfloors and _B >= _cfloors[_t]), None)
                 if _ceiling is None:
                     _ceiling = CFG.TIER_CONSTELLATION_FLOOR_TIER if _B > 0 else CFG.TIER_DECOY
                 if (_cur_t in _order and _ceiling in _order
                         and _order.index(_ceiling) > _order.index(_cur_t)):
                     _tag = f"low_constellation(B={_B:g}<{_cfloors.get(_cur_t, 0):g})"
-                    data["degrader_tier"] = _ceiling
+                    data[CFG.COL_TIER] = _ceiling
                     if _ceiling not in CFG.TIER_HIGH_QUALITY:
                         data["is_degrader"] = False
                         data["constraint_check"] = "Fail"
@@ -4463,16 +4463,16 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             hold elite only through its single most crystal-perfect pose, not every pose,
             without any substrate-class label. geometric_tier keeps the raw call.
             """
-            if data.get("degrader_tier") == "Tier_1A":
+            if data.get(CFG.COL_TIER) == "Tier_1A":
                 _mech_e = float(data.get("mechanistic_score_effective",
-                                        data.get("mechanistic_score", 0.0)) or 0.0)
+                                        data.get(CFG.COL_MECH_S, 0.0)) or 0.0)
                 _B_e    = float(data.get("catalytic_constellation_score", 0.0) or 0.0)
                 # Elite via either: (a) complete machinery + open backside; (b) near-complete
                 # machinery redeemed by a crystal-exact constellation.
                 _elite_ok = (_mech_e >= CFG.MECH_ELITE_HI) or \
                             (_mech_e >= CFG.MECH_ELITE_LO and _B_e >= CFG.MECH_ELITE_CONSTELLATION)
                 if not _elite_ok:
-                    data["degrader_tier"] = "Tier_1B"
+                    data[CFG.COL_TIER] = "Tier_1B"
                     _etag = (f"incomplete_machinery(mech={_mech_e:.2f}"
                              f"<{CFG.MECH_ELITE_HI:g}, B={_B_e:.2f}<{CFG.MECH_ELITE_CONSTELLATION:g})")
                     _eprev = data.get("elite_demotion", "none")
@@ -4559,13 +4559,13 @@ CSV_COLUMN_ORDER = [
     # --- Job outcome ---
     "status", "completed_at", "elapsed_seconds",
     # --- Primary degrader scores ---
-    "degrader_tier", "is_degrader",
+    CFG.COL_TIER, "is_degrader",
     "ActiveSite_Conservation_Score",
     # --- Confidence scores ---
     "confidence_score", "iptm", "ptm", "ligand_iptm", "protein_iptm",
     "mean_plddt", "cross_interface_pae_mean",
     # --- Binding scores ---
-    "binding_likelihood_computed", "custom_affinity_score", "interaction_density",
+    "binding_likelihood_computed", "custom_affinity_score", CFG.COL_IDENS,
     # --- SN2 geometry (+ auxiliary non-gating reference angles) ---
     "sn2_attack_angle", "sn2_trajectory_dev",
     "scissile_cf_bde", "sn2_backside_occlusion", "beta_f_count", "sn2_dead_end", "feasibility_factor",
@@ -4605,7 +4605,7 @@ CSV_COLUMN_ORDER = [
     "best_model_name",
     # --- Scoring / verdict ---
     "constraint_check", "scientific_meaning", "Justification",
-    "sn2_alignment_score", "mechanistic_score", "residues_within_6A",
+    "sn2_alignment_score", CFG.COL_MECH_S, "residues_within_6A",
     # --- Verbose calculation strings ---
     "interaction_density_calc", "binding_likelihood_calc", "custom_affinity_calc",
     # --- Clash / penalty metrics ---
@@ -4861,12 +4861,12 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
         if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
             df_rank = pd.read_csv(CSV_PATH, low_memory=False)
 
-            for c in ["ActiveSite_Conservation_Score", "mechanistic_score", "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
+            for c in ["ActiveSite_Conservation_Score", CFG.COL_MECH_S, "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
                 if c not in df_rank.columns: df_rank[c] = 0.0
-            if "degrader_tier" not in df_rank.columns: df_rank["degrader_tier"] = CFG.TIER_DECOY
+            if CFG.COL_TIER not in df_rank.columns: df_rank[CFG.COL_TIER] = CFG.TIER_DECOY
 
             tier_map = CFG.TIER_SORT_WEIGHT
-            df_rank["tier_val"] = df_rank["degrader_tier"].map(tier_map).fillna(0)
+            df_rank["tier_val"] = df_rank[CFG.COL_TIER].map(tier_map).fillna(0)
 
             """
             Mechanism-first ranking. The degrader tier (hard chemistry gates + the Criterion-B
@@ -4891,7 +4891,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 kind="mergesort",
             )
             df_rank.insert(0, "Scientific_Rank", range(1, len(df_rank) + 1))
-            _lig_col = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
+            _lig_col = next((c for c in (CFG.COL_LIG, "ligand") if c in df_rank.columns), None)
             if _lig_col:
                 df_rank.insert(1, "Rank_Within_Ligand", df_rank.groupby(_lig_col).cumcount() + 1)
 
@@ -4911,7 +4911,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 _pl_scope = (list(CFG.MD_PER_LIGAND_TIER)
                              if isinstance(CFG.MD_PER_LIGAND_TIER, (list, tuple, set))
                              else [CFG.MD_PER_LIGAND_TIER])
-                _tier_ok  = df_rank["degrader_tier"].isin(_pl_scope)
+                _tier_ok  = df_rank[CFG.COL_TIER].isin(_pl_scope)
                 # Roster: data-driven (every unique ligand that reached the tier) when
                 # MD_PER_LIGAND_AUTO, else the explicit curated MD_PER_LIGAND panel.
                 if getattr(CFG, "MD_PER_LIGAND_AUTO", True):
@@ -4926,7 +4926,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                         _pick_idx.append(_cand[0])
                 _sel_mask = df_rank.index.isin(_pick_idx)
             else:   # "tier" (and fallback when no ligand column for per_ligand)
-                _sel_mask = df_rank["degrader_tier"].isin(CFG.MD_TIERS)
+                _sel_mask = df_rank[CFG.COL_TIER].isin(CFG.MD_TIERS)
             df_rank[_md_sel] = _sel_mask.astype(bool)
             df_rank[_md_rnk] = pd.NA
             _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
@@ -4949,13 +4949,13 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             # tier, rank, protein, job) so the shortlist is auditable, styled to match
             # the rest of the console output.
             try:
-                _prot_col = next((c for c in ("Protein_Name", "protein", "Protein")
+                _prot_col = next((c for c in (CFG.COL_PROT, "protein", "Protein")
                                   if c in df_rank.columns), None)
                 _sel_rows = df_rank.loc[_sel_mask].sort_values("Scientific_Rank")
                 _rows_data = [
                     (str(_i),
                      str(_r.get(_lig_col, "?")) if _lig_col else "?",
-                     str(_r.get("degrader_tier", "?")),
+                     str(_r.get(CFG.COL_TIER, "?")),
                      f"#{int(_r.get('Scientific_Rank', 0))}",
                      str(_r.get(_prot_col, "?")) if _prot_col else "?",
                      str(_r.get("job_name", "?")))
@@ -4986,7 +4986,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 console_info(f"    (MD-ready provenance unavailable: {_md_e})")
 
             df_rank["Ranking_Score_Calc"] = (
-                "Tier:"  + df_rank["degrader_tier"].astype(str)
+                "Tier:"  + df_rank[CFG.COL_TIER].astype(str)
                 + " | Competence:" + df_rank["competence_score"].map("{:.3f}".format)
                 + " | Consensus:" + df_rank["model_degrader_consensus"].map("{:.2f}".format)
                 + " | Cons:" + df_rank["ActiveSite_Conservation_Score"].map("{:.2f}".format)
@@ -5015,9 +5015,9 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             """
             control_validation = "PASS"
             try:
-                _lc = next((c for c in ("Ligand_Name", "ligand") if c in df_rank.columns), None)
+                _lc = next((c for c in (CFG.COL_LIG, "ligand") if c in df_rank.columns), None)
                 if _lc:
-                    _top = df_rank[df_rank["degrader_tier"] == CFG.TIER_TOP][_lc]
+                    _top = df_rank[df_rank[CFG.COL_TIER] == CFG.TIER_TOP][_lc]
                     _top_set = sorted(set(_top.astype(str).str.replace(r"^\d+_", "", regex=True)))
                     # Anchored to the exact bare "<idx>_Fluoroacetate" name so FA and DFA
                     # stay distinct — "Fluoroacetate" is a substring of "Difluoroacetate".
@@ -5038,7 +5038,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                         _crows = df_rank[df_rank[_lc].astype(str).str.fullmatch(rf"\d+_{_cname}", na=False)]
                         _is_deg = _crows["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0")) \
                             if "is_degrader" in _crows.columns else pd.Series([], dtype=bool)
-                        _in_hq = _crows["degrader_tier"].isin(_hq) if "degrader_tier" in _crows.columns else pd.Series([], dtype=bool)
+                        _in_hq = _crows[CFG.COL_TIER].isin(_hq) if CFG.COL_TIER in _crows.columns else pd.Series([], dtype=bool)
                         if not (bool(_is_deg.any()) or bool(_in_hq.any())):
                             _failed.append(_cname)
                     if _failed:
@@ -5716,7 +5716,7 @@ def main():
                 console_info(f"  {'Trust Score (RMSD to Crystal)':<{_mw}}" + "".join(f"  {c}" for c in cells))
 
             _trust_row()
-            _row("Degrader Tier",              "degrader_tier",                 fmt="{}",     unit="")
+            _row("Degrader Tier",              CFG.COL_TIER,                 fmt="{}",     unit="")
             _row("SN2 Attack Angle",           "sn2_attack_angle",              fmt="{:.1f}", unit="°")
             _row("Nucleophile Distance (ASP)", "dist_Nuc",                      fmt="{:.2f}", unit=" Å")
             _row("Base Distance (HIS)",        "dist_Base",                     fmt="{:.2f}", unit=" Å")
@@ -5726,7 +5726,7 @@ def main():
             _row("α-Carbon Attack (1=yes)",    "scissile_is_alpha",             fmt="{:.0f}", unit="")
             _row("Carboxylate Clamp (0/½/1)",  "carboxylate_clamp_integrity",   fmt="{:.1f}", unit="")
             _row("Nucleophile Resolution",     "nuc_resolution",                fmt="{}",     unit="")
-            _row("Mechanistic Score (geometry)", "mechanistic_score",            fmt="{:.2f}", unit="")
+            _row("Mechanistic Score (geometry)", CFG.COL_MECH_S,            fmt="{:.2f}", unit="")
             _row("Pocket Containment (cavity)", "pocket_containment_cavity",     fmt="{:.2f}", unit="")
             _row("Pocket Containment (site-8)", "pocket_containment_site8",      fmt="{:.2f}", unit="")
             _row("Feasibility-wtd Mech (tier)", "mechanistic_score_effective",   fmt="{:.2f}", unit="")
@@ -5759,7 +5759,7 @@ def main():
             ranked = sorted(
                 [(ln, _res_dict.get(ln, {})) for ln, _ in CTRL_LIGANDS],
                 key=lambda x: (
-                    _TIER_RANK.get(x[1].get("degrader_tier", CFG.TIER_DECOY), 0),
+                    _TIER_RANK.get(x[1].get(CFG.COL_TIER, CFG.TIER_DECOY), 0),
                     float(x[1].get("competence_score") or 0.0),
                     float(x[1].get("catalytic_constellation_score") or 0.0),
                     float(x[1].get("ActiveSite_Conservation_Score") or 0.0),
@@ -5770,7 +5770,7 @@ def main():
             for _rank, (ln, d) in enumerate(ranked, 1):
                 mech  = float(d.get("competence_score") or 0.0)
                 sn2   = float(d.get("sn2_attack_angle") or 0.0)
-                _tier = d.get("degrader_tier", CFG.TIER_DECOY)
+                _tier = d.get(CFG.COL_TIER, CFG.TIER_DECOY)
                 ts    = _ts_dict.get(ln)
                 ts_s  = f"Trust: {ts:.3f} Å" if ts is not None else "Trust: —"
                 _lig_short = ln.split("_", 1)[-1] if "_" in ln else ln
@@ -6721,7 +6721,7 @@ def main():
 
             drop_empty = []
             zero_equivalents = {"0", "0.0", "0.00", "NA", "None", "", "nan", "False"}
-            protected_cols = {"degrader_tier", "is_degrader", "status", "Protein_Name", "Ligand_Name", "job_name", "job_index"}
+            protected_cols = {CFG.COL_TIER, "is_degrader", "status", CFG.COL_PROT, CFG.COL_LIG, "job_name", "job_index"}
             for col in df.columns:
                 if col in protected_cols:
                     continue
@@ -6831,7 +6831,7 @@ def main():
         grade_H = int(id_pct.apply(lambda x: _utils_mod.get_alignment_grade(x, CFG) == "H").sum())
         grade_I = int(id_pct.apply(lambda x: _utils_mod.get_alignment_grade(x, CFG) == "I").sum())
 
-    mdl_col = "best_model_name" if "best_model_name" in df_final.columns else "Boltz_Model_Confidence"
+    mdl_col = "best_model_name" if "best_model_name" in df_final.columns else CFG.COL_CONF
     if not df_final.empty and mdl_col in df_final.columns:
         models = Counter(df_final[mdl_col].fillna("None").tolist())
     else:
@@ -6864,8 +6864,8 @@ def main():
         reads as <library total> + <control total> rather than silently merging the
         controls into the screened population.
         """
-        if "Protein_Name" in df_final.columns:
-            _is_ctrl = df_final["Protein_Name"].astype(str).str.endswith("_Control")
+        if CFG.COL_PROT in df_final.columns:
+            _is_ctrl = df_final[CFG.COL_PROT].astype(str).str.endswith("_Control")
         else:
             _is_ctrl = pd.Series(False, index=df_final.index)
         _lib_tiers  = Counter(df_final.loc[~_is_ctrl, CFG.COL_TIER].fillna(CFG.TIER_DECOY).tolist())
