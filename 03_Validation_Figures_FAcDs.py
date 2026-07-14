@@ -5934,45 +5934,76 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
              "Mechanistic Score", f"(≥ {CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]]:.2f})", "#3A1E4A", "Machinery incomplete"),
         ]
 
-        _REJ24 = "Rejected"
+        """
+        A rejected complex EXITS at the gate that killed it. It is drawn once, as a dead-end node in
+        that gate's column, and then it is gone — no node and no ribbon in any later column, because
+        the ribbon loop skips a category that has no node. Carrying a rejected band all the way to
+        the right would say the opposite of what the pipeline does: it would show 58,056 complexes
+        arriving at the end, which is precisely the impression this figure has to destroy.
+
+        Each gate therefore has exactly two nodes — the survivors, who continue, and the rejects,
+        who stop — and the surviving stream is visibly thinner at every step.
+        """
+        """
+        EVERY complex is tiered — the ladder assigns a tier to all 58,056, including the ones that
+        fail a catalytic gate (they land in Tier_3/4/5_Decoy). So the gates do not delete anyone: a
+        complex that fails one drops into a FADED 'already rejected' lane, carries on through the
+        remaining gate columns in that lane, and still arrives at its real tier. The dead-end node at
+        each gate names WHICH gate rejected it and how many.
+
+        The tier column therefore holds all 58,056, distributed across the tiers — which is what the
+        pipeline actually produces. Only the MD-ready cohort continues past it; everything else stops
+        at its tier, so the final column is the handful of complexes taken to simulation.
+
+        Colour carries the survival story: the passing stream is drawn dark and saturated, the
+        rejected lanes light and washed out, so the eye follows the candidates that are still alive.
+        """
+        _OUT24 = "__out__"                   # no node exists for this label → the complex stops here
+        _REJLANE24 = "Rejected earlier"
         _alive24 = pd.Series(True, index=d.index)
         _stage_cols_24 = []
-        for _key24, _pass24, _ttl24, _sub24, _bg24, _passlbl24 in _gates_24:
+        for _key24, _pass24, _ttl24, _sub24, _bg24, _faillbl24 in _gates_24:
             _pass_now = _alive24 & _pass24.fillna(False)
-            d[_key24] = np.where(_pass_now, _passlbl24, _REJ24)
+            _fail_now = _alive24 & ~_pass_now          # failed HERE, not earlier
+            _n_fail24 = int(_fail_now.sum())
+            # The node drawer already prints the count; adding it here prints it twice.
+            _rej_lbl24 = f"✗ {_faillbl24}"
+            d[_key24] = np.where(_pass_now, "Pass",
+                                 np.where(_fail_now, _rej_lbl24, _REJLANE24))
             _alive24 = _pass_now
-            _stage_cols_24.append((_key24, [_passlbl24, _REJ24], _ttl24, _sub24, _bg24))
+            _ord24 = ["Pass"] + ([_rej_lbl24] if _n_fail24 else []) \
+                + ([_REJLANE24] if (d[_key24] == _REJLANE24).any() else [])
+            _stage_cols_24.append((_key24, _ord24, _ttl24, _sub24, _bg24, _rej_lbl24))
 
-        # Surviving complexes carry their tier; everything eliminated stays in the rejected band.
-        d["tier_cat"] = np.where(_alive24, d[CFG.COL_TIER].astype(str), _REJ24)
-        _surv_tiers_24 = [t for t in CFG.TIER_ORDER if (d["tier_cat"] == t).any()]
-        _tier_ord_24 = _surv_tiers_24 + [_REJ24]
+        # Every complex carries its real tier — the ladder assigns one to all of them.
+        d["tier_cat"] = d[CFG.COL_TIER].astype(str)
+        _tier_ord_24 = [t for t in CFG.TIER_ORDER if (d["tier_cat"] == t).any()]
 
-        # Terminal column: the MD-ready cohort — what the whole screen is for.
+        # Terminal column: only the MD-ready cohort continues. Everything else stops at its tier.
         _mdmask24 = _md_ready_df(d).index
-        d["md_cat"] = np.where(d.index.isin(_mdmask24), "MD-selected",
-                               np.where(_alive24, "Not selected", _REJ24))
-        _md_ord_24 = [o for o in ("MD-selected", "Not selected", _REJ24) if (d["md_cat"] == o).any()]
+        _MDSEL24 = "MD-selected"
+        d["md_cat"] = np.where(d.index.isin(_mdmask24), _MDSEL24, _OUT24)
+        _md_ord_24 = [_MDSEL24] if (d["md_cat"] == _MDSEL24).any() else []
 
         _col_seq_24  = ["all"] + [c for c, *_ in _stage_cols_24] + ["tier_cat", "md_cat"]
         _ord_seq_24  = [None]  + [o for _, o, *_ in _stage_cols_24] + [_tier_ord_24, _md_ord_24]
         _ttl_seq_24  = ["All Complexes"] + [t for _, _, t, *_ in _stage_cols_24] + ["Degrader Tier", "MD Cohort"]
         _sub_seq_24  = ["(starting pool)"] + [s for _, _, _, s, *_ in _stage_cols_24] \
-            + ["(survivors only)", "(taken to MD)"]
-        _bg_seq_24   = ["#2E4053"] + [b for _, _, _, _, b in _stage_cols_24] + ["#2E1B5E", "#7A5C00"]
+            + ["(all complexes tiered)", "(taken to MD)"]
+        _bg_seq_24   = ["#2E4053"] + [b for _, _, _, _, b, _ in _stage_cols_24] + ["#2E1B5E", "#7A5C00"]
         _n_cols_24   = len(_col_seq_24)
 
         # ── Colours ────────────────────────────────────────────────────────────
         # One survivor colour per gate (best-of-CFG's green end) and one rejected colour throughout,
         # so the eye follows a single narrowing stream against a single growing dead-end band.
-        _PASS_CLR_24 = CFG.SANKEY_GRAD5[0]
-        _REJ_CLR_24  = CFG.SANKEY_GRAD5[-1]
+        _PASS_CLR_24 = CFG.SANKEY_GRAD5[0]     # survivors: saturated
+        _REJ_CLR_24  = CFG.SANKEY_GRAD5[-1]    # rejected AT this gate: red dead-end
+        _LANE_CLR_24 = "#C9D2D9"               # already-rejected lane: washed out, recedes
         _colmap_24 = {}
-        for _key24, _ords24, *_ in _stage_cols_24:
-            _colmap_24[_key24] = {_ords24[0]: _PASS_CLR_24, _REJ24: _REJ_CLR_24}
-        _colmap_24["md_cat"] = {"MD-selected": "#FFC300",
-                                "Not selected": "#9FB6C7",
-                                _REJ24: _REJ_CLR_24}
+        for _key24, _ords24, _t24, _s24, _b24, _rej24 in _stage_cols_24:
+            _colmap_24[_key24] = {"Pass": _PASS_CLR_24, _rej24: _REJ_CLR_24,
+                                  _REJLANE24: _LANE_CLR_24}
+        _colmap_24["md_cat"] = {_MDSEL24: "#FFC300"}
         _tier_clr_24  = {t: TIER_PALETTE.get(t, "#999")
                          for t in [CFG.TIER_TOP,CFG.TIER_ORDER[1],CFG.TIER_ORDER[2],CFG.TIER_ORDER[3],CFG.TIER_ORDER[4],CFG.TIER_POOR,CFG.TIER_DECOY,"Other"]}
         _tier_alp_24  = {
@@ -5981,7 +6012,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         }
 
         def _clr_24(cat_col, lbl):
-            if lbl == _REJ24:
+            if str(lbl).startswith("✗"):          # a dead-end node: the complexes rejected at this gate
                 return _REJ_CLR_24
             if cat_col == "tier_cat":
                 return TIER_PALETTE.get(lbl, _tier_clr_24.get(lbl, "#CCC"))
@@ -6007,7 +6038,14 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             nz = {k: int(cnts.get(k, 0)) for k in order if int(cnts.get(k, 0)) > 0}
             if not nz: return {}
             total_h = _BH_24 - _BGAP_24 * max(len(nz) - 1, 0)
-            total_c = max(sum(nz.values()), 1)
+            """
+            Node heights are scaled against the WHOLE corpus, not against the column's own sum.
+            Every intermediate column holds all 58,056 complexes, so the two agree there — but the
+            final column holds only the MD-selected handful, and normalising it to itself would blow
+            4 complexes up to the full height of the figure, drawn exactly as large as the 22,184 of
+            Tier_3 beside it. The point of the last column is how FEW survive; it must be a sliver.
+            """
+            total_c = max(_total_j_24, 1)
             """
             Stack TOP-DOWN so the first label in `order` sits at the top of the
             column (best category on top — Tier_1A, ≤3.0Å, ≥170°, …).
@@ -6218,10 +6256,23 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 y0a, y0b = _so24.get(s0, 0), _to24.get(t0, 0)
                 _so24[s0] = y0a + _rhs
                 _to24[t0] = y0b + _rht
+                """
+                The ribbon's weight follows the complex's fate. A flow that is still ALIVE — leaving a
+                Pass node and not entering a dead end — is drawn in its tier colour at full strength.
+                A flow that has been rejected, whether it is falling into a dead end now or drifting
+                along in the already-rejected lane, is drawn pale and translucent so it recedes. The
+                reader then follows the surviving candidates without having to read a single label.
+                """
+                _dead_src = (s0 == _REJLANE24) or str(s0).startswith("✗")
+                _dead_tgt = (t0 == _REJLANE24) or str(t0).startswith("✗")
+                if _dead_src or _dead_tgt:
+                    _rc24, _ra24 = _LANE_CLR_24, 0.30
+                else:
+                    _rc24 = TIER_PALETTE.get(tc, _tier_clr_24.get(tc, "#999"))
+                    _ra24 = min(0.92, _tier_alp_24.get(tc, 0.40) + 0.28)
                 _brib_24(_xs_24[_ri], _bw_24, _xs_24[_ri + 1],
                          y0a, y0a + _rhs, y0b, y0b + _rht,
-                         TIER_PALETTE.get(tc, _tier_clr_24.get(tc, "#999")),
-                         _tier_alp_24.get(tc, 0.40), zorder=2 + _ri)
+                         _rc24, _ra24, zorder=2 + _ri)
 
         """
         Legend removed — Final Tier column already carries the tier names/colours.
