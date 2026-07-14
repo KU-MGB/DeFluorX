@@ -3438,18 +3438,21 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["beta_f_count"] = beta_f_count
         n_scissile_f = int(_aux.get("n_scissile_f", 1))
         """
-        Angle multiplicity for the Šidák correction (CFG §5.5). The correction exists to remove
-        best-of-N inflation: where the leaving fluorine is picked as the most anti-periplanar of
-        several, a poly-fluorinated carbon gets N chances at a near-linear angle. Where the
-        fluoride cradle resolves the leaving F, that selection is deterministic — the departing
-        F is the one the cradle stabilises — so there is no best-of-N over fluorines and the
-        exponent must fall to 1. The attacking oxygen is still chosen as the better of the two
-        Oδ, so a multiplicity of 2 remains earned in every case.
+        Angle multiplicity for the Šidák correction (CFG §5.2d) = the number of equivalent C–F bonds
+        on the scissile carbon. The inflation being corrected lives in the POSE: an α-CF3 has three
+        chances to present some fluorine anti-periplanar to the nucleophile, a mono-fluoro substrate
+        has one. Which of the three actually leaves — resolved here by the fluoride cradle — does not
+        change how many chances the pose had, so the cradle does not reduce the exponent.
+
+        The tier ladder then gates on the EFFECTIVE angle: the angle a single-C–F substrate would
+        have to show to be as improbable as this pose. Without it, TFA out-angles fluoroacetate on the
+        DeHa4 control in all five diffusion samples and takes a higher tier on the one enzyme known
+        not to turn it over.
         """
-        _cradle_resolved = bool(_aux.get("cradle_resolved", False))
-        n_angle_choices = (CFG.ANGLE_MULTIPLICITY_OXYGENS if _cradle_resolved
-                           else max(1, n_scissile_f) * CFG.ANGLE_MULTIPLICITY_OXYGENS)
+        n_angle_choices = max(1, n_scissile_f)
         results["angle_multiplicity"] = int(n_angle_choices)
+        angle_effective = CFG.sn2_effective_angle(angle, n_angle_choices)
+        results["sn2_attack_angle_effective"] = round(angle_effective, 1)
         # feasibility_factor stays a reported diagnostic (α C–F BDE × β-fluorination). The
         # separate graded chemistry penalty (BDE + occlusion, below) is what feeds the tier
         # via mechanistic_score_effective; competence/ranking keep the raw geometry. Step-07
@@ -3683,25 +3686,34 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                 f"His base, Asp acid (mapped Nuc={site_resname.get('Nuc','MISSING')}, "
                 f"Base={site_resname.get('Base','MISSING')}, Acid={site_resname.get('Acid','MISSING')})."), False
 
+        # The ladder gates on angle_effective, the multiplicity-corrected attack angle (CFG §5.2d),
+        # not on the raw one. A poly-fluorinated attack carbon has several equivalent C–F bonds and
+        # so several chances at a near-linear backside geometry; the raw angle rewards that best-of-N
+        # as though it were catalytic competence. Gating on the raw angle lets trifluoroacetate
+        # outrank the native substrate on the DeHa4 control — the enzyme known NOT to turn TFA over —
+        # because Boltz gives its CF3 a better-aligned pose in all five diffusion samples. The
+        # effective angle asks what a single-C–F substrate would have had to achieve to be equally
+        # improbable, so a mediocre CF3 pose falls back and only a near-ideal one holds its tier.
+        #
         # Tier_1A  (TIER_ORDER[0]) — elite: productive α-attack with near-ideal SN2 geometry,
         # intact catalytic constellation, bidentate carboxylate clamp engaged and a directly
         # resolved nucleophile. Pruned for near-ideal geometry to reduce downstream MD workload.
-        elif productive_attack and elite_ready and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_TOP] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_TOP] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_TOP] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_TOP] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_TOP]:
+        elif productive_attack and elite_ready and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_TOP] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_TOP] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_TOP] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_TOP] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_TOP]:
             tier, meaning, is_degrader = CFG.TIER_TOP, "Elite-Grade Analysis: Near-perfect SN2 Trajectory demonstrating absolute anchor integrity.", True
 
         # Tier_1B  (TIER_ORDER[1])
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[1]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[1]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[1]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[1]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[1]]:
+        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[1]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[1]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[1]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[1]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[1]]:
             tier, meaning, is_degrader = CFG.TIER_ORDER[1], "Crystal-Grade Analysis: Ideal ground-state contact sequence with a connected catalytic relay (elite anchor integrity NOT asserted — Tier_1A only).", True
 
         # Tier_2A  (TIER_ORDER[2])
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]]:
+        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]]:
             tier, meaning, is_degrader = CFG.TIER_ORDER[2], "Functional Analysis: Nucleophile located in tight contact, accompanied by acceptable target attack angles.", True
 
         # Tier_2B  (TIER_ORDER[3]) — lowest degrader tier: productive α-attack, nucleophile in reach,
         # SN2 angle ≥ threshold AND a still-connected proton relay (Nuc–Base / Base–Acid within the
         # loose Tier_2B ceilings). The relay check prevents a catalytically dead, geometrically
         # dissociated triad from being labelled a (marginal) degrader on nucleophile+angle alone.
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and angle >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[3]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[3]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[3]]:
+        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[3]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[3]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[3]]:
             tier, meaning, is_degrader = CFG.TIER_ORDER[3], "Marginal Analysis: Nucleophile in loose contact with a marginal attack angle, catalytic relay still connected.", True
 
         # Tier_3  (TIER_ORDER[4]) — nucleophile within reach but no productive pathway:
@@ -4594,7 +4606,7 @@ CSV_COLUMN_ORDER = [
     "hydrophobic_desolvation_ratio", "active_site_contact_flag",
     # --- Active-site pocket vs ligand steric fit ---
     "pocket_containment_cavity", "pocket_containment_site8", "ligand_buriedness_mean",
-    "ligand_reach", "dist_Nuc_nearest_O", "angle_multiplicity",
+    "ligand_reach", "dist_Nuc_nearest_O", "angle_multiplicity", "sn2_attack_angle_effective",
     "active_site_volume", "active_site_radius",
     "ligand_volume", "ligand_radius_gyration", "ligand_max_extent",
     "pocket_occupancy", "fit_ratio", "ligand_fits",

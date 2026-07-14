@@ -796,7 +796,20 @@ class CFG:
                    and the same ligand can score differently in different enzymes. Long-PFAS
                    hydrolytic-SN2 hits remain EXPLORATORY, not degraders.
     """
-    CHEM_PEN_W_BDE: float    = 0.025   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
+    """
+    CHEM_PEN_W_BDE is the flat cost per kcal/mol of scissile C–F strength above SCISSILE_CF_BDE_MAX.
+    It answers one question — how much harder is this bond to break — and nothing else.
+
+    It is deliberately modest (an α-CF3 pays ~0.07 of mech score) because the discrimination that
+    keeps a poly-fluorinated substrate honest is now made where it belongs: in the multiplicity-
+    corrected attack angle (§5.2d), which strips the best-of-N geometric advantage a CF3 carbon
+    enjoys before the tier ladder ever sees it. A heavier BDE penalty would double-charge the same
+    substrate — once for its bond strength and again, implicitly, for a pose advantage that has
+    already been removed — and would bar an α-CF3 from the elite tier by arithmetic rather than by
+    evidence. The bond-strength ceiling (TIER_ELITE_BDE_MAX, §8.5) remains the hard limit, and
+    Step-07 QM/MM remains the arbiter of whether the barrier is actually surmountable.
+    """
+    CHEM_PEN_W_BDE: float    = 0.015   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
     CHEM_PEN_W_OCCL: float   = 0.13    # penalty per Å of backside occlusion above SN2_BACKSIDE_OCCL_MAX
     CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-fluorine on the attack-carbon chain: β-fluorination inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-fluorine (β_F=0) receives no β term and is governed by the α-BDE/occlusion penalty above
     # The angle fade applies to the backside-occlusion term ONLY: full at/below
@@ -858,9 +871,39 @@ class CFG:
     CONTAIN_PEN_W: float      = 1.00   # penalty per unit of cavity-containment shortfall below the target
 
     # -------------------------------------------------------------------------------
-    # Step 5.2d: Angle multiplicity (Šidák exponent, §5.5)
+    # Step 5.2d: Angle multiplicity — the Šidák exponent and the effective attack angle
     # -------------------------------------------------------------------------------
-    ANGLE_MULTIPLICITY_OXYGENS: int = 2   # the attacking Oδ is the better of the aspartate's two oxygens — always a best-of-2
+    """
+    A poly-fluorinated attack carbon gets more than one chance at a near-linear backside angle, and
+    that advantage is geometric, not catalytic. An α-CF3 has three equivalent C–F bonds arranged
+    about the Cα–COO⁻ axis: rotate the head group and SOME fluorine always lands roughly opposite the
+    nucleophile. Fluoroacetate has a single C–F and must be oriented exactly.
+
+    Measured on the DeHa4 control across all five Boltz diffusion samples, trifluoroacetate
+    out-angles the native substrate in EVERY sample (151–159° vs 95–145°). Left uncorrected, that
+    best-of-3 buys TFA a higher tier than fluoroacetate on the very enzyme that is known not to turn
+    TFA over (Wackett 2022) — the control inverts, and the ladder is measuring fluorine count rather
+    than catalytic competence.
+
+    sn2_effective_angle() removes the inflation: it converts the observed angle into the angle a
+    SINGLE-C–F substrate would have to show to be equally improbable. p1 = (1-cos δ)/2 is the
+    single-bond chance of landing within δ of linear; the pose had n such chances, so its Šidák
+    survival is (1-p1)^n, and the effective angle is the one whose single-bond probability equals it.
+    A mono-fluoro substrate is unchanged by construction; a CF3 pose is deflated in proportion to how
+    mediocre it is, and a genuinely near-ideal CF3 pose (≈178°) barely moves — which is the intent.
+    The tier ladder gates on this effective angle; the raw angle stays reported.
+    """
+    def sn2_effective_angle(self, angle: float, scissile_f_count: int = 1) -> float:
+        import math
+        _n = max(1, int(scissile_f_count))
+        if _n == 1:
+            return float(angle)
+        _delta = max(0.0, 180.0 - float(angle))
+        _p1 = (1.0 - math.cos(math.radians(_delta))) / 2.0
+        _q = max(0.0, min(1.0, (1.0 - _p1) ** _n))          # Šidák survival across the n bonds
+        _p_eff = 1.0 - _q                                    # equivalent single-bond probability
+        _cos = max(-1.0, min(1.0, 1.0 - 2.0 * _p_eff))
+        return float(180.0 - math.degrees(math.acos(_cos)))
 
     # -------------------------------------------------------------------------------
     # Step 5.3: Reactive-centre gating — α-carbon attack + bidentate carboxylate clamp
@@ -954,13 +997,18 @@ class CFG:
         if clamp_ok:                             s += self.MECH_W_CLAMP
         if stabilised:                           s += self.MECH_W_STAB
         """
-        Šidák multiplicity-corrected attack-angle credit. The exponent is the number of
-        INDEPENDENT chances the pose had at a near-linear angle, which the caller computes
-        (§5.5): the two aspartate oxygens always, times the fluorines on the scissile carbon
-        only when the leaving F was NOT fixed by the fluoride cradle. A cradle-resolved
-        leaving group is a single deterministic choice and carries no best-of-N inflation, so
-        raising the exponent to the fluorine count there would penalise a poly-fluorinated
-        substrate twice for a selection it never made.
+        Šidák multiplicity-corrected attack-angle credit. The exponent is the number of equivalent
+        C–F bonds on the scissile carbon (§5.2d) — the number of chances the POSE had at presenting
+        some fluorine anti-periplanar to the nucleophile.
+
+        The multiplicity is a property of the substrate's geometry, not of how the leaving fluorine
+        is later identified. An α-CF3 carbon has three-fold symmetry about the Cα–COO⁻ axis: rotate
+        the head group and SOME fluorine always ends up reasonably backside. Fluoroacetate has one
+        C–F and two hydrogens, so its single fluorine must be oriented exactly. Resolving the leaving
+        F by the fluoride cradle tells us WHICH bond breaks; it does not undo the fact that the CF3
+        had three ways to look good. Measured on the DeHa4 control across all five diffusion samples,
+        TFA out-angles fluoroacetate in every one (151–159° vs 95–145°) — a best-of-3 advantage that
+        is not a catalytic one, and precisely the inflation this correction exists to remove.
         """
         _delta = max(0.0, 180.0 - float(angle))
         _p1    = (1.0 - math.cos(math.radians(_delta))) / 2.0
