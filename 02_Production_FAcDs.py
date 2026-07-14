@@ -3417,12 +3417,30 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         '''
         if not _tf_mapped:
             terminal_f_count = int(_aux.get("n_scissile_f", 0))
-        scissile_cf_bde = float(CFG.SCISSILE_CF_BDE.get(terminal_f_count, 0.0))
+        """
+        CHEMISTRY THAT COULD NOT BE EVALUATED IS NOT CHEMISTRY THAT PASSED.
+
+        Falling back to 0.0 here does not mean "unknown" — it means a C-F bond with ZERO dissociation
+        energy, which sails under the dead-end gate (123 kcal/mol) and under the Tier_1A ceiling
+        (TIER_ELITE_BDE_MAX). A complex whose fluorine count could not be resolved was therefore
+        scored MORE favourably than one that was properly penalised.
+
+        The BDE table is keyed on 1, 2 or 3 fluorines. Anything else means the scissile centre was not
+        resolved, and that is recorded as such (_chem_unknown) rather than silently forgiven.
+        """
+        _chem_unknown = terminal_f_count not in CFG.SCISSILE_CF_BDE
+        scissile_cf_bde = float(CFG.SCISSILE_CF_BDE.get(terminal_f_count, CFG.SENTINEL_UNDEFINED))
 
         # B — backside steric occlusion: vdW bulk of heavy halogen substituents on the
         # attack carbon lying on the nucleophile-approach hemisphere (anti to leaving F).
         # The leaving F sits opposite the approach axis (dot < 0) and is auto-excluded.
+        # A skipped computation is not a measurement of zero. Fluoroacetate genuinely HAS zero backside
+        # occlusion; a complex whose RDKit mapping failed has an UNKNOWN one, and the two must not be
+        # written the same way. The flag below separates them.
         backside_occlusion = 0.0
+        _occl_measured = bool(best_c_atom is not None and target_x_pos is not None and rd_mol and mm_map)
+        if not _occl_measured:
+            _chem_unknown = True
         if best_c_atom is not None and target_x_pos is not None and rd_mol and mm_map:
             _c_idx = mm_map.get(best_c_atom.name)
             if _c_idx is not None:
@@ -3589,8 +3607,25 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         property of the bond, not of the angle of approach, so a near-linear attack on a strong C–F
         keeps its full penalty. β-fluorination and containment stay flat for the same reason.
         """
-        _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
-        _bde_pen  = CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
+        """
+        UNKNOWN CHEMISTRY IS BARRED FROM ELITE, NOT ANNIHILATED.
+
+        When the scissile centre could not be resolved (_chem_unknown), the BDE is the sentinel and the
+        occlusion was never measured. Feeding the sentinel into the penalty would subtract ~13 from the
+        mechanistic score and bury the complex in Tier_5 — punishing it for a mapping failure rather than
+        for its chemistry, and destroying a candidate that may be perfectly good.
+
+        The honest position is narrower: we do not know, so we do not PROMOTE. No numeric penalty is
+        invented from a sentinel, and the complex is barred from the elite tier (below). It keeps its
+        geometry-earned rank and is flagged, so a human can see exactly which complexes were never
+        chemically verified instead of finding them silently at the top or silently at the bottom.
+        """
+        if _chem_unknown:
+            _occl_pen = 0.0
+            _bde_pen  = 0.0
+        else:
+            _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
+            _bde_pen  = CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
         _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
         _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
@@ -3598,6 +3633,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         _cont_pen = CFG.CONTAIN_PEN_W * max(0.0, CFG.CONTAIN_PEN_TARGET - _cont)
         mech_effective = max(0.0, mech_score - _chem_pen - _cont_pen)
         results["chem_penalty"]              = round(_chem_pen, 3)
+        results["chem_verified"]             = 0 if _chem_unknown else 1
         results["containment_penalty"]       = round(_cont_pen, 3)
         results["mechanistic_score_effective"] = round(mech_effective, 2)
         mech_score = mech_effective   # tier ladder + elite gate gate on the feasibility-weighted score
@@ -3677,8 +3713,16 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         discovery lead for Step-07 QM/MM to adjudicate.
         """
         bde_elite_ok = scissile_cf_bde <= CFG.TIER_ELITE_BDE_MAX
+        """
+        `not _chem_unknown` is a requirement of the ELITE tier, not of every tier. Tier_1A is the claim
+        that this complex is a lead worth a week of GPU time — and that claim cannot rest on chemistry
+        that was never evaluated. A complex whose scissile centre could not be resolved keeps whatever
+        rank its geometry earns, but it cannot be promoted to the top on the strength of penalties that
+        were skipped rather than passed.
+        """
         elite_ready = (elite_identity_ok and ligand_clamp_engaged and stabilised
                        and bde_elite_ok
+                       and not _chem_unknown
                        and nuc_rescue_offset <= CFG.NUC_RESCUE_MAX_OFFSET_ELITE)
 
         tier, is_degrader, meaning, constraint = CFG.TIER_DECOY, False, "No significant documented interactions.", "Fail"
