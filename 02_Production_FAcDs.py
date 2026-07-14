@@ -2593,6 +2593,22 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                        + (x.pos.z - _cc0[2])**2)
         return max(_fs, key=lambda x: calculate_angle(_o.pos, _c.pos, x.pos))
 
+    """
+    The attacking oxygen is the one that best satisfies BOTH near-attack conditions AT ONCE — a short
+    approach and a linear trajectory — because an SN2 needs them on the SAME atom. Neither condition
+    alone identifies it:
+
+      · ranking by DISTANCE alone picks a nearby oxygen that may be approaching side-on;
+      · ranking by ANGLE alone picks a well-aligned oxygen that may be far out of reach. Measured on
+        the 3R3U fluoroacetate control, OD1 is anti-periplanar (171°) but sits 4.44 Å from the
+        α-carbon, while OD2 is 2.85 Å away at 163° — a textbook NAC. Angle-first selects OD1 and the
+        native substrate control scores as a non-degrader.
+
+    Both are therefore scored jointly, with the SAME graded NAC terms the soft score uses (§4.1): the
+    distance sigmoid about NAC_DIST_STRICT and the angle sigmoid about NAC_ANGLE_STRICT. Their product
+    is maximised, so an oxygen must be both close and aligned to win, and a pose is credited with the
+    geometry a nucleophile could actually react through.
+    """
     best_O, best_C = None, None
     _best_key = None
     for o in asp_oxygens:
@@ -2602,7 +2618,9 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                 continue
             _ang = calculate_angle(o.pos, c.pos, _f.pos)
             _d = o.pos.dist(c.pos)
-            _key = (_ang, -_d)              # best backside angle first, then the shorter approach
+            _nac = (sigmoid(_d, k=CFG.SOFT_K_NUC, x0=CFG.NAC_DIST_STRICT)
+                    * sigmoid(_ang, k=CFG.SOFT_K_ANG, x0=CFG.NAC_ANGLE_STRICT))
+            _key = (_nac, _ang, -_d)        # joint NAC quality; angle then proximity break ties
             if _best_key is None or _key > _best_key:
                 _best_key, best_O, best_C = _key, o, c
 
@@ -3454,7 +3472,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             d_nuc, dist_nuc_base, dist_base_acid,
             clamp_ok, stabilised, angle, steric_clashes,
             scissile_cf_bde, backside_occlusion, beta_f_count,
-            scissile_f_count=n_angle_choices,
+            angle_multiplicity=n_angle_choices,
         )
         results["mechanistic_score"] = round(mech_score, 2)
 
@@ -3733,7 +3751,18 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         })
         return results
     except Exception as e:
-        results.update({"catalytic_dist_A": 999.0, "error": str(e), "degrader_tier": "Error"})
+        """
+        A pose that fails to score is not a pose that scored zero. The tier is set to "Error" and the
+        exception is LOGGED WITH ITS TRACEBACK, because this handler is the last thing standing
+        between a broken call signature and a full run of 58,056 complexes that all silently read
+        tier="Error", mechanistic_score=0.00 and default pocket containment — a result that looks
+        like data and is not. Anything that reaches here is a bug in the scorer, not a property of
+        the complex, and it must be visible in the log the moment it happens.
+        """
+        logger.error(f"check_catalytic_geometry FAILED for {getattr(cif_path, 'name', cif_path)}: "
+                     f"{type(e).__name__}: {e}", exc_info=True)
+        results.update({"catalytic_dist_A": 999.0, "error": f"{type(e).__name__}: {e}",
+                        "degrader_tier": "Error"})
         return results
 
 # -------------------------------------------------------------------------------

@@ -935,8 +935,10 @@ class CFG:
         each. Tiering stays geometric here, no ligand excluded a priori; chemistry rides in
         the effective score, competence/diagnostics and Step-08 QMMM.
 
-        The angle term is Šidák multiplicity-corrected for the scissile C–F count
-        (scissile_f_count): a CF2/CF3 attack carbon presents more equivalent C–F bonds, so
+        The angle term is Šidák multiplicity-corrected by angle_multiplicity — the number of
+        independent chances the pose had at a near-linear angle (§5.2d), which the caller computes:
+        the two aspartate oxygens always, times the fluorines on the scissile carbon only when the
+        cradle did NOT fix the leaving F. A CF2/CF3 attack carbon presents more equivalent C–F bonds, so
         more chances of one landing near the 180° anti-axis. The credit (1-p1)^n, with
         p1=(1-cos δ)/2 and δ=180-angle, removes that best-of-N inflation from tiering — the
         same statistic used in competence_score, applied here so the tier gate is not gamed
@@ -1253,15 +1255,24 @@ class CFG:
     MECH_ELITE_CONSTELLATION: float = 0.74   # constellation that compensates a mech in [LO, HI) for Tier_1A (RMSD ≲ 0.35 Å, crystal-grade)
 
     """
-    Elite bond-strength ceiling (Tier_1A, downgrade-only). Geometry cannot repeal thermochemistry:
-    a scissile C–F above TIER_ELITE_BDE_MAX is a bond the enzyme is not expected to break in a
-    single hydrolytic SN2 step, and no attack angle — however close to 180° — lowers that bond's
-    dissociation energy. Such a pose is capped at Tier_1B and remains a discovery lead whose
-    barrier Step-07 QM/MM adjudicates; it is barred from the elite tier the headline claim rests on.
-    The ceiling sits above the α-CF3 class (127.5 kcal/mol) so trifluoroacetate is capped, while
-    the mono/di-fluoro native substrates (≈ 109.5 / 119.5) are untouched.
+    Elite bond-strength ceiling (Tier_1A, downgrade-only). A scissile C–F above TIER_ELITE_BDE_MAX
+    cannot hold the elite tier at any attack angle: the strength of the bond being broken is a
+    property of the bond, not of the approach geometry, so no near-linear trajectory lowers it. Such
+    a pose is capped at Tier_1B and remains a discovery lead for Step-07 QM/MM to adjudicate.
+
+    The ceiling sits above the α-CF3 class (127.5 kcal/mol), so an α-CF3 substrate such as
+    trifluoroacetate is eligible for Tier_1A when its geometry earns it. TFA is the hardest substrate
+    the hydrolytic SN2 mechanism can plausibly reach, and the pipeline surfaces it as a lead rather
+    than ruling it out a priori. The bond strength is not waived: it is carried as a flat, non-fading
+    penalty on mechanistic_score_effective (CHEM_PEN_W_BDE × the excess over SCISSILE_CF_BDE_MAX),
+    which costs an α-CF3 pose ~0.11 of mech score. Only the most crystal-perfect α-CF3 pose therefore
+    survives the coupled elite gate — one lead, not a chemotype.
+
+    The ceiling is chemically specific: only an α-CF3 carbon reaches 127.5. The long perfluoro
+    carboxylates present an α-CF2 (119.5) and are held below the elite tier by the β-fluorine and
+    containment penalties, not by this bond-strength ceiling.
     """
-    TIER_ELITE_BDE_MAX: float       = 123.0  # kcal/mol; scissile C–F above this cannot hold Tier_1A at any angle (= SCISSILE_CF_BDE_MAX)
+    TIER_ELITE_BDE_MAX: float       = 128.0  # kcal/mol; a scissile C–F above this cannot hold Tier_1A at any attack angle
 
     """
     Top-tier confidence guard. The catalytic machinery for Tier_1A is enforced by the tier

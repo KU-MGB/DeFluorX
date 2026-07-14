@@ -373,6 +373,17 @@ thread_logger = threading.local()
 _strip_ansi = getattr(_utils_mod, '_strip_ansi', lambda x: x)
 
 
+def _sigmoid07(x: float, k: float, x0: float) -> float:
+    """The graded NAC term used to pick the attacking oxygen (CFG §4.1).
+
+    Identical in form to Step 02's sigmoid, so both stages score a near-attack conformation on the
+    same scale and agree on which aspartate oxygen is attacking. A frame whose distance and angle
+    are judged by one rule in the ranking and another in the trajectory analysis is not comparable
+    with itself.
+    """
+    return float(1.0 / (1.0 + np.exp(-np.clip(k * (x - x0), -60.0, 60.0))))
+
+
 def console_title(msg: str) -> None:
     if hasattr(thread_logger, 'lines'):
         thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {msg}")
@@ -3658,10 +3669,22 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                         continue
                     _a = np.degrees(np.arccos(np.clip(
                         np.dot(_v_cf[_ok], _v_cn) / (_l_cf[_ok] * _n_cn), -1.0, 1.0)))
-                    _key = (float(_a.max()), -float(_nc_d[_ni, _ci]))
+                    """
+                    The attacking oxygen satisfies BOTH near-attack conditions at once — short
+                    approach and linear trajectory — because the SN2 needs them on the same atom.
+                    Scored jointly with the same graded NAC terms Step 02 uses, so the two stages
+                    agree on which oxygen is attacking. Ranking on angle alone selects a
+                    well-aligned oxygen that can sit far out of reach, and the frame is then
+                    credited with a trajectory no nucleophile could travel.
+                    """
+                    _ang_j = float(_a.max())
+                    _d_j = float(_nc_d[_ni, _ci])
+                    _nac_j = (_sigmoid07(_d_j, CFG.SOFT_K_NUC, CFG.NAC_DIST_STRICT)
+                              * _sigmoid07(_ang_j, CFG.SOFT_K_ANG, CFG.NAC_ANGLE_STRICT))
+                    _key = (_nac_j, _ang_j, -_d_j)
                     if _best_key is None or _key > _best_key:
                         _best_key, best_nuc_idx, best_ca_idx = _key, _n_atom, _c_atom
-                        nac_nuc_dist = float(_nc_d[_ni, _ci])
+                        nac_nuc_dist = _d_j
             if best_nuc_idx is None:                   # no bonded F resolvable — fall back
                 _flat = int(np.argmin(_nc_d))
                 _nl, _cl = divmod(_flat, len(warhead_c))
