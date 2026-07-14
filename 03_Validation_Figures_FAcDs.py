@@ -7211,9 +7211,18 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _qc_panels.append((_func_c, "competence_score",
                                _func_lbl, "Catalytic competence score", None))
         if _qc_panels:
-            fig, axes = plt.subplots(1, len(_qc_panels),
-                                     figsize=(6.6 * len(_qc_panels), 5.6), squeeze=False)
-            for _axi, (_xc, _yc, _xl, _yl, _mode) in zip(axes[0], _qc_panels):
+            """
+            Both panels plot the SAME quantity on y — the catalytic competence score, on the same
+            0–1 scale — so the axis is drawn once and shared. Repeating an identical scale beside
+            itself spends horizontal space on nothing and invites the reader to check whether the two
+            axes really are the same. Sharing it also locks the two clouds to a common vertical
+            reference, which is the only way the panels can honestly be compared by eye.
+            """
+            fig, axes = plt.subplots(1, len(_qc_panels), sharey=True,
+                                     figsize=(6.1 * len(_qc_panels), 5.6), squeeze=False)
+            for _pi, (_axi, (_xc, _yc, _xl, _yl, _mode)) in enumerate(zip(axes[0], _qc_panels)):
+                if _pi > 0:
+                    _yl = None                 # the shared axis is labelled once, on the left
                 _xv = _num(_xc)
                 _yv = _num(_yc)
                 if _mode == "invert":
@@ -7242,7 +7251,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 if _ss07:
                     _axi.set_title(_ss07, fontsize=9, fontweight="bold", color="#2C3E50", pad=6)
                 _axi.set_xlabel(_xl, fontsize=10)
-                _axi.set_ylabel(_yl, fontsize=10)
+                if _yl:
+                    _axi.set_ylabel(_yl, fontsize=10)
             # Single-row legend spanning the top of the figure (above both panels).
             _h07, _l07 = axes[0][0].get_legend_handles_labels()
             fig.legend(_h07, _l07, loc="lower left", bbox_to_anchor=(0.02, 0.99),
