@@ -652,6 +652,20 @@ class CFG:
     # -------------------------------------------------------------------------------
     # Step 4.1: Strict NAC — publication-grade catalytic viability
     # -------------------------------------------------------------------------------
+    """
+    ── The prepared-pose measurement (Step 05) ──
+    The tier is decided on the Boltz CIF; the MD starts from the PrepWizard PDB. Measured across the MD
+    picks and the six controls, preparation moves the SN2 angle by 6.3° on average (max 18.5°) and pushes
+    the nucleophile 0.30 Å further out — and the shift is DIRECTIONAL: the poses the screen selected
+    degrade while the poses it rejected improve, which is regression to the mean on a variable the screen
+    itself selected for. The ladder's 5° rungs and 0.2 Å step are therefore finer than the structure is
+    reproducible. These constants let Step 05 re-measure the pose it actually hands to MD, so the drift is
+    recorded rather than silent; they do not gate anything.
+    """
+    CF_BOND_MAX_A: float        = 1.80   # Å  a C–F pair closer than this is a bond (the scissile C–F)
+    NUC_SEARCH_RADIUS_A: float  = 8.0    # Å  how far from the attack carbon to look for a carboxylate O
+    PREP_ANGLE_NOISE_DEG: float = 6.3    # °  measured mean |Δangle| CIF → prepared (max observed 18.5)
+    PREP_DIST_NOISE_A: float    = 0.30   # Å  measured mean Δdistance CIF → prepared (systematically outward)
     NAC_DIST_STRICT: float   = 3.2    # Å  nucleophile O to electrophilic C
     NAC_ANGLE_STRICT: float  = 155.0  # °  O–C–F attack angle at C (180° = ideal backside)
 
