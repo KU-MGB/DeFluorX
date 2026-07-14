@@ -635,9 +635,26 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     _is_md = [not str(j).startswith(CFG.CONTROL_JOB_PREFIX) for j in df["job"]]
     _y = np.arange(len(df))
 
-    fig, (ax_a, ax_d) = plt.subplots(1, 2, figsize=(14.5, 0.62 * len(df) + 3.4), sharey=True)
+    fig, (ax_a, ax_d) = plt.subplots(1, 2, figsize=(17.0, 0.62 * len(df) + 3.0), sharey=True,
+                                     gridspec_kw={"wspace": 0.06})
 
     def _panel(ax, c0, c1, gate, gate_lbl, relaxed, relaxed_lbl, xlab, worse_is):
+        """
+        The two zones are SHADED, not merely ruled. A dashed line tells the reader where the gate is; a
+        filled band tells them which side of it means competent, without translating a number first. For
+        the angle the gate is a FLOOR (pass = to the right of it); for the distance a CEILING (pass = to
+        the left). The fills carry that reversal so the eye does not have to.
+        """
+        _lo = min(df[c0].min(), df[c1].min(), gate, relaxed)
+        _hi = max(df[c0].max(), df[c1].max(), gate, relaxed)
+        _m = (_hi - _lo) * 0.13
+        _x0, _x1 = _lo - _m, _hi + _m
+        if worse_is == "down":                      # angle: elite is HIGH
+            ax.axvspan(gate, _x1, color=CFG.VIS_TINT["green"], alpha=0.55, lw=0, zorder=0)
+            ax.axvspan(_x0, relaxed, color=CFG.VIS_TINT["red"], alpha=0.55, lw=0, zorder=0)
+        else:                                       # distance: elite is LOW
+            ax.axvspan(_x0, gate, color=CFG.VIS_TINT["green"], alpha=0.55, lw=0, zorder=0)
+            ax.axvspan(relaxed, _x1, color=CFG.VIS_TINT["red"], alpha=0.55, lw=0, zorder=0)
         for _i, (_a, _b) in enumerate(zip(df[c0], df[c1])):
             # 'worse' = away from the gate. For the angle the gate is a floor; for the distance a ceiling.
             _worse = (_b < _a) if worse_is == "down" else (_b > _a)
@@ -654,19 +671,24 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
             ax.annotate(f"{_b:.1f}", xy=(_b, _i), xytext=(9 * _dir, 0), textcoords="offset points",
                         ha="left" if _dir > 0 else "right", va="center",
                         fontsize=CFG.VIS_FONT_ANNOT - 0.5, color=_col, zorder=6)
-        ax.axvline(gate, ls="--", lw=1.4, color=CFG.VIS_INK["dark"], alpha=0.85, zorder=2)
-        ax.text(gate, len(df) - 0.35, gate_lbl, rotation=90, va="top", ha="right",
-                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"])
-        ax.axvline(relaxed, ls=":", lw=1.1, color=CFG.VIS_INK["ghost"], zorder=2)
-        ax.text(relaxed, len(df) - 0.35, relaxed_lbl, rotation=90, va="top", ha="right",
-                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["ghost"])
+        ax.axvline(gate, ls="--", lw=1.4, color=CFG.VIS_INK["dark"], alpha=0.9, zorder=2)
+        ax.axvline(relaxed, ls=":", lw=1.2, color=CFG.VIS_INK["ghost"], zorder=2)
+        """
+        The gate labels sit in the MARGIN ABOVE the panel, not inside it. Rotated 90° across the data
+        they crossed arrows, values and rows — the reader had to decode the label before reading the
+        plot. Anchored to the axis in data-x and figure-y, they stay attached to their own line and
+        collide with nothing.
+        """
+        for _gv, _gl, _gc in ((gate, gate_lbl, CFG.VIS_INK["dark"]),
+                              (relaxed, relaxed_lbl, CFG.VIS_INK["ghost"])):
+            ax.annotate(_gl, xy=(_gv, 1.0), xycoords=("data", "axes fraction"),
+                        xytext=(0, 6), textcoords="offset points",
+                        ha="center", va="bottom", rotation=0,
+                        fontsize=CFG.VIS_FONT_ANNOT, color=_gc, clip_on=False)
         ax.set_xlabel(xlab)
         ax.grid(True, axis="x", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
         ax.set_axisbelow(True)
-        _lo = min(df[c0].min(), df[c1].min(), gate, relaxed)
-        _hi = max(df[c0].max(), df[c1].max(), gate, relaxed)
-        _m = (_hi - _lo) * 0.13
-        ax.set_xlim(_lo - _m, _hi + _m)
+        ax.set_xlim(_x0, _x1)
 
     _panel(ax_a, "raw_sn2_angle", "prep_sn2_angle",
            CFG.TIER_ANGLE_MIN[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_ANGLE_MIN[CFG.TIER_TOP]:.0f}°",
@@ -686,20 +708,20 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     _h = [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
                   markeredgecolor=CFG.VIS_INK["dark"], ms=7, label="Boltz CIF  (what the screen scored)"),
           _Line2D([0], [0], color=CFG.VIS_BAND["low"], lw=2.2, label="prepared pose moved AWAY from the gate"),
-          _Line2D([0], [0], color=CFG.VIS_BAND["high"], lw=2.2, label="prepared pose moved TOWARDS the gate")]
-    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.02, 1.015), ncol=3,
+          _Line2D([0], [0], color=CFG.VIS_BAND["high"], lw=2.2, label="prepared pose moved TOWARDS the gate"),
+          _mpatches.Patch(facecolor=CFG.VIS_TINT["green"], edgecolor="none", label="clears the Tier_1A gate"),
+          _mpatches.Patch(facecolor=CFG.VIS_TINT["red"], edgecolor="none", label="outside the relaxed NAC envelope")]
+    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.03, 1.055), ncol=3,
                 frameon=False, fontsize=CFG.VIS_FONT_LEGEND)
 
     _da = pd.to_numeric(df["prep_d_angle"], errors="coerce").dropna()
     _dd = pd.to_numeric(df["prep_d_dist"], errors="coerce").dropna()
-    fig.suptitle("The pose the screen scored is not the pose MD starts from",
-                 fontsize=CFG.VIS_FONT_AXIS_LABEL + 2)
     fig.text(0.5, 0.012,
              f"Arrow = Boltz CIF → PrepWizard.   CIF→RAW conversion is lossless (max |Δ| 0.04°), so it is not drawn.   "
              f"Preparation: mean |Δangle| {_da.abs().mean():.1f}° (max {_da.abs().max():.1f}°), "
              f"mean Δdistance {_dd.mean():+.2f} Å.   Blue labels = MD-selected.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.045, 1, 0.925))
+    fig.tight_layout(rect=(0, 0.045, 1, 0.90))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "01_Pose_Drift_CIF_to_Prepared.png"
