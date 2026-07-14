@@ -190,8 +190,8 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,761 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,393 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,817 lines &nbsp; "]
+        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,381 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
         CFG --- UTL --- ENV
     end
@@ -201,7 +201,7 @@ flowchart TD
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
         M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,922 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,158 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,221 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,657 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -210,7 +210,7 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~2,978 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~3,562 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
@@ -218,7 +218,7 @@ flowchart TD
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
         M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Desmond SID → *_SID-out.eaf (frame-count validated) &nbsp; \n &nbsp; Per-frame ΔG_bind + energy components + plots &nbsp; \n &nbsp; Disk-safe scratch · phase-aware heartbeat · WARN status &nbsp; \n &nbsp; 📄 ~2,265 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,757 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,791 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
@@ -922,6 +922,7 @@ python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
 **Usage:**
 ```bash
 python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp   # + QM ligand charges
 ```
 
 **Pipeline:**
@@ -934,7 +935,33 @@ python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
    - Disulfide bond detection and bonding
 3. Parallel processing: `CFG.GLOBAL_MAX_WORKERS` workers
 
-**Configuration (CFG §15):** pH values, RMSD threshold, CPU reservation, chain names.
+4. **Prepared-pose geometry** — the SN2 geometry is re-measured on the structure MD will actually start
+   from, at the **mapped catalytic aspartate** (`Mapped_Nucleophile`; Asp110 in FAcD, shifted in variants).
+
+   > **The screened pose is not the simulated pose.** The tier is decided on the Boltz CIF; MD starts
+   > from the PrepWizard PDB. Measured across the MD picks and the six controls: CIF→RAW is **lossless**
+   > (max |Δ| 0.04°), but RAW→PREP moves the attack angle by **6.3° on average (max 18.5°)** and pushes
+   > the nucleophile **+0.30 Å outward** in 8 of 9 structures — and the shift is **directional**: the
+   > poses the screen ranked highest come *down*, the poses it ranked lowest go *up*. That is regression
+   > to the mean on a coordinate the screen itself selected for. The tier ladder's 5° rungs and 0.2 Å
+   > step are therefore **finer than the structure is reproducible**. This is recorded, never gated on:
+   > a prepared pose that has left the relaxed NAC envelope is *flagged*, never dropped.
+
+   Outputs: `3_Comparative_Analysis/00_Prepared_Pose_Geometry.csv` and
+   `01_Pose_Drift_CIF_to_Prepared.png`.
+5. **QM ligand charges** (`--esp` or `CFG.ESP_CHARGES_ENABLE`; **off by default**) — a Jaguar DFT
+   single-point with `icfit=1` on each prepared ligand, writing `<ligand>_ESP.mae`.
+
+   > OPLS4 assigns ligand charges by atom type, so it cannot see the one quantity an SN2 rate turns on:
+   > how electrophilic the α-carbon is. The QM charge on that carbon runs **+0.023 (FA) → +0.126 (DFA) →
+   > +0.297 (TFA)** — a **13× spread** the force field flattens. The charges are **never injected**: they
+   > reach the physics only if you load the `.mae` **by hand** in Maestro System Builder ("Use custom
+   > charges" → "Partial charges from structure"). This step does not build a system and does not touch
+   > MD or WaterMap. It is irrelevant to Step 07, where QSite places the ligand *inside* the QM region.
+
+   Outputs: `4_Ligand_ESP_Charges/00_ESP_Charges_Summary.csv` and `01_ESP_Alpha_Carbon_Charge.png`.
+
+**Configuration (CFG §15):** pH values, RMSD threshold, CPU reservation, chain names, ESP basis/functional.
 
 **Scientific references:**
 | Method | Reference |
