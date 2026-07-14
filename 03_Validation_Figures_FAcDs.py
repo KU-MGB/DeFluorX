@@ -146,6 +146,15 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 07_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
     • 08_Model_Agreement.png                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
 
+    ── 08_Extended_Analysis/ ── merged extended-analysis panels (geometry, affinity, phylogeny, pillars)
+    • 01_Geometry_and_Uncertainty.png              <-- Nucleophile distance + SN2 angle with multi-model uncertainty
+    • 02_Binding_Affinity_Metrics.png              <-- Binding-affinity distribution by tier (2-column legend + stats)
+    • 03_Evolutionary_Phylogeny.png       <-- Evolutionary phylogeny, detailed variant
+    • 04_Pillar_Divergence_by_Tier.png             <-- Divergence of the scoring pillars across tiers
+    • 05_Mechanistic_Breakdown_by_Tier.png         <-- Mechanistic components broken down per tier
+    • 06_Chain_Length_by_Tier.png                  <-- PFAS chain-length distribution by tier (stats top-left)
+    • 07_Tier1A_Cross_Ligand_Heatmap.png           <-- Tier_1A proteins × ligands cross-tabulation heatmap
+
 -------------------------------------------------------------------------------
 Scientific References:
     1. Data handling & numerics:
@@ -7608,6 +7617,1418 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close("all")
 
 
+# ===============================================================================
+# SECTION: EXTENDED ANALYSIS FIGURES  [writes folder 08_Extended_Analysis]
+# ===============================================================================
+"""
+Eight panels merged in from the two more_Plots prototypes, each taken from whichever prototype drew
+it best (both were rendered and reviewed side by side before selection).
+
+The prototypes define helpers of the SAME NAME with DIFFERENT bodies (_save, _legend_with_stats), and
+each defines a phylogeny figure — of which BOTH are wanted. Everything is therefore namespaced by
+origin (_xn_ = newer prototype, _xo_ = older) rather than folded into one set of helpers: a shared
+namespace would silently hand one version's figure the other version's helper, and the result would
+look plausible and be wrong.
+
+The prototypes' raw filenames (Figure_1_…, Figure_05C_…, mixed numbering and letter suffixes) are
+replaced by the pipeline's convention — sequential 01-08 with descriptive names.
+"""
+# Imports this section needs and the rest of 03 does not.
+import gemmi
+import scipy.stats as _sc_stats
+from scipy.stats import chi2_contingency, mannwhitneyu, t as _t_dist
+from dataclasses import dataclass
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
+
+_xn_STANDARD_AA = {
+    "ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS", "ILE",
+    "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
+}
+
+_xn_WATER_NAMES = {"HOH", "WAT", "SOL", "TIP3", "TIP3P", "SPC", "SPCE", "OPC"}
+
+_xn_NUCLEOPHILE_SEARCH_RADIUS_A = 6.0
+
+_xn_CF_BOND_CUTOFF_A = 1.7
+
+_xn_IDEAL_SN2_ANGLE_DEG = 180.0
+
+_xn_NUCLEOPHILE_ATTACK_ATOMS = {
+    "ASP": ("OD1", "OD2"),
+    "GLU": ("OE1", "OE2"),
+    "SER": ("OG",),
+    "THR": ("OG1",),
+    "CYS": ("SG",),
+}
+
+class _xn_AtomRecord:
+    """Atomo con metadati minimi necessari per geometria e tracciabilita'."""
+    atom: gemmi.Atom
+    residue_name: str
+    residue_seqid: int
+    chain_name: str
+
+class _xn_GeometryResult:
+    """Risultato della migliore geometria S_N2 trovata in un modello."""
+    sn2_distance_A: float
+    sn2_angle_deg: float
+    sn2_angle_deviation_deg: float
+    nucleophile_resname: str
+    nucleophile_resseq: int
+    nucleophile_chain: str
+    nucleophile_atom: str
+    reactive_carbon_atom: str
+    leaving_fluorine_atom: str
+    cf_distance_A: float
+    candidate_count: int
+    status: str
+
+def _xn_calculate_angle(p1: gemmi.Position, p2: gemmi.Position, p3: gemmi.Position) -> float:
+    """
+    Calcola l'angolo p1-p2-p3 in gradi.
+
+    Nel caso S_N2: p1 = O_nuc, p2 = C_pfas, p3 = F uscente.
+    """
+    v1 = np.array([p1.x - p2.x, p1.y - p2.y, p1.z - p2.z], dtype=float)
+    v2 = np.array([p3.x - p2.x, p3.y - p2.y, p3.z - p2.z], dtype=float)
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    if norm_v1 == 0 or norm_v2 == 0:
+        return 0.0
+    cosine_angle = np.dot(v1, v2) / (norm_v1 * norm_v2)
+    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+    return float(np.degrees(angle))
+
+def _xn_is_ligand_residue(residue: gemmi.Residue) -> bool:
+    """Classifica come ligando tutto cio' che non e' proteina standard o acqua."""
+    name = residue.name.strip().upper()
+    return name not in _xn_STANDARD_AA and name not in _xn_WATER_NAMES
+
+def _xn_iter_atoms_from_cif(cif_path: Path) -> Tuple[List[_xn_AtomRecord], List[_xn_AtomRecord]]:
+    """
+    Estrae atomi di ligando e proteina da un CIF Boltz-2.
+
+    Qualunque eccezione di parsing viene propagata al chiamante, che saltera' il
+    singolo modello senza interrompere l'intero batch.
+    """
+    doc = gemmi.cif.read_file(str(cif_path))
+    structure = gemmi.make_structure_from_block(doc.sole_block())
+    ligand_atoms: List[_xn_AtomRecord] = []
+    protein_atoms: List[_xn_AtomRecord] = []
+
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                bucket = ligand_atoms if _xn_is_ligand_residue(residue) else protein_atoms
+                for atom in residue:
+                    # Gli idrogeni non sono necessari per la geometria richiesta.
+                    if atom.element.name == "H":
+                        continue
+                    bucket.append(_xn_AtomRecord(
+                        atom=atom,
+                        residue_name=residue.name.strip().upper(),
+                        residue_seqid=int(residue.seqid.num) if residue.seqid.num is not None else -1,
+                        chain_name=chain.name,
+                    ))
+    return ligand_atoms, protein_atoms
+
+def _xn_find_reactive_cf_pairs(lig_atoms: Sequence[_xn_AtomRecord]) -> List[Tuple[_xn_AtomRecord, _xn_AtomRecord]]:
+    """Trova tutte le coppie C-F del ligando con distanza inferiore a 1.7 A."""
+    carbons = [a for a in lig_atoms if a.atom.element.name == "C"]
+    fluorines = [a for a in lig_atoms if a.atom.element.name == "F"]
+    pairs: List[Tuple[_xn_AtomRecord, _xn_AtomRecord]] = []
+    for carbon in carbons:
+        for fluorine in fluorines:
+            if carbon.atom.pos.dist(fluorine.atom.pos) < _xn_CF_BOND_CUTOFF_A:
+                pairs.append((carbon, fluorine))
+    return pairs
+
+def _xn_iter_nucleophile_atoms(protein_atoms: Sequence[_xn_AtomRecord]) -> Iterable[_xn_AtomRecord]:
+    """Restituisce gli atomi nucleofili candidati in ASP/GLU/SER/THR/CYS."""
+    for atom_record in protein_atoms:
+        allowed_atoms = _xn_NUCLEOPHILE_ATTACK_ATOMS.get(atom_record.residue_name)
+        if not allowed_atoms:
+            continue
+        if atom_record.atom.name.strip() in allowed_atoms:
+            yield atom_record
+
+def _xn_geometry_rank(distance_A: float, angle_deg: float) -> Tuple[float, float]:
+    """
+    Ordina i candidati bilanciando distanza corta e angolo vicino a 180 gradi.
+
+    Il primo termine combina distanza e deviazione angolare normalizzata; il
+    secondo mantiene la distanza come discriminante stabile in caso di pareggio.
+    """
+    angle_deviation = abs(_xn_IDEAL_SN2_ANGLE_DEG - angle_deg)
+    combined = distance_A + (angle_deviation / 45.0)
+    return combined, distance_A
+
+def _xn_compute_sn2_geometry(cif_path: Path) -> _xn_GeometryResult:
+    """Calcola la migliore geometria S_N2 direttamente dal CIF."""
+    lig_atoms, protein_atoms = _xn_iter_atoms_from_cif(cif_path)
+    cf_pairs = _xn_find_reactive_cf_pairs(lig_atoms)
+    if not lig_atoms:
+        return _xn_empty_geometry("no_ligand_atoms")
+    if not cf_pairs:
+        return _xn_empty_geometry("no_reactive_cf_pair")
+
+    best: Optional[Tuple[Tuple[float, float], _xn_GeometryResult]] = None
+    candidate_count = 0
+
+    for nuc in _xn_iter_nucleophile_atoms(protein_atoms):
+        for carbon, fluorine in cf_pairs:
+            distance_A = nuc.atom.pos.dist(carbon.atom.pos)
+            if distance_A > _xn_NUCLEOPHILE_SEARCH_RADIUS_A:
+                continue
+            angle_deg = _xn_calculate_angle(nuc.atom.pos, carbon.atom.pos, fluorine.atom.pos)
+            angle_deviation = abs(_xn_IDEAL_SN2_ANGLE_DEG - angle_deg)
+            cf_distance_A = carbon.atom.pos.dist(fluorine.atom.pos)
+            candidate_count += 1
+            result = _xn_GeometryResult(
+                sn2_distance_A=distance_A,
+                sn2_angle_deg=angle_deg,
+                sn2_angle_deviation_deg=angle_deviation,
+                nucleophile_resname=nuc.residue_name,
+                nucleophile_resseq=nuc.residue_seqid,
+                nucleophile_chain=nuc.chain_name,
+                nucleophile_atom=nuc.atom.name.strip(),
+                reactive_carbon_atom=carbon.atom.name.strip(),
+                leaving_fluorine_atom=fluorine.atom.name.strip(),
+                cf_distance_A=cf_distance_A,
+                candidate_count=candidate_count,
+                status="ok",
+            )
+            ranked = _xn_geometry_rank(distance_A, angle_deg)
+            if best is None or ranked < best[0]:
+                best = (ranked, result)
+
+    if best is None:
+        return _xn_empty_geometry("no_nucleophile_within_6A")
+
+    final = best[1]
+    return _xn_GeometryResult(
+        **{**final.__dict__, "candidate_count": candidate_count}
+    )
+
+def _xn_empty_geometry(status: str) -> _xn_GeometryResult:
+    """Risultato sentinella per modelli senza geometria S_N2 misurabile."""
+    return _xn_GeometryResult(
+        sn2_distance_A=math.nan,
+        sn2_angle_deg=math.nan,
+        sn2_angle_deviation_deg=math.nan,
+        nucleophile_resname="",
+        nucleophile_resseq=-1,
+        nucleophile_chain="",
+        nucleophile_atom="",
+        reactive_carbon_atom="",
+        leaving_fluorine_atom="",
+        cf_distance_A=math.nan,
+        candidate_count=0,
+        status=status,
+    )
+
+_xn_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
+
+_xn_COL_DOUBLE_IN = 12.5
+
+_xn_STRIP_MAX_PER_GROUP = 250
+
+_xn__RNG = np.random.default_rng(CFG.RANDOM_SEED if hasattr(CFG, "RANDOM_SEED") else 42)
+
+class _xn_ReportManager:
+    def __init__(self, out_dir: Path):
+        self.path = out_dir / "01_Analysis_Log.txt"
+        with open(self.path, "w") as f:
+            f.write("MERGED PUBLICATION PLOTS — REPORT\\n")
+            f.write("=" * 80 + "\\n\\n")
+
+    def log(self, text: str):
+        print(text, flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[LOG] {text}\\n")
+
+    def section(self, title: str):
+        print(f"\\n--- {title} ---", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"\\n--- {title} ---\\n")
+
+    def warning(self, text: str):
+        print(f"[WARNING] {text}", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[WARNING] {text}\\n")
+            
+    def info(self, text: str):
+        self.log(text)
+
+    def error(self, text: str):
+        print(f"[ERROR] {text}", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[ERROR] {text}\\n")
+
+def _xn__minmax(s):
+    s = pd.to_numeric(s, errors='coerce')
+    lo, hi = (np.nanmin(s), np.nanmax(s))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        return pd.Series(np.nan, index=s.index)
+    return (s - lo) / (hi - lo)
+
+def _xn__nuc_distance(df: pd.DataFrame) -> pd.Series:
+    """Nucleophile–substrate distance, resolving the several historical names.
+
+    The Step-02 writer renames ``dist_Nuc`` to ``Dist_Nucleophile_ASP10`` via
+    ``CFG.COLUMN_RENAMING_MAP``; older/raw exports expose the live geometry as
+    ``best_nucleophile_distance``. All three are treated as equivalent.
+    """
+    col = _xn__col(df, 'Dist_Nucleophile_ASP10', 'Dist_Nucleophile', 'best_nucleophile_distance', 'dist_Nuc')
+    return _xn__num(df, col)
+
+_xn_PILLAR_ALIASES = {
+    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', 'Boltz_Model_Confidence'],
+    'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
+    'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
+    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
+    'Final_Unified_Score': ['Final_Unified_Score', 'Ranking_Score_Calc'],
+}
+
+def _xn__col(df: pd.DataFrame, *candidates: str) -> str | None:
+    """Return the first candidate column that exists in ``df`` (else ``None``)."""
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+def _xn__pillar_col(df: pd.DataFrame, pillar: str) -> str | None:
+    """Resolve a headline-pillar name to whichever concrete column is present."""
+    return _xn__col(df, *_xn_PILLAR_ALIASES.get(pillar, [pillar]))
+
+def _xn__num(df: pd.DataFrame, col: str | None) -> pd.Series:
+    """Coerce a column to numeric, returning an empty series when it is absent."""
+    if col is None or col not in df.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(df[col], errors='coerce')
+
+def _xn__tiers_present(df: pd.DataFrame, tier_col: str='degrader_tier') -> list[str]:
+    """Return the canonical tier ordering restricted to tiers actually present."""
+    if tier_col not in df.columns:
+        return []
+    have = set(df[tier_col].dropna().unique())
+    return [t for t in TIER_ORDER_LOGIC if t in have]
+
+def _xn__fmt_p(p: float) -> str:
+    """Compact, publication-style p-value formatting."""
+    if p is None or not np.isfinite(p):
+        return 'p = n/a'
+    if p < 0.0001:
+        return 'p < 1e-4'
+    return f'p = {p:.3g}'
+
+def _xn__annotate(ax, text: str, loc: str='upper right') -> None:
+    """Place a boxed statistics annotation on an axis."""
+    xy = {'upper right': (0.98, 0.97, 'right', 'top'), 'upper left': (0.02, 0.97, 'left', 'top'), 'lower right': (0.98, 0.03, 'right', 'bottom'), 'lower left': (0.02, 0.03, 'left', 'bottom')}.get(loc, (0.98, 0.97, 'right', 'top'))
+    ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=8.5, family='monospace', bbox=dict(boxstyle='round,pad=0.4', fc='white', ec='#BBBBBB', alpha=0.9))
+
+def _xn__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8):
+    """One combined box: the legend entries, then the statistics lines as blank-handle rows,
+    so the legend and the stats annotation read as a single unit rather than two boxes."""
+    from matplotlib.lines import Line2D as _L2D
+    _blank = lambda: _L2D([], [], linestyle='', marker='', color='none')
+    h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
+    l = list(labels) + [''] + list(stat_lines)
+    ax.legend(h, l, loc=loc, framealpha=0.95, fancybox=True, prop={'family': 'monospace', 'size': fontsize})
+
+def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
+    """Persist a figure as a PNG at the pipeline's publication resolution, then free its memory.
+
+    The DPI comes from CFG.VIS_FIGURE_DPI — the same value every other step renders at, so a
+    sandbox figure and a Step-03 figure are the same physical object at the same scale.
+    """
+    stem = Path(name).stem
+    png = out_dir / f'{stem}.png'
+    fig.savefig(png, dpi=CFG.VIS_FIGURE_DPI)
+    plt.close(fig)
+    reporter.log(f'  ✓ {stem}.png')
+
+def _xn__panel(ax, letter: str) -> None:
+    """No-op: the panel letters are not drawn.
+
+    These figures are read on their own rather than as a lettered composite in a caption, so an (a)
+    / (b) tag labels a relationship that does not exist on the page.
+    """
+    return
+
+def _xn__fmt_n(n: int) -> str:
+    """A sample size that fits the ~0.5 in a tier occupies on a two-panel figure.
+
+    Seven tiers across a double-column axis leave no room for '22,184' under each tick; the
+    thousands are what a reader takes from it, not the units.
+    """
+    n = int(n)
+    return f'{n:,}' if n < 1000 else f'{n / 1000:.1f}k'
+
+def _xn__stat_header(ax, text: str) -> None:
+    """The panel's test result, on its own line ABOVE the axes.
+
+    Inside the axes it has nowhere to go that is not on top of either the data or the tail of a
+    violin, and a boxed annotation nudged out of the way by constrained_layout collides with the
+    neighbouring panel instead. Above the frame it always has room and never covers a mark.
+    """
+    if not text:
+        return
+    ax.text(0.015, 0.015, text, transform=ax.transAxes, ha='left', va='bottom',
+            fontsize=CFG.VIS_FONT_ANNOT - 0.5, family='monospace', color='#444444',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.85,
+                      edgecolor='#CCCCCC', linewidth=0.6), zorder=9)
+
+def _xn__thin(sub: pd.DataFrame, group_col: str, cap: int = _xn_STRIP_MAX_PER_GROUP) -> pd.DataFrame:
+    """A per-group random subsample for strip overlays (see _xn_STRIP_MAX_PER_GROUP)."""
+    parts = []
+    for _, g in sub.groupby(group_col, observed=True):
+        if len(g) > cap:
+            g = g.iloc[_xn__RNG.choice(len(g), cap, replace=False)]
+        parts.append(g)
+    return pd.concat(parts, ignore_index=True) if parts else sub
+
+def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
+    """Kruskal-Wallis across the ordered groups, formatted for an on-panel annotation."""
+    groups = [sub.loc[sub[group_col] == t, val_col].dropna().values for t in order]
+    groups = [g for g in groups if len(g) >= 2]
+    if len(groups) < 2:
+        return ''
+    H, p = _sc_stats.kruskal(*groups)
+    # Epsilon-squared: the share of rank variance the grouping explains. H alone grows with n
+    # and says nothing about how large the tier separation actually is.
+    n = sum(len(g) for g in groups)
+    eps2 = (H - len(groups) + 1) / (n - len(groups)) if n > len(groups) else np.nan
+    return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
+
+_xn_FIG_NAMES = {
+    'geometry':   '01_Geometry_and_Uncertainty',
+    'binding':    'Figure_2_Binding_Affinity_Metrics',
+    'phylogeny':  '03_Evolutionary_Phylogeny',
+    'pillars':    '04_Pillar_Divergence_by_Tier',
+    'size_mech':  'Figure_5_Mechanistic_Geometry_vs_Chain_Length',
+    'size_tier':  'Figure_6_Chain_Length_by_Tier',
+    'validation': '07_Tier1A_Cross_Ligand_Heatmap',
+}
+
+def _xn__gate_lines_distance(ax) -> None:
+    """The tier distance gates, drawn where the tiers are actually decided (CFG.TIER_NUC_DIST).
+
+    A box plot shows where the data sit; it does not show the cut the classifier applied. With
+    the gate drawn, a reader can see for themselves why a complex landed in the tier it did.
+    """
+    gates = getattr(CFG, 'TIER_NUC_DIST', {}) or {}
+    # The 1A and 2A gates are only 0.2 A apart: centred labels would print on top of each other,
+    # so consecutive labels sit alternately below and above their own rule.
+    for i, tier in enumerate((CFG.TIER_TOP, 'Tier_2A', 'Tier_2B')):
+        v = gates.get(tier)
+        if v is None or not np.isfinite(float(v)) or float(v) > 12.0:
+            continue
+        ax.axhline(float(v), ls=':', lw=1.0, color=TIER_PALETTE.get(tier, '#777777'),
+                   alpha=0.9, zorder=4)
+        ax.text(0.995, float(v), f'{tier} ≤{float(v):.1f} Å',
+                transform=ax.get_yaxis_transform(), ha='right',
+                va='top' if i % 2 else 'bottom',
+                fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=TIER_PALETTE.get(tier, '#777777'))
+
+def _xn__gate_lines_angle(ax) -> None:
+    """The tier SN2-angle gates (CFG.TIER_ANGLE_MIN); see _xn__gate_lines_distance."""
+    gates = getattr(CFG, 'TIER_ANGLE_MIN', {}) or {}
+    for tier in (CFG.TIER_TOP, 'Tier_2A', 'Tier_2B'):
+        v = gates.get(tier)
+        if v is None or not np.isfinite(float(v)):
+            continue
+        ax.axhline(float(v), ls=':', lw=1.0, color=TIER_PALETTE.get(tier, '#777777'),
+                   alpha=0.9, zorder=4)
+        ax.text(0.995, float(v), f'{tier} ≥{float(v):.0f}°',
+                transform=ax.get_yaxis_transform(), ha='right', va='center',
+                fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=TIER_PALETTE.get(tier, '#777777'))
+
+def _xn__tidy_tier_ticks(ax, counts=None) -> None:
+    """Tier labels upright and shortened, optionally carrying their own n.
+
+    Rotated labels cost a reader a head-tilt per panel, and the 'Tier_' stem repeats on every
+    tick without adding anything the axis title lacks. Where the top of the axis is already
+    spoken for by a legend, the sample size rides on the tick label rather than fighting it.
+    """
+    labels = []
+    for t in ax.get_xticklabels():
+        raw = t.get_text()
+        # The full tier name, as every other figure in the set prints it. Abbreviating to '1A' saves
+        # a few pixels and costs the reader a translation on every glance between figures.
+        lbl = raw
+        if counts is not None:
+            lbl += f'\n{_xn__fmt_n(counts.get(raw, 0))}'
+        labels.append(lbl)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, rotation=0, fontsize=CFG.VIS_FONT_TICK)
+    if counts is not None:
+        ax.set_xlabel(f'{ax.get_xlabel()}   (n below each tier)')
+
+def _xn__tier_boxstrip(ax, sub, tiers, val_col, ylabel, *, group_col='tier'):
+    """The tier-versus-value panel used by several figures: box + capped strip + n + test.
+
+    Draw order matters. The strip goes down FIRST at low zorder and the box on top of it with a
+    semi-transparent face, so the median and the quartiles stay readable through the points
+    instead of being buried under them.
+    """
+    thin = _xn__thin(sub, group_col)
+    sns.stripplot(data=thin, x=group_col, y=val_col, order=tiers, color='#333333',
+                  size=1.8, alpha=0.28, jitter=0.28, ax=ax, zorder=1, legend=False)
+    sns.boxplot(data=sub, x=group_col, y=val_col, order=tiers, hue=group_col,
+                palette=TIER_PALETTE, legend=False, fliersize=0, ax=ax,
+                width=0.62, linewidth=1.0, zorder=3,
+                boxprops=dict(alpha=0.85), medianprops=dict(color='#111111', linewidth=1.6))
+    ax.set_xlabel('Degrader tier')
+    ax.set_ylabel(ylabel)
+    ax.set_axisbelow(True)
+    _xn__tidy_tier_ticks(ax, counts=sub[group_col].value_counts())
+    _xn__stat_header(ax, _xn__kruskal(sub, group_col, val_col, tiers))
+    return ax
+
+def _xn__ensure_multimodel_variance_csv(prod_dir: Path, reporter) -> Path:
+    """Return the per-model variance CSV, computing it lazily if absent.
+
+    Target path is ``prod_dir/4_Prediction_Jobs/boltz_qc_multimodel_variance.csv``.
+    When missing, the geometry is recomputed by parsing every model ``.cif`` for
+    all complexes under ``4_Prediction_Jobs``. The heavy SN2 geometry (nucleophile
+    → reactive carbon → leaving fluorine) is delegated to the internal gemmi
+    engine (_xn_compute_sn2_geometry, merged in above) so the recomputed values are
+    numerically identical to the pipeline's own analysis rather than a divergent
+    re-implementation. Per-model ``ptm``/``iptm``/``ligand_iptm``/``confidence_score``
+    are read from the sibling ``confidence_*.json``.
+    """
+    jobs_dir = prod_dir / '4_Prediction_Jobs'
+    target = jobs_dir / 'boltz_qc_multimodel_variance.csv'
+    if target.exists():
+        return target
+    _root_copy = prod_dir / 'boltz_qc_multimodel_variance.csv'
+    if _root_copy.exists():
+        return _root_copy
+    if not jobs_dir.exists():
+        reporter.log(f'  ! Multi-model variance: {jobs_dir} not found; cannot compute.')
+        return target
+    reporter.log('  ⧗ boltz_qc_multimodel_variance.csv missing — computing structural variance from CIF files (this can take several minutes)…')
+    import json as _json
+    _mre = re.compile('_(model_\\d+)\\.json$')
+    rows = []
+    job_folders = sorted((p for p in jobs_dir.iterdir() if p.is_dir()))
+    n_jobs = len(job_folders)
+    for ji, job_dir in enumerate(job_folders, 1):
+        if ji % 500 == 0 or ji == n_jobs:
+            reporter.log(f'    · variance progress: {ji}/{n_jobs} complexes')
+        conf_jsons = sorted(job_dir.glob('boltz_results_*/predictions/*/confidence_*_model_*.json'))
+        for cj in conf_jsons:
+            mm = _mre.search(cj.name)
+            if not mm:
+                continue
+            model_name = mm.group(1)
+            cif_path = cj.with_name(cj.name.replace('confidence_', '', 1).replace('.json', '.cif'))
+            if not cif_path.exists():
+                continue
+            try:
+                with open(cj) as fh:
+                    cd = _json.load(fh)
+            except Exception:
+                cd = {}
+            try:
+                geo = _xn_compute_sn2_geometry(cif_path)
+                sn2_dist = float(geo.sn2_distance_A)
+                sn2_ang = float(geo.sn2_angle_deg)
+            except Exception:
+                sn2_dist = float('nan')
+                sn2_ang = float('nan')
+            rows.append({'complex_id': job_dir.name, 'model_name': model_name, 'ptm': cd.get('ptm', np.nan), 'iptm': cd.get('iptm', np.nan), 'ligand_iptm': cd.get('ligand_iptm', np.nan), 'confidence_score': cd.get('confidence_score', np.nan), 'sn2_distance_A': sn2_dist, 'sn2_angle_deg': sn2_ang})
+    var_df = pd.DataFrame(rows)
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    var_df.to_csv(target, index=False)
+    reporter.log(f"  ✔ Computed multi-model variance for {var_df['complex_id'].nunique()} complexes → {target.resolve()}")
+    return target
+
+def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
+    """Geometry and inter-model uncertainty by degrader tier (2x2 grid).
+
+    Identical to Figure_01c_Geometry_and_Uncertainty, except the 180 degree
+    "ideal in-line" reference line (and its legend) is removed from the
+    SN2-angle panel (top-right).
+
+    Uses the variance CSV's own ``degrader_tier`` column (identical across a
+    complex's 5 models — it is the pipeline's authoritative classification)
+    rather than re-deriving a tier from raw distance/angle alone. A purely
+    geometric re-derivation cannot represent Tier_5_Decoy here: the 02b
+    geometry engine only searches for a nucleophile within a 6 A radius
+    (``geometry_status == "no_nucleophile_within_6A"`` otherwise), so
+    ``sn2_distance_A`` never exceeds ~6 A in practice — well inside the
+    Tier_4 cutoff (8 A). Combined with taking the best of 5 models per
+    complex, that made Tier_5_Decoy essentially unreachable even though it
+    is a genuine, populated tier in the source data.
+    """
+    # Use the run's real production dir (set by main); out_dir is a fixed sandbox path so
+    # out_dir.parent no longer points at the run.
+    _prod = globals().get("_PROD_DIR") or (out_dir.parent / '1_Boltz2_Production')
+    """
+    The inter-model uncertainty panels need the per-model variance CSV. Building it from scratch
+    means parsing 5 model CIFs for each of ~58,000 complexes — hours of gemmi. That is a
+    deliberate, opt-in job (--variance), not something a figure refresh should trigger silently:
+    without the flag, an absent CSV falls through to the two absolute-geometry panels, which
+    carry the same tier claim and are drawn from the ranked CSV in seconds.
+    """
+    if globals().get('_ALLOW_VARIANCE_COMPUTE', False):
+        var_path = _xn__ensure_multimodel_variance_csv(_prod, reporter)
+    else:
+        var_path = next((p for p in (_prod / '4_Prediction_Jobs' / 'boltz_qc_multimodel_variance.csv',
+                                     _prod / 'boltz_qc_multimodel_variance.csv') if p.exists()), None)
+        if var_path is None:
+            reporter.log('  · Figure 1: no per-model variance CSV; drawing the two geometry panels. '
+                         'Pass --variance to build it from the CIFs (slow) and get the uncertainty panels too.')
+    if var_path is None or not Path(var_path).exists():
+        # FAcDs has no per-model variance CSV (needs the 02b reanalysis engine), so the two
+        # inter-model uncertainty panels cannot be drawn. Plot the two absolute-geometry panels
+        # (nucleophile distance, SN2 attack angle) by tier from the ranked CSV instead.
+        reporter.log('  ! Figure 01C: variance CSV unavailable — plotting geometry-only (nucleophile distance + SN2 angle) from ranked CSV.')
+        _dist = _xn__nuc_distance(df).where(lambda s: s < 20.0)  # drop ~999/1000 Å "no nucleophile" sentinel
+        _ang = _xn__num(df, _xn__col(df, 'SN2_Attack_Angle'))
+        _tcol = _xn__col(df, 'degrader_tier')
+        if _tcol is None or _dist.empty or _ang.empty:
+            reporter.log('  ! Figure 01C skipped: geometry columns unavailable.')
+            return
+        gdf = pd.DataFrame({'tier': df[_tcol].values, 'dist': _dist.values, 'ang': _ang.values}).dropna(subset=['dist', 'ang'])
+        if gdf.empty:
+            reporter.log('  ! Figure 01C skipped: no geometry rows.')
+            return
+        _tiers = [t for t in TIER_ORDER_LOGIC if t in set(gdf['tier'])]
+        fig, (axd, axa) = plt.subplots(1, 2, figsize=(_xn_COL_DOUBLE_IN, 0.45 * _xn_COL_DOUBLE_IN))
+        _xn__tier_boxstrip(axd, gdf, _tiers, 'dist', 'Nucleophile distance  (Å)')
+        _xn__tier_boxstrip(axa, gdf, _tiers, 'ang', 'SN2 attack angle  (°)')
+        _xn__gate_lines_distance(axd)
+        _xn__gate_lines_angle(axa)
+        # The nucleophile distance is long-tailed: Tier_5_Decoy reaches ~17 Å while every
+        # catalytically meaningful difference sits between 2 and 6 Å. On a linear axis spanning
+        # the tail, the tiers the paper is about collapse into one flat line.
+        axd.set_ylim(0, float(np.nanpercentile(gdf['dist'], 99)) * 1.05)
+        axa.set_ylim(0, 185)
+        axa.set_yticks([0, 45, 90, 135, 180])
+        _xn__panel(axd, 'a')
+        _xn__panel(axa, 'b')
+        _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
+        return
+    try:
+        vdf = pd.read_csv(var_path)
+    except FileNotFoundError:
+        reporter.log(f'  ! Figure 01C skipped: could not open {var_path}.')
+        return
+    id_col = next((c for c in ('complex_id', 'job_name') if c in vdf.columns), None)
+    if id_col is None or 'sn2_angle_deg' not in vdf.columns or 'sn2_distance_A' not in vdf.columns:
+        reporter.log("  ! Figure 01C skipped: variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
+        return
+    if 'degrader_tier' not in vdf.columns:
+        reporter.log("  ! Figure 01C skipped: variance CSV lacks 'degrader_tier'.")
+        return
+    vdf['sn2_distance_A'] = pd.to_numeric(vdf['sn2_distance_A'], errors='coerce')
+    vdf['sn2_angle_deg'] = pd.to_numeric(vdf['sn2_angle_deg'], errors='coerce')
+    per_complex = []
+    for cid, g in vdf.groupby(id_col):
+        g_valid = g.dropna(subset=['sn2_distance_A', 'sn2_angle_deg'])
+        if g_valid.empty:
+            continue
+        best_row = g_valid.loc[g_valid['sn2_distance_A'].idxmin()]
+        per_complex.append({'complex_id': cid, 'best_geo_tier': g['degrader_tier'].iloc[0], 'abs_distance': float(best_row['sn2_distance_A']), 'abs_angle': float(best_row['sn2_angle_deg']), 'distance_std': float(g['sn2_distance_A'].std(ddof=1)), 'angle_std': float(g['sn2_angle_deg'].std(ddof=1))})
+    cdf = pd.DataFrame(per_complex)
+    if cdf.empty:
+        reporter.log('  ! Figure 01C skipped: no complexes after geometric tiering.')
+        return
+    tiers = [t for t in TIER_ORDER_LOGIC if t in set(cdf['best_geo_tier'])]
+    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.82 * _xn_COL_DOUBLE_IN))
+    (ax_tl, ax_tr), (ax_bl, ax_br) = axes
+    _xn__tier_boxstrip(ax_tl, cdf, tiers, 'abs_distance', 'Nucleophile distance  (Å)', group_col='best_geo_tier')
+    _xn__gate_lines_distance(ax_tl)
+    ax_tl.set_ylim(0, float(np.nanpercentile(cdf['abs_distance'], 99)) * 1.05)
+    _xn__tier_boxstrip(ax_tr, cdf, tiers, 'abs_angle', 'SN2 attack angle  (°)', group_col='best_geo_tier')
+    _xn__gate_lines_angle(ax_tr)
+    ax_tr.set_ylim(0, 185)
+    ax_tr.set_yticks([0, 45, 90, 135, 180])
+    for _ax, _y, _lab in [(ax_bl, 'distance_std', 'Distance s.d. across 5 models  (Å)'),
+                          (ax_br, 'angle_std', 'Angle s.d. across 5 models  (°)')]:
+        sns.violinplot(data=cdf, x='best_geo_tier', y=_y, order=tiers, hue='best_geo_tier',
+                       palette=TIER_PALETTE, legend=False, cut=0, inner='quartile',
+                       linewidth=0.9, ax=_ax)
+        for _c in _ax.collections:
+            _c.set_alpha(0.85)
+        _ax.set_xlabel('Degrader tier')
+        _ax.set_ylabel(_lab)
+        _ax.set_axisbelow(True)
+        _xn__tidy_tier_ticks(_ax, counts=cdf['best_geo_tier'].value_counts())
+        _xn__stat_header(_ax, _xn__kruskal(cdf, 'best_geo_tier', _y, tiers))
+    for _ax, _l in [(ax_tl, 'a'), (ax_tr, 'b'), (ax_bl, 'c'), (ax_br, 'd')]:
+        _xn__panel(_ax, _l)
+    _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
+
+def _xn__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
+    idc = _xn__col(df, 'identity_pct', 'Identity_to_Control')
+    evo = _xn__pillar_col(df, 'Evolutionary_Fingerprint_Score')
+    mech = _xn__col(df, 'Mechanistic_Fingerprint_Score', 'Catalytic_Fingerprint_Score')
+    rmsd = _xn__col(df, 'Active_Site_RMSD_to_Control')
+    tiers = _xn__tiers_present(df)
+    if not tiers or (idc is None and evo is None):
+        reporter.log('  ! Figure 04A skipped: necessary columns or tiers missing.')
+        return
+    xpos = {t: i for i, t in enumerate(tiers)}
+    deg_idx = [xpos[t] for t in tiers if t in _xn_ELITE_TIERS]
+    non_idx = [xpos[t] for t in tiers if t not in _xn_ELITE_TIERS]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(_xn_COL_DOUBLE_IN, 1.05 * _xn_COL_DOUBLE_IN))
+
+    def _mw_signed_p1(mcol):
+        if mcol is None or mcol not in df.columns:
+            return None
+        v = pd.to_numeric(df[mcol], errors='coerce')
+        is_deg = df['degrader_tier'].isin(_xn_ELITE_TIERS)
+        a = v[is_deg].dropna().values
+        b = v[~is_deg].dropna().values
+        if len(a) < 2 or len(b) < 2:
+            return None
+        U, p = mannwhitneyu(a, b, alternative='two-sided')
+        r = 2.0 * U / (len(a) * len(b)) - 1.0
+        return (float(p), float(r))
+    if idc is not None:
+        sns.violinplot(data=df, x='degrader_tier', y=idc, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
+        for _coll in ax1.collections:
+            _coll.set_alpha(0.6)
+        ax1.set_xlabel('Catalytic degrader tier')
+        ax1.set_ylabel('Sequence identity to control (%)')
+        # panel title removed (user request)
+        res = _mw_signed_p1(idc)
+        stat_text = 'Degraders vs Non-Degraders (Mann–Whitney U)\n'
+        if res:
+            p, r = res
+            stat_text += f'Sequence Identity: {_xn__fmt_p(p)} | r = {r:+.2f}'
+        else:
+            stat_text += 'Sequence Identity: n/a'
+        _xn__annotate(ax1, stat_text, loc='lower left')
+    if evo is not None:
+        sns.violinplot(data=df, x='degrader_tier', y=evo, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax2, zorder=2)
+        for _coll in ax2.collections:
+            _coll.set_alpha(0.6)
+
+        def _mean_ci(values):
+            v = np.asarray(values, float)
+            v = v[np.isfinite(v)]
+            if len(v) < 2:
+                return (np.nan, np.nan) if len(v) == 0 else (float(v[0]), 0.0)
+            mean = float(np.mean(v))
+            sem = float(np.std(v, ddof=1) / np.sqrt(len(v)))
+            ci = float(sem * _t_dist.ppf(0.975, len(v) - 1))
+            return (mean, ci)
+        trend_specs = [(mech, '#0072B2', 'Mechanistic fingerprint  (norm., mean ± 95% CI)', 'o'), (rmsd, '#E69F00', 'Active site RMSD  (norm., mean ± 95% CI)', 's')]
+        df_norm = df.copy()
+        for tcol, colour, tlabel, mk in trend_specs:
+            if tcol is None:
+                continue
+            if 'RMSD' in tcol:
+                rmsd_vals = pd.to_numeric(df_norm[tcol], errors='coerce').clip(upper=5.0)
+                rmsd_norm = _xn__minmax(rmsd_vals)
+                df_norm['_nrm'] = 1.0 - rmsd_norm
+                tlabel = tlabel.replace('norm.', 'norm. inverted, 1.0=best')
+            else:
+                df_norm['_nrm'] = _xn__minmax(df_norm[tcol])
+            xs, means, cis = ([], [], [])
+            for t in tiers:
+                vals = df_norm.loc[df_norm['degrader_tier'] == t, '_nrm'].dropna().values
+                mval, cval = _mean_ci(vals)
+                if np.isfinite(mval):
+                    xs.append(xpos[t])
+                    means.append(mval)
+                    cis.append(cval)
+            if xs:
+                ax2.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0, capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel, zorder=6)
+        stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
+        metric_map = [('Evo_Score', evo), ('Mech_Fpt', mech), ('Active_RMDA', rmsd)]
+        for label, mcol in metric_map:
+            res = _mw_signed_p1(mcol)
+            if res is None:
+                stat_lines.append(f'{label:<12}: n/a')
+            else:
+                p, r = res
+                stat_lines.append(f'{label:<12}: {_xn__fmt_p(p)} | r = {r:+.2f}')
+        y_max = np.nanmax(pd.to_numeric(df[evo], errors='coerce').values) if evo in df.columns else 1.0
+        y_top = max(1.0, float(y_max)) * 1.08
+        ax2.set_xlabel('Catalytic degrader tier')
+        ax2.set_ylabel('Evolutionary_Fingerprint_Score / normalised components (0–1)')
+        ax2.set_ylim(0, y_top)
+        # panel title removed (user request)
+        from matplotlib.lines import Line2D
+        from matplotlib.patches import Patch as _PatchA
+        handles, labels = ax2.get_legend_handles_labels()
+        handles = [_PatchA(facecolor='#BBBBBB', alpha=0.6, label='Evolutionary_Fingerprint_Score (violin)')] + handles
+        labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
+        _xn__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left', 7.5)
+    _counts = df['degrader_tier'].value_counts()
+    for _ax, _l in [(ax1, 'a'), (ax2, 'b')]:
+        if _ax.get_xticklabels():
+            _xn__tidy_tier_ticks(_ax, counts=_counts)
+        _xn__panel(_ax, _l)
+    _xn__save(fig, out_dir, _xn_FIG_NAMES['phylogeny'], reporter)
+
+def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
+    # Tier-resolved pillar divergence: one violin panel per scoring pillar, each showing the
+    # pillar-score distribution across degrader tiers (green→red gradient). Replaces the flat
+    # size-only line plot so each tier's contribution is visible.
+    pillars = [('Model_Quality_Score', 'Model Quality'),
+               ('Binding_Affinity_Score', 'Binding Affinity'),
+               ('Catalytic_Competence_Score', 'Catalytic Competence'),
+               ('Evolutionary_Fingerprint_Score', 'Evolutionary Fingerprint')]
+    tcol = _xn__col(df, 'degrader_tier')
+    if tcol is None:
+        return
+    tiers = [t for t in TIER_ORDER_LOGIC if t in set(df[tcol].dropna())]
+    if not tiers:
+        return
+    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.85 * _xn_COL_DOUBLE_IN))
+    counts = df[tcol].value_counts()
+    for ax, letter, (pil, lab) in zip(axes.ravel(), ['a', 'b', 'c', 'd'], pillars):
+        pc = _xn__pillar_col(df, pil)
+        if pc is None or pc not in df.columns:
+            ax.set_visible(False)
+            continue
+        sub = pd.DataFrame({'tier': df[tcol].values, 'y': pd.to_numeric(df[pc], errors='coerce').values}).dropna()
+        sub = sub[sub['tier'].isin(tiers)]
+        if sub.empty:
+            ax.set_visible(False)
+            continue
+        sns.violinplot(data=sub, x='tier', y='y', order=tiers, hue='tier', palette=TIER_PALETTE,
+                       legend=False, cut=0, inner='box', linewidth=0.9, ax=ax, zorder=2)
+        for _c in ax.collections:
+            _c.set_alpha(0.75)
+        # The median trend across tiers. Four violins side by side show four distributions; the
+        # question the panel is asked is whether the pillar rises or falls with tier, and only a
+        # connected median answers that without the reader eyeballing four white bars.
+        med = sub.groupby('tier', observed=True)['y'].median().reindex(tiers)
+        ax.plot(range(len(tiers)), med.values, '-', color='#1A1A1A', lw=1.2, alpha=0.65,
+                marker='o', markersize=3.2, markerfacecolor='white', markeredgewidth=0.9,
+                zorder=6, label='Median trend')
+        ax.set_xlabel('Degrader tier')
+        ax.set_ylabel(lab)
+        ax.set_axisbelow(True)
+        _xn__tidy_tier_ticks(ax, counts=counts)
+        _xn__stat_header(ax, _xn__kruskal(sub, 'tier', 'y', tiers))
+        _xn__panel(ax, letter)
+    _xn__save(fig, out_dir, _xn_FIG_NAMES['pillars'], reporter)
+
+def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
+    """Create Tier_1A enzyme × ligand heatmap for lab validation targets."""
+    import matplotlib.colors as mcolors
+    import re
+    enzyme_col = 'Protein_Name' if 'Protein_Name' in df.columns else next((c for c in df.columns if c.lower() == 'job_name'), None)
+    ligand_col = 'Ligand_Name' if 'Ligand_Name' in df.columns else next((c for c in df.columns if c.lower() in ('ligand', 'ligand_name')), None)
+    tier_col = 'degrader_tier' if 'degrader_tier' in df.columns else None
+    if not enzyme_col or not ligand_col or (not tier_col):
+        if reporter:
+            reporter.log('  ! Figure 06A skipped: required columns missing')
+        return
+    df = df[df[ligand_col] != 'Fluoroacetate_Ref']
+    df_hm = df[[enzyme_col, ligand_col, tier_col]].copy()
+    df_hm[enzyme_col] = df_hm[enzyme_col].astype(str).str.strip()
+    df_hm[ligand_col] = df_hm[ligand_col].astype(str).str.strip()
+    df_hm[tier_col] = df_hm[tier_col].astype(str).fillna(CFG.TIER_DECOY)
+    tier1a_enzymes = df_hm.loc[df_hm[tier_col] == CFG.TIER_TOP, enzyme_col].unique()
+    if len(tier1a_enzymes) == 0:
+        if reporter:
+            reporter.log('  ! Figure 06A skipped: no Tier_1A enzymes found')
+        return
+    tier_rank_map = CFG.TIER_RANK
+    df_hm['tier_rank'] = df_hm[tier_col].map(tier_rank_map).fillna(max(tier_rank_map.values()) + 1).astype(int)
+    df_best = df_hm.sort_values('tier_rank').drop_duplicates(subset=[enzyme_col, ligand_col], keep='first')
+
+    def get_versatility_score(enz):
+        sub = df_best[df_best[enzyme_col] == enz]
+        score = 0
+        for lig in ['MFA', 'DFA', 'TFA', 'Fluoroacetate']:
+            tier_val = sub.loc[sub[ligand_col].str.lower() == lig.lower(), tier_col]
+            if not tier_val.empty and tier_val.values[0] == CFG.TIER_TOP:
+                score += 10
+            elif not tier_val.empty and tier_val.values[0] == CFG.TIER_ORDER[1]:
+                score += 5
+        total_1a = (sub[tier_col] == CFG.TIER_TOP).sum()
+        return (score, total_1a)
+    enzymes = sorted(tier1a_enzymes, key=get_versatility_score, reverse=True)
+
+    def _extract_number(l):
+        m = re.search('\\d+', l)
+        return int(m.group(0)) if m else float('inf')
+    ligands = sorted(df_best[ligand_col].unique(), key=_extract_number)
+    if not ligands:
+        if reporter:
+            reporter.log('  ! Figure 06A skipped: no ligands found')
+        return
+
+    def _canonical_ligand_name(raw_name: object) -> str:
+        if raw_name is None or pd.isna(raw_name):
+            return ''
+        name = str(raw_name).strip()
+        low = name.lower()
+        if low in {'mfa', 'fluoroacetate', 'fluoroacetate (mfa)', 'monofluoroacetate', 'mono-fluoroacetate'}:
+            return 'MFA'
+        if low in {'dfa', 'difluoroacetate', 'difluoroacetate (dfa)'}:
+            return 'DFA'
+        if low in {'tfa', 'trifluoroacetate', 'trifluoroacetate (tfa)'}:
+            return 'TFA'
+        return name
+    df_best['ligand_display'] = df_best[ligand_col].map(_canonical_ligand_name)
+    ligands_display_ordered = []
+    for l in ligands:
+        dl = _canonical_ligand_name(l)
+        if dl not in ligands_display_ordered:
+            ligands_display_ordered.append(dl)
+    pivot = pd.pivot_table(df_best, values='tier_rank', index=enzyme_col, columns='ligand_display', aggfunc='min', fill_value=np.nan).reindex(index=enzymes, columns=ligands_display_ordered)
+    inv_rank_map = {v: '5' if k == 'Tier_5_Decoy' else k.replace('Tier_', '') for k, v in tier_rank_map.items()}
+    pivot_labels = pivot.map(lambda x: inv_rank_map.get(int(x), '') if pd.notna(x) else '')
+    fig_h = max(3.0, len(enzymes) * 0.25 + 1.8)
+    fig_w = max(_xn_COL_DOUBLE_IN, len(ligands_display_ordered) * 0.42 + 2.4)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    unique_ranks = sorted([r for r in tier_rank_map.values()])
+    color_list = []
+    for rank in unique_ranks:
+        tier_name = [k for k, v in tier_rank_map.items() if v == rank][0]
+        if tier_name == CFG.TIER_TOP:
+            color_list.append('#009E73')
+        else:
+            color_list.append(TIER_PALETTE.get(tier_name, '#CCCCCC'))
+    cmap = mcolors.ListedColormap(color_list)
+    bounds = np.arange(min(unique_ranks) - 0.5, max(unique_ranks) + 1.5, 1)
+    norm = mcolors.BoundaryNorm(bounds, cmap.N)
+    # Cell labels are written in whichever of black/white survives the fill they sit on. A fixed
+    # black label is legible on the pale mid-tiers and disappears into the dark Tier_1A green.
+    _label_colours = pivot.map(
+        lambda x: (_utils_mod.auto_label_colour(CFG, cmap(norm(int(x))))
+                   if (pd.notna(x) and _utils_mod is not None) else '#111111'))
+    sns.heatmap(pivot, ax=ax, cmap=cmap, norm=norm, cbar=False, linewidths=0.5, linecolor='white',
+                annot=pivot_labels, fmt='s', annot_kws={'fontsize': 7.5, 'weight': 'bold'},
+                square=False, mask=pivot.isna())
+    for _txt in ax.texts:
+        _r, _c = int(_txt.get_position()[1] - 0.5), int(_txt.get_position()[0] - 0.5)
+        try:
+            _txt.set_color(_label_colours.iloc[_r, _c])
+        except Exception:
+            pass
+    ax.set_facecolor('#EBEBEB')
+    ax.set_ylabel('Enzyme')
+    ax.set_xlabel('PFAS ligand')
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=CFG.VIS_FONT_TICK - 1.0)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right', fontsize=CFG.VIS_FONT_TICK - 1.0)
+    ax.tick_params(length=0)
+    handles = []
+    for rank, color in zip(unique_ranks, color_list):
+        tier_name = [k for k, v in tier_rank_map.items() if v == rank][0]
+        handles.append(plt.Line2D([0], [0], marker='s', color='w', markerfacecolor=color,
+                                  markersize=9, label=tier_name.replace('Tier_', '')))
+    _grey = plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='#EBEBEB',
+                       markeredgecolor='#BBBBBB', markersize=9, label='not modelled')
+    # Anchored just under the axis, not floated away from it: a legend set adrift below the panel
+    # reads as a separate object and the eye has to travel to connect it to the cells it explains.
+    ax.legend(handles=handles + [_grey], title='Degradation tier  (cell label = tier)',
+              loc='upper center', bbox_to_anchor=(0.5, -0.055), ncol=len(handles) + 1,
+              fontsize=CFG.VIS_FONT_LEGEND, title_fontsize=CFG.VIS_FONT_LEGEND + 0.5, frameon=False)
+    _xn__save(fig, out_dir, _xn_FIG_NAMES['validation'], reporter)
+
+class _xo_AtomRecord:
+    """Atomo con metadati minimi necessari per geometria e tracciabilita'."""
+    atom: gemmi.Atom
+    residue_name: str
+    residue_seqid: int
+    chain_name: str
+
+class _xo_GeometryResult:
+    """Risultato della migliore geometria S_N2 trovata in un modello."""
+    sn2_distance_A: float
+    sn2_angle_deg: float
+    sn2_angle_deviation_deg: float
+    nucleophile_resname: str
+    nucleophile_resseq: int
+    nucleophile_chain: str
+    nucleophile_atom: str
+    reactive_carbon_atom: str
+    leaving_fluorine_atom: str
+    cf_distance_A: float
+    candidate_count: int
+    status: str
+
+_xo_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
+
+class _xo_ReportManager:
+    def __init__(self, out_dir: Path):
+        self.path = out_dir / "01_Analysis_Log.txt"
+        with open(self.path, "w") as f:
+            f.write("MERGED PUBLICATION PLOTS — REPORT\\n")
+            f.write("=" * 80 + "\\n\\n")
+
+    def log(self, text: str):
+        print(text, flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[LOG] {text}\\n")
+
+    def section(self, title: str):
+        print(f"\\n--- {title} ---", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"\\n--- {title} ---\\n")
+
+    def warning(self, text: str):
+        print(f"[WARNING] {text}", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[WARNING] {text}\\n")
+            
+    def info(self, text: str):
+        self.log(text)
+
+    def error(self, text: str):
+        print(f"[ERROR] {text}", flush=True)
+        with open(self.path, "a") as f:
+            f.write(f"[ERROR] {text}\\n")
+
+def _xo__minmax(s):
+    s = pd.to_numeric(s, errors='coerce')
+    lo, hi = (np.nanmin(s), np.nanmax(s))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        return pd.Series(np.nan, index=s.index)
+    return (s - lo) / (hi - lo)
+
+def _xo__nuc_distance(df: pd.DataFrame) -> pd.Series:
+    """Nucleophile–substrate distance, resolving the several historical names.
+
+    The Step-02 writer renames ``dist_Nuc`` to ``Dist_Nucleophile_ASP10`` via
+    ``CFG.COLUMN_RENAMING_MAP``; older/raw exports expose the live geometry as
+    ``best_nucleophile_distance``. All three are treated as equivalent.
+    """
+    col = _xo__col(df, 'Dist_Nucleophile_ASP10', 'Dist_Nucleophile', 'best_nucleophile_distance', 'dist_Nuc')
+    return _xo__num(df, col)
+
+def _xo_get_col(df, name, fallbacks=[]):
+    if name in df.columns:
+        return name
+    for f in fallbacks:
+        if f in df.columns:
+            return f
+    return None
+
+_xo_PILLAR_ALIASES = {
+    'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', 'Boltz_Model_Confidence'],
+    'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
+    'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
+    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
+    'Final_Unified_Score': ['Final_Unified_Score', 'Ranking_Score_Calc'],
+}
+
+def _xo__col(df: pd.DataFrame, *candidates: str) -> str | None:
+    """Return the first candidate column that exists in ``df`` (else ``None``)."""
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+def _xo__pillar_col(df: pd.DataFrame, pillar: str) -> str | None:
+    """Resolve a headline-pillar name to whichever concrete column is present."""
+    return _xo__col(df, *_xo_PILLAR_ALIASES.get(pillar, [pillar]))
+
+def _xo__num(df: pd.DataFrame, col: str | None) -> pd.Series:
+    """Coerce a column to numeric, returning an empty series when it is absent."""
+    if col is None or col not in df.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(df[col], errors='coerce')
+
+def _xo__tiers_present(df: pd.DataFrame, tier_col: str='degrader_tier') -> list[str]:
+    """Return the canonical tier ordering restricted to tiers actually present."""
+    if tier_col not in df.columns:
+        return []
+    have = set(df[tier_col].dropna().unique())
+    return [t for t in TIER_ORDER_LOGIC if t in have]
+
+def _xo__fmt_p(p: float) -> str:
+    """Compact, publication-style p-value formatting."""
+    if p is None or not np.isfinite(p):
+        return 'p = n/a'
+    if p < 0.0001:
+        return 'p < 1e-4'
+    return f'p = {p:.3g}'
+
+def _xo__annotate(ax, text: str, loc: str='upper right') -> None:
+    """Place a boxed statistics annotation on an axis."""
+    xy = {'upper right': (0.98, 0.97, 'right', 'top'), 'upper left': (0.02, 0.97, 'left', 'top'), 'lower right': (0.98, 0.03, 'right', 'bottom'), 'lower left': (0.02, 0.03, 'left', 'bottom')}.get(loc, (0.98, 0.97, 'right', 'top'))
+    ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=8.5, family='monospace', bbox=dict(boxstyle='round,pad=0.4', fc='white', ec='#BBBBBB', alpha=0.9))
+
+def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, ncol=1):
+    """One combined box: the legend entries, then the statistics lines as blank-handle rows,
+    so the legend and the stats annotation read as a single unit rather than two boxes.
+
+    ncol lays the entries out in columns. Stacked in a single column they grow into a tall strip
+    down the side of the panel and start covering the data they describe; two or three columns give
+    the same information in a fraction of the height."""
+    from matplotlib.lines import Line2D as _L2D
+    _blank = lambda: _L2D([], [], linestyle='', marker='', color='none')
+    h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
+    l = list(labels) + [''] + list(stat_lines)
+    # A tuple loc is an axes-fraction anchor; matplotlib takes it via bbox_to_anchor, not loc.
+    _kw = dict(framealpha=0.95, fancybox=True, ncol=max(1, int(ncol)), columnspacing=1.0,
+               handletextpad=0.5, borderaxespad=0.3, prop={'family': 'monospace', 'size': fontsize})
+    if isinstance(loc, (tuple, list)):
+        ax.legend(h, l, loc='upper left', bbox_to_anchor=tuple(loc), **_kw)
+    else:
+        ax.legend(h, l, loc=loc, **_kw)
+
+def _xo__save(fig, out_dir: Path, name: str, reporter) -> None:
+    """Persist a figure at publication resolution and free its memory."""
+    path = out_dir / name
+    fig.savefig(path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches='tight')
+    plt.close(fig)
+    reporter.log(f'  ✓ {name}')
+
+def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
+    """Binding_Affinity_Score violin + Affinity/Pocket-ratio/Density mean ± 95% CI lines.
+
+    Mirrors Figure_01A's layout (green Degrader / orange Non-Degrader zones,
+    Mann-Whitney stats box). The violin is Binding_Affinity_Score; the
+    overlay lines are Affinity (custom_affinity_score), Pocket ratio
+    (Pocket_Tightness_Score), and Interaction density, each min-max
+    normalised to 0-1 and connected across tiers by a coloured line. Each
+    line also gets a dashed horizontal reference at the DehH2+MFA control's
+    value (same colour). Rank-biserial r is signed so r > 0 whenever
+    Degraders (Tier_1A/1B) exceed Non-Degraders on that metric.
+    """
+    controls = controls or {}
+    ba_col = _xo__pillar_col(df, 'Binding_Affinity_Score')
+    if ba_col is None:
+        reporter.log('  ! Figure 02A skipped: Binding_Affinity_Score column missing.')
+        return
+    aff_col = _xo__col(df, 'custom_affinity_score', 'Chemical_Affinity_Score', 'custom_affinity_calc')
+    pocket_col = _xo__col(df, 'Pocket_Tightness_Score', 'pocket_enclosure_ratio')
+    dens_col = _xo__col(df, 'interaction_density', 'Interaction_Density_Norm', 'interaction_density_calc')
+    tiers = _xo__tiers_present(df)
+    if not tiers:
+        reporter.log('  ! Figure 02A skipped: no tiers present.')
+        return
+    xpos = {t: i for i, t in enumerate(tiers)}
+    fig, ax = plt.subplots(figsize=(10, 6))
+    deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
+    non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
+    sns.violinplot(data=df, x='degrader_tier', y=ba_col, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax, zorder=2)
+
+    """
+    The per-tier MEAN affinity, traced across the tiers. The violins carry the distributions;
+    the line carries the point — affinity does NOT order the tiers, and a reader should be able
+    to see that without integrating seven shapes by eye.
+    """
+    _means2 = [float(pd.to_numeric(df.loc[df['degrader_tier'] == _t, ba_col],
+                                   errors='coerce').mean()) for _t in tiers]
+    ax.plot(range(len(tiers)), _means2, color='#C0392B', lw=2.2, marker='D', ms=6,
+            mec='white', mew=0.8, zorder=8, label='Mean affinity (trend)')
+
+    for _coll in ax.collections:
+        _coll.set_alpha(0.6)
+
+    def _mean_ci(values):
+        v = np.asarray(values, float)
+        v = v[np.isfinite(v)]
+        if len(v) < 2:
+            return (np.nan, np.nan) if len(v) == 0 else (float(v[0]), 0.0)
+        mean = float(np.mean(v))
+        sem = float(np.std(v, ddof=1) / np.sqrt(len(v)))
+        ci = float(sem * _t_dist.ppf(0.975, len(v) - 1))
+        return (mean, ci)
+    trend_specs = [(aff_col, '#0072B2', 'Affinity  (norm., mean ± 95% CI)', 'o'), (pocket_col, '#E69F00', 'Pocket ratio  (norm., mean ± 95% CI)', 's'), (dens_col, '#9467BD', 'Interaction density  (norm., mean ± 95% CI)', '^')]
+    df_norm = df.copy()
+    for tcol, colour, tlabel, mk in trend_specs:
+        if tcol is None:
+            continue
+        df_norm['_nrm'] = _xo__minmax(df_norm[tcol])
+        xs, means, cis = ([], [], [])
+        for t in tiers:
+            vals = df_norm.loc[df_norm['degrader_tier'] == t, '_nrm'].dropna().values
+            mval, cval = _mean_ci(vals)
+            if np.isfinite(mval):
+                xs.append(xpos[t])
+                means.append(mval)
+                cis.append(cval)
+        if xs:
+            ax.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0, capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel, zorder=6)
+        ctrl_row = controls.get('DehH2+MFA')
+        if ctrl_row is not None:
+            raw = pd.to_numeric(df[tcol], errors='coerce')
+            lo, hi = (np.nanmin(raw), np.nanmax(raw))
+            cval_raw = pd.to_numeric(pd.Series([ctrl_row.get(tcol, np.nan)]), errors='coerce').iloc[0]
+            if np.isfinite(lo) and np.isfinite(hi) and (hi > lo) and pd.notna(cval_raw):
+                cval_norm = float(np.clip((cval_raw - lo) / (hi - lo), 0, 1))
+                ax.axhline(cval_norm, ls='--', lw=1.4, color=colour, alpha=0.85, zorder=1.5, label=f"{tlabel.split('  (')[0]} — DehH2+MFA control = {cval_norm:.2f}")
+
+    def _mw_signed(mcol):
+        if mcol is None or mcol not in df.columns:
+            return None
+        v = pd.to_numeric(df[mcol], errors='coerce')
+        is_deg = df['degrader_tier'].isin(_xo_ELITE_TIERS)
+        a = v[is_deg].dropna().values
+        b = v[~is_deg].dropna().values
+        if len(a) < 2 or len(b) < 2:
+            return None
+        U, p = mannwhitneyu(a, b, alternative='two-sided')
+        r = 2.0 * U / (len(a) * len(b)) - 1.0
+        return (float(p), float(r))
+    stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
+    metric_map = [('BA_Score', ba_col), ('Affinity', aff_col), ('Pocket', pocket_col), ('IntDens', dens_col)]
+    for label, mcol in metric_map:
+        res = _mw_signed(mcol)
+        if res is None:
+            stat_lines.append(f'{label:<9}: n/a')
+        else:
+            p, r = res
+            stat_lines.append(f'{label:<9}: {_xo__fmt_p(p)} | r = {r:+.2f}')
+    y_max = np.nanmax(pd.to_numeric(df[ba_col], errors='coerce').values) if ba_col in df.columns else 1.0
+    y_top = max(1.0, float(y_max)) * 1.08
+    ax.set_xlabel('Catalytic degrader tier')
+    ax.set_ylabel('Binding_Affinity_Score / normalised components (0–1)')
+    ax.set_ylim(0, y_top)
+    # figure title removed (user request)
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch as _PatchA
+    handles, labels = ax.get_legend_handles_labels()
+    handles = [_PatchA(facecolor='#BBBBBB', alpha=0.6, label='Binding_Affinity_Score (violin)')] + handles
+    labels = ['Binding_Affinity_Score (violin)'] + labels
+    # Anchored inside the top-left corner: the default 'upper left' placement drifts out to the
+    # frame and reads as a separate object floating beside the panel.
+    _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), 7.5, ncol=2)
+    _xo__save(fig, out_dir, '02_Binding_Affinity_Metrics.png', reporter)
+
+def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
+    idc = _xo__col(df, 'identity_pct', 'Identity_to_Control')
+    evo = _xo__pillar_col(df, 'Evolutionary_Fingerprint_Score')
+    mech = _xo__col(df, 'Mechanistic_Fingerprint_Score', 'Catalytic_Fingerprint_Score')
+    rmsd = _xo__col(df, 'Active_Site_RMSD_to_Control')
+    tiers = _xo__tiers_present(df)
+    if not tiers or (idc is None and evo is None):
+        reporter.log('  ! Figure 04A skipped: necessary columns or tiers missing.')
+        return
+    xpos = {t: i for i, t in enumerate(tiers)}
+    deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
+    non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
+
+    def _mw_signed_p1(mcol):
+        if mcol is None or mcol not in df.columns:
+            return None
+        v = pd.to_numeric(df[mcol], errors='coerce')
+        is_deg = df['degrader_tier'].isin(_xo_ELITE_TIERS)
+        a = v[is_deg].dropna().values
+        b = v[~is_deg].dropna().values
+        if len(a) < 2 or len(b) < 2:
+            return None
+        U, p = mannwhitneyu(a, b, alternative='two-sided')
+        r = 2.0 * U / (len(a) * len(b)) - 1.0
+        return (float(p), float(r))
+    if idc is not None:
+        sns.violinplot(data=df, x='degrader_tier', y=idc, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
+        for _coll in ax1.collections:
+            _coll.set_alpha(0.6)
+        ax1.set_xlabel('Catalytic degrader tier')
+        ax1.set_ylabel('Sequence identity to control (%)')
+        # panel title removed (user request)
+        res = _mw_signed_p1(idc)
+        stat_text = 'Degraders vs Non-Degraders (Mann–Whitney U)\n'
+        if res:
+            p, r = res
+            stat_text += f'Sequence Identity: {_xo__fmt_p(p)} | r = {r:+.2f}'
+        else:
+            stat_text += 'Sequence Identity: n/a'
+        _xo__annotate(ax1, stat_text, loc='lower left')
+    if evo is not None:
+        sns.violinplot(data=df, x='degrader_tier', y=evo, order=tiers, hue='degrader_tier', palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax2, zorder=2)
+        for _coll in ax2.collections:
+            _coll.set_alpha(0.6)
+
+        def _mean_ci(values):
+            v = np.asarray(values, float)
+            v = v[np.isfinite(v)]
+            if len(v) < 2:
+                return (np.nan, np.nan) if len(v) == 0 else (float(v[0]), 0.0)
+            mean = float(np.mean(v))
+            sem = float(np.std(v, ddof=1) / np.sqrt(len(v)))
+            ci = float(sem * _t_dist.ppf(0.975, len(v) - 1))
+            return (mean, ci)
+        trend_specs = [(mech, '#0072B2', 'Mechanistic fingerprint  (norm., mean ± 95% CI)', 'o'), (rmsd, '#E69F00', 'Active site RMSD  (norm., mean ± 95% CI)', 's')]
+        df_norm = df.copy()
+        for tcol, colour, tlabel, mk in trend_specs:
+            if tcol is None:
+                continue
+            if 'RMSD' in tcol:
+                rmsd_vals = pd.to_numeric(df_norm[tcol], errors='coerce').clip(upper=5.0)
+                rmsd_norm = _xo__minmax(rmsd_vals)
+                df_norm['_nrm'] = 1.0 - rmsd_norm
+                tlabel = tlabel.replace('norm.', 'norm. inverted, 1.0=best')
+            else:
+                df_norm['_nrm'] = _xo__minmax(df_norm[tcol])
+            xs, means, cis = ([], [], [])
+            for t in tiers:
+                vals = df_norm.loc[df_norm['degrader_tier'] == t, '_nrm'].dropna().values
+                mval, cval = _mean_ci(vals)
+                if np.isfinite(mval):
+                    xs.append(xpos[t])
+                    means.append(mval)
+                    cis.append(cval)
+            if xs:
+                ax2.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0, capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel, zorder=6)
+        stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
+        metric_map = [('Evo_Score', evo), ('Mech_Fpt', mech), ('Active_RMDA', rmsd)]
+        for label, mcol in metric_map:
+            res = _mw_signed_p1(mcol)
+            if res is None:
+                stat_lines.append(f'{label:<12}: n/a')
+            else:
+                p, r = res
+                stat_lines.append(f'{label:<12}: {_xo__fmt_p(p)} | r = {r:+.2f}')
+        y_max = np.nanmax(pd.to_numeric(df[evo], errors='coerce').values) if evo in df.columns else 1.0
+        y_top = max(1.0, float(y_max)) * 1.08
+        ax2.set_xlabel('Catalytic degrader tier')
+        ax2.set_ylabel('Evolutionary_Fingerprint_Score / normalised components (0–1)')
+        ax2.set_ylim(0, y_top)
+        # panel title removed (user request)
+        from matplotlib.lines import Line2D
+        from matplotlib.patches import Patch as _PatchA
+        handles, labels = ax2.get_legend_handles_labels()
+        handles = [_PatchA(facecolor='#BBBBBB', alpha=0.6, label='Evolutionary_Fingerprint_Score (violin)')] + handles
+        labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
+        _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left', 7.5)
+    plt.tight_layout()
+    _xo__save(fig, out_dir, '03_Evolutionary_Phylogeny.png', reporter)
+
+def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
+    fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
+    if fcol is None:
+        return
+    m_all = pd.Series(True, index=df.index)
+    inter = _xo__col(df, 'interacting_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'interacting_fluorine_count')
+    tot = fcol
+    if inter and tot:
+        df['FER_computed'] = pd.to_numeric(df[inter], errors='coerce') / pd.to_numeric(df[tot], errors='coerce')
+    else:
+        df['FER_computed'] = np.nan
+    rows = [(_xo__col(df, 'SN2_Attack_Angle') if '_xo__col' in globals() else _xo_get_col(df, 'SN2_Attack_Angle'), 'SN2 attack angle (°)', m_all), ('nuc_dist', 'Nucleophile distance (Å)', m_all), ('FER_computed', 'Fluorine Engagement Ratio', m_all)]
+    fig, axes = plt.subplots(3, 1, figsize=(8.5, 12), sharex=True)
+    x_all = pd.to_numeric(df[fcol], errors='coerce')
+    # Drop the "no nucleophile found" sentinel (~999/1000 Å) so the panel shows real
+    # catalytic distances (2–8 Å) rather than being crushed to the axis floor.
+    nuc = _xo__nuc_distance(df).where(lambda s: s < 20.0)
+    unique_x = sorted(x_all.dropna().unique())
+    for i, (col, ylab, mask) in enumerate(rows):
+        ax = axes[i]
+        if col == 'nuc_dist':
+            y = nuc
+        elif col is None or col not in df.columns:
+            ax.set_visible(False)
+            continue
+        else:
+            y = pd.to_numeric(df[col], errors='coerce')
+        xx = x_all[mask]
+        yy = y[mask]
+        ok = xx.notna() & yy.notna()
+        xx, yy = (xx[ok], yy[ok])
+        if len(xx) < 5:
+            ax.set_visible(False)
+            continue
+        temp_df = pd.DataFrame({'x': xx, 'y': yy})
+        sns.boxplot(data=temp_df, x='x', y='y', ax=ax, color='#0072B2', fliersize=1)
+        grp = temp_df.groupby('x')['y'].mean()
+        valid_x = sorted(temp_df['x'].unique())
+        x_indices = [unique_x.index(x_val) for x_val in valid_x]
+        ax.plot(x_indices, grp.values, '-', color='#D55E00', lw=2, marker='o')
+        ax.set_ylabel(ylab)
+        if col in ['nuc_dist', rows[0][0]]:
+            y_le3 = yy[xx <= 3].dropna()
+            y_gt3 = yy[xx > 3].dropna()
+            if len(y_le3) > 0 and len(y_gt3) > 0:
+                if col == rows[0][0]:
+                    stat, p = mannwhitneyu(y_le3, y_gt3, alternative='greater')
+                    test_desc = 'F≤3 > F>3'
+                else:
+                    stat, p = mannwhitneyu(y_le3, y_gt3, alternative='less')
+                    test_desc = 'F≤3 < F>3'
+                p_str = f'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
+                ax.text(0.95, 0.95, f'MWU ({test_desc}): {p_str}', transform=ax.transAxes, ha='right', va='top', bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+    axes[-1].set_xticks(np.arange(len(unique_x)))
+    axes[-1].set_xticklabels([str(int(val)) for val in unique_x])
+    axes[-1].set_xlabel('Total fluorine count')
+    # figure title removed (user request)
+    fig.tight_layout()
+    _xo__save(fig, out_dir, '05_Mechanistic_Breakdown_by_Tier.png', reporter)
+
+def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
+    fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
+    if fcol is None:
+        return
+    tiers = _xo__tiers_present(df) if '_xo__tiers_present' in globals() else sorted(df['degrader_tier'].dropna().unique())
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.violinplot(data=df, x='degrader_tier', y=fcol, order=tiers, hue='degrader_tier', palette=TIER_PALETTE if 'TIER_PALETTE' in globals() else None, legend=False, cut=0, inner='box', ax=ax)
+    degrader_tiers = [t for t in tiers if t in _xo_ELITE_TIERS] if '_xo_ELITE_TIERS' in globals() else [t for t in tiers if t in ['Tier_1A', 'Tier_1B']]
+    non_degrader_tiers = [t for t in tiers if t not in degrader_tiers]
+    xpos = {t: i for i, t in enumerate(tiers)}
+    deg_idx = [xpos[t] for t in degrader_tiers]
+    non_idx = [xpos[t] for t in non_degrader_tiers]
+    """
+    The per-tier MEAN, traced across the tiers. A violin shows each tier's shape but leaves the
+    reader to compare seven of them by eye; the trend line states the claim the figure exists to
+    make — chain length rises monotonically as the tier falls — in one stroke.
+    """
+    _means7 = [float(df.loc[df['degrader_tier'] == _t, fcol].mean()) for _t in tiers]
+    _xs7 = list(range(len(tiers)))
+    ax.plot(_xs7, _means7, color='#C0392B', lw=2.2, marker='D', ms=6,
+            mec='white', mew=0.8, zorder=8, label='Mean (trend)')
+    ax.legend(loc='upper right', fontsize=8, framealpha=0.92)
+
+    ax.set_xlabel('Catalytic degrader tier')
+    ax.set_ylabel('Total fluorine count')
+    # figure title removed (user request)
+    df_deg = df[df['degrader_tier'].isin(degrader_tiers)][fcol].dropna()
+    df_non = df[df['degrader_tier'].isin(non_degrader_tiers)][fcol].dropna()
+    if len(df_deg) > 0 and len(df_non) > 0:
+        stat, p = mannwhitneyu(df_deg, df_non, alternative='two-sided')
+        n1, n2 = (len(df_deg), len(df_non))
+        r = 1 - 2 * stat / (n1 * n2)
+        p_str = f'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
+        # One line, top-left: three stacked lines in the top-right corner sat over the widest
+        # violins and cost more space than the statistic they carried.
+        ax.text(0.015, 0.97, f'Mann-Whitney U · {p_str} · effect size r = {r:.2f}',
+                transform=ax.transAxes, ha='left', va='top', fontsize=8.5,
+                bbox=dict(facecolor='white', alpha=0.85, edgecolor='#CCCCCC', linewidth=0.6,
+                          boxstyle='round,pad=0.3'))
+    _xo__save(fig, out_dir, '06_Chain_Length_by_Tier.png', reporter)
+
+
+def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None:
+    """The eight extended-analysis panels -> <Run>/3_Validation_Figures/08_Extended_Analysis.
+
+    A failure in one panel is logged and the rest still render: losing seven figures because the
+    eighth hit a missing column would be a poor trade.
+    """
+    _ext_dir = out_dir / "08_Extended_Analysis"
+    _ext_dir.mkdir(parents=True, exist_ok=True)
+    reporter.section("Extended Analysis Figures  [writes folder 08_Extended_Analysis]")
+
+    global _xn__PROD_DIR
+    _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"
+
+    _jobs = [
+        ("01_Geometry_and_Uncertainty",        _xn__fig_01C_geometry_and_uncertainty),
+        ("02_Binding_Affinity_Metrics",        _xo__fig_02A_binding_affinity_metrics),
+        ("03_Evolutionary_Phylogeny",          _xo__fig_04A_evolutionary_phylogeny),
+        ("04_Pillar_Divergence_by_Tier",       _xn__fig_05a_pillar_divergence_modified),
+        ("05_Mechanistic_Breakdown_by_Tier",   _xo__fig_05b_mechanistic_size_modified),
+        ("06_Chain_Length_by_Tier",            _xo__fig_05c_size_by_tier_modified),
+        ("07_Tier1A_Cross_Ligand_Heatmap",     _xn_figure_06a),
+    ]
+    _ok = 0
+    for _label, _fn in _jobs:
+        try:
+            _fn(df, _ext_dir, reporter)
+            _ok += 1
+        except Exception as _e:                                  # noqa: BLE001
+            reporter.log(f"  ! {_label} skipped: {type(_e).__name__}: {_e}")
+            plt.close("all")
+    reporter.log(f"  Extended analysis: {_ok}/{len(_jobs)} figures written")
+
+
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
     """
     Backbone-geometry validation of the control predictions against the 3R3U crystal.
@@ -8222,6 +9643,49 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: whether Tier_1A is consensus-backed. A tier whose hits sit BELOW 0.5 earned",
         "            its label from a minority of samples — a best-of-N over the diffusion ensemble,",
         "            not a reproducible property of the complex.",
+        "",
+        "=" * 80,
+        "EXTENDED ANALYSIS (subfolder: 08_Extended_Analysis/)",
+        "=" * 80,
+        "",
+        "-" * 80,
+        "01_Geometry_and_Uncertainty.png",
+        "  Title   : Reaction geometry with multi-model uncertainty",
+        "  Look for: nucleophile distance and SN2 angle per tier, with the spread across the",
+        "            diffusion samples — a tight tier is a reproducible one.",
+        "",
+        "-" * 80,
+        "02_Binding_Affinity_Metrics.png",
+        "  Title   : Binding affinity by tier",
+        "  Look for: affinity does NOT order the tiers — a high-affinity binder that presents the",
+        "            wrong face to Asp110 is not a degrader. This figure is the evidence.",
+        "",
+        "-" * 80,
+        "03_Evolutionary_Phylogeny.png / 03_Evolutionary_Phylogeny.png",
+        "  Title   : Evolutionary phylogeny of the cohort",
+        "  Look for: whether the degrader tiers cluster phylogenetically or are scattered across",
+        "            the tree. Scattered = catalytic competence is not a clade property.",
+        "",
+        "-" * 80,
+        "04_Pillar_Divergence_by_Tier.png",
+        "  Title   : Divergence of the scoring pillars across tiers",
+        "  Look for: which pillar actually separates the tiers, and which merely follows.",
+        "",
+        "-" * 80,
+        "05_Mechanistic_Breakdown_by_Tier.png",
+        "  Title   : Mechanistic components per tier",
+        "  Look for: the component that collapses first as the tier falls.",
+        "",
+        "-" * 80,
+        "06_Chain_Length_by_Tier.png",
+        "  Title   : PFAS chain length by tier",
+        "  Look for: the elite tiers are short-chain. FAcD is a small-substrate hydrolase.",
+        "",
+        "-" * 80,
+        "07_Tier1A_Cross_Ligand_Heatmap.png",
+        "  Title   : Tier_1A proteins x ligands",
+        "  Look for: whether an elite protein is elite for ONE ligand or several — a protein that",
+        "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
         "",
         "-" * 80,
         "04_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
