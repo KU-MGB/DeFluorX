@@ -7949,15 +7949,41 @@ def _ext_match_03_style(fig) -> None:
     build through seaborn and never touch again.
     """
     _LBL, _TICK, _COL = 11.0, 9.0, "#000000"
+    _LEG = float(getattr(CFG, "VIS_FONT_LEGEND", 8.5))
     for _ax in fig.get_axes():
         for _t in (_ax.xaxis.label, _ax.yaxis.label):
             _t.set_fontsize(_LBL)
             _t.set_color(_COL)
             _t.set_fontweight("normal")
         _ax.tick_params(axis="both", labelsize=_TICK, labelcolor=_COL)
-        for _t in _ax.get_xticklabels() + _ax.get_yticklabels():
+        for _t in _ax.get_yticklabels():
             _t.set_fontsize(_TICK)
             _t.set_color(_COL)
+
+        """
+        A tier tick takes its TIER'S colour, as it does in every other figure in the set. The tick
+        and the box above it then say the same thing twice, in the same language: the reader can go
+        from a colour in the plot to a name on the axis without consulting a key. Ticks that are not
+        tier names (a carbon number, a ligand) stay black — colouring them would imply an encoding
+        that does not exist.
+        """
+        for _t in _ax.get_xticklabels():
+            _t.set_fontsize(_TICK)
+            _raw = _t.get_text().split("\n")[0].strip()
+            if _raw in TIER_PALETTE:
+                _t.set_color(TIER_PALETTE[_raw])
+                _t.set_fontweight("bold")
+            else:
+                _t.set_color(_COL)
+
+        # Legend text on the pipeline's legend size, so a legend here and a legend in 03 are the
+        # same object at the same scale.
+        _lg = _ax.get_legend()
+        if _lg is not None:
+            for _txt in _lg.get_texts():
+                _txt.set_fontsize(_LEG)
+            if _lg.get_title() is not None:
+                _lg.get_title().set_fontsize(_LEG)
 
 
 def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
@@ -7974,10 +8000,10 @@ def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
     reporter.log(f'  ✓ {stem}.png')
 
 def _xn__panel(ax, letter: str) -> None:
-    """No-op: the panel letters are not drawn.
+    """No-op: panel letters are not drawn.
 
-    These figures are read on their own rather than as a lettered composite in a caption, so an (a)
-    / (b) tag labels a relationship that does not exist on the page.
+    No other figure in this set carries an (A)/(B) tag, and a lettering convention that appears in one
+    figure and nowhere else is noise — the reader assumes it means something.
     """
     return
 
@@ -8045,29 +8071,56 @@ def _xn__gate_lines_distance(ax) -> None:
     gates = getattr(CFG, 'TIER_NUC_DIST', {}) or {}
     # The 1A and 2A gates are only 0.2 A apart: centred labels would print on top of each other,
     # so consecutive labels sit alternately below and above their own rule.
+    _gate_keys = []
     for i, tier in enumerate((CFG.TIER_TOP, 'Tier_2A', 'Tier_2B')):
         v = gates.get(tier)
         if v is None or not np.isfinite(float(v)) or float(v) > 12.0:
             continue
         ax.axhline(float(v), ls=':', lw=1.0, color=TIER_PALETTE.get(tier, '#777777'),
                    alpha=0.9, zorder=4)
-        ax.text(0.995, float(v), f'{tier} ≤{float(v):.1f} Å',
-                transform=ax.get_yaxis_transform(), ha='right',
-                va='top' if i % 2 else 'bottom',
-                fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=TIER_PALETTE.get(tier, '#777777'))
+        """
+        The rule carries a LETTER, not a sentence. 'Tier_1A ≤3.0 Å' written along its line is wider
+        than the gap between the lines it has to fit into — Tier_1A (3.0 Å) and Tier_2A (3.2 Å) are
+        0.2 Å apart — so whatever it clears, it lands on something else. A single letter fits between
+        them, and the key at the foot of the panel says what each letter means.
+        """
+        _tag = chr(ord('A') + i)
+        _gate_keys.append(f'{_tag} = {tier} ≤ {float(v):.1f} Å')
+        ax.text(0.995, float(v), _tag, transform=ax.get_yaxis_transform(),
+                ha='right', va='center', fontsize=CFG.VIS_FONT_ANNOT,
+                fontweight='bold', color=TIER_PALETTE.get(tier, '#777777'),
+                bbox=dict(boxstyle='circle,pad=0.16', facecolor='white', alpha=0.92,
+                          edgecolor=TIER_PALETTE.get(tier, '#777777'), linewidth=0.8),
+                zorder=7)
+
+    # The key is NOT drawn here. Two boxes — one naming the tier colours, one naming the gate tags —
+    # say two halves of the same thing and cost the panel twice the space. The strings are handed to
+    # the caller, which folds them into the single legend.
+    ax._gate_keys = _gate_keys
 
 def _xn__gate_lines_angle(ax) -> None:
     """The tier SN2-angle gates (CFG.TIER_ANGLE_MIN); see _xn__gate_lines_distance."""
     gates = getattr(CFG, 'TIER_ANGLE_MIN', {}) or {}
-    for tier in (CFG.TIER_TOP, 'Tier_2A', 'Tier_2B'):
+    _gate_keys = []
+    for i, tier in enumerate((CFG.TIER_TOP, 'Tier_2A', 'Tier_2B')):
         v = gates.get(tier)
         if v is None or not np.isfinite(float(v)):
             continue
         ax.axhline(float(v), ls=':', lw=1.0, color=TIER_PALETTE.get(tier, '#777777'),
                    alpha=0.9, zorder=4)
-        ax.text(0.995, float(v), f'{tier} ≥{float(v):.0f}°',
-                transform=ax.get_yaxis_transform(), ha='right', va='center',
-                fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=TIER_PALETTE.get(tier, '#777777'))
+        _tag = chr(ord('A') + i)
+        _gate_keys.append(f'{_tag} = {tier} ≥ {float(v):.0f}°')
+        ax.text(0.995, float(v), _tag, transform=ax.get_yaxis_transform(),
+                ha='right', va='center', fontsize=CFG.VIS_FONT_ANNOT,
+                fontweight='bold', color=TIER_PALETTE.get(tier, '#777777'),
+                bbox=dict(boxstyle='circle,pad=0.16', facecolor='white', alpha=0.92,
+                          edgecolor=TIER_PALETTE.get(tier, '#777777'), linewidth=0.8),
+                zorder=7)
+
+    # The key is NOT drawn here. Two boxes — one naming the tier colours, one naming the gate tags —
+    # say two halves of the same thing and cost the panel twice the space. The strings are handed to
+    # the caller, which folds them into the single legend.
+    ax._gate_keys = _gate_keys
 
 def _xn__tidy_tier_ticks(ax, counts=None) -> None:
     """Tier labels upright and shortened, optionally carrying their own n.
@@ -8190,7 +8243,18 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     """
     # Use the run's real production dir (set by main); out_dir is a fixed sandbox path so
     # out_dir.parent no longer points at the run.
-    _prod = globals().get("_PROD_DIR") or (out_dir.parent / '1_Boltz2_Production')
+    """
+    The production directory sits beside 3_Validation_Figures under the RUN root — not beside the
+    figure subfolder. In the prototype out_dir WAS 3_Validation_Figures, so out_dir.parent reached the
+    run root; here out_dir is 08_Extended_Analysis, so the same expression pointed at
+    3_Validation_Figures/1_Boltz2_Production, a path that cannot exist. The variance CSV was then
+    reported 'unavailable' when the CIFs were sitting there all along.
+    """
+    _prod = globals().get("_xn__PROD_DIR") or globals().get("_PROD_DIR")
+    if _prod is None or not Path(_prod).exists():
+        _prod = next((_c for _c in (out_dir.parent.parent / '1_Boltz2_Production',
+                                    out_dir.parent / '1_Boltz2_Production')
+                      if _c.exists()), out_dir.parent / '1_Boltz2_Production')
     """
     The inter-model uncertainty panels need the per-model variance CSV. Building it from scratch
     means parsing 5 model CIFs for each of ~58,000 complexes — hours of gemmi. That is a
@@ -8235,6 +8299,42 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         axa.set_yticks([0, 45, 90, 135, 180])
         _xn__panel(axd, 'a')
         _xn__panel(axa, 'b')
+        """
+        ONE tier legend for BOTH panels, inside panel A. The two panels share the same colour
+        encoding, so repeating the key beside each of them would state the same thing twice and eat
+        the space the data needs. Placed inside the axes rather than beside the figure, it also
+        cannot be cropped away from the panels it explains.
+        """
+        """
+        ONE legend, top-left of panel A: the tier colours AND the gate tags.
+
+        The tags mean the same tier in both panels (A = Tier_1A, B = Tier_2A, C = Tier_2B) and differ
+        only in the threshold each panel enforces, so a single entry can carry both — the distance
+        gate and the angle gate side by side. Two separate boxes stated the tier twice and spent the
+        panel's space saying it.
+        """
+        from matplotlib.patches import Patch as _P1C
+        from matplotlib.lines import Line2D as _L1C
+        _h = [_P1C(facecolor=TIER_PALETTE.get(_t, '#999999'), alpha=0.85,
+                   edgecolor='#222222', linewidth=0.7, label=_t)
+              for _t in _tiers]
+        _l = list(_tiers)
+        _dk = {k.split(' = ')[0]: k.split(' = ')[1] for k in getattr(axd, '_gate_keys', [])}
+        _ak = {k.split(' = ')[0]: k.split(' = ')[1] for k in getattr(axa, '_gate_keys', [])}
+        for _tag in ('A', 'B', 'C'):
+            if _tag not in _dk:
+                continue
+            _tier_name = _dk[_tag].split(' ≤')[0]
+            _dist_gate = _dk[_tag].split(' ≤')[-1]
+            _ang_gate = _ak.get(_tag, '').split(' ≥')[-1] if _tag in _ak else ''
+            _h.append(_L1C([], [], ls=':', lw=1.4,
+                           color=TIER_PALETTE.get(_tier_name, '#777777')))
+            _l.append(f'({_tag}) gate: ≤{_dist_gate}  ·  ≥{_ang_gate}')
+        axd.legend(_h, _l, loc='upper left', bbox_to_anchor=(0.012, 0.985), ncol=2,
+                   fontsize=7.5, framealpha=0.93, fancybox=True,
+                   handlelength=1.4, handletextpad=0.5, columnspacing=1.0,
+                   title='Degrader tier   ·   gate tags (A/B/C on the rules)',
+                   title_fontsize=7.5)
         _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
         return
     try:
@@ -8547,10 +8647,11 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                                   markersize=9, label=tier_name.replace('Tier_', '')))
     _grey = plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='#EBEBEB',
                        markeredgecolor='#BBBBBB', markersize=9, label='not modelled')
-    # Anchored just under the axis, not floated away from it: a legend set adrift below the panel
-    # reads as a separate object and the eye has to travel to connect it to the cells it explains.
+    # ABOVE the heatmap. Below it, the legend has to share a strip with the rotated ligand labels and
+    # the x-axis title, and every placement that clears one collides with the other. The top edge is
+    # empty, so the legend sits there — attached to the panel, over nothing.
     ax.legend(handles=handles + [_grey], title='Degradation tier  (cell label = tier)',
-              loc='upper center', bbox_to_anchor=(0.5, -0.055), ncol=len(handles) + 1,
+              loc='lower center', bbox_to_anchor=(0.5, 1.015), ncol=len(handles) + 1,
               fontsize=CFG.VIS_FONT_LEGEND, title_fontsize=CFG.VIS_FONT_LEGEND + 0.5, frameon=False)
     _xn__save(fig, out_dir, _xn_FIG_NAMES['validation'], reporter)
 
