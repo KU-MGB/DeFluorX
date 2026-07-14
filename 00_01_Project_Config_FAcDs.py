@@ -2175,6 +2175,23 @@ class CFG:
     """
     PREPWIZARD_FORCEFIELD: str       = "S-OPLS"   # OPLS4-family; matches Desmond/WaterMap/Prime
 
+    """
+    QM (Jaguar ESP) partial charges for the MD-ready ligands — Step 05b.
+
+    Desmond takes its ligand charges from OPLS4. A fixed-charge force field represents fluorine's low
+    polarisability poorly, and the worst case is precisely this chemistry: a perfluoroalkyl carboxylate,
+    a hard-charged head on a long, weakly-polarisable-modelled tail. The error lands on the alpha-carbon's
+    electrophilicity — the one quantity the SN2 turns on — and nothing downstream compensates for it.
+
+    icfit=1 fits the charges to the electrostatic potential. Verified by running it, not assumed:
+    Jaguar prints 'Atomic charges from electrostatic potential' and the fitted charges sum to the
+    formal charge (fluoroacetate: -1.000). The fit is done on the PREPARED geometry — the structure
+    the MD actually starts from — because a charge set derived from a different conformer is a charge
+    set for a different molecule.
+    """
+    ESP_CHARGE_BASIS: str            = "6-31G**"   # basis for the ESP single point
+    ESP_CHARGE_DFT: str              = "b3lyp"     # functional for the ESP single point
+
     # -------------------------------------------------------------------------------
     # Step 15.2: Parallelism
     # -------------------------------------------------------------------------------
