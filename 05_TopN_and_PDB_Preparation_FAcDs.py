@@ -879,6 +879,25 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
         _rname = lines[_idx[0]][17:20].strip()
         _names = {lines[i][12:16].strip() for i in _idx}
 
+        """
+        Fail closed on an unexpected residue. The strip lists are role-specific and assume the role's
+        chemistry — ("HD2","HE2") for a carboxylate nucleophile/acid, ("HE2",) for the histidine base.
+        If the alignment ever maps a role onto a residue of a different type, deleting those atom names
+        does not impose a protonation state, it deletes whatever atoms happen to share the name and
+        corrupts the residue. CFG.ROLE_EXPECTED_RESIDUES already declares what each role may legally be;
+        anything else is a mapping failure and must be REPORTED, not silently rewritten.
+        """
+        _role_key = {"Nuc": "Nucleophile", "Acid": "Acid_Catalyst", "Base": "Base_Catalyst"}.get(_role)
+        _expected = CFG.ROLE_EXPECTED_RESIDUES.get(_role_key, set()) if _role_key else set()
+        if _expected and _rname.upper() not in {r.upper() for r in _expected}:
+            _report[_role] = (_rname, _num,
+                              f"REFUSED — {_rname} is not a valid {_role} residue "
+                              f"(expected {sorted(_expected)}); protonation not enforced")
+            if logger:
+                logger.warning(f"[QC] {job_name}: {_role} mapped to {_rname}{_num}, which is not in "
+                               f"CFG.ROLE_EXPECTED_RESIDUES[{_role_key}] — refusing to strip hydrogens.")
+            continue
+
         if _rname.upper().startswith("HI") and "HE2" in _pol["strip_H"] and "HD1" not in _names:
             _report[_role] = (_rname, _num, "left as-is (no HD1 to keep)")
             continue
@@ -1256,6 +1275,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     HIS_TYPES = {"HIS", "HIE", "HID", "HIP"}
 
     resnum_to_resname = {}
+    resnum_to_atoms   = defaultdict(set)
     try:
         with open(prepared_pdb_path) as fh:
             for line in fh:
@@ -1263,6 +1283,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
                     resname = line[17:20].strip()
                     resnum  = int(line[22:26].strip())
                     resnum_to_resname[resnum] = resname
+                    resnum_to_atoms[resnum].add(line[12:16].strip().upper())
     except Exception:
         return {"offset": 0}
 
@@ -1280,13 +1301,30 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     acid_found, acid_offset = find_type_near(acid_ref, ASP_TYPES)
     base_found, base_offset = find_type_near(base_ref, HIS_TYPES)
 
-    # QC: the catalytic nucleophile Asp must be DEPROTONATED (ASP) for the SN2 attack.
-    # At pH 8 PropKa should assign ASP, but a raised local pKa can give ASH (protonated
-    # = catalytically dead). Warn loudly so a dead-enzyme QM/MM is not run unnoticed.
-    if nuc_found is not None and resnum_to_resname.get(nuc_found) == "ASH":
-        _msg = (f"[QC] Nucleophile Asp{nuc_found} is PROTONATED (ASH) — a deprotonated "
-                f"ASP is required for the SN2 defluorination. Check PropKa/Epik pH.")
-        (logger.warning if logger else print)(_msg)
+    """
+    QC: the catalytic nucleophile Asp must be DEPROTONATED for the SN2 attack; a protonated
+    carboxylic acid cannot attack, so a protonated nucleophile is a catalytically DEAD enzyme.
+
+    The state is read from the HYDROGENS, not from the residue NAME. Schrödinger's preparation keeps
+    the name ASP whether or not the carboxyl carries its proton — ASH is an AMBER convention — so a
+    name test never fires and the guard it was supposed to provide is silently absent. The carboxyl
+    proton (HD2 on Asp, HE2 on Glu) is the observable that actually distinguishes the two states.
+
+    This is a WARNING, not an edit: enforce_catalytic_protonation strips exactly these hydrogens from
+    the nucleophile, so the chemistry is already imposed. What was missing was the report telling you
+    when the preparation had handed over a dead enzyme in the first place.
+    """
+    _CARBOXYL_H = {"HD2", "HE2"}
+    if nuc_found is not None:
+        _nuc_atoms = resnum_to_atoms.get(nuc_found, set())
+        _protonated = bool(_nuc_atoms & _CARBOXYL_H) or resnum_to_resname.get(nuc_found) == "ASH"
+        if _protonated:
+            _msg = (f"[QC] Nucleophile Asp{nuc_found} is PROTONATED "
+                    f"(carboxyl H present: {sorted(_nuc_atoms & _CARBOXYL_H) or 'named ASH'}) — a "
+                    f"deprotonated ASP is required for the SN2 defluorination. The protonation "
+                    f"enforcement strips it, but check PropKa/Epik pH: the preparation produced a "
+                    f"catalytically dead nucleophile.")
+            (logger.warning if logger else print)(_msg)
 
     """
     Use the most common non-zero offset (consensus across Nuc/Acid/Base);

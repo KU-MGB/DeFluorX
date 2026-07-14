@@ -1929,8 +1929,25 @@ class CFG:
     kcat-like rate proxy:  P(strict-NAC) · exp(−ΔE‡ / RT)  (RT from GAS_CONSTANT_KCAL ×
     MMGBSA_TEMPERATURE_K). Rank candidates by that proxy, not by ΔG_bind.
     """
-    DEFLUOR_STRICT_VIABILITY_MIN_PCT: float = 1.0    # Xs — min % of pocket-bound frames in the STRICT NAC
-    DEFLUOR_DWELL_MIN_NS: float             = 1.0    # Y  — min longest CONTINUOUS strict-NAC residence (ns)
+    '''
+    WHAT "STRICT" MEANS HERE, because the name has been misread as a claim about occupancy.
+
+    "Strict" qualifies the GEOMETRIC WINDOW — the tight distance × angle definition of the near-attack
+    conformation — not the fraction of time spent in it. DEFLUOR_STRICT_VIABILITY_MIN_PCT is a floor on
+    that OCCUPANCY, and 1 % is deliberate, not a placeholder: near-attack-conformer populations in real
+    enzymes are genuinely small. Bruice's NAC work puts them at roughly 10⁻²–10⁻¹ in enzymes against
+    ~10⁻⁶ in water, so 1 % sits inside the range an efficient enzyme actually shows, and raising it to
+    something that "looks strict" would reject catalysis on a criterion catalysis does not obey.
+
+    So the occupancy floor is a WEAK filter by design, and it is the DWELL (DEFLUOR_DWELL_MIN_NS) that
+    carries the persistence claim: a ligand flickering through the NAC for one frame in a hundred can
+    clear 1 % occupancy, but it cannot clear a full nanosecond of CONTINUOUS residence. Occupancy asks
+    "how often"; dwell asks "did it ever actually SIT there" — and only the second is evidence of
+    catalytic pre-organisation. Read the two together; neither is the gate on its own.
+    '''
+    DEFLUOR_STRICT_VIABILITY_MIN_PCT: float = 1.0    # Xs — occupancy FLOOR (weak by design; see above)
+    DEFLUOR_DWELL_MIN_NS: float             = 1.0    # Y  — min longest CONTINUOUS strict-NAC residence (ns);
+                                                     #      this is the leg that carries the persistence claim
     DEFLUOR_BARRIER_MAX_KCAL: float         = 22.0   # Z  — max surmountable QM/MM SN2 barrier ΔE‡ (kcal/mol)
     DEFLUOR_DERXN_MAX_KCAL: float           = 0.0    # SN2 reaction energy ceiling — product must be ≤ reactant (ΔE_rxn ≤ this)
 
