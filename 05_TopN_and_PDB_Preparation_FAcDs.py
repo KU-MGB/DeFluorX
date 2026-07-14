@@ -602,29 +602,19 @@ def check_prep_needed(job_name: str, dir_raw: Path, dir_prep_clean: Path):
     return True # Needed (Missing)
 
 def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
-    """The gating geometry through the three states it passes: Boltz CIF → converted RAW → prepared PDB.
+    """What preparation does to the two numbers the tier is decided on.
 
-    WHAT THE FIGURE IS FOR
-    ----------------------
-    The tier is decided on the CIF. The MD starts from the prepared PDB. This is the only place the two
-    are drawn on the same axis, so it is the only place the reader can see that they are not the same
-    structure.
+    One row per complex; the dot is the pose the SCREEN scored (Boltz CIF), the arrowhead is the pose MD
+    actually STARTS from (PrepWizard). The gap between them is the whole point of the figure.
 
-    Two things become visible and cannot be argued with:
+    The RAW column is deliberately absent. CIF → RAW is lossless — the gemmi conversion moves the angle
+    by at most 0.04° — so drawing it would spend a third of the panel on a flat line. It is stated in the
+    caption instead, which is where a null result belongs.
 
-      · CIF → RAW is a FLAT line for every complex. The gemmi conversion is lossless, so the drift that
-        follows cannot be blamed on it.
-
-      · RAW → PREP is not noise, it is REGRESSION TO THE MEAN. The lines cross. Poses the screen ranked
-        highest come DOWN; poses it ranked lowest go UP. That is the signature of having selected on a
-        noisy coordinate: the best-of-5 pick is partly luck, and minimisation takes the luck back. The
-        nucleophile distance tells the same story in one direction — preparation pushes it outward in
-        almost every structure.
-
-    The gate lines are drawn from CFG so the reader can see, directly, which complexes would no longer
-    clear the bar they were admitted on. Nothing here rejects anything: this figure is the evidence that
-    the ladder's 5° rungs are finer than the structure is reproducible, which is a fact about the screen,
-    not a verdict on any candidate.
+    Arrows are coloured by DIRECTION, because the direction is the finding: the poses the screen ranked
+    highest move AWAY from the gate, the poses it ranked lowest move TOWARDS it. That is regression to
+    the mean — the best-of-5 pick is partly luck, and minimisation takes the luck back. A figure that
+    coloured by tier would hide it; a figure that coloured by direction cannot.
     """
     if not geom_rows:
         return None
@@ -632,62 +622,84 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     _utils_mod.apply_figure_style(CFG)
 
     df = pd.DataFrame(geom_rows)
-    df = df[pd.to_numeric(df["prep_sn2_angle"], errors="coerce").notna()]
+    for _c in ("raw_sn2_angle", "prep_sn2_angle", "raw_dist_nuc", "prep_dist_nuc"):
+        df[_c] = pd.to_numeric(df[_c], errors="coerce")
+    df = df.dropna(subset=["raw_sn2_angle", "prep_sn2_angle"])
     if df.empty:
         return None
+    df = df.sort_values("prep_sn2_angle").reset_index(drop=True)
 
-    fig, (ax_a, ax_d) = plt.subplots(1, 2, figsize=(13.5, 6.2))
-    _states = ["CIF", "RAW", "PREP"]
-    _x = [0, 1, 2]
+    _label = ["_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
+              .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", "")
+              for j in df["job"]]
+    _is_md = [not str(j).startswith(CFG.CONTROL_JOB_PREFIX) for j in df["job"]]
+    _y = np.arange(len(df))
 
-    def _panel(ax, cols, gates, ylab, title):
-        for _, r in df.iterrows():
-            _y = [pd.to_numeric(r[c], errors="coerce") for c in cols]
-            if any(pd.isna(v) for v in _y):
-                continue
-            _is_md = not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
-            _col = CFG.VIS_ACCENT["blue"] if _is_md else CFG.VIS_INK["ghost"]
-            ax.plot(_x, _y, "-o", color=_col, lw=2.0 if _is_md else 1.1,
-                    ms=6 if _is_md else 4, alpha=0.95 if _is_md else 0.6,
-                    zorder=5 if _is_md else 3,
-                    markerfacecolor=_col, markeredgecolor="white", markeredgewidth=0.7)
-            _lab = "_".join(str(r["job"]).split("_")[2:])[:26]
-            ax.annotate(_lab, (2, _y[2]), xytext=(6, 0), textcoords="offset points",
-                        fontsize=CFG.VIS_FONT_ANNOT - 0.5, va="center",
-                        color=_col, zorder=6)
-        for _gv, _gl, _gc in gates:
-            ax.axhline(_gv, ls=":", lw=1.1, color=_gc, alpha=0.9, zorder=2)
-            ax.annotate(_gl, (0.02, _gv), xycoords=("axes fraction", "data"),
-                        fontsize=CFG.VIS_FONT_ANNOT - 0.5, color=_gc, va="bottom")
-        ax.set_xticks(_x)
-        ax.set_xticklabels(_states)
-        ax.set_xlim(-0.25, 2.95)
-        ax.set_ylabel(ylab)
-        ax.set_title(title, fontsize=CFG.VIS_FONT_AXIS_LABEL, pad=10)
-        ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
+    fig, (ax_a, ax_d) = plt.subplots(1, 2, figsize=(14.5, 0.62 * len(df) + 3.4), sharey=True)
 
-    _panel(ax_a, ["raw_sn2_angle", "raw_sn2_angle", "prep_sn2_angle"],
-           [(CFG.TIER_ANGLE_MIN[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_ANGLE_MIN[CFG.TIER_TOP]:.0f}°", CFG.VIS_BAND["high"]),
-            (CFG.NAC_ANGLE_RELAXED, f"relaxed NAC  {CFG.NAC_ANGLE_RELAXED:.0f}°", CFG.VIS_BAND["low"])],
-           "SN2 attack angle  (°)", "Attack angle — the pose the screen chose, and the pose MD gets")
-    _panel(ax_d, ["raw_dist_nuc", "raw_dist_nuc", "prep_dist_nuc"],
-           [(CFG.TIER_NUC_DIST[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_NUC_DIST[CFG.TIER_TOP]:.1f} Å", CFG.VIS_BAND["high"]),
-            (CFG.NAC_DIST_RELAXED, f"relaxed NAC  {CFG.NAC_DIST_RELAXED:.1f} Å", CFG.VIS_BAND["low"])],
-           "Nucleophile distance  (Å)", "Nucleophile distance — preparation pushes it outward")
+    def _panel(ax, c0, c1, gate, gate_lbl, relaxed, relaxed_lbl, xlab, worse_is):
+        for _i, (_a, _b) in enumerate(zip(df[c0], df[c1])):
+            # 'worse' = away from the gate. For the angle the gate is a floor; for the distance a ceiling.
+            _worse = (_b < _a) if worse_is == "down" else (_b > _a)
+            _col = CFG.VIS_BAND["low"] if _worse else CFG.VIS_BAND["high"]
+            ax.annotate("", xy=(_b, _i), xytext=(_a, _i),
+                        arrowprops=dict(arrowstyle="-|>,head_width=0.28,head_length=0.6",
+                                        color=_col, lw=2.2, shrinkA=0, shrinkB=0), zorder=4)
+            ax.plot([_a], [_i], "o", ms=7, color=CFG.VIS_INK["white"],
+                    markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=1.3, zorder=5)
+            # The value rides BEYOND the arrowhead, in the direction of travel, so it can never sit on
+            # top of the gate line the arrow is crossing.
+            _pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012 if ax.get_xlim()[1] > ax.get_xlim()[0] else 0.0
+            _dir = 1 if _b >= _a else -1
+            ax.annotate(f"{_b:.1f}", xy=(_b, _i), xytext=(9 * _dir, 0), textcoords="offset points",
+                        ha="left" if _dir > 0 else "right", va="center",
+                        fontsize=CFG.VIS_FONT_ANNOT - 0.5, color=_col, zorder=6)
+        ax.axvline(gate, ls="--", lw=1.4, color=CFG.VIS_INK["dark"], alpha=0.85, zorder=2)
+        ax.text(gate, len(df) - 0.35, gate_lbl, rotation=90, va="top", ha="right",
+                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"])
+        ax.axvline(relaxed, ls=":", lw=1.1, color=CFG.VIS_INK["ghost"], zorder=2)
+        ax.text(relaxed, len(df) - 0.35, relaxed_lbl, rotation=90, va="top", ha="right",
+                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["ghost"])
+        ax.set_xlabel(xlab)
+        ax.grid(True, axis="x", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
+        ax.set_axisbelow(True)
+        _lo = min(df[c0].min(), df[c1].min(), gate, relaxed)
+        _hi = max(df[c0].max(), df[c1].max(), gate, relaxed)
+        _m = (_hi - _lo) * 0.13
+        ax.set_xlim(_lo - _m, _hi + _m)
 
-    _handles = [_Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], lw=2.0, marker="o", ms=6, label="MD-selected candidate"),
-                _Line2D([0], [0], color=CFG.VIS_INK["ghost"], lw=1.1, marker="o", ms=4, label="Control")]
-    ax_a.legend(handles=_handles, loc="lower left", frameon=True,
-                framealpha=CFG.VIS_LEGEND_FRAME_ALPHA, fontsize=CFG.VIS_FONT_LEGEND)
+    _panel(ax_a, "raw_sn2_angle", "prep_sn2_angle",
+           CFG.TIER_ANGLE_MIN[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_ANGLE_MIN[CFG.TIER_TOP]:.0f}°",
+           CFG.NAC_ANGLE_RELAXED, f"relaxed NAC  {CFG.NAC_ANGLE_RELAXED:.0f}°",
+           "SN2 attack angle at the mapped nucleophile  (°)", worse_is="down")
+    _panel(ax_d, "raw_dist_nuc", "prep_dist_nuc",
+           CFG.TIER_NUC_DIST[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_NUC_DIST[CFG.TIER_TOP]:.1f} Å",
+           CFG.NAC_DIST_RELAXED, f"relaxed NAC  {CFG.NAC_DIST_RELAXED:.1f} Å",
+           "Nucleophile distance  (Å)", worse_is="up")
+
+    ax_a.set_yticks(_y)
+    ax_a.set_yticklabels(_label)
+    for _t, _md in zip(ax_a.get_yticklabels(), _is_md):
+        _t.set_color(CFG.VIS_ACCENT["blue"] if _md else CFG.VIS_INK["muted"])
+    ax_a.set_ylim(-0.8, len(df) - 0.2)
+
+    _h = [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
+                  markeredgecolor=CFG.VIS_INK["dark"], ms=7, label="Boltz CIF  (what the screen scored)"),
+          _Line2D([0], [0], color=CFG.VIS_BAND["low"], lw=2.2, label="prepared pose moved AWAY from the gate"),
+          _Line2D([0], [0], color=CFG.VIS_BAND["high"], lw=2.2, label="prepared pose moved TOWARDS the gate")]
+    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.02, 1.015), ncol=3,
+                frameon=False, fontsize=CFG.VIS_FONT_LEGEND)
 
     _da = pd.to_numeric(df["prep_d_angle"], errors="coerce").dropna()
     _dd = pd.to_numeric(df["prep_d_dist"], errors="coerce").dropna()
-    fig.suptitle("The screened pose is not the simulated pose", fontsize=CFG.VIS_FONT_AXIS_LABEL + 2)
-    fig.text(0.5, 0.005,
-             f"CIF→RAW lossless.   RAW→PREP: mean |Δangle| {_da.abs().mean():.1f}°  (max {_da.abs().max():.1f}°)   ·   "
-             f"mean Δdistance {_dd.mean():+.2f} Å.   Tier rungs are 5° apart — finer than this drift.",
+    fig.suptitle("The pose the screen scored is not the pose MD starts from",
+                 fontsize=CFG.VIS_FONT_AXIS_LABEL + 2)
+    fig.text(0.5, 0.012,
+             f"Arrow = Boltz CIF → PrepWizard.   CIF→RAW conversion is lossless (max |Δ| 0.04°), so it is not drawn.   "
+             f"Preparation: mean |Δangle| {_da.abs().mean():.1f}° (max {_da.abs().max():.1f}°), "
+             f"mean Δdistance {_dd.mean():+.2f} Å.   Blue labels = MD-selected.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.035, 1, 0.96))
+    fig.tight_layout(rect=(0, 0.045, 1, 0.925))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "01_Pose_Drift_CIF_to_Prepared.png"
@@ -696,7 +708,7 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     return _path
 
 
-def measure_sn2_geometry(struct_path: Path) -> dict:
+def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> dict:
     """Measure the SN2 geometry of a structure — CIF or PDB — with the pipeline's own joint-NAC rule.
 
     WHY THIS EXISTS
@@ -714,9 +726,19 @@ def measure_sn2_geometry(struct_path: Path) -> dict:
     complexes can only ever run on the CIF, because preparation costs minutes per structure. What this
     does is MEASURE the pose that is actually handed to MD, so the drift is visible instead of silent.
 
-    The rule is the pipeline's own: the attacking oxygen must satisfy BOTH the distance and the angle
-    on the SAME atom, chosen by maximising sigmoid(d) x sigmoid(angle). Picking the nearest oxygen, or
-    the best-angle oxygen, invents a nucleophile that does not exist.
+    THE NUCLEOPHILE IS THE NUCLEOPHILE
+    ----------------------------------
+    The attack is made by ONE residue — the catalytic aspartate that 02 mapped for this protein
+    (Mapped_Nucleophile, e.g. ASP110), found by global alignment and robust to insertions. It is passed
+    in as nuc_resnum. Scanning every Asp/Glu in the protein and taking whichever scores best would let a
+    surface carboxylate 6 A away win a geometry contest it has no business entering, and report an
+    attack that no enzyme makes. Without the mapped residue the measurement REFUSES to guess: it returns
+    status "no_mapped_nucleophile" rather than a plausible number from the wrong atom.
+
+    Between the two oxygens OF THAT residue the choice is the pipeline's own JOINT-NAC rule: the
+    attacking oxygen must satisfy the distance AND the angle on the SAME atom, chosen by maximising
+    sigmoid(d) x sigmoid(angle). Taking the nearest oxygen, or the best-angle oxygen, pairs a distance
+    from one atom with an angle from the other and describes a nucleophile that does not exist.
     """
     _AA = {"ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO",
            "SER","THR","TRP","TYR","VAL","HID","HIE","HIP","ASH","GLH","LYN","HOH","WAT","NA","CL","SPC","T3P"}
@@ -749,8 +771,15 @@ def measure_sn2_geometry(struct_path: Path) -> dict:
         _out["status"] = "no_CF_bond"
         return _out
 
-    _nucs = [(r, a) for r in _prot if r.name.strip().upper() in ("ASP", "GLU", "ASH", "GLH")
+    if nuc_resnum is None:
+        _out["status"] = "no_mapped_nucleophile"
+        return _out
+    _nucs = [(r, a) for r in _prot
+             if r.seqid.num == int(nuc_resnum) and r.name.strip().upper() in ("ASP", "GLU", "ASH", "GLH")
              for a in r if a.name.strip() in ("OD1", "OD2", "OE1", "OE2")]
+    if not _nucs:
+        _out["status"] = f"nucleophile_{nuc_resnum}_not_found"
+        return _out
 
     def _sig(x, k, x0):
         try:
@@ -763,7 +792,7 @@ def measure_sn2_geometry(struct_path: Path) -> dict:
         for _r, _o in _nucs:
             _d = _o.pos.dist(_c.pos)
             if _d > CFG.NUC_SEARCH_RADIUS_A:
-                continue
+                continue   # the ligand has left the catalytic site entirely
             _v1 = np.array([_o.pos.x - _c.pos.x, _o.pos.y - _c.pos.y, _o.pos.z - _c.pos.z])
             _v2 = np.array([_f.pos.x - _c.pos.x, _f.pos.y - _c.pos.y, _f.pos.z - _c.pos.z])
             _cs = float(np.dot(_v1, _v2) / (np.linalg.norm(_v1) * np.linalg.norm(_v2) + 1e-12))
@@ -887,8 +916,9 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
         A candidate whose prepared pose has fallen out of the relaxed NAC envelope is FLAGGED, so that
         it is known before a week of GPU time is spent on it, and never silently dropped.
         """
-        _raw_g  = measure_sn2_geometry(raw_pdb_path)
-        _prep_g = measure_sn2_geometry(final_prep_path)
+        _nuc_res = (anchors or {}).get("Nuc")
+        _raw_g  = measure_sn2_geometry(raw_pdb_path, _nuc_res)
+        _prep_g = measure_sn2_geometry(final_prep_path, _nuc_res)
         _geo = {
             "raw_sn2_angle":   _raw_g["sn2_angle"],
             "raw_dist_nuc":    _raw_g["dist_nuc"],
@@ -2648,7 +2678,37 @@ def prep_and_convert_phase(args):
     tier was granted on? The screen tiers the Boltz CIF; preparation then moves the angle by ~6° and the
     nucleophile ~0.3 Å outward, in the direction that undoes the selection. Recording both poses side by
     side makes that drift auditable instead of invisible. Nothing is gated on it.
+
+    EVERY prepared structure on disk is measured, not merely the ones prepared on this run. Preparation
+    is cached — a second run queues zero PrepWizard jobs — so measuring only the newly-prepared ones
+    would leave the table empty on exactly the runs where the structures already exist, which is most of
+    them. The measurement is cheap; the cache is not a reason to under-report.
     """
+    _measured = {r["job"] for r in _prep_geom_rows}
+    for _pp in sorted(dir_prep_clean.glob("*_Prepared.pdb")):
+        _job = _pp.name.replace("_Prepared.pdb", "")
+        if _job in _measured:
+            continue
+        _rp = dir_raw / f"{_job}_RAW.pdb"
+        if not _rp.exists():
+            continue
+        _nr = (cat_anchor_map.get(_job) or {}).get("Nuc")
+        _rg, _pg2 = measure_sn2_geometry(_rp, _nr), measure_sn2_geometry(_pp, _nr)
+        _da2 = _pg2["sn2_angle"] - _rg["sn2_angle"]
+        _dd2 = _pg2["dist_nuc"] - _rg["dist_nuc"]
+        _prep_geom_rows.append({
+            "job": _job, "rank": str(rank_map.get(_job, "N/A")),
+            "raw_sn2_angle": _rg["sn2_angle"], "raw_dist_nuc": _rg["dist_nuc"],
+            "prep_sn2_angle": _pg2["sn2_angle"], "prep_dist_nuc": _pg2["dist_nuc"],
+            "prep_d_angle": round(_da2, 2) if _da2 == _da2 else float("nan"),
+            "prep_d_dist": round(_dd2, 2) if _dd2 == _dd2 else float("nan"),
+            "prep_attack_o": _pg2["attack_o"],
+            "prep_left_nac": int(_pg2["sn2_angle"] == _pg2["sn2_angle"]
+                                 and (_pg2["sn2_angle"] < CFG.NAC_ANGLE_RELAXED
+                                      or _pg2["dist_nuc"] > CFG.NAC_DIST_RELAXED)),
+            "prep_geom_status": _pg2["status"],
+        })
+
     if _prep_geom_rows:
         _pg = pd.DataFrame(_prep_geom_rows).sort_values("prep_sn2_angle", ascending=False)
         _pg_path = dir_prep_clean.parent / "3_Comparative_Analysis" / "00_Prepared_Pose_Geometry.csv"

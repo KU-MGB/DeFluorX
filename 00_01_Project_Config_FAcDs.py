@@ -664,8 +664,6 @@ class CFG:
     """
     CF_BOND_MAX_A: float        = 1.80   # Å  a C–F pair closer than this is a bond (the scissile C–F)
     NUC_SEARCH_RADIUS_A: float  = 8.0    # Å  how far from the attack carbon to look for a carboxylate O
-    PREP_ANGLE_NOISE_DEG: float = 6.3    # °  measured mean |Δangle| CIF → prepared (max observed 18.5)
-    PREP_DIST_NOISE_A: float    = 0.30   # Å  measured mean Δdistance CIF → prepared (systematically outward)
     NAC_DIST_STRICT: float   = 3.2    # Å  nucleophile O to electrophilic C
     NAC_ANGLE_STRICT: float  = 155.0  # °  O–C–F attack angle at C (180° = ideal backside)
 
