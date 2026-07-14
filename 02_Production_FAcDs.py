@@ -331,6 +331,7 @@ from Bio.Align import substitution_matrices
 import gemmi
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdDetermineBonds
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
 
 # -------------------------------------------------------------------------------
@@ -560,6 +561,8 @@ DEFAULT_METRICS = {
     "catalytic_dist_A": 999.0,
     CFG.COL_IDENS: 0.0,
     "custom_affinity_score": 0.0,
+    "ligand_smiles_stale": 0,   # 1 = the finished structure predates the current input SMILES; it is
+                                #     analysed against the SMILES it was PREDICTED FROM, never the new one
     "binding_likelihood_computed": 0.0,
     "confidence_score": 0.0,
     "sn2_attack_angle": 0.0,
@@ -1446,19 +1449,116 @@ def kabsch_transform(P, Q):
     t = Qc - (R @ Pc)
     return R, t
 
+def graph_map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol):
+    """
+    Map Boltz-predicted (mmCIF) atoms to RDKit template atoms by CONNECTIVITY, not by
+    position. Returns {mmcif_atom_name: rdkit_atom_index}, or None if the graphs cannot
+    be matched.
+
+    This is the correct primitive, and the spatial assignment below is only a fallback.
+    The template carries an ETKDG-embedded conformer (rdkit_mol_from_smiles_with_3d),
+    which shares its BONDING with the Boltz pose but not its TORSIONS. Two different
+    conformers of the same molecule cannot be superposed by any rigid rotation, so a
+    distance-based assignment between them is matching atoms across a geometry mismatch
+    it cannot remove: a nearest-neighbour cost can then pair chemically distinct atoms
+    (an F on one carbon with an F on another; a carboxylate O with an F) whenever the
+    torsional difference exceeds the interatomic spacing. Because the reactive-centre
+    gates are keyed on the mapped α-carbon and carboxylate oxygens, that mislabelling
+    silently relocates the scissile centre.
+
+    A graph isomorphism has no such failure mode: it is invariant to conformation, to
+    reference frame, and to atom order. Bonds are perceived from the mmCIF geometry
+    (rdDetermineBonds), and the template is matched onto them with generic bond queries
+    so that perceived single bonds still match aromatic/double template bonds. Where the
+    molecule has symmetry (the three F of a CF3), the match picks one automorphism —
+    those atoms are chemically interchangeable, so any of them is equally correct.
+
+    One ambiguity is not resolvable and does not need to be: the perceived probe carries
+    neither hydrogens nor bond orders, so the two carboxylate oxygens are topologically
+    equivalent in it and the match may interchange them. They are a resonance pair — the
+    ligand is the carboxylATE at the assay pH — and every consumer is symmetric in them:
+    _ligand_ionisable classifies an oxygen by its local topology (bound to a C/S/P bearing
+    ≥2 oxygens), which is identical for both, and the reactive-centre gates key on the
+    α-carbon, not on either oxygen. Measured against shuffled, re-embedded conformers, the
+    carbon/fluorine skeleton — the scissile centre — maps with 100% accuracy for FA, DFA,
+    TFA, PFBA and PFOA, where the spatial fallback reaches only 82% for PFBA and 48% for
+    PFOA (the flexible chains, where the two conformers differ most).
+    """
+    if not mmcif_atoms or rdkit_mol is None:
+        return None
+    try:
+        heavy = [(i, a) for i, a in enumerate(mmcif_atoms)
+                 if str(a.get("element", "")).strip().upper() not in ("H", "D")]
+        if len(heavy) < 2:
+            return None
+
+        # Perceive connectivity from the predicted geometry alone.
+        _xyz = f"{len(heavy)}\n\n" + "\n".join(
+            f'{a["element"]} {float(a["x"]):.6f} {float(a["y"]):.6f} {float(a["z"]):.6f}'
+            for _, a in heavy)
+        probe = Chem.MolFromXYZBlock(_xyz)
+        if probe is None:
+            return None
+        rdDetermineBonds.DetermineConnectivity(probe)
+        if probe.GetNumBonds() == 0:
+            return None
+
+        # Heavy-atom template, remembering each atom's index in the ORIGINAL rdkit_mol.
+        work = Chem.Mol(rdkit_mol)
+        for _a in work.GetAtoms():
+            _a.SetIntProp("_orig_idx", _a.GetIdx())
+        tmpl = Chem.RemoveHs(work, sanitize=False)
+        if tmpl is None or tmpl.GetNumAtoms() < 2:
+            return None
+        orig_idx = [_a.GetIntProp("_orig_idx") for _a in tmpl.GetAtoms()]
+
+        '''
+        Neither bond ORDERS nor formal CHARGES are recoverable from bare coordinates, so the query
+        must not demand either. Bonds are made generic; charges are zeroed on the query copy, because
+        the input SMILES are supplied as the anion (O=C([O-])...) at the assay pH while the perceived
+        probe carries neutral oxygens — a charge-sensitive match rejects every carboxylate and every
+        sulfonate. Atom ELEMENTS and the bond GRAPH still have to agree, which is what identifies the
+        atoms. The original template indices are carried in _orig_idx, so neutralising this copy
+        changes nothing that is returned.
+        '''
+        for _a in tmpl.GetAtoms():
+            _a.SetFormalCharge(0)
+            _a.SetNoImplicit(True)
+        _qp = Chem.AdjustQueryParameters.NoAdjustments()
+        _qp.makeBondsGeneric = True
+        query = Chem.AdjustQueryProperties(tmpl, _qp)
+
+        match = probe.GetSubstructMatch(query)      # match[k] = probe atom for template atom k
+        if len(match) != tmpl.GetNumAtoms():
+            return None
+
+        # Belt and braces: the isomorphism must also be element-consistent.
+        out = {}
+        for _k, _probe_i in enumerate(match):
+            _mm_i, _mm_a = heavy[_probe_i]
+            if str(_mm_a["element"]).strip().upper() != tmpl.GetAtomWithIdx(_k).GetSymbol().upper():
+                return None
+            out[_mm_a["atom_name"]] = int(orig_idx[_k])
+        return out or None
+    except Exception:
+        return None
+
+
 def map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol):
     """
-    Map Boltz-predicted (mmCIF) atoms to RDKit template atoms by optimal
-    element-aware 3D assignment, robust to atom-ordering AND reference-frame
-    differences between the two sources.
+    FALLBACK atom map, reached only when graph_map_mmcif_to_rdkit above cannot perceive
+    the bonds or cannot match the graph. Maps Boltz-predicted (mmCIF) atoms to RDKit
+    template atoms by optimal element-aware 3D assignment, robust to atom-ordering AND
+    reference-frame differences between the two sources — but NOT to the conformational
+    difference between the pose and the embedded template, which is why it is second choice.
 
     The two structures live in different frames, so a rigid alignment is required
-    before inter-atomic distances are meaningful. The previous implementation
-    seeded that alignment from atom INDEX order (rd_coords[:m] ↔ mm_coords[:m]),
-    which silently fails whenever Boltz's mmCIF atom order differs from RDKit's
-    SMILES order — increasingly likely for larger ligands — producing a wrong
-    rotation, inflated costs, and unmapped catalytic atoms (e.g. the carboxylate
-    C/O, which then breaks Bürgi–Dunitz / Flippin–Lodge / mechanistic scoring).
+    before inter-atomic distances are meaningful. That alignment must NOT be seeded
+    from atom INDEX order (rd_coords[:m] ↔ mm_coords[:m]): Boltz's mmCIF atom order
+    need not match RDKit's SMILES order — the mismatch grows with ligand size — and
+    an index-seeded rotation silently produces inflated costs and unmapped catalytic
+    atoms (e.g. the carboxylate C/O, which then breaks Bürgi–Dunitz / Flippin–Lodge /
+    mechanistic scoring).
 
     Instead, several ORDER-INDEPENDENT candidate alignments are generated by
     matching the two clouds' principal axes (all four proper-rotation sign
@@ -1468,6 +1568,13 @@ def map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol):
     """
     if not mmcif_atoms or rdkit_mol is None:
         return {}
+
+    # Connectivity first: conformer-, frame- and order-independent. Spatial assignment is
+    # reached only when bond perception or the graph match fails.
+    _graph = graph_map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol)
+    if _graph:
+        return _graph
+
     mm_coords = np.asarray([[a["x"], a["y"], a["z"]] for a in mmcif_atoms], float)
     rd_coords = np.asarray(rdkit_coords_list(rdkit_mol), float)
     if mm_coords.size == 0 or rd_coords.size == 0:
@@ -1553,9 +1660,9 @@ def _ligand_ionisable(rd_atom) -> Optional[str]:
     Input PFAS SMILES are typically supplied in the neutral (protonated) acid
     form (e.g. fluoroacetate "C(C(=O)O)F"), so RDKit reports a formal charge of
     0 even for groups that are fully ionised at the assay pH (8.0). Relying on
-    formal charge alone would miss every carboxylate/sulfonate; treating ANY
-    neutral N/O/S as charged (the previous heuristic) over-counts ethers and
-    amides. This recognises the actual ionisable groups instead:
+    formal charge alone would miss every carboxylate/sulfonate, while treating ANY
+    neutral N/O/S as charged over-counts ethers and amides. The actual ionisable
+    groups are recognised instead:
       • anion : carboxylate / sulfonate / phosphonate oxygen (O bound to a
                 C/S/P bearing ≥2 oxygens), or any atom with formal charge < 0.
       • cation: basic amine nitrogen (all-single-bond N, not an amide), or any
@@ -2852,17 +2959,16 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
 def sigmoid(x: float, k: float = 1.0, x0: float = 0.0) -> float:
     """Soft threshold. The limit is decided by the SIGN OF k, not by the sign of (x - x0).
 
-    The overflow branch used to read `0.0 if x - x0 < 0 else 1.0`, which silently assumes k > 0. Two of
-    this pipeline's steepnesses are NEGATIVE (SOFT_K_NUC = -4.0, SOFT_K_TRIAD = -2.0) — they are meant to
-    DECREASE with distance. With a negative k that branch is inverted, so an enormous distance overflowed
-    exp() and returned 1.0: a PERFECT score.
+    Two of this pipeline's steepnesses are NEGATIVE (SOFT_K_NUC = -4.0, SOFT_K_TRIAD = -2.0): they must
+    DECREASE with distance. So the overflow branch cannot key on the sign of (x - x0) — that assumes a
+    positive k, and with a negative one it is inverted, handing a PERFECT 1.0 to an enormous distance.
 
-    That was not hypothetical. calculate_sn2_metrics returns 999.0 A as its 'no nucleophile' sentinel, and
-    999 A overflows for k = -4 (the threshold is 180.4 A). Every complex with no nucleophile at all was
-    being handed s_nuc = 1.000.
+    The trap is concrete: calculate_sn2_metrics returns 999.0 A as its "no nucleophile" sentinel, and at
+    k = -4 the exp() overflows past 180.4 A. A complex with no nucleophile at all must not score a perfect
+    nucleophile term.
 
-    The limit of the logistic is set by the sign of k*(x - x0): it saturates to 1 when that product is
-    large and positive, to 0 when it is large and negative. That is what is computed here.
+    The limit of a logistic is set by the sign of k*(x - x0): it saturates to 1 when that product is large
+    and positive, to 0 when it is large and negative. That is what is computed here.
     """
     _z = k * (x - x0)
     try:
@@ -3431,6 +3537,17 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         _chem_unknown = terminal_f_count not in CFG.SCISSILE_CF_BDE
         scissile_cf_bde = float(CFG.SCISSILE_CF_BDE.get(terminal_f_count, CFG.SENTINEL_UNDEFINED))
 
+        '''
+        An incomplete ligand atom map means the scissile centre was never identified, because every
+        reactive-centre gate is keyed on the MAPPED α-carbon. The fraction was being written to the
+        CSV and read by nothing, so a complex whose ligand barely mapped was scored on the geometry
+        around an atom the pipeline could not name. Below CFG.LIGAND_MAP_MIN_FRACTION the chemistry
+        is declared unverified — barred from the elite tier, not annihilated.
+        '''
+        _map_frac = (float(len(mm_map)) / float(len(mmcif_lig))) if mmcif_lig else 0.0
+        if _map_frac < CFG.LIGAND_MAP_MIN_FRACTION:
+            _chem_unknown = True
+
         # B — backside steric occlusion: vdW bulk of heavy halogen substituents on the
         # attack carbon lying on the nucleophile-approach hemisphere (anti to leaving F).
         # The leaving F sits opposite the approach axis (dot < 0) and is auto-excluded.
@@ -3486,10 +3603,23 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["angle_multiplicity"] = int(n_angle_choices)
         angle_effective = CFG.sn2_effective_angle(angle, n_angle_choices)
         results["sn2_attack_angle_effective"] = round(angle_effective, 1)
-        # feasibility_factor stays a reported diagnostic (α C–F BDE × β-fluorination). The
-        # separate graded chemistry penalty (BDE + occlusion, below) is what feeds the tier
-        # via mechanistic_score_effective; competence/ranking keep the raw geometry. Step-07
-        # QM/MM remains the final reactivity arbiter.
+        """
+        WHERE C–F BOND STRENGTH ENTERS, STATED HONESTLY.
+
+        The previous note here claimed "competence/ranking keep the raw geometry". They do not:
+        CFG.competence_score multiplies the geometric sum by feasibility_factor(scissile_cf_bde,
+        beta_f_count). Bond strength therefore enters in THREE places, deliberately and for three
+        different purposes, and a reader is entitled to know all three:
+
+          · the TIER, through the graded chemistry penalty in mechanistic_score_effective (_bde_pen);
+          · the ELITE CEILING, through TIER_ELITE_BDE_MAX, which bars an unbreakable C–F from Tier_1A
+            however good its pose;
+          · the WITHIN-TIER RANK, through feasibility_factor scaling competence_score.
+
+        The three are not a double-count: the first decides whether the chemistry is feasible at all, the
+        second whether it is elite, the third how it ranks among its peers. Step-07 QM/MM remains the
+        final reactivity arbiter — none of these is a substitute for a barrier.
+        """
         results["feasibility_factor"] = round(CFG.feasibility_factor(scissile_cf_bde, beta_f_count), 3)
         sn2_dead_end = (scissile_cf_bde > CFG.SCISSILE_CF_BDE_MAX
                         and backside_occlusion > CFG.SN2_BACKSIDE_OCCL_MAX)
@@ -3504,11 +3634,25 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         mechanistic_score_effective = this minus the graded chemistry and containment
         penalties (computed after the pocket-fit block). All weights live in CFG.
         """
+        """
+        THE MULTIPLICITY CORRECTION IS CHARGED ONCE, AND BOTH GATES SEE THE SAME CORRECTED ANGLE.
+
+        The correction must not be applied twice to one tier decision. `angle_effective` already converts the
+        observed angle into the angle a single-C–F substrate would need to be equally improbable (the
+        Šidák deflation, §5.2d). Passing the RAW angle plus `angle_multiplicity=n` then made
+        mechanistic_score deflate that same angle a second time, by the same exponent — and the Tier_1A
+        branch requires `angle_effective >= TIER_ANGLE_MIN` AND `mech_score >= TIER_MECH_MIN`, so a CF2 or
+        CF3 substrate paid the best-of-N penalty on both rungs of the same ladder.
+
+        The correction is right; charging it twice is not. It is computed once, and the already-corrected
+        angle is what both gates score — so the penalty is real, applied once, and the two gates cannot
+        silently compound it.
+        """
         mech_score = CFG.mechanistic_score(
             d_nuc, dist_nuc_base, dist_base_acid,
-            clamp_ok, stabilised, angle, steric_clashes,
+            clamp_ok, stabilised, angle_effective, steric_clashes,
             scissile_cf_bde, backside_occlusion, beta_f_count,
-            angle_multiplicity=n_angle_choices,
+            angle_multiplicity=1,
         )
         results[CFG.COL_MECH_S] = round(mech_score, 2)
 
@@ -4351,8 +4495,10 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             data["binding_likelihood_computed"] = binding_prob
             data["binding_likelihood_calc"] = (
                 f"({W_IPTM} * {float(iptm_v):.2f}) + ({W_PLDDT} * {plddt_v/100.0:.2f}) + "
-                f"({W_INTERACTIONS} * {min(1.0, interaction_density/2.0):.2f}) - "
-                f"({W_CROSS_PAE} * {min(1.0, c_pae/50.0):.2f}) + ({W_CONF} * {conf:.2f}) = {score_v:.2f} -> Sigmoid = {binding_prob:.4f}"
+                f"({W_INTERACTIONS} * {min(1.0, interaction_density / CFG.BIND_INT_DENSITY_NORM):.2f}) - "
+                f"({W_CROSS_PAE} * {min(1.0, c_pae / CFG.BIND_CROSS_PAE_NORM):.2f}) + ({W_CONF} * {conf:.2f}) "
+                f"= {score_v:.2f}  ->  z = (raw - {CFG.BIND_LOGIT_CENTRE}) / {CFG.BIND_LOGIT_GAIN} "
+                f"= {_z_bind:.2f}  ->  Sigmoid = {binding_prob:.4f}"
             )
 
             hb = counts.get("hydrogen_bond", 0)
@@ -4626,7 +4772,7 @@ CSV_COLUMN_ORDER = [
     "confidence_score", "iptm", "ptm", "ligand_iptm", "protein_iptm",
     "mean_plddt", "cross_interface_pae_mean",
     # --- Binding scores ---
-    "binding_likelihood_computed", "custom_affinity_score", CFG.COL_IDENS,
+    "ligand_smiles_stale", "binding_likelihood_computed", "custom_affinity_score", CFG.COL_IDENS,
     # --- SN2 geometry (+ auxiliary non-gating reference angles) ---
     "sn2_attack_angle", "sn2_trajectory_dev",
     "scissile_cf_bde", "sn2_backside_occlusion", "beta_f_count", "sn2_dead_end", "feasibility_factor",
@@ -4817,6 +4963,9 @@ def analysis_worker_loop(q, prod_dir, diff_samples, aln_dir, ctrl_cif, ctrl_map,
                     expected_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
                     res["job_name"]  = expected_name
                     res["job_index"] = str(job["job_index"])
+                    # A resumed prediction whose input SMILES has since changed is analysed against the
+                    # molecule it was built from, and says so in its own row.
+                    res["ligand_smiles_stale"] = int(job.get("smiles_stale", 0))
                     local_rows.append(flatten_job_result(res))
                     if len(local_rows) >= 10:
                         # clear in finally so a transient append/IO error cannot leave the
@@ -5381,6 +5530,9 @@ def main():
     # -------------------------------------------------------------------------------
     tasks = []
     task_count = 0
+    # job_stem -> the SMILES its finished CIF was actually predicted from, when that differs from the
+    # current input. The analysis must use THIS, not the new one (see the resume branch below).
+    _stale_smi_jobs: dict = {}
     total_ops = len(proteins) * len(ligands)
     existing_yamls = set(f.name for f in D_YAML.glob("*.yaml"))
     active_job_stems = set()
@@ -5422,7 +5574,28 @@ def main():
                         yaml_needs_write = False
                     else:
                         if is_completed:
-                            console_info(f"[Resume] Structural metadata mismatch in {y_name} bypassed to preserve workflow continuity.")
+                            """
+                            THE STRUCTURE WAS PREDICTED FROM THE OLD MOLECULE. IT MUST BE ANALYSED AS THE
+                            OLD MOLECULE.
+
+                            Keeping a finished prediction when the input SMILES has since changed is the
+                            right call — re-running days of GPU because a carboxylate was re-protonated in
+                            the input file would be absurd. Carrying the NEW SMILES forward against the OLD
+                            CIF is not: map_mmcif_to_rdkit would build its template from a molecule that is
+                            not the one in the structure, and every chemistry term downstream of that map —
+                            the scissile carbon, n_scissile_f, beta_f_count, the formal charges, the
+                            pi-cation terms — would be computed for the wrong compound. Nothing would fail.
+                            One INFO line would be printed.
+
+                            So the analysis uses the SMILES the structure was actually built from, and the
+                            row is FLAGGED (ligand_smiles_stale) so the divergence is visible in the output
+                            rather than buried in a resume log.
+                            """
+                            console_info(f"[Resume] {y_name}: input SMILES/sequence has changed since this "
+                                         f"prediction was made. The finished structure is KEPT and will be "
+                                         f"analysed against the SMILES it was PREDICTED FROM; the row is "
+                                         f"flagged ligand_smiles_stale=1.")
+                            _stale_smi_jobs[job_stem] = existing_smi
                             yaml_needs_write = False
                         else:
                             console_info(f"[Resume] Sequence or ligand structure mismatch unequivocally detected in {y_name}. Moving stale YAML definitions and corrupted runs to Trash.")
@@ -5451,9 +5624,13 @@ def main():
                 with open(y_path, "w") as f: yaml.safe_dump(payload, f, sort_keys=False, default_flow_style=False)
                 GLOBAL_STATS["created_yaml"] += 1
 
+            # A finished prediction is analysed with the SMILES it was PREDICTED FROM, never with a newer
+            # one that describes a different molecule.
+            _smi_for_analysis = _stale_smi_jobs.get(job_stem, smi)
             tasks.append({
                 "job_index": jid, "protein": pid, "job_protein": job_pid, "protein_idx": protein_order,
-                "ligand": lid, "sequence": seq, "smiles": smi, "yaml": y_path
+                "ligand": lid, "sequence": seq, "smiles": _smi_for_analysis, "yaml": y_path,
+                "smiles_stale": int(job_stem in _stale_smi_jobs),
             })
 
     if resumed:

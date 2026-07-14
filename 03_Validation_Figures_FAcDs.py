@@ -1202,18 +1202,25 @@ def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
         xi,yi = np.linspace(x0,x1,220), np.linspace(y0,y1,220)
         Xi,Yi = np.meshgrid(xi,yi)
         Zi = kde(np.vstack([Xi.ravel(),Yi.ravel()])).reshape(Xi.shape)
-        # The density floor (1e-6) caps the relative free energy at
-        # F_max = -0.596·ln(1e-6) ≈ 8.23 kcal/mol; tie vmax to it so the full
-        # colourbar range is populated instead of leaving the upper ~45% empty.
-        _dens_floor = 1e-6
-        _F_MAX = float(-0.596 * np.log(_dens_floor))
-        F  = np.clip(-0.596*np.log(np.clip(Zi/Zi.max(), _dens_floor, None)), 0, _F_MAX)
+        """
+        THIS IS A POPULATION DENSITY. IT IS NOT A FREE-ENERGY SURFACE.
+
+        -RT·ln(ρ) is a potential of mean force only when ρ is a Boltzmann density over a METRIC
+        coordinate. Here ρ is a Gaussian KDE of how many library members the screen happens to contain,
+        on UMAP axes — a designed sample, on non-metric, non-volume-preserving coordinates. Nothing about
+        it is thermodynamic, and an energy axis on it invites exactly the reading it cannot support.
+
+        So the density is plotted as a density: no log transform, no kcal/mol scale, and a colourbar that
+        says what the colour means. Where the library clusters is the only thing this figure can show.
+        """
+        _dens = Zi / Zi.max() if Zi.max() > 0 else Zi
         fig, ax = _tt_new_fig()
-        cf = ax.contourf(Xi,Yi,F, levels=45, cmap="Blues_r", vmin=0, vmax=_F_MAX, alpha=0.90)
-        ax.contour(Xi,Yi,F, levels=18, colors="white", linewidths=0.30, alpha=0.38)
+        cf = ax.contourf(Xi, Yi, _dens, levels=45, cmap="Blues", vmin=0, vmax=1.0, alpha=0.90)
+        ax.contour(Xi, Yi, _dens, levels=18, colors="white", linewidths=0.30, alpha=0.38)
         cb = fig.colorbar(cf, ax=ax, fraction=0.025, pad=0.01)
-        cb.set_label("KDE Population Density  (darker = more complexes)", fontsize=9.5)
-        cb.set_ticks([0, 2, 4, 6, 8])
+        cb.set_label("Library density  (KDE, normalised — darker = more complexes)",
+                     fontsize=CFG.VIS_FONT_LEGEND)
+        cb.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
         _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
         _tt_draw_thumbnails(fig, ax, pax, imgs)
         _tt_style(ax, "UMAP 1", "UMAP 2", "")
@@ -6924,8 +6931,14 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         return out
 
 
-    def _spear_str(x, y):
-        """Spearman ρ / p / n as a one-line string for embedding in a legend title; None if <10 pts."""
+    def _spear_str(x, y, panel: str = "extended figure"):
+        """Spearman ρ / p / n as a one-line string for embedding in a legend title; None if <10 pts.
+
+        The test is registered into the shared Benjamini-Hochberg family, and the p printed on the
+        panel is marked uncorrected: the family is complete only after every figure has run, so no q
+        exists at draw time. The corrected q_BH for this exact test is in 06_Statistical_Tests.csv,
+        which is the reportable value.
+        """
         _xy = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"),
                             "y": pd.to_numeric(y, errors="coerce")}).dropna()
         if len(_xy) < 10:
@@ -6933,8 +6946,9 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         _rho, _p = _sc_stats.spearmanr(_xy["x"], _xy["y"])
         if not np.isfinite(_rho):
             return None
+        _register_p("Spearman correlation", panel, float(_rho), int(len(_xy)), float(_p), rho=float(_rho))
         _ptxt = "p < 0.001" if _p < 0.001 else f"p = {_p:.3f}"
-        return f"Spearman ρ = {_rho:+.2f}   {_ptxt}   n = {len(_xy):,}"
+        return f"Spearman ρ = {_rho:+.2f}   {_ptxt} uncorrected   n = {len(_xy):,}"
 
     # ── Figure 01: Pocket volume vs ligand volume (steric fit boundary) ─────────
     """
@@ -7009,7 +7023,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                     ec=_nofit_col, alpha=0.9, linewidth=0.8))
             # Two-row legend above the axes (tiers + fit boundary); the Spearman ρ/p/n
             # rides in the legend title so it sits with the key, not as a floating box.
-            _ss01 = _spear_str(sub["asv"], sub["lv"])
+            _ss01 = _spear_str(sub["asv"], sub["lv"], "XN-01 pocket volume vs ligand volume")
             ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=5, fontsize=7.5,
                       framealpha=0.92, columnspacing=0.9, handletextpad=0.4, borderaxespad=0.0,
                       title=_ss01, title_fontsize=8)
@@ -7281,7 +7295,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                fontsize=8)
             ax.set_xlabel("Multi-model degrader consensus  (fraction of 5 models)", fontsize=11)
             ax.set_ylabel("Boltz-2 model confidence", fontsize=11)
-            _ss06 = _spear_str(sub["cons"], sub["conf"])
+            _ss06 = _spear_str(sub["cons"], sub["conf"], "XN-06 pose consensus vs confidence")
             ax.legend(loc="lower right", fontsize=8.5, framealpha=0.92,
                       title=_ss06, title_fontsize=8.5)
             plt.tight_layout()
@@ -7357,7 +7371,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                   markeredgewidth=0.7, zorder=6, label="Binned median")
                 # Panel-specific Spearman sits in the panel title (top, with the key row)
                 # rather than as a floating stat box inside the data.
-                _ss07 = _spear_str(_pdat["x"], _pdat["y"])
+                _ss07 = _spear_str(_pdat["x"], _pdat["y"], "XN-07 inter-model geometry spread")
                 if _ss07:
                     _axi.set_title(_ss07, fontsize=9, fontweight="bold", color=CFG.VIS_INK["ink_deep"], pad=6)
                 _axi.set_xlabel(_xl, fontsize=10)
@@ -9258,7 +9272,9 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
                                 float(_rho), int(_fin.sum()), float(_p),
                                 effect_size=round(float(_rho), 4), effect_type="spearman rho")
                     p_str = 'p < 0.001' if _p < 0.001 else f'p = {_p:.3f}'
-                    ax.text(0.95, 0.95, f'Spearman ρ = {_rho:+.2f}  ·  {p_str}  ·  n = {int(_fin.sum()):,}',
+                    # Marked uncorrected: the BH family closes only after every figure has run, so no
+                    # q exists at draw time. The corrected q_BH is in 06_Statistical_Tests.csv.
+                    ax.text(0.95, 0.95, f'Spearman ρ = {_rho:+.2f}  ·  {p_str} uncorrected  ·  n = {int(_fin.sum()):,}',
                             transform=ax.transAxes, ha='right', va='top',
                             fontsize=CFG.VIS_FONT_ANNOT,
                             bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
@@ -9301,10 +9317,15 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
         stat, p = mannwhitneyu(df_deg, df_non, alternative='two-sided')
         n1, n2 = (len(df_deg), len(df_non))
         r = 1 - 2 * stat / (n1 * n2)
+        _register_p("Mann-Whitney U", "Total fluorine count: degrader vs non-degrader tiers",
+                    float(stat), int(n1 + n2), float(p),
+                    effect_size_r=float(r), n_degrader=int(n1), n_non_degrader=int(n2),
+                    median_degrader=float(df_deg.median()), median_non_degrader=float(df_non.median()))
         p_str = f'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
-        # One line, top-left: three stacked lines in the top-right corner sat over the widest
-        # violins and cost more space than the statistic they carried.
-        ax.text(0.015, 0.97, f'Mann-Whitney U · {p_str} · effect size r = {r:.2f}',
+        # Marked uncorrected: the BH family closes only after every figure has run, so no q exists at
+        # draw time. The corrected q_BH is in 06_Statistical_Tests.csv. One line, top-left: three
+        # stacked lines in the top-right corner sit over the widest violins.
+        ax.text(0.015, 0.97, f'Mann-Whitney U · {p_str} uncorrected · effect size r = {r:.2f}',
                 transform=ax.transAxes, ha='left', va='top', fontsize=8.5,
                 bbox=dict(facecolor='white', alpha=0.85, edgecolor=CFG.VIS_INK["palest"], linewidth=0.6,
                           boxstyle='round,pad=0.3'))

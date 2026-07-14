@@ -813,7 +813,27 @@ class CFG:
     SN2_BACKSIDE_OCCL_MAX: float = 2.0     # Å (Σ vdW); above → backside SN2 approach sterically blocked (2×F=2.94 fails, 1×F=1.47 passes)
 
     # Graded chemical-feasibility factor (feasibility_factor) — continuous, never a veto.
-    FEASIBILITY_FLOOR: float     = 0.50    # lowest the feasibility multiplier can reach (a recalcitrant but real substrate such as TFA is down-ranked, not buried — QM/MM is the true arbiter)
+    """
+    A FLOOR ABOVE THE DATA IS NOT A FLOOR — IT IS A CEILING ON DISCRIMINATION.
+
+    At 0.50 the floor sat ABOVE every product the recalcitrant class actually produces, so all of them
+    collapsed onto one value and the multiplier had zero resolving power over the exact class it exists
+    to grade:
+
+        TFA   f_bde 0.38 × f_beta 1.00 = 0.375  ->  0.50
+        PFBA  f_bde 1.00 × f_beta 0.36 = 0.364  ->  0.50
+        PFOA  f_bde 1.00 × f_beta 0.18 = 0.180  ->  0.50
+        PFOS  f_bde 1.00 × f_beta 0.16 = 0.160  ->  0.50
+
+    A 2.3-fold spread flattened to a single number, and the within-class ranking fell back onto pure
+    geometry. The floor is now BELOW the minimum the library produces, so it catches only a pathological
+    value and never erases a real gradient.
+
+    Its original purpose — keeping a recalcitrant-but-real substrate such as TFA visible rather than
+    buried — is served properly by MD_SELECTION_MODE = "per_ligand": the best complex for EACH ligand is
+    taken, so TFA reaches MD on its own merit and does not need an artificial score propping it up.
+    """
+    FEASIBILITY_FLOOR: float     = 0.10    # below the library minimum (PFOS, 0.16), so it never flattens a real gradient
     FEAS_BDE_LO: float           = 120.0   # kcal/mol; scissile C–F BDE ≤ this → no BDE penalty (FA 109.9, DFA 119.5 pass)
     FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. TFA (127.5) lands graded (~0.38), not the floor, so it still ranks as a lead — but the Tier_1A bond-strength ceiling (TIER_ELITE_BDE_MAX, §8.5) caps it at Tier_1B regardless of its pose
     FEAS_BETA_PER_F: float       = 0.35    # per-β-fluorine penalty: f_beta = 1/(1 + this·β_F) (FA/DFA β=0; PFAS β≥2)
@@ -1031,15 +1051,27 @@ class CFG:
         each. Tiering stays geometric here, no ligand excluded a priori; chemistry rides in
         the effective score, competence/diagnostics and Step-08 QMMM.
 
-        The angle term is Šidák multiplicity-corrected by angle_multiplicity — the number of
-        independent chances the pose had at a near-linear angle (§5.2d), which the caller computes:
-        the two aspartate oxygens always, times the fluorines on the scissile carbon only when the
-        cradle did NOT fix the leaving F. A CF2/CF3 attack carbon presents more equivalent C–F bonds, so
-        more chances of one landing near the 180° anti-axis. The credit (1-p1)^n, with
-        p1=(1-cos δ)/2 and δ=180-angle, removes that best-of-N inflation from tiering — the
-        same statistic used in competence_score, applied here so the tier gate is not gamed
-        by fluorine multiplicity. Backside occlusion is NOT applied here — it is a single-
-        source feasibility penalty in mechanistic_score_effective (§5.2b). Floored at 0,
+        MULTIPLICITY: WHAT THE CALLER ACTUALLY PASSES, AND WHY IT IS 1 HERE.
+
+        angle_multiplicity is the number of independent chances the pose had at a near-linear angle
+        (§5.2d). A CF2/CF3 attack carbon presents more equivalent C–F bonds, so more chances of one
+        landing near the 180° anti-axis, and the Šidák credit (1-p1)^n — p1 = (1-cos δ)/2, δ = 180-angle
+        — removes that best-of-N inflation.
+
+        The correction is applied ONCE, and Step 02 applies it: it computes angle_effective =
+        sn2_effective_angle(angle, n_scissile_f) and passes THAT angle in, with angle_multiplicity = 1.
+        Both the angle rung of the tier ladder and this score therefore see the same already-corrected
+        angle. Passing the raw angle together with n > 1 would deflate it a second time, and since the
+        Tier_1A branch requires angle_effective >= TIER_ANGLE_MIN AND mech >= TIER_MECH_MIN, a
+        polyfluorinated substrate would pay the same penalty on both rungs of one ladder.
+
+        The exponent is the fluorine count on the scissile carbon, n = max(1, n_scissile_f). There is no
+        factor of two for the aspartate oxygens and no cradle condition: the attacking oxygen is chosen by
+        the joint-NAC rule (one atom must satisfy the distance AND the angle), so the pose does not get an
+        independent try per oxygen.
+
+        Backside occlusion is NOT applied here — it is a single-source feasibility penalty in
+        mechanistic_score_effective (§5.2b). Floored at 0,
         rounded to 2 dp.
         """
         import math
@@ -2180,6 +2212,15 @@ class CFG:
     """
     BOND_CO_MAX_A: float          = 1.6    # Å  above this, a C and an O are not bonded
     PCA_DEGENERACY_TOL: float     = 0.15   # relative gap below which two axes are degenerate
+    '''
+    Fraction of the predicted ligand's atoms that must map onto the RDKit template before its
+    chemistry is treated as verified. Every reactive-centre gate is keyed on the MAPPED α-carbon,
+    so an incomplete map does not merely lose atoms — it leaves the scissile centre unidentified
+    while the geometry around it still scores. Below this fraction the complex is marked
+    chem_verified = 0 and barred from the elite tier; it keeps its geometric rank and is flagged,
+    which is the same fail-closed-narrowly rule used for an unresolved fluorine count.
+    '''
+    LIGAND_MAP_MIN_FRACTION: float = 0.90  # ≥ this fraction of ligand atoms mapped → chemistry verified
     RMSD_BAND_EXCELLENT: float  = 1.0   # Å  ≤ this → excellent
     RMSD_BAND_ACCEPTABLE: float = 2.0   # Å  ≤ this → acceptable
     RMSD_BAND_DIVERGED: float   = 3.0   # Å  ≤ this → diverged (above → severe)
