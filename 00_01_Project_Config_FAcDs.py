@@ -194,6 +194,19 @@ class CFG:
     # -------------------------------------------------------------------------------
     BOLTZ_RETRY_MAX: int     = 2   # max retries after GPU failure before abandoning job
     BOLTZ_RETRY_SLEEP: int   = 6   # seconds to wait between retry attempts
+    """
+    Boltz-2 diffusion seed. The CLI default is None — NO seeding — so every prediction is stochastic
+    and the same protein-ligand pair yields a different pose on every run. Measured on the DeHa4
+    fluoroacetate control across two runs of identical code: the SN2 attack angle moved 145.5° → 132.4°
+    and the nucleophile distance 3.77 → 3.03 Å. A tier assignment that changes when nothing changed
+    is not a result, and it silently invalidates any comparison between runs — including the control
+    read-out, which is the pipeline's own calibration check.
+
+    Seeding costs nothing and makes a run reproducible from its config alone. It does NOT reduce
+    conformational sampling: diffusion_samples still draws the full ensemble per complex; the seed
+    only fixes where that ensemble starts, so the same command returns the same ensemble.
+    """
+    BOLTZ_SEED: int          = 42   # --seed passed to every Boltz prediction; fixes run-to-run drift
     CONTROL_RESIDUE_MATCH_RADIUS: float = 6.0   # Å — search radius when matching a control's catalytic residue onto its structural counterpart (Cα-anchored nearest same-type residue)
     BOLTZ_PREDICT_TIMEOUT_S: int = 3600  # per-prediction wall-clock ceiling; a single co-fold never approaches this, so a breach means a frozen GPU/CUDA driver → kill and retry rather than stall the pipeline
     BOLTZ_POLL_INTERVAL: int = 5   # seconds between job-status poll cycles

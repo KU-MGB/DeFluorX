@@ -2731,13 +2731,14 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     from the other one describes a nucleophile that does not exist — one oxygen supplying the
     trajectory and its partner supplying the reach.
 
-    cradle_resolved records whether the scissile fluorine was fixed by the fluoride cradle. When
-    it was, the leaving F is deterministic and the angle carries no best-of-N inflation, so the
-    Šidák multiplicity exponent must not be applied over the fluorine count (CFG §5.5).
+    n_scissile_f is the number of equivalent C–F bonds on the attack carbon. It drives the Šidák
+    multiplicity correction (CFG §5.2d): the inflation it removes lives in the POSE — a CF3 carbon
+    has three chances to present some fluorine anti-periplanar — so it is the bond COUNT that
+    matters, not which of them the cradle later identifies as leaving.
     """
     aux = {"burgi_dunitz_angle": 999.0, "flippin_lodge_offset": 999.0,
            "n_scissile_f": n_scissile_f, "beta_f_count": beta_f_count,
-           "attack_o_atom": best_O, "cradle_resolved": bool(cradle_coords)}
+           "attack_o_atom": best_O}
     if rd_mol and mm_map:
         try:
             inv_map   = {v: k for k, v in mm_map.items()}
@@ -4096,11 +4097,17 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         env["MKL_NUM_THREADS"] = "1"
         env["OPENBLAS_NUM_THREADS"] = "1"
 
+        # --seed: Boltz seeds nothing by default, so an unseeded run returns a different pose for the
+        # same complex every time (measured on the DeHa4 control: 145.5° → 132.4° between two runs of
+        # identical code). A tier that moves when nothing moved is not reproducible, and it breaks the
+        # control read-out the pipeline calibrates itself against. The full diffusion ensemble is
+        # still sampled; the seed only fixes where it starts.
         cmd = [
             BOLTZ_BIN, "predict", str(job["yaml"]), "--out_dir", str(job_dir),
             "--cache", str(BOLTZ_CACHE), "--model", BOLTZ_MODEL,
             "--recycling_steps", str(RECYCLING_STEPS),
             "--diffusion_samples", str(diffusion_samples),
+            "--seed", str(CFG.BOLTZ_SEED),
             "--accelerator", "gpu", "--devices", "1",
             "--use_msa_server", "--output_format", OUTPUT_FORMAT,
             "--no_kernels"
