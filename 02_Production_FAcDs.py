@@ -738,7 +738,7 @@ def setup_reference_data(target_dir: Path):
     if not pdb_path.exists():
         url = CFG.REFERENCE_PDB_URL
         try:
-            console_info(f"  Downloading PDB 3R3U from {url}...")
+            console_info(f"  Downloading PDB {CFG.REFERENCE_PDB_ID} from {url}...")
             urllib.request.urlretrieve(url, pdb_path)
             console_info(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC}  PDB 3R3U download complete.")
         except Exception as e:
@@ -5266,7 +5266,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     # Positive-control assertion: FA and DFA must each register as a degrader.
                     _hq = set(CFG.TIER_HIGH_QUALITY)
                     _failed = []
-                    for _cname in ("Fluoroacetate", "Difluoroacetate"):
+                    for _cname in CFG.CTRL_POSITIVE:
                         # Anchored fullmatch so "Fluoroacetate" does not also capture
                         # "Difluoroacetate" (substring) — each control asserted on its own poses.
                         _crows = df_rank[df_rank[_lc].astype(str).str.fullmatch(rf"\d+_{_cname}", na=False)]

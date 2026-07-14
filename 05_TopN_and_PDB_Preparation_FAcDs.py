@@ -628,7 +628,9 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     df = df.dropna(subset=["raw_sn2_angle", "prep_sn2_angle"])
     if df.empty:
         return None
-    df = df.sort_values("prep_sn2_angle").reset_index(drop=True)
+    # Secondary key: rows arrive in thread-completion order, so equal angles would otherwise
+    # be ordered by whichever worker happened to finish first.
+    df = df.sort_values(["prep_sn2_angle", "job"], kind="mergesort").reset_index(drop=True)
 
     _label = ["_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
               .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", "")
@@ -3036,7 +3038,8 @@ def prep_and_convert_phase(args):
         })
 
     if _prep_geom_rows:
-        _pg = pd.DataFrame(_prep_geom_rows).sort_values("prep_sn2_angle", ascending=False)
+        _pg = pd.DataFrame(_prep_geom_rows).sort_values(
+            ["prep_sn2_angle", "job"], ascending=[False, True], kind="mergesort")
         _pg_path = dir_prep_clean.parent / "3_Comparative_Analysis" / "00_Prepared_Pose_Geometry.csv"
         _pg_path.parent.mkdir(parents=True, exist_ok=True)
         _pg.to_csv(_pg_path, index=False)

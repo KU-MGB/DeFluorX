@@ -292,6 +292,10 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     ).replace(
         "{{ JSON_TIER_ALPHAS }}", json.dumps(CFG.VIS_TIER_ALPHAS)
     ).replace(
+        "{{ JSON_LIGAND_COLORS }}", json.dumps(list(CFG.VIS_LIGAND_SERIES))
+    ).replace(
+        "{{ JSON_CLADE_COLORS }}",  json.dumps(list(CFG.VIS_CLADE_SERIES))
+    ).replace(
         '<div id="upload-section">',
         '<div id="upload-section" style="display:none;">'
     )
@@ -333,7 +337,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         reporter.log("  ! Critical Error: Could not identify Protein column in CSV. Skipping.")
         return
 
-    fasta_files = list(input_dir.glob("*.fasta")) + list(input_dir.glob("*.fa"))
+    # Sorted: max() returns the FIRST maximal element, so two FASTAs with the same record
+    # count would otherwise be separated by filesystem order.
+    fasta_files = sorted(input_dir.glob("*.fasta")) + sorted(input_dir.glob("*.fa"))
     if not fasta_files:
         reporter.log("  ! Critical Error: No FASTA file found in input directory. Skipping.")
         return
@@ -693,8 +699,8 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         }
 
         const BASE_TIER_COLORS = {{ JSON_BASE_COLORS }};
-        const LIGAND_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
-        const CLADE_COLORS = [...LIGAND_COLORS, "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#cbd5e1"];
+        const LIGAND_COLORS = {{ JSON_LIGAND_COLORS }};
+        const CLADE_COLORS = [...LIGAND_COLORS, ...{{ JSON_CLADE_COLORS }}];
         const TIER_RANKING = {{ JSON_TIER_ORDER }};
         const CELL_PADDING = 2;
 

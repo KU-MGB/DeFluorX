@@ -2292,7 +2292,9 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             High confidence zone: 0.90–1.01 — fixed at top-right via transAxes so it is
             always visible regardless of ylim and never lands on Tier_1A box bodies.
             """
-            _hc_vis_lo10 = max(0.90, y_lo_f10)
+            # The LABEL below already reads CFG.CONF_BAND_HIGH; the shading must start at the same
+            # value or the panel states a threshold it does not draw.
+            _hc_vis_lo10 = max(float(CFG.CONF_BAND_HIGH), y_lo_f10)
             if _hc_vis_lo10 < _y_top10 - 0.005:
                 ax.text(0.01, 0.98, f"High confidence (≥{CFG.CONF_BAND_HIGH:.2f})", color=CFG.VIS_BAND["high"],
                         fontsize=8, ha="left", va="top", fontweight="bold",

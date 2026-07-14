@@ -1066,6 +1066,30 @@ def load_watermap_reference_ca(wm_path: Path) -> dict:
     return ref
 
 
+def unwrap_ca_trace(ca_xyz, box):
+    """Make a Cα trace whole across the periodic boundary before it is superimposed.
+
+    Raw Desmond frames are WRAPPED: a protein straddling a box face has part of its backbone
+    re-imaged to the far side, so its Cartesian trace is split in two even though the fold is
+    perfectly intact. Kabsch cannot superimpose a split trace onto an intact reference — the
+    RMSD explodes, and the fold check then rejects a good frame as a denatured one. The failure
+    is silent and geometry-dependent: it fires only for the frames in which the protein happens
+    to sit on a boundary.
+
+    Consecutive Cα are ~3.8 Å apart, far below any half-box length, so the trace can be rebuilt
+    without ambiguity by walking it and placing each atom at the nearest periodic image of its
+    predecessor. This never moves an already-whole trace, so it is a no-op on frames that do not
+    straddle the boundary.
+    """
+    _xyz = np.asarray(ca_xyz, dtype=float)
+    if box is None or len(_xyz) < 2:
+        return _xyz
+    out = _xyz.copy()
+    for i in range(1, len(out)):
+        out[i] = out[i - 1] + get_mic_vector(out[i], out[i - 1], box)
+    return out
+
+
 def kabsch_transform(ref_xyz: np.ndarray, frame_xyz: np.ndarray):
     """The rigid transform that carries `ref_xyz` onto `frame_xyz` (rotation, then translation),
     with the post-superposition Cα RMSD.
@@ -3454,8 +3478,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # ── Nucleophile centroid at frame 0 (reference for WM statistics) ──────────
     _f0         = tr[0]
 
-    warhead_c = list(set(c for c, f in cf_pairs))
-    lig_f     = list(set(f for c, f in cf_pairs))
+    # sorted(): these become ARRAY INDEX orders downstream, and a set has none.
+    warhead_c = sorted(set(c for c, f in cf_pairs))
+    lig_f     = sorted(set(f for c, f in cf_pairs))
     nuc_num   = cms_model.atom[idx_nuc[0]].resnum
     # Base and Acid residue numbers from Smart-Lock — needed for QM region expansion.
     base_num  = cms_model.atom[idx_base[0]].resnum if idx_base else None
@@ -3898,7 +3923,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _wm_frame = wm_sites
         _fold_rmsd = np.nan
         if len(_wm_pos_ref):
-            _R, _t, _fold_rmsd = kabsch_transform(_ref_ca_xyz, _p[_li_ca])
+            _R, _t, _fold_rmsd = kabsch_transform(_ref_ca_xyz, unwrap_ca_trace(_p[_li_ca], box))
             if _fold_rmsd > float(CFG.MD_FOLD_RMSD_MAX):
                 """
                 The fold in this frame no longer superimposes on the WaterMap reference. Carrying the

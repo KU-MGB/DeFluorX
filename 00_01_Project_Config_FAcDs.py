@@ -312,6 +312,19 @@ class CFG:
         ("25_TFA",             "O=C(O)C(F)(F)F"),    # trifluoroacetate
     ])
 
+    '''
+    The controls do NOT all point the same way, and the split is the whole point of having them.
+
+    CTRL_POSITIVE are the substrates FAcD is known to turn over: they MUST come out as degraders, and
+    the run asserts it. CTRL_NEGATIVE is trifluoroacetate, which FAcD is known NOT to defluorinate
+    (Wackett 2022) — it is the decoy, and its job is to FAIL. Iterating CTRL_LIGANDS to build the
+    positive assertion would therefore assert that TFA is a degrader and invert the control, which is
+    exactly the trap this split exists to close. Anything asserting on controls must name which
+    direction it expects.
+    '''
+    CTRL_POSITIVE: tuple = ("Fluoroacetate", "Difluoroacetate")   # must register as degraders
+    CTRL_NEGATIVE: tuple = ("TFA",)                               # must NOT — the decoy
+
     # -------------------------------------------------------------------------------
     # Step 2.5: Reference active-site mapping (3R3U / DEHA4 canonical)
     # -------------------------------------------------------------------------------
@@ -2179,6 +2192,22 @@ class CFG:
     VIS_RADAR_SERIES: tuple = ("#057759", "#0BF1E2", "#E69F00", "#CC79A7", "#0072B2",
                                "#56B4E9", "#F0E442", "#009E73", "#D55E00", "#CC79A7")
     VIS_TREND_SERIES: tuple = ("#0072B2", "#E69F00", "#9467BD", "#009E73", "#D55E00")
+
+    '''
+    Categorical palettes for the interactive dendrogram (04). These encode DATA — which ligand, which
+    clade — so they belong here with every other data-to-colour mapping rather than as literals inside
+    the generated JavaScript, where a change to the project palette would silently fail to reach them.
+    The page's CSS chrome (background, scrollbars, hover strokes) is deliberately NOT hoisted here: it
+    styles the HTML document, encodes nothing, and putting it in the config would add indirection
+    without protecting a single result.
+
+    VIS_CLADE_SERIES extends the ligand cycle with the Okabe-Ito colourblind-safe set, so a tree with
+    more clades than ligands does not wrap round and reuse a colour that already means something.
+    '''
+    VIS_LIGAND_SERIES: tuple = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
+    VIS_CLADE_SERIES: tuple  = ("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                                "#0072B2", "#D55E00", "#CC79A7", "#cbd5e1")
     """
     Deep/secondary shades of the accents, for the marks that must sit ON a filled band of the same
     hue and still be legible (a dark-green label on the pale-green 'strong' fill, and so on).
