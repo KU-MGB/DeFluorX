@@ -1914,6 +1914,177 @@ class CFG:
     VIS_GRID_LINEWIDTH: float   = 0.6
     VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
     VIS_LEGEND_FRAME_ALPHA: float = 0.92
+    """
+    ── Step 03 ink: every mark colour in the validation figures that is not a tier, grade, conflict or
+    role colour (those have their own dicts above). The candidate/tier colours say WHAT a mark is; the
+    ink here says how it is drawn — medians, reference lines, annotation text, box edges, fills.
+
+    Kept in one place for the reason the rest of this file exists: a restyle must be one edit, not a
+    hunt through ten thousand lines of plotting code. Keys are by ROLE, not by hue, so changing the
+    'reference line' colour changes every reference line and nothing else.
+    """
+    VIS_INK: dict = field(default_factory=lambda: {
+        # neutrals — text, strokes, edges, fills
+        "black":      "#000000",
+        "near_black": "#111111",
+        "outline":    "#222222",
+        "dark":       "#333333",
+        "soft":       "#444444",
+        "muted":      "#555555",
+        "mid":        "#666666",
+        "grey":       "#777777",
+        "ghost":      "#888888",
+        "faint":      "#999999",
+        "pale":       "#AAAAAA",
+        "paler":      "#BBBBBB",
+        "palest":     "#CCCCCC",
+        "hairline":   "#DDDDDD",
+        "tick":       "#DCDCDC",
+        "wash":       "#E0E0E0",
+        "mist":       "#ECECEC",
+        "smoke":      "#EEEEEE",
+        "grid":       "#EBEBEB",
+        "panel":      "#FAFAFA",
+        "canvas":     "#FBFBFB",
+        "white":      "#FFFFFF",
+        "slate":      "#9E9E9E",
+        "silver":     "#BDBDBD",
+        # slate-blue neutrals used for structural annotation frames
+        "steel":      "#C9D2D9",
+        "stone":      "#AAB7B8",
+        "shadow":     "#7F8C8D",
+        "charcoal":   "#566573",
+        "ink_navy":   "#2E4053",
+        "ink_deep":   "#2C3E50",
+        "ink_pure":   "#1A1A1A",
+    })
+    """
+    Qualitative accents. The base six are Okabe-Ito (colour-blind safe) and carry the same meaning
+    wherever they appear; the rest are role-specific accents the validation figures need — the MD
+    star, the twin-axis pair, the pass/fail marks.
+    """
+    VIS_ACCENT: dict = field(default_factory=lambda: {
+        # Okabe-Ito qualitative base
+        "blue":       "#0072B2",
+        "vermillion": "#D55E00",
+        "green":      "#009E73",
+        "amber":      "#E69F00",
+        "magenta":    "#CC79A7",
+        "sky":        "#56B4E9",
+        "yellow":     "#F0E442",
+        # the MD-selected star (fill + stroke) — it must read instantly at a glance
+        "star":       "#FFD400",
+        "star_edge":  "#B8860B",
+        # twin-axis pair: each axis carries a different quantity, so its ticks, label and gridlines
+        # take the axis colour and cannot be misread as one another
+        "axis_left":  "#2C6FAC",
+        "axis_right": "#A06000",
+        # pass / warn / fail
+        "good":       "#1B7837",
+        "warn":       "#B22222",
+        "bad":        "#C0392B",
+        "alert":      "#CC0000",
+        "error":      "#FF6B6B",
+    })
+    """
+    Sequential ramps and the pale tints used behind annotations. A ramp is ordered — light to dark —
+    and is indexed, never picked from by name, so a figure cannot silently reorder its own scale.
+    """
+    VIS_RAMP: dict = field(default_factory=lambda: {
+        "green":  ("#D4EFDF", "#A1D99B", "#238B45", "#1B7837", "#0B5345"),
+        "orange": ("#FCE4D0", "#E08A3C", "#D94801", "#B84000", "#7E3E00"),
+        "blue":   ("#D6EAF8", "#9DB8D2", "#4C8BC9", "#2C6FAC", "#1B3A5E"),
+        "purple": ("#F9E4F2", "#B15FBF", "#8E44AD", "#6A51A3", "#3A1E4A"),
+    })
+    VIS_TINT: dict = field(default_factory=lambda: {
+        "red":    "#FDECEA",   # behind a warning annotation
+        "green":  "#D6F5EB",
+        "amber":  "#FFF8E7",
+        "blue":   "#CFE0EA",
+        "cream":  "#FFF3CC",
+    })
+    """
+    The three qualitative bands — strong / moderate / weak — used by every figure that shades a zone
+    or labels a threshold region (confidence bands, engagement bands, mechanistic zones, tertiles).
+
+    One green, one gold, one red, for ALL of them. The same band label must not be one green in the
+    confidence figure and a slightly different green in the engagement figure: a reader who sees two
+    greens is entitled to assume they mean two different things.
+    """
+    VIS_BAND: dict = field(default_factory=lambda: {
+        "high":      "#007A50",
+        "moderate":  "#8A6000",
+        "low":       "#CC2222",
+        "high_fill": "#D4EFDF",
+        "mod_fill":  "#FFF3CC",
+        "low_fill":  "#FADBD8",
+    })
+    """
+    Interaction (bond) types, one colour each, wherever an interaction profile is stacked or split.
+    Sourced here so the H-bond in one figure is the H-bond in every other.
+    """
+    BOND_TYPE_COLOUR: dict = field(default_factory=lambda: {
+        "H-Bond":        "#4C72B0",
+        "Salt Bridge":   "#DD8452",
+        "Halogen":       "#55A868",
+        "F-Polar":       "#C44E52",
+        "F-Hydrophobic": "#8172B2",
+        "Hydrophobic":   "#937860",
+    })
+    """
+    Ordered series palettes. Indexed, never name-picked, so a figure cannot silently reorder its scale.
+    RADAR carries one colour per plotted ligand; TREND one per metric on a multi-metric trend panel.
+    """
+    VIS_RADAR_SERIES: tuple = ("#057759", "#0BF1E2", "#E69F00", "#CC79A7", "#0072B2",
+                               "#56B4E9", "#F0E442", "#009E73", "#D55E00", "#CC79A7")
+    VIS_TREND_SERIES: tuple = ("#0072B2", "#E69F00", "#9467BD", "#009E73", "#D55E00")
+    """
+    Deep/secondary shades of the accents, for the marks that must sit ON a filled band of the same
+    hue and still be legible (a dark-green label on the pale-green 'strong' fill, and so on).
+    """
+    VIS_ACCENT_DEEP: dict = field(default_factory=lambda: {
+        "green":      "#005840",
+        "green_alt":  "#1B4D2E",
+        "teal":       "#0E7C7B",
+        "blue":       "#00408B",
+        "blue_alt":   "#1A4080",
+        "blue_mid":   "#2c7fb8",
+        "blue_light": "#2E86C1",
+        "orange":     "#A03000",
+        "orange_alt": "#803000",
+        "orange_mid": "#B35400",
+        "orange_hot": "#C04000",
+        "gold":       "#D4A000",
+        "gold_deep":  "#9A6B00",
+        "gold_dark":  "#7A5C00",
+        "gold_hot":   "#FFC300",
+        "red":        "#A93226",
+        "red_deep":   "#8B0000",
+        "red_dark":   "#990000",
+        "red_bright": "#D62728",
+        "purple":     "#7B1FA2",
+        "purple_deep":"#7A0177",
+        "purple_dark":"#2E1B5E",
+        "emerald":    "#2ECC71",
+        "emerald_alt":"#27AE60",
+        "leaf":       "#4CAF50",
+        "moss":       "#2C4A1E",
+        "pine":       "#1E4A3A",
+        "jade":       "#17A589",
+        "sea":        "#1B9E77",
+        "cyan":       "#1B9E9E",
+        "clover":     "#2ca02c",
+        "sun":        "#F1C40F",
+        "tangerine":  "#E67E22",
+        "brick":      "#E74C3C",
+        "rose_fill":  "#F8D7DA",
+        "rose_edge":  "#FFF5F5",
+        "mint_fill":  "#D4EDDA",
+        "cream_fill": "#FFF3CD",
+        "peach_fill": "#FBEEE6",
+        "orange_deepest": "#6E2C00",   # the no-fit / potential-inhibitor mark
+        "gold_muted":     "#C9A227",   # edge of an amber annotation box
+    })
     VIS_PFAS_FCOUNT_BINS: list = field(default_factory=lambda: [0, 8, 13, 18, 24, float("inf")])  # total-fluorine-count bin edges for the PFAS chain-length size figure (Step 03)
     # Bin labels paired with VIS_PFAS_FCOUNT_BINS (must have len(bins)-1 entries; kept beside the
     # edges so they never drift apart). Multi-line for legend, short for axis ticks.
