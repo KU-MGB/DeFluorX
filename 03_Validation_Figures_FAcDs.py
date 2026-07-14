@@ -1507,7 +1507,20 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 pctdistance=0.62,
                 labeldistance=None,
                 wedgeprops=dict(edgecolor="white", linewidth=1.6))
-            for _w6, _lab6, _col6, _at6 in zip(wedges6, _model_labels6, _pie_colours, autotexts):
+            """
+            The pie says which Boltz diffusion model produced each pose. A gold star marks the wedges
+            the MD-SELECTED complexes were actually drawn from, so the reader can see at a glance
+            whether the cohort committed to simulation came from one model or several. A cohort that
+            all came from a single diffusion sample is a different claim from one spread across
+            models: the first could be a single-model artefact, the second is model-independent.
+            """
+            _md6 = _md_ready_df(df)
+            _md_models6 = set()
+            if not _md6.empty and model_col in _md6.columns:
+                _md_models6 = {str(_v) for _v in _md6[model_col].dropna().unique()}
+
+            for _w6, _lab6, _col6, _at6, _key6 in zip(wedges6, _model_labels6, _pie_colours,
+                                                      autotexts, model_counts.index):
                 _tc6 = _text_color(_col6)
                 _at6.set_fontsize(7.5)
                 _at6.set_color(_tc6)
@@ -1516,7 +1529,35 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 ax_pie.text(0.82 * np.cos(_ang6), 0.82 * np.sin(_ang6), _lab6,
                             ha="center", va="center", fontsize=7.5,
                             fontweight="bold", color=_tc6)
+                if str(_key6) in _md_models6:
+                    _w6.set_edgecolor("#111111")
+                    _w6.set_linewidth(2.0)
+                    _n_md6 = int((_md6[model_col].astype(str) == str(_key6)).sum())
+                    # Star sits inboard of the wedge's percentage text, with its count directly
+                    # beneath it, so neither overlaps the M-label or the autopct already there.
+                    _sx6, _sy6 = 0.34 * np.cos(_ang6), 0.34 * np.sin(_ang6)
+                    ax_pie.scatter([_sx6], [_sy6], marker="*", s=170, facecolor="#FFD400",
+                                   edgecolor="black", linewidths=1.0, zorder=6)
+                    ax_pie.text(_sx6, _sy6 - 0.145, f"MD×{_n_md6}",
+                                ha="center", va="center", fontsize=7.0, fontweight="bold",
+                                color="#111111", zorder=7,
+                                bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="none",
+                                          alpha=0.75))
             ax_pie.set_frame_on(False)
+
+        # Gold star on the tier the MD-ready cohort sits in — the bar the pipeline acts on.
+        _md6_bar = _md_ready_df(df)
+        if not _md6_bar.empty and CFG.COL_TIER in _md6_bar.columns:
+            _md6_tiers = _md6_bar[CFG.COL_TIER].astype(str).value_counts()
+            for _t6, _n6 in _md6_tiers.items():
+                if _t6 not in existing_tiers:
+                    continue
+                _idx6 = existing_tiers.index(_t6)
+                _xi6, _yi6 = bar_x6[_idx6], float(counts6[_idx6])
+                ax.scatter([_xi6], [_yi6 + _y_ceil6 * 0.115], **_MD_STAR_KW)
+                ax.text(_xi6, _yi6 + _y_ceil6 * 0.155, f"MD-selected\n(n={_n6})",
+                        ha="center", va="bottom", fontsize=7.0, fontweight="bold",
+                        color="#B8860B", zorder=9)
 
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_02_Tier_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -1733,6 +1774,29 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                               title_fontsize=8.0,
                               bbox_to_anchor=(0.01, 0.93))
         _leg7.set_zorder(20)
+
+        """
+        The MD-selected cohort is marked on the identity axis with gold stars. The figure's whole
+        argument is that catalytic competence does not track sequence identity to DeHa4; the
+        complexes the pipeline actually commits to simulating are the ones that claim has to hold
+        for, so they are shown individually rather than left inside an aggregate curve.
+        """
+        _md7 = _md_ready_df(df)
+        if not _md7.empty and "identity_pct" in _md7.columns:
+            _mdx7 = pd.to_numeric(_md7["identity_pct"], errors="coerce").dropna()
+            if len(_mdx7):
+                _y7 = ax.get_ylim()[1] * 0.035
+                ax.scatter(_mdx7.to_numpy(), np.full(len(_mdx7), _y7),
+                           label=f"MD-selected (n={len(_mdx7)})", **_MD_STAR_KW)
+                for _xv7 in _mdx7:
+                    ax.annotate("", xy=(float(_xv7), 0), xytext=(float(_xv7), _y7),
+                                arrowprops=dict(arrowstyle="-", color="#B8860B",
+                                                lw=0.9, alpha=0.85), zorder=8)
+                _leg7b = ax.legend(loc="upper left", bbox_to_anchor=(0.01, 0.70),
+                                   fontsize=8.0, framealpha=0.92, fancybox=True)
+                _leg7b.set_zorder(21)
+                ax.add_artist(_leg7)
+
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_03_Alignment_Grades.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
@@ -1857,6 +1921,43 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax.set_ylabel("Degrader Tier", fontsize=11)
             ax.xaxis.grid(True, color="#DCDCDC", linewidth=0.65, zorder=0)
             ax.set_axisbelow(True)
+
+            """
+            Gold stars mark the MD-selected cohort on its own tier row, positioned at the cumulative
+            proportion of the identity grade each complex falls in. The row shows how that tier is
+            spread across sequence-identity grades; the star shows where inside that spread the
+            complexes actually taken to MD sit — which is the part of the distribution the downstream
+            claims rest on.
+            """
+            _md11 = _md_ready_df(f11_df)
+            if not _md11.empty and "Grade" in _md11.columns:
+                _tier_row11 = {t: bar_y[i] for i, t in enumerate(tiers_f11)}
+                _grades11 = list(ct11.columns)
+                _pct11 = ct11.div(ct11.sum(axis=1), axis=0) * 100.0
+                _star_seen11 = 0
+                for _t11, _grp11 in _md11.groupby(_md11["degrader_tier"].astype(str)):
+                    if _t11 not in _tier_row11:
+                        continue
+                    for _g11, _sub11 in _grp11.groupby(_grp11["Grade"].astype(str)):
+                        if _g11 not in _grades11:
+                            continue
+                        _gi11 = _grades11.index(_g11)
+                        # Mid-point of this grade's segment within the tier's stacked row.
+                        _cum11 = float(_pct11.loc[_t11].iloc[:_gi11].sum())
+                        _seg11 = float(_pct11.loc[_t11].iloc[_gi11])
+                        ax.scatter([_cum11 + _seg11 / 2.0], [_tier_row11[_t11]],
+                                   **({**_MD_STAR_KW, "s": 260}))
+                        ax.text(_cum11 + _seg11 / 2.0, _tier_row11[_t11] + 0.30,
+                                f"MD×{len(_sub11)}", ha="center", va="bottom",
+                                fontsize=7.0, fontweight="bold", color="#111", zorder=10)
+                        _star_seen11 += len(_sub11)
+                if _star_seen11:
+                    from matplotlib.lines import Line2D as _L2D11
+                    ax.legend([_L2D11([], [], marker="*", linestyle="none", markersize=13,
+                                      markerfacecolor="#FFD400", markeredgecolor="black")],
+                              [f"MD-selected (n={_star_seen11})"],
+                              loc="lower left", bbox_to_anchor=(0.01, 0.02),
+                              fontsize=8.0, framealpha=0.92, fancybox=True).set_zorder(11)
 
             if _chi2_str:
                 ax.text(0.99, 0.01, _chi2_str, transform=ax.transAxes,
@@ -3540,8 +3641,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                               alpha=0.70, linewidth=0))
 
         ax.set_xlim(0, 5.0)
-        ax.set_ylim(0, 212)          # headroom above 180° for the rotated cut-off labels
-        ax.set_yticks(range(0, 196, 20))
+        # Headroom above 180° carries the rotated cut-off labels. It is kept to the minimum those
+        # labels need: any more and the panel opens a band of empty white above the data.
+        ax.set_ylim(0, 205)
+        ax.set_yticks(range(0, 181, 20))
         _nuc_lbl = CFG.REF_ACTIVE_SITE_MAP["Nuc"]
         ax.set_xlabel(f'{_nuc_lbl["res"]}{_nuc_lbl["id"]} Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry',
                       fontsize=10)
@@ -3557,8 +3660,12 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 continue
             clean_handles12.append(h12)
             clean_labels12.append(l12)
+        # The legend goes in the lower-left quadrant, which the data genuinely does not occupy (a
+        # short nucleophile distance with a collapsed attack angle is not a pose that exists). At the
+        # top it either forced a band of empty white above the data or sat on the tier threshold
+        # labels; here it costs nothing and hides nothing.
         ax.legend(clean_handles12, clean_labels12,
-                  loc="upper left", bbox_to_anchor=(0.01, 0.99),
+                  loc="lower left", bbox_to_anchor=(0.012, 0.055),
                   fontsize=7, framealpha=0.92, fancybox=True,
                   ncol=max(2, (len(clean_handles12) + 1) // 2),
                   handlelength=1.2, handletextpad=0.4)
@@ -4632,8 +4739,24 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             worst_avg  = (df[df["degrader_tier"] == worst_tier].mean(numeric_only=True).to_frame().T
                           if worst_tier else pd.DataFrame())
 
-            # --- 18a: All Tier_1A complexes sorted by Scientific_Rank ---
-            _pa18a = df[df["degrader_tier"] == CFG.TIER_TOP].copy()
+            """
+            The radar profiles the MD-READY COHORT, not the whole elite tier.
+
+            A radar is a per-complex figure: every hit is one polygon, and the reader compares them
+            spoke by spoke. That only works for a handful of complexes. Tier_1A now holds ~100
+            members, so drawing the tier would either overplot into an unreadable web or — worse —
+            silently truncate to an arbitrary top-N and present it as though it were the tier.
+
+            The MD-selected cohort is the set this figure is actually about: the few complexes the
+            pipeline commits to simulate, one per ligand. Those are the polygons worth comparing.
+            Falls back to the top Tier_1A ranks only when no MD selection exists yet (e.g. a run
+            stopped before Step 02 wrote the column).
+            """
+            _pa18a = _md_ready_df(df).copy()
+            _radar_src = "MD-selected cohort"
+            if _pa18a.empty:
+                _pa18a = df[df["degrader_tier"] == CFG.TIER_TOP].copy()
+                _radar_src = f"top {CFG.TIER_TOP} ranks (no MD selection in this run)"
             _sort_col18a = "Scientific_Rank" if "Scientific_Rank" in _pa18a.columns \
                            else "Boltz_Model_Confidence"
             _asc18a = _sort_col18a == "Scientific_Rank"
@@ -4644,7 +4767,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _pa18a = _pa18a.head(CFG.VIS_RADAR_MAX_HITS)
             _draw_radar(_pa18a, worst_avg, metrics_r,
                         out_dir / "Figure_19a_Radar_TopHits.png",
-                        f"All {CFG.TIER_TOP} complexes vs. worst-tier baseline",
+                        f"{_radar_src} vs. worst-tier baseline",
                         label_mode="rank")
 
             # --- 18b: One representative per tier (best Boltz confidence per tier) ---
@@ -5785,12 +5908,18 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                                bins=[-np.inf, _am[CFG.TIER_ORDER[3]], _am[CFG.TIER_ORDER[2]], _am[CFG.TIER_ORDER[1]], _am[CFG.TIER_TOP], np.inf],
                                labels=_ang_ord_24)
                         .astype(str).fillna("Unknown")) if "SN2_Attack_Angle" in d.columns else "Unknown"
-        # 6) Mechanistic score — cuts = CFG.TIER_MECH_MIN
+        """
+        6) Mechanistic score — cuts = CFG.TIER_MECH_MIN.
+
+        Two-decimal labels, because the floors are two-decimal numbers. Formatting 0.85 with one
+        decimal prints '0.8' (round-half-even), so the column announced a cut at 0.8 while the bin
+        edge it drew was 0.85 — the figure disagreed with its own arithmetic.
+        """
         _mm = CFG.TIER_MECH_MIN
-        _mech_lbls_24 = [f"<{_mm[CFG.TIER_ORDER[2]]:.1f}",
-                         f"{_mm[CFG.TIER_ORDER[2]]:.1f}–{_mm[CFG.TIER_ORDER[1]]:.1f}",
-                         f"{_mm[CFG.TIER_ORDER[1]]:.1f}–{_mm[CFG.TIER_TOP]:.1f}",
-                         f"≥{_mm[CFG.TIER_TOP]:.1f}"]
+        _mech_lbls_24 = [f"<{_mm[CFG.TIER_ORDER[2]]:.2f}",
+                         f"{_mm[CFG.TIER_ORDER[2]]:.2f}–{_mm[CFG.TIER_ORDER[1]]:.2f}",
+                         f"{_mm[CFG.TIER_ORDER[1]]:.2f}–{_mm[CFG.TIER_TOP]:.2f}",
+                         f"≥{_mm[CFG.TIER_TOP]:.2f}"]
         _mech_edges_24 = [-np.inf, _mm[CFG.TIER_ORDER[2]], _mm[CFG.TIER_ORDER[1]], _mm[CFG.TIER_TOP], np.inf]
         # Collapse bins whose CFG thresholds coincide (e.g. Tier_1A == Tier_1B mech floor),
         # keeping edges strictly increasing for pd.cut and dropping each vanished bin's label.
@@ -5800,10 +5929,21 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 _me24.append(_mech_edges_24[_i24 + 1])
                 _ml24.append(_lbl24)
         _mech_edges_24, _mech_lbls_24 = _me24, _ml24
-        d["mech_cat"] = (pd.cut(_num24("mechanistic_score", np.nan),
+        """
+        The score binned here must be the one the tier gate actually keys on —
+        mechanistic_score_effective (raw geometry MINUS the graded chemistry and containment
+        penalties). Binning the raw mechanistic_score made the column a non-sequitur: a complex
+        could sit in the top score bin and still land in a low tier, because the penalty that
+        demoted it was invisible to the figure. The Sankey claims to explain the flow into the final
+        tier, so it has to show the quantity that decides it. Falls back to the raw score only if
+        the effective column is absent (an older CSV).
+        """
+        _mech_col_24 = ("mechanistic_score_effective"
+                        if "mechanistic_score_effective" in d.columns else "mechanistic_score")
+        d["mech_cat"] = (pd.cut(_num24(_mech_col_24, np.nan),
                                 bins=_mech_edges_24,
                                 labels=_mech_lbls_24)
-                         .astype(str).fillna("Unknown")) if "mechanistic_score" in d.columns else "Unknown"
+                         .astype(str).fillna("Unknown")) if _mech_col_24 in d.columns else "Unknown"
 
         # Order mirrors 02_Production tier cascade: Tier_1A → … → Tier_3 → Tier_4 → Tier_5_Decoy
         _tier_ord_24 = CFG.TIER_ORDER + ["Other"]
@@ -6182,6 +6322,15 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 window=_win25, center=True, min_periods=5).median()
             axA.plot(_roll25["total_fluorine_count"], _roll25["_med"],
                      color="black", lw=2.2, zorder=6, label="Rolling median SN2")
+
+        # The MD-selected cohort, starred on the size/angle landscape: this figure argues that
+        # attack geometry degrades with chain length, and these are the complexes that argument is
+        # being acted on.
+        _md25 = _md_ready_df(_d25)
+        if not _md25.empty:
+            axA.scatter(_md25["total_fluorine_count"], _md25["SN2_Attack_Angle"],
+                        label=f"MD-selected (n={len(_md25)})",
+                        **({**_MD_STAR_KW, "s": 340}))
         axA.text(0.99, 0.92, f"SUBSTRATE ZONE  (SN2 ≥ {CFG.SUBSTRATE_ANGLE_MIN:.0f}°)",
                  transform=axA.transAxes, ha="right", va="top", fontsize=9.5,
                  color="#007A52", fontweight="bold",
@@ -7257,6 +7406,28 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                     axR.text(0.12, _fy + 0.004, f"{_lbl} floor ≥{_fy:g}", ha="left", va="bottom",
                              fontsize=7.5, color=_fc, fontweight="bold", zorder=9,
                              bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=_fc, lw=0.5, alpha=0.88))
+                """
+                MD-selected complexes, starred on the left (distance) axis at their own carbon
+                number. This panel's claim is that reactive engagement collapses as the ligand grows;
+                the starred points are the cohort that claim is being acted on, so they are shown as
+                individuals rather than dissolved into the box for their carbon bin.
+                """
+                _md09 = _md_ready_df(_d09)
+                if not _md09.empty and "_nC" in _md09.columns:
+                    _grp_pos09 = {int(g): p for g, p in zip(_grps09, _pos09)}
+                    _mdc09 = pd.to_numeric(_md09["_nC"], errors="coerce")
+                    _mdd09 = pd.to_numeric(_md09["Dist_Nucleophile"], errors="coerce")
+                    _mx09, _my09 = [], []
+                    for _cn09, _dv09 in zip(_mdc09, _mdd09):
+                        if pd.isna(_cn09) or pd.isna(_dv09):
+                            continue
+                        if int(_cn09) in _grp_pos09:
+                            _mx09.append(_grp_pos09[int(_cn09)])
+                            _my09.append(float(_dv09))
+                    if _mx09:
+                        axL.scatter(_mx09, _my09, label=f"MD-selected (n={len(_mx09)})",
+                                    **({**_MD_STAR_KW, "s": 300}))
+
                 axR.set_ylim(0, 1.02); axR.set_ylabel("Catalytic metric (0–1)", fontsize=10)
                 axR.yaxis.set_major_locator(_MLoc09(0.1))
                 axR.yaxis.grid(True, color="#E08A3C", alpha=0.30, lw=0.6, ls=(0, (4, 3)), zorder=0)  # right grid
