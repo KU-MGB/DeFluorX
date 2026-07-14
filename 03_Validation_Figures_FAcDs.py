@@ -187,6 +187,7 @@ import sys
 import re
 import json
 import shutil
+import time as _time
 import concurrent.futures as cf
 import argparse
 import warnings
@@ -8280,6 +8281,35 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     reporter.log(f'  ⧗ Building boltz_qc_multimodel_variance.csv — parsing {n_jobs:,} complexes '
                  f'× 5 model CIFs across {_n_proc} cores…')
 
+    """
+    A three-hour job that prints one line every few thousand complexes is indistinguishable from a
+    hung one. The console gets a live counter rewritten in place (\\r) carrying rate and ETA, so the
+    run can be watched; the run LOG gets a plain milestone line every 5,000 complexes, because a log
+    file full of carriage returns is unreadable. The counter is only drawn to a terminal — piped to a
+    file it would be noise.
+    """
+    _t0 = _time.time()
+    _tty = sys.stdout.isatty()
+
+    def _tick(done: int) -> None:
+        _el = max(1e-6, _time.time() - _t0)
+        _rate = done / _el
+        _eta = (n_jobs - done) / _rate if _rate > 0 else 0.0
+        if _tty:
+            _bar_n = 28
+            _fill = int(_bar_n * done / max(1, n_jobs))
+            sys.stdout.write(
+                f'\r    · variance: [{"█" * _fill}{"·" * (_bar_n - _fill)}] '
+                f'{done:,}/{n_jobs:,} ({done / max(1, n_jobs):5.1%})  '
+                f'{_rate:6.1f} cx/s  elapsed {_el / 60:5.1f}m  ETA {_eta / 60:5.1f}m   ')
+            sys.stdout.flush()
+        if done % 5000 == 0 or done == n_jobs:
+            if _tty:
+                sys.stdout.write('\n')
+                sys.stdout.flush()
+            reporter.log(f'    · variance progress: {done:,}/{n_jobs:,} complexes '
+                         f'({done / max(1, n_jobs):.0%})  ·  elapsed {_el / 60:.1f} min  ·  ETA {_eta / 60:.1f} min')
+
     rows: list = []
     _n_geom_fail = 0
     with cf.ProcessPoolExecutor(max_workers=_n_proc) as _ex:
@@ -8288,8 +8318,8 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             rows.extend(_job_rows)
             _n_geom_fail += _fails
             _done += 1
-            if _done % 2000 == 0 or _done == n_jobs:
-                reporter.log(f'    · variance progress: {_done:,}/{n_jobs:,} complexes')
+            if _done % 50 == 0 or _done == n_jobs:
+                _tick(_done)
 
     var_df = pd.DataFrame(rows)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -10040,7 +10070,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _utils_mod.print_elapsed(_t0, "03_Validation_Figures_FAcDs.py")
