@@ -139,8 +139,6 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     ── 07_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
     • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
     • 02_Pocket_Occupancy_by_Carbon_Number.png     <-- Occupancy violin+box per PFAS carbon number, median trend
-    • 03_Occupancy_vs_Competence.png               <-- Competence vs occupancy + binned-median trend
-    • 04_Ligand_Fit_Rate_by_Ligand.png             <-- % complexes passing the steric fit test, per ligand
     • 05_MultiModel_Consensus_by_Tier.png          <-- Multi-model degrader consensus, mean ± CI by tier
     • 06_Confidence_vs_Consensus.png               <-- Confidence vs cross-model consensus hexbin + trend
     • 07_Quality_and_Competence_Diagnostics.png    <-- Confidence×competence + mech-score×penalty scatter (tier)
@@ -6870,13 +6868,26 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                             bbox=dict(boxstyle="round,pad=0.22", fc="none", ec=_t1c,
                                       alpha=0.95, linewidth=1.0),
                             arrowprops=dict(arrowstyle="->", color=_t1c, lw=1.4))
-            _lim = float(np.ceil(max(sub["asv"].quantile(0.99), sub["lv"].quantile(0.99)) / 250.0) * 250.0)
+            """
+            Each axis is scaled to ITS OWN data. Forcing a shared limit and an equal aspect — which a
+            y = x boundary line invites — sized the ligand axis by the POCKET volumes: cavities reach
+            ~1,700 Å³ while almost every ligand sits below 500 Å³, so two thirds of the panel was
+            empty and the data was crushed into a band along the bottom.
+
+            The y = x boundary is a locus, not a 45° line: it marks where the ligand exactly fills the
+            cavity, and it remains exactly that under independent scales — it simply becomes steep,
+            which is the honest picture when ligands are an order of magnitude smaller than the
+            pockets holding them. That is the finding, not a plotting artefact to be hidden by
+            padding the axis until the line looks diagonal.
+            """
+            _xlim = float(np.ceil(sub["asv"].quantile(0.995) / 250.0) * 250.0)
+            _ylim = float(np.ceil(sub["lv"].quantile(0.995) * 1.08 / 50.0) * 50.0)
+            _lim = max(_xlim, _ylim)
             ax.plot([0, _lim], [0, _lim], color="#444444", linestyle="--", linewidth=1.3,
                     alpha=0.8, zorder=4, label="Fit boundary (ligand = pocket)")
             ax.axvline(sub["asv"].median(), color="#888888", linestyle=":", linewidth=1.0, alpha=0.6, zorder=2)
             ax.axhline(sub["lv"].median(), color="#888888", linestyle=":", linewidth=1.0, alpha=0.6, zorder=2)
-            ax.set_xlim(0, _lim); ax.set_ylim(0, _lim)
-            ax.set_aspect("equal", adjustable="box")
+            ax.set_xlim(0, _xlim); ax.set_ylim(0, _ylim)
             ax.set_xlabel("Active-site cavity volume  (Å³)", fontsize=11)
             ax.set_ylabel("Ligand molecular volume  (Å³)", fontsize=11)
             _ovf_n = int((sub["lv"] > sub["asv"]).sum())
@@ -6918,12 +6929,103 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         if not _smi02.exists():
             _smi02 = Path.cwd() / CFG.INPUT_SMILES
         _LP02 = _utils_mod.compute_ligand_properties(_smi02) if _smi02.exists() else {}
-        occ = _num("pocket_occupancy")
-        sub = pd.DataFrame({"occ": occ, "lig": df.get("Ligand_Name")}).dropna(subset=["occ", "lig"])
+        """
+        TWO coverage measures per carbon number, on one panel:
+
+          · pocket_containment_cavity — the fraction of the ligand the PROTEIN CAVITY encloses,
+            by ray-cast buriedness against every protein heavy atom. Drawn as the VIOLIN: it is the
+            full distribution, and its shape is the story (a long low tail = the chain is spilling).
+          · pocket_containment_site8 — the fraction of the ligand inside the contact shell of the
+            EIGHT mapped catalytic residues (CFG §2.5, positions taken from the ranked sheet's
+            Mapped_* columns, never hardcoded). Drawn as the BOX inside the violin: it is the
+            reactive-shell engagement, and its median/IQR is what the tier gate cares about.
+
+        Both means are traced as trend lines, so the divergence is readable at a glance: the cavity
+        can still hold a long chain while the catalytic shell has already lost it. That gap IS the
+        selectivity of the enzyme, and no single containment number can show it.
+
+        Falls back to the legacy pocket_occupancy view when the containment columns are absent (a
+        ranked sheet written before the protein-aware containment landed).
+        """
+        _has_cav02 = "pocket_containment_cavity" in df.columns
+        _has_s802 = "pocket_containment_site8" in df.columns
+        _two02 = _has_cav02 and _has_s802
+
+        if _two02:
+            sub = pd.DataFrame({"cav": _num("pocket_containment_cavity"),
+                                "s8": _num("pocket_containment_site8"),
+                                "lig": df.get("Ligand_Name")}).dropna(subset=["cav", "s8", "lig"])
+        else:
+            sub = pd.DataFrame({"occ": _num("pocket_occupancy"),
+                                "lig": df.get("Ligand_Name")}).dropna(subset=["occ", "lig"])
         sub["_nC"] = sub["lig"].map(lambda l: _LP02.get(str(l), {}).get("nC"))
         sub = sub.dropna(subset=["_nC"])
         if not _LP02:
             reporter.log("  ! Diag 02 skipped: ligand SMILES panel not found for carbon grouping")
+        elif _two02 and len(sub) >= 5 and sub["_nC"].nunique() >= 2:
+            sub["_nC"] = sub["_nC"].astype(int)
+            groups = sorted(sub["_nC"].unique())
+            _present02 = set(sub["lig"].astype(str))
+
+            def _xlab02b(nc):
+                _fs = sorted({_LP02[l]["nF"] for l in _LP02
+                              if _LP02[l].get("nC") == nc and l in _present02})
+                return f"C{int(nc)}\n(" + ", ".join(f"{int(f)}F" for f in _fs) + ")"
+
+            labels = [_xlab02b(g) for g in groups]
+            fig, ax = plt.subplots(figsize=(max(9.5, 1.0 * len(groups)), 6.6))
+            _CAV02, _S802 = "#2E86C1", "#E67E22"
+
+            _cav_by = [sub.loc[sub["_nC"] == g, "cav"].to_numpy() for g in groups]
+            _s8_by = [sub.loc[sub["_nC"] == g, "s8"].to_numpy() for g in groups]
+            _pos02 = np.arange(len(groups))
+
+            _vp02 = ax.violinplot(_cav_by, positions=_pos02, widths=0.86,
+                                  showmeans=False, showextrema=False)
+            for _b in _vp02["bodies"]:
+                _b.set_facecolor(_CAV02); _b.set_alpha(0.35)
+                _b.set_edgecolor(_CAV02); _b.set_linewidth(0.9)
+
+            _bp02 = ax.boxplot(_s8_by, positions=_pos02, widths=0.24, showfliers=False,
+                               patch_artist=True,
+                               medianprops=dict(color="#7E3E00", linewidth=1.5))
+            for _b in _bp02["boxes"]:
+                _b.set(facecolor=_S802, alpha=0.55, edgecolor="#7E3E00", linewidth=0.9)
+            for _w in _bp02["whiskers"] + _bp02["caps"]:
+                _w.set(color="#7E3E00", linewidth=0.9)
+
+            _mcav = [float(np.mean(v)) if len(v) else np.nan for v in _cav_by]
+            _ms8 = [float(np.mean(v)) if len(v) else np.nan for v in _s8_by]
+            ax.plot(_pos02, _mcav, color=_CAV02, lw=2.2, marker="o", ms=6,
+                    mec="white", mew=0.8, zorder=7, label="Mean — whole-cavity coverage")
+            ax.plot(_pos02, _ms8, color="#B35400", lw=2.2, ls="--", marker="D", ms=6,
+                    mec="white", mew=0.8, zorder=7,
+                    label="Mean — 8-residue active-site coverage")
+
+            from matplotlib.patches import Patch as _P02
+            ax.legend(handles=[
+                _P02(facecolor=_CAV02, alpha=0.35, edgecolor=_CAV02,
+                     label="Whole-cavity coverage (violin — full distribution)"),
+                _P02(facecolor=_S802, alpha=0.55, edgecolor="#7E3E00",
+                     label="8-residue active-site coverage (box — median · IQR)"),
+                *ax.get_legend_handles_labels()[0],
+            ], loc="lower left", fontsize=8, framealpha=0.93, ncol=2)
+
+            ax.set_ylim(0, 1.12)
+            ax.set_yticks(np.arange(0, 1.01, 0.2))
+            ax.axhline(1.0, color="#7F8C8D", ls=":", lw=1.1, alpha=0.8)
+            ax.text(len(groups) - 0.45, 1.012, "ligand fully contained", ha="right", va="bottom",
+                    fontsize=7.5, color="#7F8C8D", style="italic")
+            ax.set_xticks(_pos02); ax.set_xticklabels(labels, fontsize=8)
+            ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)",
+                          fontsize=10)
+            ax.set_ylabel("Fraction of the ligand contained  (0–1)", fontsize=11)
+            ax.yaxis.grid(True, ls=":", alpha=0.35)
+            ax.set_axisbelow(True)
+            plt.tight_layout()
+            _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
+            fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
         elif len(sub) >= 5 and sub["_nC"].nunique() >= 2:
             sub["_nC"] = sub["_nC"].astype(int)
             groups = sorted(sub["_nC"].unique())
@@ -6975,102 +7077,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             reporter.log("  ! Diag 02 skipped: insufficient occupancy/carbon data")
     except Exception as e:
         reporter.log(f"  ! Diag 02 skipped: {e}")
-        plt.close("all")   # release the figure left open by the failed savefig
-
-    # ── Figure 03: Occupancy vs catalytic competence (binned median trend) ──────
-    """
-    Pocket occupancy (x) against catalytic competence score (y), coloured by tier.
-    A binned-median trend line (10 equal-width occupancy bins) summarises whether
-    competence falls as ligands crowd the cavity — the steric penalty signal that
-    feeds the feasibility weighting.
-    """
-    try:
-        occ, comp = _num("pocket_occupancy"), _num("competence_score")
-        sub = pd.DataFrame({"occ": occ, "comp": comp, "tier": df.get("degrader_tier")}).dropna(subset=["occ", "comp"])
-        if len(sub) >= 10:
-            fig, ax = plt.subplots(figsize=(8.4, 6.4))
-            for t in existing_tiers:
-                d = sub[sub["tier"] == t]
-                if d.empty:
-                    continue
-                ax.scatter(d["occ"], d["comp"], s=12, alpha=0.22, linewidths=0,
-                           color=TIER_PALETTE.get(t, "#999999"), label=t, zorder=2)
-            # Clamp the x-view to the real occupancy distribution (a few cavity-detection
-            # failures push occupancy ≫ 1 and otherwise crush all data against x = 0).
-            _xhi03 = float(min(max(1.0, sub["occ"].quantile(0.995) * 1.1), 3.0))
-            _nhi03 = int((sub["occ"] > _xhi03).sum())
-            _bins = np.linspace(0.0, _xhi03, 11)
-            sub["_b"] = pd.cut(sub["occ"].clip(upper=_xhi03), _bins, include_lowest=True)
-            med = sub.groupby("_b", observed=True).agg(x=("occ", "median"), y=("comp", "median"),
-                                                       n=("comp", "size")).dropna()
-            med = med[med["n"] >= 5]
-            if len(med) >= 2:
-                ax.plot(med["x"].clip(upper=_xhi03), med["y"], color="#C0392B", linewidth=2.4,
-                        marker="D", markersize=7, markeredgecolor="black", markeredgewidth=0.8,
-                        zorder=6, label="Binned median trend")
-            ax.set_xlim(-_xhi03 * 0.02, _xhi03)
-            if _nhi03:
-                ax.text(0.985, 0.03, f"{_nhi03:,} pose(s) with occupancy > {_xhi03:.1f} hidden",
-                        transform=ax.transAxes, ha="right", va="bottom", fontsize=7.5,
-                        style="italic", color="#566573")
-            ax.set_xlabel("Pocket occupancy  (ligand vol / cavity vol)", fontsize=11)
-            ax.set_ylabel("Catalytic competence score", fontsize=11)
-            _spear_box(ax, sub["occ"], sub["comp"], "upper right")
-            ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=12, fontsize=7,
-                      framealpha=0.92, columnspacing=0.9, handletextpad=0.4, borderaxespad=0.0)
-            plt.tight_layout()
-            _o = out_dir / "03_Occupancy_vs_Competence.png"
-            fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
-        else:
-            reporter.log("  ! Diag 03 skipped: insufficient occupancy/competence data")
-    except Exception as e:
-        reporter.log(f"  ! Diag 03 skipped: {e}")
-        plt.close("all")   # release the figure left open by the failed savefig
-
-    # ── Figure 04: Ligand fit rate per ligand ───────────────────────────────────
-    """
-    Fraction of complexes per ligand for which the steric fit test passed
-    (ligand_fits == True). Bars are sorted by fit rate and labelled with the
-    percentage and complex count; the colour ramps from fit (teal) to no-fit
-    (maroon) using the CFG outcome palette.
-    """
-    try:
-        if "ligand_fits" in df.columns and "Ligand_Name" in df.columns:
-            fits = df["ligand_fits"]
-            if fits.dtype == object:
-                fits = fits.astype(str).str.strip().str.lower().map(
-                    {"true": True, "false": False, "1": True, "0": False})
-            fits = fits.astype("boolean")
-            sub = pd.DataFrame({"fit": fits, "lig": df["Ligand_Name"]}).dropna(subset=["fit", "lig"])
-            if len(sub) >= 5 and sub["lig"].nunique() >= 2:
-                g = sub.groupby("lig")["fit"].agg(["mean", "size"]).sort_values("mean", ascending=True)
-                fig, ax = plt.subplots(figsize=(9.0, max(5.0, 0.34 * len(g))))
-                import matplotlib.colors as _mc
-                _cmap = _mc.LinearSegmentedColormap.from_list("fit", [_nofit_col, "#E8E8E8", _fit_col])
-                colours = [_cmap(v) for v in g["mean"]]
-                ax.barh(range(len(g)), g["mean"] * 100, color=colours, edgecolor="black", linewidth=0.5)
-                ax.set_yticks(range(len(g))); ax.set_yticklabels(g.index, fontsize=8)
-                from matplotlib.patches import Patch as _Patch
-                ax.legend(handles=[_Patch(facecolor=_fit_col, edgecolor="black", label="High fit rate"),
-                                   _Patch(facecolor=_nofit_col, edgecolor="black", label="Low fit rate")],
-                          loc="upper right", fontsize=8, framealpha=0.92, ncol=2)
-                for i, (rate, n) in enumerate(zip(g["mean"], g["size"])):
-                    ax.text(rate * 100 + 1, i, f"{rate*100:.0f}%  (n={int(n):,})",
-                            va="center", ha="left", fontsize=7.5, color="#222222")
-                ax.set_xlim(0, 108)
-                ax.set_xlabel("Complexes passing steric fit test  (%)", fontsize=11)
-                ax.set_ylabel("Ligand", fontsize=11)
-                plt.tight_layout()
-                _o = out_dir / "04_Ligand_Fit_Rate_by_Ligand.png"
-                fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-                reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
-            else:
-                reporter.log("  ! Diag 04 skipped: insufficient ligand-fit data")
-        else:
-            reporter.log("  ! Diag 04 skipped: ligand_fits/Ligand_Name column absent")
-    except Exception as e:
-        reporter.log(f"  ! Diag 04 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
     # ── Figure 05: Multi-model degrader consensus by tier ───────────────────────
@@ -8140,7 +8146,6 @@ def write_figure_descriptions(out_dir: Path):
         "            fluoroacetate lowest); tails crossing 1.0 flag steric saturation.",
         "",
         "-" * 80,
-        "03_Occupancy_vs_Competence.png",
         "  Title   : Catalytic competence vs pocket occupancy",
         "  Type    : Scatter coloured by tier + binned-median trend (red diamonds)",
         "  Axes    : X = pocket occupancy; Y = catalytic competence score",
@@ -8148,7 +8153,6 @@ def write_figure_descriptions(out_dir: Path):
         "            informs the feasibility weighting.",
         "",
         "-" * 80,
-        "04_Ligand_Fit_Rate_by_Ligand.png",
         "  Title   : Steric fit rate by ligand",
         "  Type    : Horizontal bars, sorted; colour ramps no-fit (maroon) → fit (teal)",
         "  X-axis  : % of complexes passing the steric fit test (ligand_fits == True)",
