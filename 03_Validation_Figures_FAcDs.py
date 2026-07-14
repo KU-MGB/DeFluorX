@@ -8229,6 +8229,20 @@ def _xn__tidy_tier_ticks(ax, counts=None) -> None:
     if counts is not None:
         ax.set_xlabel(f'{ax.get_xlabel()}   (n below each tier)')
 
+def _xn__mean_trend(ax, sub, tiers, val_col, *, group_col='tier', label='Mean (trend)'):
+    """Connect the per-tier MEANS with a line.
+
+    Seven boxes side by side ask the reader to compare seven distributions by eye and infer whether the
+    quantity rises or falls with tier. The trend line states that in one stroke — and it must be the MEAN,
+    not the median already drawn inside each box, or the line would only restate a mark that is there.
+    """
+    _m = [pd.to_numeric(sub.loc[sub[group_col] == _t, val_col], errors='coerce').mean() for _t in tiers]
+    ax.plot(range(len(tiers)), _m, color=CFG.VIS_ACCENT["bad"], lw=2.0, marker='D', ms=5.5,
+            mec='white', mew=0.8, zorder=9, label=label)
+    ax.legend(loc='best', fontsize=CFG.VIS_FONT_LEGEND, framealpha=CFG.VIS_LEGEND_FRAME_ALPHA)
+    return ax
+
+
 def _xn__tier_boxstrip(ax, sub, tiers, val_col, ylabel, *, group_col='tier'):
     """The tier-versus-value panel used by several figures: box + capped strip + n + test.
 
@@ -8243,6 +8257,7 @@ def _xn__tier_boxstrip(ax, sub, tiers, val_col, ylabel, *, group_col='tier'):
                 palette=TIER_PALETTE, legend=False, fliersize=0, ax=ax,
                 width=0.62, linewidth=1.0, zorder=3,
                 boxprops=dict(alpha=0.85), medianprops=dict(color=CFG.VIS_INK["near_black"], linewidth=1.6))
+    _xn__mean_trend(ax, sub, tiers, val_col, group_col=group_col)
     ax.set_xlabel('Degrader tier')
     ax.set_ylabel(ylabel)
     ax.set_axisbelow(True)
@@ -8652,6 +8667,9 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
                        linewidth=0.9, ax=_ax)
         for _c in _ax.collections:
             _c.set_alpha(0.85)
+        # The violin's inner quartiles show the SPREAD of the spread; the trend line answers the question
+        # the panel is actually asked — does inter-model disagreement rise or fall with tier?
+        _xn__mean_trend(_ax, cdf, tiers, _y, group_col='best_geo_tier')
         _ax.set_xlabel('Degrader tier')
         _ax.set_ylabel(_lab)
         _ax.set_axisbelow(True)
@@ -9069,6 +9087,8 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         sns.violinplot(data=df, x=CFG.COL_TIER, y=idc, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
         for _coll in ax1.collections:
             _coll.set_alpha(0.6)
+        # Seven violins ask the reader to infer the trend by eye; the mean line states it.
+        _xn__mean_trend(ax1, df, tiers, idc, group_col=CFG.COL_TIER, label='Mean identity (trend)')
         ax1.set_xlabel('Catalytic degrader tier')
         ax1.set_ylabel('Sequence identity to control (%)')
         # panel title removed (user request)
@@ -9095,13 +9115,34 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
             ci = float(sem * _t_dist.ppf(0.975, len(v) - 1))
             return (mean, ci)
         trend_specs = [(mech, CFG.VIS_ACCENT["blue"], 'Mechanistic fingerprint  (norm., mean ± 95% CI)', 'o'), (rmsd, CFG.VIS_ACCENT["amber"], 'Active site RMSD  (norm., mean ± 95% CI)', 's')]
+        """
+        THE NORMALISED TRACES GET THEIR OWN AXIS.
+
+        The violins are the evolutionary fingerprint score, which runs 0-100. The overlaid traces are
+        min-max normalised to 0-1. Drawn on the same axis, a 0-1 series against a 0-100 scale is a flat
+        line pinned to the floor: it was plotted, it was legible as a colour, and it carried no
+        information at all. They now share the x-axis and nothing else.
+
+        The RMSD column also carries a 999.0 sentinel for 'undefined' (max = 999.00 in the ranked sheet).
+        Min-max normalising through that sentinel crushes every real value into the bottom of the range,
+        so it is dropped before the scaling rather than clipped after it — a clip to 5 A still lets a
+        sentinel-derived 5.0 masquerade as a genuinely bad fold.
+        """
+        ax2r = ax2.twinx()
+        ax2r.set_ylim(0, 1.05)
+        ax2r.set_ylabel('normalised (0–1)   ·   RMSD inverted, 1.0 = best',
+                        fontsize=CFG.VIS_FONT_AXIS_LABEL - 1.5, color=CFG.VIS_INK["muted"])
+        ax2r.tick_params(axis='y', labelsize=CFG.VIS_FONT_TICK, colors=CFG.VIS_INK["muted"])
+        ax2r.grid(False)
+
         df_norm = df.copy()
         for tcol, colour, tlabel, mk in trend_specs:
             if tcol is None:
                 continue
             if 'RMSD' in tcol:
-                rmsd_vals = pd.to_numeric(df_norm[tcol], errors='coerce').clip(upper=5.0)
-                rmsd_norm = _xo__minmax(rmsd_vals)
+                rmsd_vals = pd.to_numeric(df_norm[tcol], errors='coerce')
+                rmsd_vals = rmsd_vals.where(rmsd_vals < float(CFG.SENTINEL_UNDEFINED))  # drop 999 = undefined
+                rmsd_norm = _xo__minmax(rmsd_vals.clip(upper=5.0))
                 df_norm['_nrm'] = 1.0 - rmsd_norm
                 tlabel = tlabel.replace('norm.', 'norm. inverted, 1.0=best')
             else:
@@ -9115,7 +9156,9 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
                     means.append(mval)
                     cis.append(cval)
             if xs:
-                ax2.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0, capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel, zorder=6)
+                ax2r.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0,
+                              capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel,
+                              zorder=6)
         stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
         metric_map = [('Evo_Score', evo), ('Mech_Fpt', mech), ('Active_RMDA', rmsd)]
         for label, mcol in metric_map:
@@ -9127,8 +9170,9 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
                 stat_lines.append(f'{label:<12}: {_xo__fmt_p(p)} | r = {r:+.2f}')
         y_max = np.nanmax(pd.to_numeric(df[evo], errors='coerce').values) if evo in df.columns else 1.0
         y_top = max(1.0, float(y_max)) * 1.08
+        _xn__mean_trend(ax2, df, tiers, evo, group_col=CFG.COL_TIER, label='Mean evo score (trend)')
         ax2.set_xlabel('Catalytic degrader tier')
-        ax2.set_ylabel('Evolutionary_Fingerprint_Score / normalised components (0–1)')
+        ax2.set_ylabel('Evolutionary fingerprint score')
         ax2.set_ylim(0, y_top)
         # panel title removed (user request)
         from matplotlib.lines import Line2D

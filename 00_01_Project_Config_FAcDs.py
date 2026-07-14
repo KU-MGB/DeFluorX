@@ -2387,6 +2387,25 @@ class CFG:
     """
     ESP_CHARGE_BASIS: str            = "6-31G**"   # basis for the ESP single point
     ESP_CHARGE_DFT: str              = "b3lyp"     # functional for the ESP single point
+    """
+    QM (Jaguar ESP) ligand charges — Step 05, OPT-IN.
+
+    OPLS4 assigns the ligand's charges by atom type, so it cannot see the one quantity an SN2 rate turns
+    on: how electrophilic the α-carbon actually is. The QM charge on that carbon runs +0.023 (FA) →
+    +0.126 (DFA) → +0.297 (TFA) — a thirteen-fold spread the force field flattens to near-nothing.
+
+    OFF by default, because the charges only reach the physics if they are loaded BY HAND in Maestro's
+    System Builder ('Use custom charges' → 'Partial charges from structure'). This step writes the .mae;
+    it never touches the MD or WaterMap setup, which are done in Schrödinger by the user. Generating a
+    charge set that silently changed the force field would be worse than not generating one at all.
+
+    It is irrelevant to Step 07: QSite puts the ligand INSIDE the QM region, where DFT computes its
+    density directly and never consults a point charge.
+    """
+    ESP_CHARGES_ENABLE: bool         = False       # --esp on the Step-05 command line also turns it on
+    ESP_KEEP_SCRATCH: bool           = False       # Jaguar leaves ~26 scratch files per ligand
+                                                   # (babel.com, symtry.*, restart.*, *_tmp.mae …);
+                                                   # they are deleted unless this is set
 
     # -------------------------------------------------------------------------------
     # Step 15.2: Parallelism
@@ -2433,6 +2452,13 @@ class CFG:
     # Controls are emitted by 02 with a reserved zero job index, so a job name beginning with this
     # prefix IS a control. Kept here because several steps test for it and a literal "0000000" in
     # three scripts is three places to get it wrong.
+    """
+    The sentinel for a quantity that could not be measured. Written as a number rather than NaN because
+    it has to survive a CSV round-trip and an integer cast; anything reading it MUST filter it out
+    before averaging or normalising. A 999 that reaches a min-max scaler crushes every real value into
+    the bottom of the range, which is how a metric becomes a flat line at zero and nobody notices.
+    """
+    SENTINEL_UNDEFINED: float = 999.0
     CONTROL_JOB_PREFIX: str = "0000000"
     COL_TIER:     str = "degrader_tier"
     COL_PROT:     str = "Protein_Name"
