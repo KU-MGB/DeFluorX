@@ -8082,7 +8082,6 @@ def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
     png = out_dir / f'{stem}.png'
     fig.savefig(png, dpi=CFG.VIS_FIGURE_DPI)
     plt.close(fig)
-    reporter.log(f'  ✓ {stem}.png')
 
 def _xn__panel(ax, letter: str) -> None:
     """No-op: panel letters are not drawn.
@@ -8925,7 +8924,6 @@ def _xo__save(fig, out_dir: Path, name: str, reporter) -> None:
     path = out_dir / name
     fig.savefig(path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches='tight')
     plt.close(fig)
-    reporter.log(f'  ✓ {name}')
 
 def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     """Binding_Affinity_Score violin + Affinity/Pocket-ratio/Density mean ± 95% CI lines.
@@ -9303,10 +9301,10 @@ def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None
             never written, and reported '7/7' when six existed. A count that cannot fail is not a count.
             """
             if (_dest / f"{_name}.png").exists():
-                reporter.log(f"    -> {_folder}/{_name}.png")
+                reporter.log(f"  ✔ Saved: {_folder}/{_name}.png")
                 _ok += 1
             else:
-                reporter.log(f"  ! {_folder}/{_name}: the panel drew nothing (see its own message above).")
+                reporter.log(f"  ! {_folder}/{_name}.png NOT written — the panel drew nothing.")
         except Exception as _e:                                  # noqa: BLE001
             reporter.log(f"  ! {_folder}/{_name} skipped: {type(_e).__name__}: {_e}")
             plt.close("all")
