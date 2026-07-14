@@ -8304,11 +8304,14 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
                 f'{_rate:6.1f} cx/s  elapsed {_el / 60:5.1f}m  ETA {_eta / 60:5.1f}m   ')
             sys.stdout.flush()
         if done % 5000 == 0 or done == n_jobs:
-            if _tty:
-                sys.stdout.write('\n')
-                sys.stdout.flush()
-            reporter.log(f'    · variance progress: {done:,}/{n_jobs:,} complexes '
-                         f'({done / max(1, n_jobs):.0%})  ·  elapsed {_el / 60:.1f} min  ·  ETA {_eta / 60:.1f} min')
+            _milestone = (f'    · variance progress: {done:,}/{n_jobs:,} complexes '
+                          f'({done / max(1, n_jobs):.0%})  ·  elapsed {_el / 60:.1f} min  ·  ETA {_eta / 60:.1f} min')
+            _file_only = getattr(reporter, 'log_file_only', None)
+            if _tty and _file_only is not None:
+                # The console already carries this in the bar; printing it again would break the bar.
+                _file_only(_milestone)
+            else:
+                reporter.log(_milestone)
 
     rows: list = []
     _n_geom_fail = 0
@@ -8320,6 +8323,11 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             _done += 1
             if _done % 50 == 0 or _done == n_jobs:
                 _tick(_done)
+
+    # Close the bar's line, so the summary below is not written over the last frame of it.
+    if _tty:
+        sys.stdout.write('\n')
+        sys.stdout.flush()
 
     var_df = pd.DataFrame(rows)
     target.parent.mkdir(parents=True, exist_ok=True)

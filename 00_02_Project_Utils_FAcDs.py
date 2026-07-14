@@ -319,6 +319,18 @@ class ReportManager:
         with open(self.path, "a") as f:
             f.write(f"[LOG] {text}\n")
 
+    def log_file_only(self, text: str):
+        """Record a line in the log file WITHOUT printing it to the console.
+
+        For output the console is already showing in another form. A long job draws a progress bar
+        rewritten in place (\\r); a milestone line sent through log() would print on top of it and
+        break the bar into a ladder of half-finished lines. The file still gets the milestone, which
+        is where it is wanted — a log full of carriage returns is unreadable, and a console full of
+        milestone lines is a bar that does not work.
+        """
+        with open(self.path, "a") as f:
+            f.write(f"[LOG] {text}\n")
+
     def section(self, title: str):
         print(f"\n{ConsoleColours.BOLD}{title}{ConsoleColours.ENDC}", flush=True)
         print(self.separator, flush=True)
