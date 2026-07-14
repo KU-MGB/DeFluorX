@@ -7936,12 +7936,37 @@ def _xn__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8):
     l = list(labels) + [''] + list(stat_lines)
     ax.legend(h, l, loc=loc, framealpha=0.95, fancybox=True, prop={'family': 'monospace', 'size': fontsize})
 
+def _ext_match_03_style(fig) -> None:
+    """Bring an extended-analysis panel onto 03's typography before it is written.
+
+    The merged prototypes never set label or tick fonts — they inherited whatever rcParams were in
+    force, which in their own sandbox was seaborn's scaled theme and here is 03's. The result is a
+    folder whose axis labels are a different size and colour from every other figure in the set, and
+    a reader flicking between folders sees two typefaces and wonders which is authoritative.
+
+    The values are the ones 03's own figures pass explicitly: 11 pt axis labels, 9 pt ticks, black.
+    Applied at save time so it reaches every axis of every panel, including the ones the prototypes
+    build through seaborn and never touch again.
+    """
+    _LBL, _TICK, _COL = 11.0, 9.0, "#000000"
+    for _ax in fig.get_axes():
+        for _t in (_ax.xaxis.label, _ax.yaxis.label):
+            _t.set_fontsize(_LBL)
+            _t.set_color(_COL)
+            _t.set_fontweight("normal")
+        _ax.tick_params(axis="both", labelsize=_TICK, labelcolor=_COL)
+        for _t in _ax.get_xticklabels() + _ax.get_yticklabels():
+            _t.set_fontsize(_TICK)
+            _t.set_color(_COL)
+
+
 def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
     """Persist a figure as a PNG at the pipeline's publication resolution, then free its memory.
 
     The DPI comes from CFG.VIS_FIGURE_DPI — the same value every other step renders at, so a
     sandbox figure and a Step-03 figure are the same physical object at the same scale.
     """
+    _ext_match_03_style(fig)
     stem = Path(name).stem
     png = out_dir / f'{stem}.png'
     fig.savefig(png, dpi=CFG.VIS_FIGURE_DPI)
@@ -8674,6 +8699,7 @@ def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, nco
 
 def _xo__save(fig, out_dir: Path, name: str, reporter) -> None:
     """Persist a figure at publication resolution and free its memory."""
+    _ext_match_03_style(fig)
     path = out_dir / name
     fig.savefig(path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches='tight')
     plt.close(fig)
