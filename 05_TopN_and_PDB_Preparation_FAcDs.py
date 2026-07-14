@@ -107,6 +107,7 @@ for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
     os.environ.setdefault(_tv, _CPU_CAP)
 
 import shutil
+import csv
 import subprocess
 import tempfile
 import time
@@ -796,9 +797,12 @@ def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> di
     if nuc_resnum is None:
         _out["status"] = "no_mapped_nucleophile"
         return _out
+    # ASP/ASH only, and only the aspartate's own carboxylate oxygens. FAcD attacks with an aspartate;
+    # admitting GLU here would let a glutamate at the mapped position pass as the nucleophile, which is
+    # the same mistake — by residue type instead of by residue number — that put a serine in Step 03.
     _nucs = [(r, a) for r in _prot
-             if r.seqid.num == int(nuc_resnum) and r.name.strip().upper() in ("ASP", "GLU", "ASH", "GLH")
-             for a in r if a.name.strip() in ("OD1", "OD2", "OE1", "OE2")]
+             if r.seqid.num == int(nuc_resnum) and r.name.strip().upper() in ("ASP", "ASH")
+             for a in r if a.name.strip() in ("OD1", "OD2")]
     if not _nucs:
         _out["status"] = f"nucleophile_{nuc_resnum}_not_found"
         return _out
@@ -968,6 +972,232 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
 
     status = "Success" if prep_success else "Prep_Failed"
     return {"job": job_name, "status": status, "rank": rank, "protonation": _prot, **_geo}
+
+
+# =============================================================================
+# SECTION 4B: QM (Jaguar ESP) LIGAND CHARGES  —  opt-in, CFG.ESP_CHARGES_ENABLE / --esp
+# =============================================================================
+"""
+WHY THIS IS HERE, AND NOT IN 07.
+
+The ligand's charges reach the physics through exactly one door: the Desmond SYSTEM BUILD, which is done
+by hand in Maestro between this step and Step 06. So the charge set has to exist BEFORE that build. Put
+this in Step 07 and it would fire after the trajectory it was meant to influence had already been run.
+
+It is also irrelevant to Step 07 on its own terms: QSite puts the ligand INSIDE the QM region, where DFT
+computes its electron density directly and never consults a point charge. ESP charges matter only for
+the CLASSICAL regions — the Desmond trajectory and Prime MM-GBSA.
+
+WHAT IT DOES NOT DO. It does not build a system, and it does not touch MD or WaterMap: those are the
+user's, in Schrödinger. It writes <ligand>_ESP.mae and stops. The charges are applied deliberately, by a
+person, in System Builder ('Use custom charges' -> 'Partial charges from structure') — never injected
+behind their back. A charge set that silently changed the force field would be worse than none.
+"""
+
+_ESP_BUILD = r"""
+import sys
+from pathlib import Path
+from schrodinger import structure
+from schrodinger.application.jaguar.input import JaguarInput
+
+prepared, out_dir, stem, basis, dft = sys.argv[1:6]
+out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+_AA = {'ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE',
+       'PRO','SER','THR','TRP','TYR','VAL','HID','HIE','HIP','ASH','HOH','NA','CL','SPC','T3P'}
+
+st = next(structure.StructureReader(prepared))
+lig = None
+for mol in st.molecule:
+    if not ({a.pdbres.strip() for a in mol.atom} & _AA) and len(mol.atom) > 2:
+        lig = mol.extractStructure(); break
+if lig is None:
+    print('NO_LIGAND'); sys.exit(2)
+
+chg = sum(a.formal_charge for a in lig.atom)
+lig.write(str(out_dir / (stem + '_lig.mae')))
+
+# The charges are fitted on the PREPARED geometry — the structure the MD actually starts from — not on
+# an idealised gas-phase optimum. A charge set derived from a different conformer is a charge set for a
+# different molecule. icfit=1 fits to the electrostatic potential; the fitted charges sum to the formal
+# charge, which is the check that the fit converged.
+ji = JaguarInput(name=stem + '_ESP')
+ji.setStructure(lig)
+ji.setValues({'basis': basis, 'dftname': dft, 'molchg': int(chg), 'multip': 1, 'icfit': 1})
+ji.saveAs(str(out_dir / (stem + '_ESP.in')))
+print('WROTE_INPUT charge', chg, 'atoms', len(lig.atom))
+"""
+
+_ESP_PARSE = r"""
+import sys, csv
+from pathlib import Path
+from schrodinger import structure
+
+out_file, lig_mae, stem, out_dir = sys.argv[1:5]
+out_dir = Path(out_dir)
+lines = Path(out_file).read_text(errors='ignore').splitlines()
+
+# Jaguar prints the fitted charges as label/charge row PAIRS under one header. The block is read to its
+# own end rather than to a fixed line budget: a larger ligand wraps the table over several pairs and a
+# fixed cut would silently drop the tail.
+labels, charges, capture = [], [], False
+for i, ln in enumerate(lines):
+    if 'Atomic charges from electrostatic potential' in ln:
+        capture = True; continue
+    if capture:
+        t = ln.strip()
+        if t.startswith('Atom') and i + 1 < len(lines) and lines[i + 1].strip().startswith('Charge'):
+            labels += ln.split()[1:]; charges += lines[i + 1].split()[1:]
+        elif t and not t.startswith('Charge') and labels:
+            break
+if not labels:
+    print('NO_ESP_BLOCK'); sys.exit(3)
+
+vals = [float(c) for c in charges]
+with (out_dir / (stem + '_ESP_charges.csv')).open('w', newline='') as fh:
+    w = csv.writer(fh); w.writerow(['atom_label', 'esp_charge']); w.writerows(zip(labels, vals))
+
+st = next(structure.StructureReader(lig_mae))
+if len(st.atom) != len(vals):
+    print('ATOM_COUNT_MISMATCH %d vs %d' % (len(st.atom), len(vals))); sys.exit(4)
+for a, q in zip(st.atom, vals):
+    a.partial_charge = float(q)
+st.write(str(out_dir / (stem + '_ESP.mae')))
+print('OK atoms=%d sum=%+.4f' % (len(vals), sum(vals)))
+"""
+
+# Jaguar drops its scratch beside the results. Kept only when CFG.ESP_KEEP_SCRATCH is set: 26 files per
+# ligand of babel/symtry/restart noise buries the four that are actually the answer.
+_ESP_SCRATCH_GLOBS = ("babel*.com", "*.dat", "*.prm", "*.ark", "symtry.*", "restart*.in",
+                      "default.mass", "*_tmp.mae", "*_trunc.mae", "*_ESP.01.*", "nbyn.dat", "pbf*",
+                      "PID", "runflags", ".write_dir.json")   # Jaguar names these two with no suffix
+
+
+def _esp_run(script: str, *args: str, timeout: int = 1800):
+    """Run a snippet under $SCHRODINGER/run — its interpreter, not ours."""
+    return subprocess.run([str(SCHRODINGER_PATH / "run"), "python3", "-c", script, *args],
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
+    """QM (Jaguar ESP) partial charges for every prepared MD ligand. Returns the summary CSV."""
+    _jag = SCHRODINGER_PATH / "jaguar"
+    if not _jag.exists():
+        console_info(f"  ! ESP charges skipped: jaguar not found at {_jag}")
+        return None
+    _pdbs = sorted(prep_dir.glob("*_Prepared.pdb"))
+    if not _pdbs:
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _basis, _dft = str(CFG.ESP_CHARGE_BASIS), str(CFG.ESP_CHARGE_DFT)
+    console_info(f"QM ligand charges — {len(_pdbs)} ligand(s)  |  {_dft}/{_basis}  (Jaguar, icfit=1)")
+
+    _summary, _ok = [], 0
+    for _pdb in _pdbs:
+        _stem = _pdb.name.replace("_Prepared.pdb", "")
+        _r = _esp_run(_ESP_BUILD, str(_pdb), str(out_dir), _stem, _basis, _dft)
+        if "WROTE_INPUT" not in _r.stdout:
+            console_info(f"  ! {_stem}: input build failed — {(_r.stdout + _r.stderr).strip()[:120]}")
+            continue
+        _jr = subprocess.run([str(_jag), "run", "-WAIT", "-NOJOBID", f"{_stem}_ESP.in"],
+                             cwd=str(out_dir), capture_output=True, text=True, timeout=7200)
+        _out = out_dir / f"{_stem}_ESP.out"
+        if _jr.returncode != 0 or not _out.exists():
+            console_info(f"  ! {_stem}: Jaguar failed (rc={_jr.returncode})")
+            continue
+        _pr = _esp_run(_ESP_PARSE, str(_out), str(out_dir / f"{_stem}_lig.mae"), _stem, str(out_dir))
+        if not _pr.stdout.startswith("OK"):
+            console_info(f"  ! {_stem}: {(_pr.stdout + _pr.stderr).strip()[:120]}")
+            continue
+        _ok += 1
+        console_info(f"  ✔ {_stem}  {_pr.stdout.strip()}")
+        with (out_dir / f"{_stem}_ESP_charges.csv").open() as _fh:
+            for _row in csv.DictReader(_fh):
+                _summary.append({"structure": _stem, "atom_label": _row["atom_label"],
+                                 "esp_charge": float(_row["esp_charge"])})
+
+    if not _summary:
+        return None
+    _sum_path = out_dir / "00_ESP_Charges_Summary.csv"
+    pd.DataFrame(_summary).to_csv(_sum_path, index=False)
+
+    if not CFG.ESP_KEEP_SCRATCH:
+        _n = 0
+        for _g in _ESP_SCRATCH_GLOBS:
+            for _f in out_dir.glob(_g):
+                try:
+                    _f.unlink(); _n += 1
+                except OSError:
+                    pass
+        if _n:
+            console_info(f"  Removed {_n} Jaguar scratch file(s); the .in/.out/.mae/.csv are kept for audit.")
+
+    console_info(f"  ✔ {_ok}/{len(_pdbs)} ligand(s) charged → {_sum_path.name}")
+    console_info("  NEXT (by hand, in Maestro System Builder — deliberately not automated):")
+    console_info("    load <stem>_ESP.mae → 'Use custom charges' → 'Partial charges from structure'.")
+    try:
+        _f = plot_esp_alpha_carbon(_summary, out_dir)
+        if _f:
+            console_info(f"  ESP figure → {_f.name}")
+    except Exception as _e:                                       # noqa: BLE001
+        console_info(f"  ! ESP figure skipped: {type(_e).__name__}: {_e}")
+    return _sum_path
+
+
+def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
+    """The charge on the carbon the nucleophile actually attacks — the number OPLS4 cannot see.
+
+    An SN2 rate turns on how electrophilic the α-carbon is. The QM charge on that atom runs +0.023 (FA)
+    → +0.126 (DFA) → +0.297 (TFA): a thirteen-fold spread across the three substrates. OPLS4 assigns by
+    atom type, so in the classical trajectory those three carbons look much alike. The figure exists to
+    put that gap where it cannot be missed, because it is buried in a per-atom CSV otherwise.
+
+    The α-carbon is identified structurally, not by label: it is the carbon bonded to fluorine — the one
+    the leaving F departs from. Reading it off an atom NAME would break the moment Jaguar renumbered.
+    """
+    if not summary_rows:
+        return None
+    import matplotlib.pyplot as plt
+    _utils_mod.apply_figure_style(CFG)
+
+    df = pd.DataFrame(summary_rows)
+    _rows = []
+    for _st, _g in df.groupby("structure"):
+        # the alpha carbon: a C whose ESP charge is the most positive among carbons that are NOT the
+        # carboxylate carbon (which is always the most positive of all, ~+0.6, and is not attacked)
+        _c = _g[_g["atom_label"].str.match(r"^C\d+$")].sort_values("esp_charge", ascending=False)
+        if len(_c) < 2:
+            continue
+        _alpha = _c.iloc[1]                       # 0 = carboxylate C, 1 = the alpha carbon
+        _lig = ("TFA" if "TFA" in _st else "DFA" if "Difluoro" in _st
+                else "FA" if "Fluoro" in _st else _st.split("_")[-1])
+        _rows.append({"ligand": _lig, "q_alpha": float(_alpha["esp_charge"]),
+                      "n_F": int(_g["atom_label"].str.match(r"^F\d+$").sum())})
+    if not _rows:
+        return None
+    d = pd.DataFrame(_rows).drop_duplicates("ligand").sort_values("q_alpha")
+
+    fig, ax = plt.subplots(figsize=(8.6, 4.8))
+    _cols = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"]]
+    _b = ax.barh(d["ligand"], d["q_alpha"],
+                 color=[_cols[min(i, 2)] for i in range(len(d))],
+                 edgecolor=CFG.VIS_INK["dark"], linewidth=0.8, height=0.55, zorder=3)
+    for _r, _v, _nf in zip(_b, d["q_alpha"], d["n_F"]):
+        ax.text(_v + 0.006, _r.get_y() + _r.get_height() / 2, f"{_v:+.3f}   ({_nf} F)",
+                va="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"], zorder=4)
+    ax.set_xlabel("QM (Jaguar ESP) charge on the α-carbon — the atom the nucleophile attacks  (e)")
+    ax.set_xlim(0, max(d["q_alpha"]) * 1.32)
+    ax.grid(True, axis="x", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
+    ax.set_axisbelow(True)
+    _lo, _hi = float(d["q_alpha"].min()), float(d["q_alpha"].max())
+    fig.text(0.5, 0.015,
+             f"{_hi / max(_lo, 1e-6):.0f}× spread in α-carbon electrophilicity across the substrates — "
+             f"the one quantity an SN2 rate turns on. OPLS4 assigns by atom type and cannot represent it.",
+             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    _p = out_dir / "01_ESP_Alpha_Carbon_Charge.png"
+    fig.savefig(_p, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return _p
 
 
 # =============================================================================
@@ -2755,6 +2985,17 @@ def prep_and_convert_phase(args):
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Pose-drift figure skipped: {type(_e).__name__}: {_e}")
 
+    """
+    QM ligand charges — only when asked for. The step is minutes of DFT per ligand, and its product is
+    useless unless the .mae is loaded by hand in System Builder, so it must never run by surprise.
+    """
+    if bool(getattr(CFG, "ESP_CHARGES_ENABLE", False)) or bool(globals().get("_ESP_REQUESTED", False)):
+        console_separator()
+        try:
+            generate_esp_charges(dir_prep_clean, dir_prep_clean.parent / "4_Ligand_ESP_Charges")
+        except Exception as _e:                                   # noqa: BLE001
+            console_info(f"  ! ESP charges skipped: {type(_e).__name__}: {_e}")
+
     print("")
     console_separator()
 
@@ -3296,7 +3537,17 @@ def main():
     parser.add_argument("run_folder_name", help="Run Folder Name (e.g. Boltz-2_Run_...)")
     parser.add_argument("--quick", action="store_true", help="Quick resume: skip deep validation")
     parser.add_argument("--top", type=int, default=None, help="Fallback top-N when no MD_Selected column")
+    parser.add_argument("--esp", action="store_true",
+                        help="Compute QM (Jaguar ESP) partial charges for the prepared MD ligands and "
+                             "write <ligand>_ESP.mae. Load it BY HAND in Maestro System Builder "
+                             "('Use custom charges' → 'Partial charges from structure'); this step "
+                             "never touches the MD or WaterMap setup. Also settable as "
+                             "CFG.ESP_CHARGES_ENABLE.")
     args = parser.parse_args()
+
+    # --esp turns the QM charge step on for this run; CFG.ESP_CHARGES_ENABLE turns it on permanently.
+    global _ESP_REQUESTED
+    _ESP_REQUESTED = bool(args.esp)
     prep_and_convert_phase(args)
     topn_extraction_phase(args)
     # Remove Schrödinger scratch now the prep/extraction jobs are done and outputs
