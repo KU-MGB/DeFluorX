@@ -2630,26 +2630,24 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     """
     &mmkey — the MM half of the QM/MM Hamiltonian.
 
-    The MM region here must use the same force field as everything upstream of it: the Desmond system
-    was built with OPLS4, the trajectory was propagated with OPLS4, and the frame handed to QSite is a
-    snapshot of that potential. If QSite's classical region silently falls back to an older OPLS, the
-    MM energy of the protein environment is evaluated on a different potential from the one that
-    produced the geometry, and the resulting barrier carries an energetic discontinuity that has
-    nothing to do with the chemistry. PrepWizard was found doing exactly this (it defaults to
-    OPLS_2005), so the assumption is worth stating rather than trusting.
+    The classical region must not be scored on a different force field from the trajectory it came
+    from. The Desmond system was built and propagated under OPLS4, so the MM environment around the
+    QM region should be OPLS4 too — but QSite does not offer it. Schrodinger's own QSite driver
+    exposes exactly two (-ffield choices=['OPLS_2005','OPLS3e']) and emits the string keyword
+    qsite_ff='opls3e' for the newer one. OPLS_2005 is the DEFAULT, so an unset &mmkey scores an OPLS4
+    trajectory on a force field two generations older.
 
-    QSITE_MM_FF is emitted verbatim into &mmkey when set (e.g. "ff=16"). It is left UNSET by default
-    and deliberately not guessed: the numeric force-field codes are not documented in this
-    installation, and writing an unverified integer into a QM/MM input either aborts the scan or —
-    worse — silently selects the wrong classical potential, which is the very failure this is meant to
-    prevent. Confirm the code for the installed QSite release against a single short scan, set it
-    here, and the flag is then emitted for every job.
+    CFG.QSITE_MM_FF therefore carries 'qsite_ff=opls3e' — the closest available — and this is recorded
+    as a DECLARED LIMITATION rather than a fix: OPLS3e is not OPLS4. The QM region, where the bond
+    breaks, is unaffected; the mismatch is in the classical environment around it.
     """
     _mmkey = f"&mmkey\n{CFG.QSITE_MM_FF}\n&\n" if getattr(CFG, "QSITE_MM_FF", "") else "&mmkey\n&\n"
-    if not getattr(CFG, "QSITE_MM_FF", ""):
-        console_info("    [i] QSite &mmkey carries no explicit force-field flag — the MM region uses "
-                     "the QSite release default. Set CFG.QSITE_MM_FF (e.g. 'ff=16') once the code is "
-                     "confirmed, so the MM half matches the OPLS4 trajectory it is scoring.")
+    if getattr(CFG, "QSITE_MM_FF", ""):
+        console_info(f"    [i] QSite &mmkey MM force field: {CFG.QSITE_MM_FF} — the closest QSite offers to "
+                     f"the trajectory's OPLS4 (QSite supports only OPLS_2005 / OPLS3e).")
+    else:
+        console_info("    [!] QSite &mmkey carries no force-field flag — the MM region falls back to "
+                     "OPLS_2005 while the trajectory was propagated under OPLS4.")
 
     content = (
         f"MAEFILE: {mae_path.name}\n"

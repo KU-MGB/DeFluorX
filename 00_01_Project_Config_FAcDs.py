@@ -1685,21 +1685,26 @@ class CFG:
     })
     QSITE_MULT: int         = 1              # spin multiplicity (closed-shell singlet)
     """
-    Explicit force field for the MM half of the QM/MM Hamiltonian, emitted verbatim into &mmkey.
+    Force field for the MM half of the QM/MM Hamiltonian, emitted into &mmkey.
 
-    The MM region should use the same potential as the trajectory it is scoring: the Desmond system
-    was built and propagated under OPLS4, and the frame QSite receives is a snapshot of that surface.
-    A classical region that silently falls back to an older OPLS evaluates the protein environment on
-    a different potential from the one that produced the geometry, and the barrier then carries an
-    energetic discontinuity that is not chemistry. This is not hypothetical — PrepWizard was found
-    defaulting to OPLS_2005 while everything downstream ran OPLS4.
+    The keyword is qsite_ff and it takes a STRING. Confirmed against Schrodinger's own QSite driver
+    (mmshare .../common/qsite_binding_energies.py), which offers exactly two force fields —
 
-    Left EMPTY on purpose. The numeric force-field codes are not documented in this installation, and
-    an unverified integer written into a QM/MM input either aborts the scan or silently selects the
-    wrong potential — the very failure the flag exists to prevent. Confirm the code for the installed
-    QSite release against one short scan, set it here (e.g. "ff=16"), and every job emits it.
+        parser.add_argument('-ffield', choices=['OPLS_2005', 'OPLS3e'], default='OPLS_2005')
+        if cmd_args.ffield == 'OPLS3e':
+            qs_mmkey_dict['qsite_ff'] = 'opls3e'
+
+    — so QSite's classical region CANNOT run OPLS4. The best available is OPLS3e, and the DEFAULT is
+    OPLS_2005: left unset, the MM region would score an OPLS4 trajectory on a force field two
+    generations older, and the barrier would carry an energetic discontinuity that is not chemistry.
+    PrepWizard was found doing exactly this (defaulting to OPLS_2005 while everything downstream ran
+    OPLS4), so the assumption is worth stating rather than trusting.
+
+    This is a DECLARED LIMITATION, not a fix: OPLS3e is closer to the trajectory's OPLS4 than
+    OPLS_2005 is, but it is not the same force field. The QM region — where the bond actually breaks —
+    is unaffected; the mismatch sits in the classical environment around it.
     """
-    QSITE_MM_FF: str        = ""             # e.g. "ff=16"; empty → QSite release default (logged each run)
+    QSITE_MM_FF: str        = "qsite_ff=opls3e"   # &mmkey MM force field; OPLS4 is not offered by QSite
     '''
     Solvation: the extracted frame carries its explicit TIP3P water box in the MM
     region, so no implicit-solvation keyword is emitted (an implicit model would
