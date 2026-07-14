@@ -146,7 +146,6 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 07_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
     • 08_Model_Agreement.png                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
 
-    ── 08_Extended_Analysis/ ── merged extended-analysis panels (geometry, affinity, phylogeny, pillars)
     • 01_Geometry_and_Uncertainty.png              <-- Nucleophile distance + SN2 angle with multi-model uncertainty
     • 02_Binding_Affinity_Metrics.png              <-- Binding-affinity distribution by tier (2-column legend + stats)
     • 03_Evolutionary_Phylogeny.png       <-- Evolutionary phylogeny, detailed variant
@@ -5726,9 +5725,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _diag_dir.mkdir(parents=True, exist_ok=True)
     generate_additional_figures(df, _diag_dir, reporter)
 
-    # The extended-analysis panels write 08_Extended_Analysis. Wired here, into the run itself: they
-    # were rendering only when invoked by hand, so a full 03 run produced no folder 08 and its log
-    # said nothing about them.
+    # The extended-analysis panels are filed into the thematic subfolders (see _XN_EXT_ROUTES).
     generate_extended_figures(df, out_dir, reporter)
 
 
@@ -7728,7 +7725,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # ===============================================================================
-# SECTION: EXTENDED ANALYSIS FIGURES  [writes folder 08_Extended_Analysis]
+# SECTION: EXTENDED ANALYSIS FIGURES  [merged into the thematic subfolders]
 # ===============================================================================
 """
 Eight panels merged in from the two more_Plots prototypes, each taken from whichever prototype drew
@@ -8163,14 +8160,16 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
     eps2 = (H - len(groups) + 1) / (n - len(groups)) if n > len(groups) else np.nan
     return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
 
+# The extended panels are filed in the thematic subfolders alongside the figures they belong with,
+# numbered to continue each destination folder's own sequence (see _XN_EXT_ROUTES).
 _xn_FIG_NAMES = {
-    'geometry':   '01_Geometry_and_Uncertainty',
-    'binding':    'Figure_2_Binding_Affinity_Metrics',
-    'phylogeny':  '03_Evolutionary_Phylogeny',
-    'pillars':    '04_Pillar_Divergence_by_Tier',
-    'size_mech':  'Figure_5_Mechanistic_Geometry_vs_Chain_Length',
-    'size_tier':  'Figure_6_Chain_Length_by_Tier',
-    'validation': '07_Tier1A_Cross_Ligand_Heatmap',
+    'geometry':   '13_Geometry_and_Uncertainty',
+    'binding':    '09_Binding_Affinity_Metrics',
+    'phylogeny':  '05_Evolutionary_Phylogeny',
+    'pillars':    '09_Pillar_Divergence_by_Tier',
+    'size_mech':  '14_Mechanistic_Breakdown_by_Tier',
+    'size_tier':  '14_Chain_Length_by_Tier',
+    'validation': '15_Tier1A_Cross_Ligand_Heatmap',
 }
 
 def _xn__gate_lines_distance(ax) -> None:
@@ -8352,14 +8351,12 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     complex, that made Tier_5_Decoy essentially unreachable even though it
     is a genuine, populated tier in the source data.
     """
-    # Use the run's real production dir (set by main); out_dir is a fixed sandbox path so
-    # out_dir.parent no longer points at the run.
     """
     The production directory sits beside 3_Validation_Figures under the RUN root — not beside the
-    figure subfolder. In the prototype out_dir WAS 3_Validation_Figures, so out_dir.parent reached the
-    run root; here out_dir is 08_Extended_Analysis, so the same expression pointed at
-    3_Validation_Figures/1_Boltz2_Production, a path that cannot exist. The variance CSV was then
-    reported 'unavailable' when the CIFs were sitting there all along.
+    figure subfolder that out_dir points at. It is taken from the module global the dispatcher sets;
+    the fallback walks up from out_dir rather than assuming a fixed depth, because deriving it as
+    out_dir.parent silently yields 3_Validation_Figures/1_Boltz2_Production — a path that cannot
+    exist, and the variance CSV is then reported 'unavailable' while the CIFs sit there all along.
     """
     _prod = globals().get("_xn__PROD_DIR") or globals().get("_PROD_DIR")
     if _prod is None or not Path(_prod).exists():
@@ -9029,7 +9026,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     # Anchored inside the top-left corner: the default 'upper left' placement drifts out to the
     # frame and reads as a separate object floating beside the panel.
     _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), 7.5, ncol=2)
-    _xo__save(fig, out_dir, '02_Binding_Affinity_Metrics.png', reporter)
+    _xo__save(fig, out_dir, '09_Binding_Affinity_Metrics.png', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     idc = _xo__col(df, 'identity_pct', 'Identity_to_Control')
@@ -9130,7 +9127,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
         _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left', 7.5)
     plt.tight_layout()
-    _xo__save(fig, out_dir, '03_Evolutionary_Phylogeny.png', reporter)
+    _xo__save(fig, out_dir, '05_Evolutionary_Phylogeny.png', reporter)
 
 def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
     fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
@@ -9190,7 +9187,7 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
     axes[-1].set_xlabel('Total fluorine count')
     # figure title removed (user request)
     fig.tight_layout()
-    _xo__save(fig, out_dir, '05_Mechanistic_Breakdown_by_Tier.png', reporter)
+    _xo__save(fig, out_dir, '14_Mechanistic_Breakdown_by_Tier.png', reporter)
 
 def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
@@ -9231,40 +9228,52 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
                 transform=ax.transAxes, ha='left', va='top', fontsize=8.5,
                 bbox=dict(facecolor='white', alpha=0.85, edgecolor='#CCCCCC', linewidth=0.6,
                           boxstyle='round,pad=0.3'))
-    _xo__save(fig, out_dir, '06_Chain_Length_by_Tier.png', reporter)
+    _xo__save(fig, out_dir, '14_Chain_Length_by_Tier.png', reporter)
+
+
+"""
+Each extended panel is filed with the figures it belongs with, not in a holding folder of its own:
+the phylogeny sits with the cohort overview, the two size panels with the PFAS scope, and so on. The
+number continues the destination folder's existing sequence, so nothing already numbered moves.
+
+The numbering is APPENDED rather than gap-filled. 06_PFAS_Scope_and_Synthesis is missing a 06 — a
+retired figure — and reusing that slot would silently point an old citation at a new figure.
+"""
+_XN_EXT_ROUTES = [
+    # (destination subfolder,                     filename written by the panel,          panel)
+    ("04_Catalytic_Geometry_and_Mechanism",       "13_Geometry_and_Uncertainty",          _xn__fig_01C_geometry_and_uncertainty),
+    ("05_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics",           _xo__fig_02A_binding_affinity_metrics),
+    ("02_Dataset_and_Alignment_Overview",         "05_Evolutionary_Phylogeny",             _xo__fig_04A_evolutionary_phylogeny),
+    ("07_Diagnostic_and_MultiModel_Trends",       "09_Pillar_Divergence_by_Tier",          _xn__fig_05a_pillar_divergence_modified),
+    ("04_Catalytic_Geometry_and_Mechanism",       "14_Mechanistic_Breakdown_by_Tier",      _xo__fig_05b_mechanistic_size_modified),
+    ("06_PFAS_Scope_and_Synthesis",               "14_Chain_Length_by_Tier",               _xo__fig_05c_size_by_tier_modified),
+    ("06_PFAS_Scope_and_Synthesis",               "15_Tier1A_Cross_Ligand_Heatmap",        _xn_figure_06a),
+]
 
 
 def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None:
-    """The eight extended-analysis panels -> <Run>/3_Validation_Figures/08_Extended_Analysis.
+    """The extended-analysis panels, merged into the thematic subfolders (see _XN_EXT_ROUTES).
 
-    A failure in one panel is logged and the rest still render: losing seven figures because the
-    eighth hit a missing column would be a poor trade.
+    A failure in one panel is logged and the rest still render: losing six figures because the
+    seventh hit a missing column would be a poor trade.
     """
-    _ext_dir = out_dir / "08_Extended_Analysis"
-    _ext_dir.mkdir(parents=True, exist_ok=True)
-    reporter.section("Extended Analysis Figures  [writes folder 08_Extended_Analysis]")
+    reporter.section("Extended Analysis Figures  [merged into the thematic subfolders]")
 
     global _xn__PROD_DIR
     _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"
 
-    _jobs = [
-        ("01_Geometry_and_Uncertainty",        _xn__fig_01C_geometry_and_uncertainty),
-        ("02_Binding_Affinity_Metrics",        _xo__fig_02A_binding_affinity_metrics),
-        ("03_Evolutionary_Phylogeny",          _xo__fig_04A_evolutionary_phylogeny),
-        ("04_Pillar_Divergence_by_Tier",       _xn__fig_05a_pillar_divergence_modified),
-        ("05_Mechanistic_Breakdown_by_Tier",   _xo__fig_05b_mechanistic_size_modified),
-        ("06_Chain_Length_by_Tier",            _xo__fig_05c_size_by_tier_modified),
-        ("07_Tier1A_Cross_Ligand_Heatmap",     _xn_figure_06a),
-    ]
     _ok = 0
-    for _label, _fn in _jobs:
+    for _folder, _name, _fn in _XN_EXT_ROUTES:
+        _dest = out_dir / _folder
+        _dest.mkdir(parents=True, exist_ok=True)
         try:
-            _fn(df, _ext_dir, reporter)
+            _fn(df, _dest, reporter)
+            reporter.log(f"    -> {_folder}/{_name}.png")
             _ok += 1
         except Exception as _e:                                  # noqa: BLE001
-            reporter.log(f"  ! {_label} skipped: {type(_e).__name__}: {_e}")
+            reporter.log(f"  ! {_folder}/{_name} skipped: {type(_e).__name__}: {_e}")
             plt.close("all")
-    reporter.log(f"  Extended analysis: {_ok}/{len(_jobs)} figures written")
+    reporter.log(f"  Extended analysis: {_ok}/{len(_XN_EXT_ROUTES)} figures merged into the thematic folders")
 
 
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
@@ -9883,44 +9892,44 @@ def write_figure_descriptions(out_dir: Path):
         "            not a reproducible property of the complex.",
         "",
         "=" * 80,
-        "EXTENDED ANALYSIS (subfolder: 08_Extended_Analysis/)",
+        "EXTENDED ANALYSIS (merged into the thematic subfolders — no folder of its own)",
         "=" * 80,
         "",
         "-" * 80,
-        "01_Geometry_and_Uncertainty.png",
+        "04_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
         "  Title   : Reaction geometry with multi-model uncertainty",
         "  Look for: nucleophile distance and SN2 angle per tier, with the spread across the",
         "            diffusion samples — a tight tier is a reproducible one.",
         "",
         "-" * 80,
-        "02_Binding_Affinity_Metrics.png",
+        "05_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
         "  Title   : Binding affinity by tier",
         "  Look for: affinity does NOT order the tiers — a high-affinity binder that presents the",
         "            wrong face to Asp110 is not a degrader. This figure is the evidence.",
         "",
         "-" * 80,
-        "03_Evolutionary_Phylogeny.png / 03_Evolutionary_Phylogeny.png",
+        "02_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
         "  Title   : Evolutionary phylogeny of the cohort",
         "  Look for: whether the degrader tiers cluster phylogenetically or are scattered across",
         "            the tree. Scattered = catalytic competence is not a clade property.",
         "",
         "-" * 80,
-        "04_Pillar_Divergence_by_Tier.png",
+        "07_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
         "  Title   : Divergence of the scoring pillars across tiers",
         "  Look for: which pillar actually separates the tiers, and which merely follows.",
         "",
         "-" * 80,
-        "05_Mechanistic_Breakdown_by_Tier.png",
+        "04_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
         "  Title   : Mechanistic components per tier",
         "  Look for: the component that collapses first as the tier falls.",
         "",
         "-" * 80,
-        "06_Chain_Length_by_Tier.png",
+        "06_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
         "  Title   : PFAS chain length by tier",
         "  Look for: the elite tiers are short-chain. FAcD is a small-substrate hydrolase.",
         "",
         "-" * 80,
-        "07_Tier1A_Cross_Ligand_Heatmap.png",
+        "06_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
         "  Title   : Tier_1A proteins x ligands",
         "  Look for: whether an elite protein is elite for ONE ligand or several — a protein that",
         "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
@@ -10015,13 +10024,6 @@ def write_figure_descriptions(out_dir: Path):
         _txt = _txt.replace(_old_fp, _new_fp)
     desc_path = _aux_dir(out_dir) / "05_Figure_Descriptions.txt"
     desc_path.write_text(_txt, encoding="utf-8")
-    # The battery runs LAST, so its tests join the same family as the ones the figures registered and
-    # the Benjamini-Hochberg correction is paid once, across all of them.
-    try:
-        _statistical_battery(df, reporter)
-    except Exception as _e:                                   # noqa: BLE001
-        reporter.log(f"  ! Statistical battery skipped: {type(_e).__name__}: {_e}")
-
     _stats_path = _write_statistical_tests(out_dir)
     if _stats_path is not None:
         print(f"  Statistical Tests (BH-corrected) Saved: {_stats_path}", flush=True)
@@ -10094,6 +10096,14 @@ def main():
         for p in out_dir.rglob("_tt_thumbnails"):
             if p.is_dir():
                 shutil.rmtree(p)
+
+        # The battery runs after every figure has registered its own tests, so the whole family —
+        # the figures' tests and the battery's — is Benjamini-Hochberg corrected together, once.
+        # It must run BEFORE write_figure_descriptions, which is what writes the stats CSV out.
+        try:
+            _statistical_battery(df, reporter)
+        except Exception as _e:                               # noqa: BLE001
+            reporter.log(f"  ! Statistical battery skipped: {type(_e).__name__}: {_e}")
 
         desc_path = write_figure_descriptions(out_dir)
         reporter.log(f"Figure Descriptions Log Saved: {desc_path.resolve()}")
