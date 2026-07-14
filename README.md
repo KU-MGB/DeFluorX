@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,817 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~2,864 lines &nbsp; "]
         UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,381 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
         CFG --- UTL --- ENV
@@ -200,8 +200,8 @@ flowchart TD
     M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~700 lines &nbsp; "] --> M2
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
-        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,922 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,221 lines &nbsp; "]
+        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~6,999 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,305 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,657 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -210,7 +210,7 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~3,562 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard &nbsp; \n &nbsp; Extraction · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~3,633 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
@@ -218,7 +218,7 @@ flowchart TD
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
         M6["06 · &nbsp; SID Post-Prep + Prime MM-GBSA &nbsp; \n &nbsp; Desmond SID → *_SID-out.eaf (frame-count validated) &nbsp; \n &nbsp; Per-frame ΔG_bind + energy components + plots &nbsp; \n &nbsp; Disk-safe scratch · phase-aware heartbeat · WARN status &nbsp; \n &nbsp; 📄 ~2,265 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,791 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~4,868 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
@@ -610,6 +610,25 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 | §16 — Data Registry & Aesthetics | Master CSV column name constants (`COL_*`), tier marker sizes/alphas, alignment grade definitions |
 | §17 — Prime MM-GBSA | End-state binding free-energy parameters (Step 06) |
 
+**Missing is not zero (§16, §9).** The pipeline's most dangerous failure mode is not a crash — it is a
+measurement that could not be taken quietly becoming an *optimal* value. `0.0` is the **best** case for an
+inverted metric (a nucleophile distance, an active-site RMSD, a steric occlusion, a bond-dissociation
+energy), so it can never stand in for "unknown". Three defences are in place, and they are the reason the
+scoring can be trusted:
+
+- **`INVERTED_METRIC_COLUMNS`** — the 15 columns where smaller is better. A missing value in any of them is
+  written as `SENTINEL_UNDEFINED` (999.0), which every gate and every figure already filters out. A missing
+  `Dist_Nucleophile` filled with `0.0` would describe a nucleophile sitting *on top of* the carbon and would
+  clear every distance gate in the pipeline.
+- **`sigmoid()` saturates by the sign of `k`**, not by the sign of `(x − x0)`. Two of the soft-threshold
+  steepnesses are negative (`SOFT_K_NUC`, `SOFT_K_TRIAD`) because they must *fall* with distance; an
+  overflow branch that assumed a positive `k` returned **1.0 — a perfect score — for a nucleophile 999 Å
+  away**.
+- **`chem_verified`** — a complex whose scissile centre could not be resolved is **barred from Tier_1A**.
+  Its chemical penalties were *skipped*, not *passed*, and the elite tier is the claim that a candidate
+  deserves a week of GPU time. It keeps the rank its geometry earned and is flagged, so it is neither
+  silently at the top nor silently at the bottom.
+
 **Column registry (§16) — enforced, not merely defined.** The master-CSV column names live in CFG
 (`COL_TIER`, `COL_PROT`, `COL_LIG`, `COL_CONF`, `COL_SN2`, `COL_MECH_S`, …) and the scripts reference
 them rather than repeating the string: a column rename is one edit, not a grep across ten thousand
@@ -887,6 +906,13 @@ python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z --no-variance
 - **`07_Diagnostic_and_MultiModel_Trends/` (01–09):** *(includes the merged **pillar divergence by tier**)* pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) — scatter panels annotated with Spearman ρ / p / n.
 
 **Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt` (legends for every figure the run actually produced; a figure that legitimately drew no data — Hidden Gems, when no complex is high-tier yet low-confidence — is listed under *Not produced in this run*, with the reason), `06_Statistical_Tests.csv`, `06_Analysis_Log.txt`, `boltz_qc_multimodel_variance.csv` (per-model geometry + confidence; cached and reused).
+
+**Binding probability is calibrated (§9).** The raw weighted logit lives in [−2.5, +7.5] and a logistic
+saturates past |z| ≈ 4, so every decent complex was scoring P > 0.99 — a typical good complex 0.9979, the
+best possible 0.9994. **0.0015 of range across the entire viable population.** Since `Binding_Probability`
+is one of the two Pareto axes, that front was effectively one-dimensional (confidence alone) while appearing
+to be two. The sum is now centred (`BIND_LOGIT_CENTRE`) and scaled (`BIND_LOGIT_GAIN`) onto the range where
+a logistic resolves. This changes no gate — the tier and `MD_Selected` key on geometry.
 
 **Statistics:** Pareto fronts (unified duplicate handling), pairwise-complete Spearman correlations with Benjamini–Hochberg FDR on unique pairs, bootstrap 95% CIs for plotted means. Beyond the tests each panel registers, a **statistical battery** tests every claim the ranking rests on: Kruskal–Wallis across tiers per metric (with ε²), Mann–Whitney for degraders-vs-rest and Tier_1A-vs-rest (with rank-biserial *r* and group medians), and Spearman ρ **between** the ranking metrics — a screen built on three correlated pillars has one pillar and two echoes. Every row carries an effect size, deliberately: at *n* = 58,056 a p-value is nearly free, and the effect size is what decides whether a difference means anything. Every hypothesis test drawn on a panel (Kruskal–Wallis across tiers, paired Wilcoxon ipTM vs pTM, silhouette label-permutation for UMAP tier separation) is registered and the **whole family — panels and battery together — is corrected once by Benjamini–Hochberg**; the panel shows the raw test result and the corrected q-values are written to `00_Analysis_Data/06_Statistical_Tests.csv`, which is the value to quote. Colours, fonts and grid sourced from CFG through `utils.apply_figure_style()` (single source of truth).
 
