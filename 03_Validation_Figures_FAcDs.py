@@ -344,7 +344,7 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
         "mechanistic_score_effective", CFG.COL_MECH_S, "competence_score",
         CFG.COL_SN2, "sn2_attack_angle_effective", "Dist_Nucleophile",
         "Binding_Affinity_Score", "Interaction_Density_Norm", CFG.COL_CONF,
-        "active_site_plddt", "catalytic_constellation_score", "identity_pct",
+        "active_site_plddt", "catalytic_constellation_score", CFG.COL_ID_PCT,
         "pocket_containment_cavity", "pocket_containment_site8", "total_fluorine_count",
     ) if c in df.columns]
     if not _metrics or CFG.COL_TIER not in df.columns:
@@ -378,8 +378,10 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
                 _register_p("Kruskal-Wallis across tiers", _m, float(_h), _n_tot, float(_p),
                             effect_size=round(_eps2, 4), effect_type="epsilon^2",
                             n_groups=len(_groups))
-            except Exception:
-                pass
+            except Exception as _e:                              # noqa: BLE001
+                # A test that fails to run must SAY SO. Swallowed silently, it simply vanishes from the
+                # results file, and a missing test looks exactly like a test that was never wanted.
+                reporter.log(f"    ! Kruskal-Wallis skipped for {_m}: {type(_e).__name__}: {_e}")
 
         # 2) Degraders vs non-degraders, with the effect size.
         for _lbl, _mask in (("Degraders vs non-degraders", _is_deg),
@@ -395,8 +397,8 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
                             effect_type="rank-biserial r", n_group_a=len(_a), n_group_b=len(_b),
                             median_a=round(float(np.median(_a)), 4),
                             median_b=round(float(np.median(_b)), 4))
-            except Exception:
-                pass
+            except Exception as _e:                              # noqa: BLE001
+                reporter.log(f"    ! Mann-Whitney skipped for {_m} ({_lbl}): {type(_e).__name__}: {_e}")
 
     # 3) Are the ranking metrics independent, or restating one another?
     _corr = [c for c in ("mechanistic_score_effective", "competence_score",
@@ -414,8 +416,9 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
                 _register_p("Spearman correlation", f"{_corr[_i]} vs {_corr[_j]}",
                             float(_rho), int(_ok.sum()), float(_p),
                             effect_size=round(float(_rho), 4), effect_type="Spearman rho")
-            except Exception:
-                pass
+            except Exception as _e:                              # noqa: BLE001
+                reporter.log(f"    ! Spearman skipped for {_corr[_i]} vs {_corr[_j]}: "
+                             f"{type(_e).__name__}: {_e}")
 
     reporter.log(f"  Statistical battery: {len(_PVALUES)} tests registered (BH-corrected together)")
 
@@ -937,7 +940,7 @@ def _tt_find_cif(pred_jobs: Path, job_name: str):
     if not jd.exists():
         return None
     bc = jd / "Best_Complex"
-    cifs = list(bc.glob("*.cif")) if bc.exists() else list(jd.rglob("*.cif"))
+    cifs = sorted(bc.glob("*.cif")) if bc.exists() else sorted(jd.rglob("*.cif"))
     return cifs[0] if cifs else None
 
 
@@ -1700,23 +1703,23 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     per identity band); KDE lines per tier overlay on the same x-axis, revealing whether
     different catalytic tiers cluster at different identity levels.
     """
-    if "identity_pct" in df.columns:
+    if CFG.COL_ID_PCT in df.columns:
         # Use existing single-letter Alignment_Grade from CSV; only compute if missing
-        if "Alignment_Grade" not in df.columns or df["Alignment_Grade"].isnull().all():
+        if CFG.COL_ALN_G not in df.columns or df[CFG.COL_ALN_G].isnull().all():
             def _simple_grade(v):
                 try:
                     val = float(v)
                 except (ValueError, TypeError):
                     return "I"
                 return _utils_mod.get_alignment_grade(val, CFG)
-            df["Alignment_Grade"] = df["identity_pct"].apply(_simple_grade)
+            df[CFG.COL_ALN_G] = df[CFG.COL_ID_PCT].apply(_simple_grade)
         # Ensure single-letter format (convert "Grade A (...)" → 'A' if needed)
-        _ag = df["Alignment_Grade"].astype(str)
+        _ag = df[CFG.COL_ALN_G].astype(str)
         if _ag.str.startswith("Grade ").any():
-            df["Alignment_Grade"] = _ag.str.extract(r"Grade\s+([A-I])", expand=False).fillna("I")
-        id_plot = df.dropna(subset=["identity_pct"]).copy()
-        id_plot["identity_pct"] = pd.to_numeric(id_plot["identity_pct"], errors="coerce").clip(0, 100)
-        id_plot = id_plot.dropna(subset=["identity_pct"])
+            df[CFG.COL_ALN_G] = _ag.str.extract(r"Grade\s+([A-I])", expand=False).fillna("I")
+        id_plot = df.dropna(subset=[CFG.COL_ID_PCT]).copy()
+        id_plot[CFG.COL_ID_PCT] = pd.to_numeric(id_plot[CFG.COL_ID_PCT], errors="coerce").clip(0, 100)
+        id_plot = id_plot.dropna(subset=[CFG.COL_ID_PCT])
 
         fig, ax = plt.subplots(figsize=(13, 7))
         ax2 = ax.twinx()   # secondary y-axis for KDE density
@@ -1733,7 +1736,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     transform=ax.get_xaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.08", fc="white", ec="none",
                               alpha=0.70), zorder=11)
-            _cnt_g02 = int((_prot_dedup02["Alignment_Grade"] == lbl).sum())
+            _cnt_g02 = int((_prot_dedup02[CFG.COL_ALN_G] == lbl).sum())
             ax.text((lo + hi) / 2, 0.952, f"{_cnt_g02}/{_n_total_prot02}", ha="center", va="top",
                     fontsize=7.0, color=col,
                     transform=ax.get_xaxis_transform(), zorder=11)
@@ -1748,7 +1751,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             sub_t = id_plot[id_plot[CFG.COL_TIER] == tier]
             if sub_t.empty:
                 continue
-            tier_hist_data.append(sub_t["identity_pct"].values)
+            tier_hist_data.append(sub_t[CFG.COL_ID_PCT].values)
             tier_hist_labels.append(f"{tier}  (n={len(sub_t):,})")
             tier_hist_colors.append(TIER_PALETTE.get(tier, CFG.VIS_INK["faint"]))
         if tier_hist_data:
@@ -1769,7 +1772,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             sub_t = id_plot[id_plot[CFG.COL_TIER] == tier]
             kde_x = np.linspace(0, 100, 400)
             try:
-                kde_y = _gkde(sub_t["identity_pct"])(kde_x)
+                kde_y = _gkde(sub_t[CFG.COL_ID_PCT])(kde_x)
             except (np.linalg.LinAlgError, ValueError):
                 # Zero-variance tier (all sequences share one identity) → singular
                 # covariance; skip this ridge rather than crash the whole figure.
@@ -1784,8 +1787,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             ax2.fill_between(kde_x, _tier_offset, kde_y_shifted,
                              color=_tcol, alpha=0.15, zorder=4 + _tier_idx)
             # Median tick mark on the KDE line
-            med_x = float(sub_t["identity_pct"].median())
-            med_y = float(np.atleast_1d(_gkde(sub_t["identity_pct"])(np.array([med_x])))[0])
+            med_x = float(sub_t[CFG.COL_ID_PCT].median())
+            med_y = float(np.atleast_1d(_gkde(sub_t[CFG.COL_ID_PCT])(np.array([med_x])))[0])
             ax2.scatter([med_x], [med_y + _tier_offset], color=_tcol,
                         s=55, zorder=6 + _tier_idx, edgecolors="black", linewidths=0.8)
             if tier == CFG.TIER_TOP:
@@ -1842,7 +1845,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         # lifted above the ridge lines with an opaque box so it never hides behind them.
         _tt_sub02 = id_plot[id_plot[CFG.COL_TIER] == CFG.TIER_TOP]
         if len(_tt_sub02) > 0 and _tt_kde_med_xy is not None:
-            _tt_med_x = float(_tt_sub02["identity_pct"].median())
+            _tt_med_x = float(_tt_sub02[CFG.COL_ID_PCT].median())
             ax2.annotate(
                 f"{CFG.TIER_TOP}  (n={len(_tt_sub02):,})\nmedian identity {_tt_med_x:.0f}%",
                 xy=_tt_kde_med_xy, xycoords="data",
@@ -1897,8 +1900,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             they explain.
             """
             _md7 = _md_ready_df(df)
-            if not _md7.empty and "identity_pct" in _md7.columns:
-                _mdx7 = pd.to_numeric(_md7["identity_pct"], errors="coerce").dropna()
+            if not _md7.empty and CFG.COL_ID_PCT in _md7.columns:
+                _mdx7 = pd.to_numeric(_md7[CFG.COL_ID_PCT], errors="coerce").dropna()
                 if len(_mdx7):
                     _y7 = ax.get_ylim()[1] * 0.035
                     ax.scatter(_mdx7.to_numpy(), np.full(len(_mdx7), _y7), **_MD_STAR_KW)
@@ -1938,11 +1941,11 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     making cross-figure reading intuitive.  Absolute counts are annotated inside wide
     segments; narrow segments get small external labels.
     """
-    if "identity_pct" in df.columns and CFG.COL_TIER in df.columns:
+    if CFG.COL_ID_PCT in df.columns and CFG.COL_TIER in df.columns:
         try:
-            f11_df = df.dropna(subset=["identity_pct"]).copy()
-            f11_df["identity_pct"] = pd.to_numeric(f11_df["identity_pct"], errors="coerce").clip(0, 100)
-            f11_df = f11_df.dropna(subset=["identity_pct"])
+            f11_df = df.dropna(subset=[CFG.COL_ID_PCT]).copy()
+            f11_df[CFG.COL_ID_PCT] = pd.to_numeric(f11_df[CFG.COL_ID_PCT], errors="coerce").clip(0, 100)
+            f11_df = f11_df.dropna(subset=[CFG.COL_ID_PCT])
             grade_cuts = list(CFG.ALIGN_GRADE_BINS)          # single source (CFG)
             _glab = CFG.ALIGN_GRADE_LABELS
             grade_lbls = []
@@ -1953,7 +1956,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                 else:                      grade_lbls.append(f"{_lb} ({_lo}–{_hi}%)")
             # Grade colours — sourced from CFG § 8.8
             grade_colors = dict(CFG.GRADE_COLOUR_FULL)
-            f11_df["Grade"] = pd.cut(f11_df["identity_pct"], bins=grade_cuts,
+            f11_df["Grade"] = pd.cut(f11_df[CFG.COL_ID_PCT], bins=grade_cuts,
                                      labels=grade_lbls, right=False)
             ct11 = pd.crosstab(f11_df[CFG.COL_TIER], f11_df["Grade"])
             ct11 = ct11.reindex(index=[t for t in existing_tiers if t in ct11.index],
@@ -2791,7 +2794,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         "tier_numeric":                "Tier",
         "Pareto_Rank":                 "Pareto",
         CFG.COL_SN2:            "SN2°",
-        "identity_pct":                "SeqID%",
+        CFG.COL_ID_PCT:                "SeqID%",
         "SN2_Trajectory_Deviation_A":  "TrajDev",
         "soft_catalytic_score":        "SoftCat",
     }
@@ -3013,7 +3016,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     """
     _f08_metric_map = {
         CFG.COL_CONF: "AI Confidence", CFG.COL_MECH_S: "Mech. Score",
-        "Binding_Probability": "Binding Prob.", "identity_pct": "Seq. Identity (%)",
+        "Binding_Probability": "Binding Prob.", CFG.COL_ID_PCT: "Seq. Identity (%)",
         CFG.COL_SN2: "SN2 Angle (°)", "Active_Site_RMSD": "RMSD (Å, inv.)",
         "SN2_Trajectory_Deviation_A": "SN2 Traj. Dev. (Å)",
         "soft_catalytic_score": "Soft Catalytic Score",
@@ -4766,7 +4769,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         CFG.COL_SN2:         "SN2(°)",
         CFG.COL_MECH_S: "Mech",
         "Active_Site_RMSD":         "RMSD(Å)",
-        "identity_pct":             "Seq.ID%",
+        CFG.COL_ID_PCT:             "Seq.ID%",
         "SN2_Trajectory_Deviation_A": "Traj.Dev",
         "soft_catalytic_score":     "Soft.Cat",
     }
@@ -7941,7 +7944,7 @@ _xn_PILLAR_ALIASES = {
     'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', CFG.COL_CONF],
     'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
     'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
-    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
+    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', CFG.COL_LIKE_S, CFG.COL_ID_PCT],
     'Final_Unified_Score': ['Final_Unified_Score', 'Ranking_Score_Calc'],
 }
 
@@ -8788,7 +8791,7 @@ _xo_PILLAR_ALIASES = {
     'Model_Quality_Score': ['Model_Quality_Score', 'Model_Quality_ScoreNormalised', CFG.COL_CONF],
     'Binding_Affinity_Score': ['Binding_Affinity_Score', 'Binding_Affinity_ScoreNormalised', 'Chemical_Affinity_Score', 'Binding_Probability', 'custom_affinity_score', 'Binding_Probability_Score'],
     'Catalytic_Competence_Score': ['Catalytic_Competence_Score', 'Catalytic_Competence_ScoreNormalised', 'competence_score', 'soft_catalytic_score'],
-    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', 'ActiveSite_Conservation_Score', 'identity_pct'],
+    'Evolutionary_Fingerprint_Score': ['Evolutionary_Fingerprint_Score', 'Evolutionary_Fingerprint_ScoreNormalised', CFG.COL_LIKE_S, CFG.COL_ID_PCT],
     'Final_Unified_Score': ['Final_Unified_Score', 'Ranking_Score_Calc'],
 }
 
@@ -8971,7 +8974,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     _xo__save(fig, out_dir, '09_Binding_Affinity_Metrics.png', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
-    idc = _xo__col(df, 'identity_pct', 'Identity_to_Control')
+    idc = _xo__col(df, CFG.COL_ID_PCT, 'Identity_to_Control')
     evo = _xo__pillar_col(df, 'Evolutionary_Fingerprint_Score')
     mech = _xo__col(df, 'Mechanistic_Fingerprint_Score', 'Catalytic_Fingerprint_Score')
     rmsd = _xo__col(df, 'Active_Site_RMSD_to_Control')
@@ -9112,18 +9115,33 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
         x_indices = [unique_x.index(x_val) for x_val in valid_x]
         ax.plot(x_indices, grp.values, '-', color=CFG.VIS_ACCENT["vermillion"], lw=2, marker='o')
         ax.set_ylabel(ylab)
+        """
+        The predictor is a COUNT, so it is tested as one.
+
+        Splitting fluorine count at F≤3 vs F>3 and running Mann-Whitney throws away everything the
+        count knows: a difluoro and a perfluorodecyl land in the same bin, the monotonic trend the panel
+        is drawn to show is discarded, and the power lost to the binarisation is paid for nothing. The
+        cut point was also arbitrary — no threshold in CFG corresponds to it.
+
+        Spearman's rho on the continuous count answers the question the figure asks — does the metric
+        move monotonically with chain length — and reports the DIRECTION and STRENGTH of that move, not
+        merely whether two arbitrary halves differ. It is registered like every other test, so it joins
+        the Benjamini-Hochberg family instead of being a p-value printed on a panel and corrected
+        nowhere.
+        """
         if col in ['nuc_dist', rows[0][0]]:
-            y_le3 = yy[xx <= 3].dropna()
-            y_gt3 = yy[xx > 3].dropna()
-            if len(y_le3) > 0 and len(y_gt3) > 0:
-                if col == rows[0][0]:
-                    stat, p = mannwhitneyu(y_le3, y_gt3, alternative='greater')
-                    test_desc = 'F≤3 > F>3'
-                else:
-                    stat, p = mannwhitneyu(y_le3, y_gt3, alternative='less')
-                    test_desc = 'F≤3 < F>3'
-                p_str = f'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
-                ax.text(0.95, 0.95, f'MWU ({test_desc}): {p_str}', transform=ax.transAxes, ha='right', va='top', bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+            _fin = xx.notna() & yy.notna()
+            if int(_fin.sum()) >= 3 and xx[_fin].nunique() > 1:
+                _rho, _p = _sc_stats.spearmanr(xx[_fin], yy[_fin])
+                if np.isfinite(_rho) and np.isfinite(_p):
+                    _register_p("Spearman correlation", f"{ylab} vs total fluorine count",
+                                float(_rho), int(_fin.sum()), float(_p),
+                                effect_size=round(float(_rho), 4), effect_type="spearman rho")
+                    p_str = 'p < 0.001' if _p < 0.001 else f'p = {_p:.3f}'
+                    ax.text(0.95, 0.95, f'Spearman ρ = {_rho:+.2f}  ·  {p_str}  ·  n = {int(_fin.sum()):,}',
+                            transform=ax.transAxes, ha='right', va='top',
+                            fontsize=CFG.VIS_FONT_ANNOT,
+                            bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
     axes[-1].set_xticks(np.arange(len(unique_x)))
     axes[-1].set_xticklabels([str(int(val)) for val in unique_x])
     axes[-1].set_xlabel('Total fluorine count')
@@ -10130,7 +10148,7 @@ def main():
         generate_comprehensive_figures(df, features, out_dir, reporter)
 
         # Cleanup temporary structure thumbnails
-        for p in out_dir.rglob("_tt_thumbnails"):
+        for p in sorted(out_dir.rglob("_tt_thumbnails")):
             if p.is_dir():
                 shutil.rmtree(p)
 

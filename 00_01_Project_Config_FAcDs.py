@@ -1609,6 +1609,19 @@ class CFG:
     MD_EQUIL_V_DRIFT_MAX_PCT_NS: float = 0.05   # %/ns  residual volume drift above this = not equilibrated (a box still shrinking or swelling)
     MD_EQUIL_TARGET_T: float           = 300.0  # K  the thermostat set point
     MD_EQUIL_T_TOL_K: float            = 3.0    # K  mean temperature may deviate from the set point by at most this
+    MD_EQUIL_BLOCK_FRAC_MIN: float     = 0.90   # fraction of the LATER blocks that must sit inside the volume
+                                                # tolerance for a block to count as settled. Not 1.0: a single
+                                                # anomalous block late in an equilibrated run would otherwise
+                                                # invalidate every block before it and collapse the production
+                                                # window to almost nothing.
+    """
+    The box can settle while the PROTEIN does not. A variant that is unfolding, or whose active site is
+    being prised open by a bulky PFAS ligand, reaches a stable volume and a stable temperature and
+    passes a barostat-only gate — the very failure the gate exists to catch. Equilibration therefore
+    also requires the backbone to have stopped moving: the Ca RMSD to the starting structure must be
+    within this bound, judged over the production window.
+    """
+    MD_EQUIL_CA_RMSD_MAX_A: float      = 3.0    # A  mean Ca RMSD over the production window
 
     # -------------------------------------------------------------------------------
     # Step 9.3: Frame scoring weights (QM/MM frame selection only)
@@ -2689,7 +2702,14 @@ class CFG:
     """
     MMGBSA_AVERAGING: str   = "mean"          # "mean" | "median" | "boltzmann"
     GAS_CONSTANT_KCAL: float = 1.9872036e-3   # kcal/mol/K — R for the boltzmann estimator
-    MMGBSA_TEMPERATURE_K: float = 298.15      # K — ensemble temperature for the boltzmann estimator
+    """
+    The Boltzmann estimator weights frames by exp(-ΔG/RT), so its T must be the temperature the frames
+    were actually SAMPLED at — not standard state. The frames come from the Desmond ensemble, whose
+    thermostat set point is MD_EQUIL_TARGET_T, so the estimator reads that number rather than carrying
+    a second, independent one. Holding 298.15 here while the trajectory ran at 300.0 K would weight an
+    ensemble against a Boltzmann distribution it was never drawn from.
+    """
+    MMGBSA_TEMPERATURE_K: float = 300.0       # K — MUST equal MD_EQUIL_TARGET_T (the sampled ensemble)
 
     # ===============================================================================
     # SECTION 18: MD-READY SELECTION  (gates heavy downstream compute — Steps 05→07)
@@ -2753,6 +2773,11 @@ class CFG:
         assert _isclose(self.TIER_NUC_DIST["Tier_2B"], self.NAC_DIST_RELAXED), "TIER_NUC_DIST['Tier_2B'] must equal NAC_DIST_RELAXED"
         assert _isclose(self.SUBSTRATE_ANGLE_MIN, self.TIER_ANGLE_MIN["Tier_1B"]), "SUBSTRATE_ANGLE_MIN must equal TIER_ANGLE_MIN['Tier_1B']"
         assert _isclose(self.INHIBITOR_ANGLE_MAX, self.NAC_ANGLE_RELAXED), "INHIBITOR_ANGLE_MAX must equal NAC_ANGLE_RELAXED"
+        # The Boltzmann estimator must weight the ensemble at the temperature that ensemble was sampled
+        # at. If the thermostat set point is ever changed, this fails at import rather than silently
+        # re-weighting the trajectory against a distribution it was never drawn from.
+        assert _isclose(self.MMGBSA_TEMPERATURE_K, self.MD_EQUIL_TARGET_T), \
+            "MMGBSA_TEMPERATURE_K must equal MD_EQUIL_TARGET_T (the sampled ensemble temperature)"
         # Component-weight sets that must sum to 1.0.
         assert _isclose(self.MECH_W_NUC + self.MECH_W_NB + self.MECH_W_BA + self.MECH_W_CLAMP + self.MECH_W_STAB + self.MECH_W_ANGLE, 1.0), "mechanistic_score weights must sum to 1.0"
         assert _isclose(self.COMP_W_ANGLE + self.COMP_W_DIST + self.COMP_W_CLAMP + self.COMP_W_TRAJ + self.COMP_W_TRIAD + self.COMP_W_HALIDE, 1.0), "competence_score weights must sum to 1.0"

@@ -950,8 +950,18 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         _tb = _t[:_nb * _bs].reshape(_nb, _bs).mean(axis=1)
         _vb = _V[:_nb * _bs].reshape(_nb, _bs).mean(axis=1)
 
+        """
+        A block is settled when the REST of the run is settled — but `.all()` demands that every later
+        block, without exception, sits inside the tolerance. One anomalous block near the end of an
+        otherwise perfectly equilibrated run then invalidates everything before it, and equilibration is
+        declared at the last block: a 1 µs trajectory collapses to a handful of production frames
+        because of a single spike. The test is therefore on the FRACTION of later blocks that are
+        settled, which is the question actually being asked — is the box still moving? — and is not
+        hostage to one outlier.
+        """
         _within = np.abs(_vb - _v_ref) <= _tol
-        _equil_b = next((_i for _i in range(_nb) if _within[_i:].all()), _nb - 1)
+        _need = float(CFG.MD_EQUIL_BLOCK_FRAC_MIN)
+        _equil_b = next((_i for _i in range(_nb) if _within[_i:].mean() >= _need), _nb - 1)
         # The block's leading edge, not its midpoint: frames from the start of the settled block on
         # are samples.
         _equil_t = float(_t[_equil_b * _bs])
@@ -1357,7 +1367,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
 
     all_data = []
     for _, row in df_master.iloc[::-1].iterrows():
-        csv_path = next(out_dir.glob(f"**/{row['Job_Name']}_NAC_Data.csv"), None)
+        csv_path = next(iter(sorted(out_dir.glob(f"**/{row['Job_Name']}_NAC_Data.csv"))), None)
         if csv_path and csv_path.exists():
             df_job = pd.read_csv(csv_path)
             df_job['Job']  = format_job_label(row['Job_Name'], row['Scientific_Rank'])
@@ -1866,7 +1876,7 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
         if not m:
             continue
         rank = int(m.group(1))
-        nac_csv = next(iter(d.glob(f"*{CFG.SUFFIX_NAC_DATA}")), None)
+        nac_csv = next(iter(sorted(d.glob(f"*{CFG.SUFFIX_NAC_DATA}"))), None)
         mg_csv = (md / f"desmond_md_job_R_{rank}" /
                   f"desmond_md_job_R_{rank}_mmgbsa-prime-out.csv")
         if nac_csv is None:
@@ -3951,6 +3961,30 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     total = len(sampled)
     total_frames_read = len(results)
 
+    """
+    THE BOX CAN SETTLE WHILE THE PROTEIN DOES NOT.
+
+    check_md_equilibration() reads the .ene stream, so it sees the box volume and the temperature and
+    nothing else. A variant that is unfolding — or whose active site is being prised open to swallow a
+    bulky PFAS tail — reaches a stable volume and a stable temperature and passes a barostat-only gate.
+    That is precisely the system the gate exists to reject, and it is the one it cannot see.
+
+    The backbone Ca RMSD is already measured per frame (Kabsch, against the starting structure), so the
+    structural half of the verdict is taken here, where those frames exist: over the sampled window the
+    mean Ca RMSD must be within CFG.MD_EQUIL_CA_RMSD_MAX_A. Equilibration is thermodynamic AND
+    structural, and a run that fails either one is not equilibrated.
+    """
+    _ca_vals = [r["Fold_RMSD_A"] for r in sampled
+                if r.get("Fold_RMSD_A") is not None and r["Fold_RMSD_A"] == r["Fold_RMSD_A"]]
+    _ca_mean = float(np.mean(_ca_vals)) if _ca_vals else float("nan")
+    _ca_ok = bool(np.isfinite(_ca_mean) and _ca_mean <= float(CFG.MD_EQUIL_CA_RMSD_MAX_A))
+    if _equil.get("MD_Equilibrated") is True and _ca_vals and not _ca_ok:
+        console_info(f"    [!] {job_name}: box and thermostat settled, but the BACKBONE did not — "
+                     f"mean Ca RMSD {_ca_mean:.2f} A > {float(CFG.MD_EQUIL_CA_RMSD_MAX_A):.2f} A. "
+                     f"The fold is still moving; not equilibrated.")
+        _equil["MD_Equilibrated"] = False
+    _equil["MD_Equil_CA_RMSD_A"] = round(_ca_mean, 3) if np.isfinite(_ca_mean) else np.nan
+
     # Viability denominators use n_pocket (bound frames), not total frames.
     # Catalytic_Viability_Pct = fraction of BOUND frames that are catalytically
     # competent — the meaningful metric for a pre-reactive ensemble.
@@ -4353,7 +4387,7 @@ def main():
             work_dir.parent / "7_MD_Thermodynamics_Results",
         ]:
             if _scan_root.exists():
-                for _d in _scan_root.iterdir():
+                for _d in sorted(_scan_root.iterdir()):
                     if _d.is_dir():
                         _m = re.search(r'(?:_R_|[Rr]ank[_\s]?)(\d+)', _d.name)
                         if _m:

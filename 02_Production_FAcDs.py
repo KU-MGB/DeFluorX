@@ -530,7 +530,7 @@ COLUMN_RENAMING_MAP = {
     "sn2_trajectory_dev": "SN2_Trajectory_Deviation_A",
     "Mapped_to_Control_All": "Full_Sequence_Alignment_Map",
     "Mapped_to_Control_Cat_Triad": "Active_Site_Triad_Map",
-    "ActiveSite_Conservation_Score": "ActiveSite_Conservation_Score",
+    CFG.COL_LIKE_S: CFG.COL_LIKE_S,
     "Active_Site_RMSD": "Active_Site_RMSD_to_Control",
     "Halide_Stabilisation": "Has_Halide_Stabilisation",
     "Carboxylate_Clamp": "Has_Carboxylate_Clamp"
@@ -551,7 +551,7 @@ DEFAULT_METRICS = {
     "elapsed_seconds": 0.0,
     CFG.COL_TIER: CFG.TIER_DECOY,
     "is_degrader": False,
-    "ActiveSite_Conservation_Score": 0.0,
+    CFG.COL_LIKE_S: 0.0,
     CFG.COL_MECH_S: 0.0,
     "Active_Site_RMSD": 999.0,
     "Identity_to_Control": 0.0,
@@ -698,7 +698,7 @@ def remove_stale_protein_jobs(prod_dir: Path, protein_id: str):
     trash_dir = prod_dir / "9_Trash" / "Jobs"
     trash_dir.mkdir(parents=True, exist_ok=True)
 
-    for item in runs_dir.glob(f"*_{protein_id}_*"):
+    for item in sorted(runs_dir.glob(f"*_{protein_id}_*")):
         if item.is_dir():
             target = trash_dir / f"{item.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             try:
@@ -966,7 +966,7 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
     # 1. Clean designated YAML structures
     yaml_dir = prod_dir / "2_Boltz2_YAML_Configs"
     if yaml_dir.exists():
-        for f in yaml_dir.glob("*.yaml"):
+        for f in sorted(yaml_dir.glob("*.yaml")):
             if f.stem not in active_job_names:
                 f.unlink()
                 yaml_count += 1
@@ -974,7 +974,7 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
     # 2. Remove all active prediction run folders not mathematically associated with active jobs
     runs_dir = prod_dir / "4_Prediction_Jobs"
     if runs_dir.exists():
-        for item in runs_dir.iterdir():
+        for item in sorted(runs_dir.iterdir()):
             if item.name == "Best_Complex": continue # Protects core architectural directories
 
             # Unmatched items are deleted to maintain an error-free workspace
@@ -1043,7 +1043,7 @@ def save_alignment_cache_final(csv_path: Path):
     of which jobs ran this session.
     """
     import ast
-    cols = ["active_site_mapping", "align_score", "gap_count", "identity_pct",
+    cols = ["active_site_mapping", "align_score", "gap_count", CFG.COL_ID_PCT,
             "nuc_rescue_offset", "nuc_resolution", "protein", "seq_length", "target_sequence"]
     jobs_dir = csv_path.parents[2] / "4_Prediction_Jobs"
     if not jobs_dir.is_dir():
@@ -1088,7 +1088,7 @@ def save_alignment_cache_final(csv_path: Path):
             "active_site_mapping": asm,
             "align_score": j.get("align_score", ""),
             "gap_count": j.get("gap_count", ""),
-            "identity_pct": j.get("identity_pct", ""),
+            CFG.COL_ID_PCT: j.get(CFG.COL_ID_PCT, ""),
             "nuc_rescue_offset": j.get("nuc_rescue_offset", ""),
             "nuc_resolution": j.get("nuc_resolution", ""),
             "protein": prot,
@@ -1144,7 +1144,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
 
     if not target_seq or not target_seq.strip():
-        return {}, {"error": "Target Sequence string is empty", "identity_pct": 0.0}, {}, "NA"
+        return {}, {"error": "Target Sequence string is empty", CFG.COL_ID_PCT: 0.0}, {}, "NA"
 
     target_seq = str(target_seq)
 
@@ -1153,7 +1153,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     # -------------------------------------------------------------------------------
     alignments = aligner.align(REF_SEQUENCE_STR, target_seq)
     if not alignments:
-        return {}, {"error": "No viable alignment mapping identified", "identity_pct": 0.0}, {}, "NA"
+        return {}, {"error": "No viable alignment mapping identified", CFG.COL_ID_PCT: 0.0}, {}, "NA"
 
     aln = alignments[0]
 
@@ -1183,7 +1183,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     identity_pct = (n_match / aligned_cols) * 100 if aligned_cols > 0 else 0
 
     stats = {
-        "align_score": aln.score, "identity_pct": round(identity_pct, 2),
+        "align_score": aln.score, CFG.COL_ID_PCT: round(identity_pct, 2),
         "target_sequence": target_seq, "seq_length": len(target_seq),
         "gap_count": seq2_str.count("-")
     }
@@ -3864,7 +3864,7 @@ def load_extra_boltz_metrics(br_dir: Path, model_name: str, prot_len: int, lig_l
     """Parses background statistical validation tensors directly from Boltz NPZ file dumps."""
     out = {}
     try:
-        conf_files = list(br_dir.rglob(f"confidence_*{model_name}.json"))
+        conf_files = list(sorted(br_dir.rglob(f"confidence_*{model_name}.json")))
         if conf_files:
             d = json.loads(conf_files[0].read_text())
             out.update({k: d.get(k) for k in ["iptm", "confidence_score", "ptm", "ligand_iptm", "protein_iptm"]})
@@ -3948,7 +3948,7 @@ def heal_smiles_in_files(job_dir: Path, yaml_path: Path, new_smiles: str, lig_id
             pass
 
     if job_dir.exists():
-        for cif in job_dir.rglob("*.cif"):
+        for cif in sorted(job_dir.rglob("*.cif")):
             try:
                 with open(cif, "r") as f:
                     lines = f.readlines()
@@ -4008,7 +4008,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
     cached_aln = get_cached_alignment_for_protein(job["protein"])
     aln_inject = {
-        "identity_pct": 0.0, "align_score": 0.0,
+        CFG.COL_ID_PCT: 0.0, "align_score": 0.0,
         "Mapped_to_Control_All": "NA", "Mapped_to_Control_Cat_Triad": "NA",
         "Mapped_Nucleophile": "NA", "Mapped_Base": "NA", "Mapped_Acid": "NA",
         "Mapped_Clamp1": "NA", "Mapped_Clamp2": "NA",
@@ -4016,7 +4016,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     }
     if cached_aln:
         aln_inject.update({
-            "identity_pct": cached_aln.get("identity_pct", 0.0),
+            CFG.COL_ID_PCT: cached_aln.get(CFG.COL_ID_PCT, 0.0),
             "align_score": cached_aln.get("align_score", 0.0),
             "Mapped_to_Control_All": cached_aln.get("Mapped_to_Control_All", "NA"),
             "Mapped_to_Control_Cat_Triad": cached_aln.get("Mapped_to_Control_Cat_Triad", "NA")
@@ -4034,7 +4034,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     data["job_name"] = name
     data["job_index"] = jid
 
-    br_dir = next((p for p in job_dir.iterdir() if p.is_dir() and p.name.startswith("boltz_results_")), None)
+    br_dir = next((p for p in sorted(job_dir.iterdir()) if p.is_dir() and p.name.startswith("boltz_results_")), None)
     prediction_exists = False
     if br_dir and (br_dir / "predictions").exists():
         """
@@ -4073,7 +4073,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         if logger: logger.debug(f"[SKIP] {name} — pre-existing prediction found, proceeding to analytics.")
 
     if run_gpu:
-        br_dir_check = next((p for p in job_dir.iterdir() if p.is_dir() and p.name.startswith("boltz_results_")), None)
+        br_dir_check = next((p for p in sorted(job_dir.iterdir()) if p.is_dir() and p.name.startswith("boltz_results_")), None)
         if br_dir_check and br_dir_check.exists(): shutil.rmtree(br_dir_check)
 
         if gpu_queue is not None:
@@ -4138,7 +4138,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         if not success: return None, gpu_idx
         data["elapsed_seconds"] = time.time() - start_time
 
-    br_dir = next((p for p in job_dir.iterdir() if p.is_dir() and p.name.startswith("boltz_results_")), None)
+    br_dir = next((p for p in sorted(job_dir.iterdir()) if p.is_dir() and p.name.startswith("boltz_results_")), None)
 
     # -------------------------------------------------------------------------------
     # Sub-Step 9.3.2: Execution Physics & Structural Topology Engine (CPU)
@@ -4162,7 +4162,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         data["Mapped_to_Control_All"] = map_all_str
         data["Mapped_to_Control_Cat_Triad"] = map_triad_str
         data.update(format_full_role_map(resname_map))
-        data["alignment_reliable"] = data.get("identity_pct", 0) >= CFG.ALIGN_MIN_SEQ_IDENTITY
+        data["alignment_reliable"] = data.get(CFG.COL_ID_PCT, 0) >= CFG.ALIGN_MIN_SEQ_IDENTITY
 
         _nuc_off = int(aln_stats.get("nuc_rescue_offset", 0))
         if br_dir:
@@ -4170,8 +4170,8 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             data["best_model_name"] = best_model
             data.update(best_meta)
         else:
-            cifs = list(best_complex_dir.glob("*.cif"))
-            if not cifs: cifs = list(job_dir.glob("*.cif"))
+            cifs = sorted(best_complex_dir.glob("*.cif"))
+            if not cifs: cifs = sorted(job_dir.glob("*.cif"))
             if cifs:
                 best_model = "model_0"
                 if "model_" in cifs[0].name:
@@ -4226,12 +4226,12 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         if br_dir:
             cif_path = br_dir / "predictions" / name / f"{name}_{data.get('best_model_name','model_0')}.cif"
             if not cif_path.exists():
-                cands = list(br_dir.rglob(f"*{data.get('best_model_name')}.cif"))
+                cands = sorted(br_dir.rglob(f"*{data.get('best_model_name')}.cif"))
                 if cands: cif_path = cands[0]
 
         if not cif_path:
-             cifs = list(best_complex_dir.glob("*.cif"))
-             if not cifs: cifs = list(job_dir.glob("*.cif"))
+             cifs = sorted(best_complex_dir.glob("*.cif"))
+             if not cifs: cifs = sorted(job_dir.glob("*.cif"))
              if cifs: cif_path = cifs[0]
 
         if cif_path and cif_path.exists():
@@ -4326,9 +4326,9 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
             base_justification = generate_rich_justification(
                 tier=tier, meaning=scientific_meaning, constraint=constraint,
-                aligned_ok=data.get("alignment_reliable", False), identity=data.get("identity_pct", 0.0)
+                aligned_ok=data.get("alignment_reliable", False), identity=data.get(CFG.COL_ID_PCT, 0.0)
             )
-            data["Justification"] = f"{base_justification} | Tier: {tier} | ID: {data.get('identity_pct', 0)}%"
+            data["Justification"] = f"{base_justification} | Tier: {tier} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
             # -------------------------------------------------------------------------------
             # SUPERIMPOSITION & LIKELIHOOD SCORING ARCHITECTURE
@@ -4340,7 +4340,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 mech_res = analyse_candidate_structure(cif_path, control_cif, control_map, target_map=mapped)
                 data.update(mech_res)
 
-                ident = data.get("identity_pct", 0.0)
+                ident = data.get(CFG.COL_ID_PCT, 0.0)
                 data["Identity_to_Control"] = round(ident, 2)
 
                 rmsd = data.get("Active_Site_RMSD", 999.0)
@@ -4390,7 +4390,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 else:
                     data["active_site_contact_flag"] = 0.0
 
-                data["ActiveSite_Conservation_Score"] = round(max(0, min(100, likelihood)), 2)
+                data[CFG.COL_LIKE_S] = round(max(0, min(100, likelihood)), 2)
 
                 # ----------------------------------------------------------------------
                 # Criterion B — precise catalytic constellation.
@@ -4436,13 +4436,13 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                         tier=_ceiling, meaning=_meaning,
                         constraint=data.get("constraint_check", "Fail"),
                         aligned_ok=data.get("alignment_reliable", False),
-                        identity=data.get("identity_pct", 0.0)
-                    ) + f" | Tier: {_ceiling} | ID: {data.get('identity_pct', 0)}%"
+                        identity=data.get(CFG.COL_ID_PCT, 0.0)
+                    ) + f" | Tier: {_ceiling} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
             if r3u_cif and r3u_cif.exists() and r3u_map:
                 _r3u = analyse_candidate_structure(cif_path, r3u_cif, r3u_map)
                 _r3u_rmsd  = _r3u.get("Active_Site_RMSD", 99.0)
-                _r3u_ident = float(data.get("identity_pct", 0.0))
+                _r3u_ident = float(data.get(CFG.COL_ID_PCT, 0.0))
                 _r3u_geo   = 0.0 if _r3u_rmsd >= 99.0 else 100.0 / (1.0 + _r3u_rmsd)
                 data["r3u_Active_Site_RMSD"]              = _r3u_rmsd
                 data["r3u_Halide_Stabilisation"]          = _r3u.get("Halide_Stabilisation", False)
@@ -4494,7 +4494,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             if br_dir:
                 cif_src = br_dir / "predictions" / name / f"{name}_{best_model}.cif"
                 if not cif_src.exists():
-                    cands = list(br_dir.rglob(f"*{best_model}.cif"))
+                    cands = list(sorted(br_dir.rglob(f"*{best_model}.cif")))
                     if cands: cif_src = cands[0]
 
             if cif_src and cif_src.exists():
@@ -4517,7 +4517,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     # -------------------------------------------------------------------------------
     # Sub-Step 9.3.5: Return Valid Data For Previously Completed Jobs
     # -------------------------------------------------------------------------------
-    if "identity_pct" not in data or data.get("identity_pct", 0) == 0:
+    if CFG.COL_ID_PCT not in data or data.get(CFG.COL_ID_PCT, 0) == 0:
         _persist_aln = job["protein"] not in _PERSISTED_PROTEINS
         mapped, aln_stats, resname_map, map_all_str = map_active_site_residues(
              job["protein"], job["sequence"],
@@ -4560,7 +4560,7 @@ CSV_COLUMN_ORDER = [
     "status", "completed_at", "elapsed_seconds",
     # --- Primary degrader scores ---
     CFG.COL_TIER, "is_degrader",
-    "ActiveSite_Conservation_Score",
+    CFG.COL_LIKE_S,
     # --- Confidence scores ---
     "confidence_score", "iptm", "ptm", "ligand_iptm", "protein_iptm",
     "mean_plddt", "cross_interface_pae_mean",
@@ -4592,7 +4592,7 @@ CSV_COLUMN_ORDER = [
     "Total_Pos_Residues", "Total_Neg_Residues", "Total_Aromatic_Residues",
     "interacting_fluorine_count", "total_fluorine_count",
     # --- Sequence / alignment ---
-    "identity_pct", "align_score", "seq_length", "gap_count",
+    CFG.COL_ID_PCT, "align_score", "seq_length", "gap_count",
     "alignment_reliable", "target_sequence",
     # --- Active site mapping ---
     # Mapped_* = the ACTUAL per-protein residue resolved for each role (±5 class-aware
@@ -4648,7 +4648,7 @@ def rebuild_best_complexes_mirror(runs_dir: Path, run_root: Path) -> int:
 
     _tty_write("\r   Listing job folders ...   \033[K")
     sys.stdout.flush()
-    job_dirs = [d for d in runs_dir.iterdir() if d.is_dir()] if runs_dir.exists() else []
+    job_dirs = [d for d in sorted(runs_dir.iterdir()) if d.is_dir()] if runs_dir.exists() else []
     n_dirs = len(job_dirs)
 
     # Collect (src, dst) pairs in parallel — each dir check is independent I/O
@@ -4662,7 +4662,7 @@ def rebuild_best_complexes_mirror(runs_dir: Path, run_root: Path) -> int:
         local_copy = []
         local_total = 0
         if bc_dir.exists():
-            for cif in bc_dir.glob("*.cif"):
+            for cif in sorted(bc_dir.glob("*.cif")):
                 local_total += 1
                 dst = dest_dir / cif.name
                 if not (dst.exists() and dst.stat().st_size == cif.stat().st_size):
@@ -4787,7 +4787,7 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
     '''
     console_info("   Walking job folders on disk (USB; ~1–2 min for 58k jobs, silent if outputs were wiped)...")
     json_files = []
-    for _scanned in runs_dir.rglob("*_summary.json"):
+    for _scanned in sorted(runs_dir.rglob("*_summary.json")):
         json_files.append(_scanned)
         if len(json_files) % 2000 == 0:
             _tty_write(f"\r   Scanning job folders: {len(json_files):,} summaries found ...   \033[K")
@@ -4861,7 +4861,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
         if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
             df_rank = pd.read_csv(CSV_PATH, low_memory=False)
 
-            for c in ["ActiveSite_Conservation_Score", CFG.COL_MECH_S, "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
+            for c in [CFG.COL_LIKE_S, CFG.COL_MECH_S, "competence_score", "catalytic_constellation_score", "model_degrader_consensus"]:
                 if c not in df_rank.columns: df_rank[c] = 0.0
             if CFG.COL_TIER not in df_rank.columns: df_rank[CFG.COL_TIER] = CFG.TIER_DECOY
 
@@ -4886,7 +4886,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             for reference but not sorted on. mergesort keeps the order stable and reproducible.
             """
             df_rank = df_rank.sort_values(
-                by=["tier_val", "competence_score", "catalytic_constellation_score", "ActiveSite_Conservation_Score", "model_degrader_consensus"],
+                by=["tier_val", "competence_score", "catalytic_constellation_score", CFG.COL_LIKE_S, "model_degrader_consensus"],
                 ascending=[False, False, False, False, False],
                 kind="mergesort",
             )
@@ -4989,7 +4989,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 "Tier:"  + df_rank[CFG.COL_TIER].astype(str)
                 + " | Competence:" + df_rank["competence_score"].map("{:.3f}".format)
                 + " | Consensus:" + df_rank["model_degrader_consensus"].map("{:.2f}".format)
-                + " | Cons:" + df_rank["ActiveSite_Conservation_Score"].map("{:.2f}".format)
+                + " | Cons:" + df_rank[CFG.COL_LIKE_S].map("{:.2f}".format)
             )
             '''
             Honest-claim disclaimer (carried on every row). The tiers/is_degrader flag are
@@ -5146,7 +5146,7 @@ def main():
 
     for d in [D_IN, D_YAML, D_RUNS, D_COLABFOLD, D_ALN]: d.mkdir(parents=True, exist_ok=True)
 
-    initial_folders_count = len([d for d in D_RUNS.iterdir() if d.is_dir()]) if D_RUNS.exists() else 0
+    initial_folders_count = len([d for d in sorted(D_RUNS.iterdir()) if d.is_dir()]) if D_RUNS.exists() else 0
     removed_folders_count = 0
 
     ts_now = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -5418,14 +5418,14 @@ def main():
         artifacts are removed so changed parameters take full effect.
         """
         console_info("Wiping per-job analysis outputs for full re-analysis...")
-        _wipe_dirs = [d for d in D_RUNS.iterdir() if d.is_dir() and d.name[0].isdigit()]
+        _wipe_dirs = [d for d in sorted(D_RUNS.iterdir()) if d.is_dir() and d.name[0].isdigit()]
         _wiped = [0]
 
         def _wipe_one(d):
-            for f in d.glob("*_summary.json"):
+            for f in sorted(d.glob("*_summary.json")):
                 try: f.unlink()
                 except Exception: pass
-            for f in d.glob("*_interactions.csv"):
+            for f in sorted(d.glob("*_interactions.csv")):
                 try: f.unlink()
                 except Exception: pass
             bc = d / "Best_Complex"
@@ -5449,7 +5449,7 @@ def main():
         resume writes a new timestamped ranked CSV and downstream steps pick the
         newest by mtime, so prior results are preserved as history.
         '''
-        for _old_csv in PROD.glob("*_Master*.csv"):
+        for _old_csv in sorted(PROD.glob("*_Master*.csv")):
             try: _old_csv.unlink()
             except Exception: pass
 
@@ -5502,7 +5502,7 @@ def main():
         console_info(f"  [{_ctrl_idx[0]}/{_n_ctrl_total}]  DeHa4 × {_lig_short_name:<18}  →  {_ctrl_name}")
         _ctrl_res, _ = process_single_job(_ctrl_task, PROD, 5, 0.0, D_ALN, None, {}, "", None)
         ctrl_results[_lig_name] = _ctrl_res or {}
-        _cifs = list((D_RUNS / _ctrl_name).glob("**/*.cif"))
+        _cifs = sorted((D_RUNS / _ctrl_name).glob("**/*.cif"))
         if _cifs:
             _ctrl_summary_p = D_RUNS / _ctrl_name / f"{_ctrl_name}_summary.json"
             _cached_ts = None
@@ -5580,7 +5580,7 @@ def main():
                     _rmsd = _deha4_recalc.get("Active_Site_RMSD", 99.0)
                     ctrl_results[_lig_name]["Active_Site_RMSD"] = _rmsd
                     _geo = 0.0 if _rmsd >= 99.0 else 100.0 / (1.0 + _rmsd)
-                    ctrl_results[_lig_name]["ActiveSite_Conservation_Score"] = round(CFG.CONSERV_REF_W_IDENT * 100.0 + CFG.CONSERV_REF_W_GEO * _geo, 2)
+                    ctrl_results[_lig_name][CFG.COL_LIKE_S] = round(CFG.CONSERV_REF_W_IDENT * 100.0 + CFG.CONSERV_REF_W_GEO * _geo, 2)
             except Exception as _recalc_err:
                 console_info(f"  [Warning] DeHa4 control re-analysis failed for {_lig_name}: {_recalc_err}")
 
@@ -5628,7 +5628,7 @@ def main():
                 _r3u_task, PROD, 5, 0.0, D_ALN, control_cif, control_map, DEHA4_CONTROL_SEQ, None, None
             )
             r3u_results[_lig_name] = _r3u_res or {}
-            _r3u_cifs = list((D_RUNS / _r3u_name).glob("**/*.cif"))
+            _r3u_cifs = sorted((D_RUNS / _r3u_name).glob("**/*.cif"))
             if _r3u_cifs:
                 _r3u_summary_p = D_RUNS / _r3u_name / f"{_r3u_name}_summary.json"
                 _r3u_cached_ts = None
@@ -5730,7 +5730,7 @@ def main():
             _row("Pocket Containment (cavity)", "pocket_containment_cavity",     fmt="{:.2f}", unit="")
             _row("Pocket Containment (site-8)", "pocket_containment_site8",      fmt="{:.2f}", unit="")
             _row("Feasibility-wtd Mech (tier)", "mechanistic_score_effective",   fmt="{:.2f}", unit="")
-            _row("Active Site Conservation Score",  "ActiveSite_Conservation_Score",     fmt="{:.2f}", unit="%")
+            _row("Active Site Conservation Score",  CFG.COL_LIKE_S,     fmt="{:.2f}", unit="%")
             _row("Boltz-2 Confidence",         "confidence_score",              fmt="{:.4f}", unit="")
             console_info(f"  {'─'*_tot}")
 
@@ -5762,7 +5762,7 @@ def main():
                     _TIER_RANK.get(x[1].get(CFG.COL_TIER, CFG.TIER_DECOY), 0),
                     float(x[1].get("competence_score") or 0.0),
                     float(x[1].get("catalytic_constellation_score") or 0.0),
-                    float(x[1].get("ActiveSite_Conservation_Score") or 0.0),
+                    float(x[1].get(CFG.COL_LIKE_S) or 0.0),
                     float(x[1].get("model_degrader_consensus") or 0.0),
                 ),
                 reverse=True
@@ -5900,7 +5900,7 @@ def main():
                         try: bad_f.unlink()
                         except Exception: pass
         from concurrent.futures import ThreadPoolExecutor as _TPE
-        _bc_dirs = list(D_RUNS.iterdir())
+        _bc_dirs = list(sorted(D_RUNS.iterdir()))
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), len(_bc_dirs) or 1)) as _ex:
             list(_ex.map(_standardize_bc, _bc_dirs))
         _tty_write("\r -> Complete standardisation of pre-existing designated folder structures finished successfully.\033[K\n")
@@ -6100,7 +6100,7 @@ def main():
                     while time.time() - start < 900:
                         if proc.poll() is not None: break
                         if job_msa_dir.exists():
-                            a3ms = list(job_msa_dir.rglob("*.a3m"))
+                            a3ms = sorted(job_msa_dir.rglob("*.a3m"))
                             if a3ms and a3ms[0].stat().st_size > 500:
                                 if validate_a3m_file(a3ms[0]):
                                     # Atomic publish: copy to a temp file in the same
@@ -6139,7 +6139,7 @@ def main():
                             proc.kill()
 
                     if not found and job_msa_dir.exists():
-                        a3ms = list(job_msa_dir.rglob("*.a3m"))
+                        a3ms = sorted(job_msa_dir.rglob("*.a3m"))
                         if a3ms: shutil.copy2(a3ms[0], a3m_path)
 
                     shutil.rmtree(job_msa_dir, ignore_errors=True)
@@ -6231,7 +6231,7 @@ def main():
                     job_map[chunk_yaml.stem] = job
                     job_run_dir = D_RUNS / job_name
                     if job_run_dir.exists():
-                        for old_res in job_run_dir.glob("boltz_results_*"):
+                        for old_res in sorted(job_run_dir.glob("boltz_results_*")):
                             if old_res.is_dir(): shutil.rmtree(old_res, ignore_errors=True)
 
             cmd = [
@@ -6255,7 +6255,7 @@ def main():
                     _salvage_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
                     if _salvage_res_dir and (_salvage_res_dir / "predictions").exists():
                         _salvaged = set()
-                        for _pred_dir in (_salvage_res_dir / "predictions").iterdir():
+                        for _pred_dir in sorted((_salvage_res_dir / "predictions").iterdir()):
                             _stem = _pred_dir.name
                             if _stem not in job_map or not _pred_dir.is_dir():
                                 continue
@@ -6265,13 +6265,13 @@ def main():
                             _dst_pred = _dst_root / "predictions" / _stem
                             try:
                                 _dst_pred.mkdir(parents=True, exist_ok=True)
-                                for _f in _pred_dir.iterdir():
+                                for _f in sorted(_pred_dir.iterdir()):
                                     shutil.move(str(_f), str(_dst_pred / _f.name))
                                 for _cat in ["constraints", "mols", "msa", "records", "structures"]:
                                     _src_cat = _salvage_res_dir / "processed" / _cat
                                     if _src_cat.exists():
                                         for _ext in [".json", ".npz", ".pkl", ".csv"]:
-                                            for _m in _src_cat.glob(f"{_stem}*{_ext}"):
+                                            for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
                                                 _d = _dst_root / "processed" / _cat
                                                 _d.mkdir(parents=True, exist_ok=True)
                                                 shutil.move(str(_m), str(_d / _m.name))
@@ -6322,7 +6322,7 @@ def main():
                             # --- Incremental move: pick up finished predictions every 5 s ---
                             _res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None) if protein_batch_out.exists() else None
                             if _res_dir and (_res_dir / "predictions").exists():
-                                for _pred_dir in list((_res_dir / "predictions").iterdir()):
+                                for _pred_dir in sorted((_res_dir / "predictions").iterdir()):
                                     _stem = _pred_dir.name
                                     if not _pred_dir.is_dir() or _stem in _moved_stems or _stem not in job_map:
                                         continue
@@ -6337,13 +6337,13 @@ def main():
                                     _dst_pred = _dst_root / "predictions" / _stem
                                     try:
                                         _dst_pred.mkdir(parents=True, exist_ok=True)
-                                        for _f in list(_pred_dir.iterdir()):
+                                        for _f in list(sorted(_pred_dir.iterdir())):
                                             shutil.move(str(_f), str(_dst_pred / _f.name))
                                         for _cat in ["constraints", "mols", "msa", "records", "structures"]:
                                             _src_cat = _res_dir / "processed" / _cat
                                             if _src_cat.exists():
                                                 for _ext in [".json", ".npz", ".pkl", ".csv"]:
-                                                    for _m in _src_cat.glob(f"{_stem}*{_ext}"):
+                                                    for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
                                                         _d = _dst_root / "processed" / _cat
                                                         _d.mkdir(parents=True, exist_ok=True)
                                                         shutil.move(str(_m), str(_d / _m.name))
@@ -6383,7 +6383,7 @@ def main():
                         failed_jobs   = []
 
                         if total_res_dir and (total_res_dir / "predictions").exists():
-                            all_pred_folders = [d.name for d in (total_res_dir / "predictions").iterdir() if d.is_dir()]
+                            all_pred_folders = [d.name for d in sorted((total_res_dir / "predictions").iterdir()) if d.is_dir()]
                         else:
                             all_pred_folders = []
 
@@ -6435,7 +6435,7 @@ def main():
                                 if not src_pred.exists():
                                     pred_base = total_res_dir / "predictions"
                                     if pred_base.exists():
-                                        matches = [d for d in pred_base.iterdir()
+                                        matches = [d for d in sorted(pred_base.iterdir())
                                                    if d.is_dir() and (job["ligand"] in d.name or stem in d.name)]
                                         if matches:
                                             src_pred = matches[0]
@@ -6448,13 +6448,13 @@ def main():
                                 if src_pred.exists():
                                     try:
                                         dst_pred_dir.mkdir(parents=True, exist_ok=True)
-                                        for f in src_pred.iterdir():
+                                        for f in sorted(src_pred.iterdir()):
                                             shutil.move(str(f), str(dst_pred_dir / f.name))
                                         for cat in ["constraints", "mols", "msa", "records", "structures"]:
                                             src_cat = total_res_dir / "processed" / cat
                                             if src_cat.exists():
                                                 for ext in [".json", ".npz", ".pkl", ".csv"]:
-                                                    for m in src_cat.glob(f"{stem}*{ext}"):
+                                                    for m in sorted(src_cat.glob(f"{stem}*{ext}")):
                                                         dst_cat_dir = dst_boltz_root / "processed" / cat
                                                         dst_cat_dir.mkdir(parents=True, exist_ok=True)
                                                         shutil.move(str(m), str(dst_cat_dir / m.name))
@@ -6738,13 +6738,13 @@ def main():
             letter grades A–I using CFG-defined bins — replaces per-job
             if-elif logic that would otherwise execute 58k+ times.
             """
-            if "identity_pct" in df.columns:
+            if CFG.COL_ID_PCT in df.columns:
                 df["Alignment_Score_Pct"] = (
-                    pd.to_numeric(df["identity_pct"], errors="coerce")
+                    pd.to_numeric(df[CFG.COL_ID_PCT], errors="coerce")
                     .fillna(0.0)
                     .clip(0, 100)
                 )
-                df["Alignment_Grade"] = pd.cut(
+                df[CFG.COL_ALN_G] = pd.cut(
                     df["Alignment_Score_Pct"],
                     bins=CFG.ALIGN_GRADE_BINS,
                     labels=CFG.ALIGN_GRADE_LABELS,
@@ -6774,7 +6774,7 @@ def main():
     console_info(" \n ✔ Summary of Validated Operational Disk Files-")
 
     yaml_count = len(list(D_YAML.glob("*.yaml")))
-    job_count = len([d for d in D_RUNS.iterdir() if d.is_dir()])
+    job_count = len([d for d in sorted(D_RUNS.iterdir()) if d.is_dir()])
     aln_count = len(list(D_ALN.glob("*.txt")))
 
     str_in   = f"({len(proteins)} Seq, {len(ligands)} Lig)"

@@ -242,7 +242,7 @@ def index_existing_files(directory: Path, suffix: str) -> dict:
     index = {}
     if not directory.exists(): return index
 
-    for f in directory.glob(f"*{suffix}"):
+    for f in sorted(directory.glob(f"*{suffix}")):
         try:
             parts = f.name.split("_")
             if parts and parts[0].isdigit():
@@ -267,7 +267,7 @@ def collect_best_cifs(best_cifs_dir: Path) -> list:
     keeps the most recently modified one.
     """
     latest_cifs = {}
-    for cif_path in best_cifs_dir.glob("*.cif"):
+    for cif_path in sorted(best_cifs_dir.glob("*.cif")):
         job_name = re.sub(r"_model_\d+$", "", cif_path.stem)
         mtime = cif_path.stat().st_mtime
         if job_name not in latest_cifs or mtime > latest_cifs[job_name][1]:
@@ -865,7 +865,7 @@ def load_reference_data(input_data_dir: Path):
                 console_info(f"Warning: Could not parse FASTA {f.name}: {e}")
 
     # 2. Load SMILES
-    for s in input_data_dir.glob("*.smi"):
+    for s in sorted(input_data_dir.glob("*.smi")):
         try:
             with open(s) as f:
                 for line in f:
@@ -949,7 +949,7 @@ def load_metadata(ext_dir: Path):
     """Populates METADATA_CACHE from any *_Scientific_Data.csv found under ext_dir."""
     try:
         import pandas as pd
-        for csv in ext_dir.rglob("*_Scientific_Data.csv"):
+        for csv in sorted(ext_dir.rglob("*_Scientific_Data.csv")):
             try:
                 df = pd.read_csv(csv)
                 for _, row in df.iterrows():
@@ -2165,10 +2165,10 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
         fig_dir = d / "Figures"
         if not fig_dir.exists():
             continue
-        for tool_dir in fig_dir.iterdir():
+        for tool_dir in sorted(fig_dir.iterdir()):
             if not tool_dir.is_dir() or tool_dir.name == "Figure_Logs":
                 continue
-            for item in list(tool_dir.iterdir()):
+            for item in list(sorted(tool_dir.iterdir())):
                 if item.is_file() and item.suffix.lower() not in _keep_ext:
                     item.unlink(missing_ok=True)
         logs = fig_dir / "Figure_Logs"
