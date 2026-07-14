@@ -88,7 +88,6 @@ import zipfile
 import re
 import traceback
 from pathlib import Path
-from datetime import datetime
 from collections import Counter
 
 # -------------------------------------------------------------------------------
@@ -673,7 +672,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
     <!-- Tooltip & Color Palette -->
     <div id="tooltip" class="tooltip"></div>
-    <div id="color-palette" class="absolute hidden bg-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] border border-slate-200 rounded-md p-2 z-50 flex flex-wrap w-36 gap-1.5 cursor-pointer"></div>
+    <div id="colour-palette" class="absolute hidden bg-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] border border-slate-200 rounded-md p-2 z-50 flex flex-wrap w-36 gap-1.5 cursor-pointer"></div>
 
     <script>
         function parseNewick(a) {
@@ -713,7 +712,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
         const svg = d3.select("#dendrogram-svg");
         const container = document.getElementById('canvas-container');
         const tooltip = d3.select("#tooltip");
-        const colorPalette = document.getElementById('color-palette');
+        const colorPalette = document.getElementById('colour-palette');
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
 
