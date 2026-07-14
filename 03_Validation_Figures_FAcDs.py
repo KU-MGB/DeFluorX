@@ -7503,6 +7503,211 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         reporter.log(f"  ! Diag 09 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
+    _diag10_model_agreement(df, out_dir, reporter)
+    _diag11_angle_multiplicity(df, out_dir, reporter)
+
+
+def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
+    """
+    Diagnostic 10 — does the diffusion ensemble AGREE about the elite hits?
+
+    Every complex is predicted several times (CFG.BOLTZ_DIFFUSION_SAMPLES independent diffusion
+    samples). model_degrader_consensus is the fraction of those samples that independently reach a
+    degrader tier. It answers the question the tier alone cannot: is a Tier_1A hit a reproducible
+    property of the protein-ligand pair, or one lucky sample out of five?
+
+    This matters more than it looks. The tier is assigned to the single representative pose, so a
+    complex whose consensus is 0.2 got its elite label from ONE sample while four others disagreed —
+    a coin-flip dressed as a result. If the elite tiers are not consensus-backed, the headline claim
+    is a sampling artefact, and the reader is entitled to see that in a figure rather than infer it.
+
+    Drawn as the consensus distribution per tier (violin + quartile box) with the per-tier mean
+    annotated, so a tier whose hits are unanimous is visibly separated from one whose hits are not.
+    """
+    try:
+        _c10 = "model_degrader_consensus"
+        if _c10 not in df.columns or CFG.COL_TIER not in df.columns:
+            reporter.log(f"  ! Diag 10 skipped: needs {_c10} + {CFG.COL_TIER}")
+            return
+        d10 = df[[_c10, CFG.COL_TIER]].copy()
+        d10[_c10] = pd.to_numeric(d10[_c10], errors="coerce")
+        d10 = d10.dropna(subset=[_c10])
+        _t10 = [t for t in CFG.TIER_ORDER if (d10[CFG.COL_TIER] == t).sum() >= 3]
+        if not _t10:
+            reporter.log("  ! Diag 10 skipped: no tier with ≥3 complexes")
+            return
+
+        fig, ax = plt.subplots(figsize=(11, 6))
+        _data10 = [d10.loc[d10[CFG.COL_TIER] == t, _c10].to_numpy() for t in _t10]
+        _pos10 = np.arange(len(_t10))
+        _vp10 = ax.violinplot(_data10, positions=_pos10, widths=0.8,
+                              showmeans=False, showextrema=False)
+        for _b10, _t in zip(_vp10["bodies"], _t10):
+            _b10.set_facecolor(TIER_PALETTE.get(_t, "#999"))
+            _b10.set_alpha(0.55)
+            _b10.set_edgecolor("#333")
+            _b10.set_linewidth(0.7)
+        _bp10 = ax.boxplot(_data10, positions=_pos10, widths=0.16, showfliers=False,
+                           patch_artist=True, medianprops=dict(color="black", linewidth=1.4))
+        for _b in _bp10["boxes"]:
+            _b.set(facecolor="white", alpha=0.9, edgecolor="#333", linewidth=0.8)
+
+        for _i10, (_t, _v10) in enumerate(zip(_t10, _data10)):
+            _m10 = float(np.mean(_v10))
+            ax.scatter([_i10], [_m10], marker="D", s=42, color="#B8860B",
+                       edgecolor="white", linewidths=0.7, zorder=6)
+            ax.text(_i10, 1.04, f"{_m10:.2f}\nn={len(_v10):,}", ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold", color=TIER_PALETTE.get(_t, "#333"))
+
+        ax.axhline(0.5, ls=":", lw=1.2, color="#777", zorder=2)
+        ax.text(len(_t10) - 0.45, 0.51, "majority of samples agree", ha="right", va="bottom",
+                fontsize=7.5, color="#777", style="italic")
+        ax.set_xticks(_pos10)
+        ax.set_xticklabels(_t10, rotation=30, ha="right", fontsize=9)
+        for _tk, _t in zip(ax.get_xticklabels(), _t10):
+            _tk.set_color(TIER_PALETTE.get(_t, "black")); _tk.set_fontweight("bold")
+        ax.set_ylim(0, 1.18)
+        ax.set_yticks(np.arange(0, 1.01, 0.2))
+        ax.set_ylabel("Diffusion-sample consensus\n(fraction of samples independently reaching a degrader tier)",
+                      fontsize=10)
+        ax.set_xlabel("Degrader Tier", fontsize=11)
+        ax.yaxis.grid(True, ls=":", alpha=0.35)
+        ax.set_axisbelow(True)
+        _md10 = _md_ready_df(df)
+        if not _md10.empty and _c10 in _md10.columns:
+            for _t, _g in _md10.groupby(_md10[CFG.COL_TIER].astype(str)):
+                if _t not in _t10:
+                    continue
+                _x10 = _t10.index(_t)
+                _y10 = pd.to_numeric(_g[_c10], errors="coerce").dropna()
+                if len(_y10):
+                    ax.scatter(np.full(len(_y10), _x10), _y10.to_numpy(),
+                               **({**_MD_STAR_KW, "s": 200}))
+        plt.tight_layout()
+        _o = out_dir / "10_Model_Agreement.png"
+        fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
+        reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+    except Exception as e:                                   # noqa: BLE001
+        reporter.log(f"  ! Diag 10 skipped: {e}")
+        plt.close("all")
+
+
+def _diag11_angle_multiplicity(df: pd.DataFrame, out_dir: Path, reporter) -> None:
+    """
+    Diagnostic 11 — the multiplicity correction, made visible.
+
+    A poly-fluorinated attack carbon gets more than one chance at a near-linear backside angle: an
+    α-CF3 has three equivalent C–F bonds about the Cα–COO⁻ axis, so rotate the head group and SOME
+    fluorine lands roughly opposite the nucleophile. Fluoroacetate has one C–F and must be oriented
+    exactly. Left uncorrected, that best-of-N buys a CF3 substrate a better tier than the native
+    substrate on the very enzyme that cannot turn it over.
+
+    The tier ladder therefore gates on the EFFECTIVE angle (CFG §5.2d) — the angle a single-C–F
+    substrate would have to show to be equally improbable. This figure plots raw against effective:
+    a mono-fluoro substrate sits exactly on the identity line, a CF2 bends away, a CF3 falls hard,
+    and a genuinely near-ideal pose of any chemotype stays close to the line. It shows in one panel
+    why a mediocre CF3 pose loses its tier while an exceptional one keeps it.
+
+    The scissile fluorine count is taken from the reported column when present, and otherwise
+    recovered from the scissile C–F bond-dissociation energy, which is a direct function of it
+    (1 F ≈ 109.9, 2 F ≈ 119.5, 3 F ≈ 127.5 kcal/mol).
+    """
+    try:
+        if "SN2_Attack_Angle" not in df.columns:
+            reporter.log("  ! Diag 11 skipped: needs SN2_Attack_Angle")
+            return
+        d11 = df.copy()
+        _raw11 = pd.to_numeric(d11["SN2_Attack_Angle"], errors="coerce")
+
+        if "angle_multiplicity" in d11.columns:
+            _nf11 = pd.to_numeric(d11["angle_multiplicity"], errors="coerce")
+        elif "scissile_cf_bde" in d11.columns:
+            _bde11 = pd.to_numeric(d11["scissile_cf_bde"], errors="coerce")
+            _nf11 = pd.cut(_bde11, bins=[-np.inf, 114.0, 123.5, np.inf],
+                           labels=[1, 2, 3]).astype("float")
+        else:
+            reporter.log("  ! Diag 11 skipped: no fluorine-count source")
+            return
+
+        _eff11 = pd.Series(
+            [CFG.sn2_effective_angle(float(a), int(n)) if (a == a and n == n) else np.nan
+             for a, n in zip(_raw11, _nf11)], index=d11.index)
+
+        m11 = pd.DataFrame({"raw": _raw11, "eff": _eff11, "nF": _nf11,
+                            "tier": d11[CFG.COL_TIER].astype(str)}).dropna()
+        m11 = m11[(m11.raw > 0) & (m11.nF >= 1)]
+        if m11.empty:
+            reporter.log("  ! Diag 11 skipped: no scorable poses")
+            return
+
+        fig, ax = plt.subplots(figsize=(11, 7.5))
+        _fcol11 = {1: "#1B7F5C", 2: "#E8A33D", 3: "#C0392B"}
+        _flab11 = {1: "1 F  (mono-fluoro · e.g. fluoroacetate)",
+                   2: "2 F  (CF₂ · e.g. difluoroacetate)",
+                   3: "3 F  (CF₃ · e.g. TFA)"}
+        for _n11 in (1, 2, 3):
+            _s11 = m11[m11.nF == _n11]
+            if _s11.empty:
+                continue
+            ax.scatter(_s11.raw, _s11.eff, s=9, alpha=0.30, linewidths=0,
+                       color=_fcol11[_n11], label=f"{_flab11[_n11]}   (n={len(_s11):,})")
+
+        _lo11 = float(max(90.0, m11.eff.min() - 5))
+        ax.plot([_lo11, 180], [_lo11, 180], ls="--", lw=1.4, color="#444", zorder=5)
+        ax.text(179, 179, "no correction\n(1 C–F)", ha="right", va="top",
+                fontsize=7.5, color="#444", style="italic")
+
+        # The gate the correction actually moves complexes across.
+        _a1a = CFG.TIER_ANGLE_MIN[CFG.TIER_TOP]
+        ax.axhline(_a1a, ls=":", lw=1.5, color=TIER_PALETTE.get(CFG.TIER_TOP, "#1B7F5C"), zorder=4)
+        ax.text(_lo11 + 1, _a1a + 0.6, f"Tier_1A gate  (effective ≥ {_a1a:g}°)",
+                fontsize=8, fontweight="bold",
+                color=TIER_PALETTE.get(CFG.TIER_TOP, "#1B7F5C"), va="bottom")
+        ax.axvline(_a1a, ls=":", lw=1.0, color="#999", zorder=3)
+
+        """
+        The wedge between the identity line and the gate is the whole point: a pose whose RAW angle
+        clears the Tier_1A threshold but whose EFFECTIVE angle does not. Those complexes look elite
+        and are not — they were riding their fluorine multiplicity.
+        """
+        _demoted11 = m11[(m11.raw >= _a1a) & (m11.eff < _a1a)]
+        if len(_demoted11):
+            ax.fill_between([_a1a, 180], [_lo11, _lo11], [_a1a, _a1a],
+                            color="#C0392B", alpha=0.07, zorder=1)
+            ax.text(180 - 0.6, _lo11 + 1.5,
+                    f"raw angle clears the gate, effective angle does not\n"
+                    f"{len(_demoted11):,} complexes — elite on multiplicity alone",
+                    ha="right", va="bottom", fontsize=8, color="#C0392B",
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#C0392B",
+                              lw=0.8, alpha=0.9))
+
+        _md11 = _md_ready_df(df)
+        if not _md11.empty:
+            _mi11 = m11.index.intersection(_md11.index)
+            if len(_mi11):
+                ax.scatter(m11.loc[_mi11, "raw"], m11.loc[_mi11, "eff"],
+                           label=f"MD-selected (n={len(_mi11)})",
+                           **({**_MD_STAR_KW, "s": 260}))
+
+        ax.set_xlabel("Raw SN2 attack angle (°)  — as measured on the pose", fontsize=10.5)
+        ax.set_ylabel("Effective SN2 attack angle (°)\nmultiplicity-corrected — what the tier gate sees",
+                      fontsize=10.5)
+        ax.set_xlim(_lo11, 181)
+        ax.set_ylim(_lo11, 181)
+        ax.grid(True, ls=":", alpha=0.35)
+        ax.set_axisbelow(True)
+        # Lower-right: the upper-left corner carries the Tier_1A gate label and the identity line.
+        ax.legend(loc="lower right", bbox_to_anchor=(0.995, 0.14), fontsize=8,
+                  framealpha=0.93, markerscale=1.1)
+        plt.tight_layout()
+        _o = out_dir / "11_Angle_Multiplicity_Correction.png"
+        fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
+        reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+    except Exception as e:                                   # noqa: BLE001
+        reporter.log(f"  ! Diag 11 skipped: {e}")
+        plt.close("all")
+
 
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
     """
