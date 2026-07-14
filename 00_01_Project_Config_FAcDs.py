@@ -237,6 +237,26 @@ class CFG:
     # Binding-probability logit normalisers (Step 02 binding_likelihood_computed).
     BIND_INT_DENSITY_NORM: float = 2.0   # interaction-density saturation normaliser in the logit
     BIND_CROSS_PAE_NORM: float   = 50.0  # cross-interface PAE normaliser in the logit
+    """
+    LOGIT CALIBRATION — without it the score has no variance where it matters.
+
+    The raw weighted sum runs over terms that are each in [0, 1] with weights
+    (+3.0 ipTM, +2.0 pLDDT, +1.5 density, +1.0 confidence, -2.5 cross-PAE), so it lives in [-2.5, +7.5].
+    A logistic saturates past |z| ~ 4, so EVERY decent complex was landing on the flat top:
+
+        typical good complex -> P = 0.9979
+        best possible        -> P = 0.9994
+
+    A discriminator with 0.0015 of range across the whole viable population is not a discriminator, and
+    Binding_Probability is one of the two axes of the Pareto front — so that front was effectively
+    one-dimensional (confidence alone) while appearing to be two.
+
+    The raw sum is therefore centred on the midpoint of its own achievable range and scaled so that range
+    maps onto roughly [-4, +4], where the logistic actually resolves. This changes no gate: the tier and
+    MD_Selected key on geometry, and Binding_Probability is a reported/plotted quantity only.
+    """
+    BIND_LOGIT_CENTRE: float = 2.5    # midpoint of the achievable raw sum ([-2.5, +7.5])
+    BIND_LOGIT_GAIN: float   = 1.25   # divides the centred sum so its full range spans about [-4, +4]
     BIND_LOGIT_CLAMP: float      = 50.0  # ± clamp on the logit before the sigmoid
 
     # ===============================================================================
@@ -2467,6 +2487,18 @@ class CFG:
     the bottom of the range, which is how a metric becomes a flat line at zero and nobody notices.
     """
     SENTINEL_UNDEFINED: float = 999.0
+    """
+    Columns where a SMALLER number is BETTER, so 0.0 is the optimum and can never stand in for 'missing'.
+    A missing value in one of these is filled with SENTINEL_UNDEFINED, not with zero: filling an absent
+    nucleophile distance with 0.0 A does not record 'unknown', it records a nucleophile sitting on top of
+    the carbon — and it would clear every distance gate in the pipeline.
+    """
+    INVERTED_METRIC_COLUMNS: tuple = (
+        "Dist_Nucleophile", "dist_Nuc_nearest_O", "Active_Site_RMSD", "Active_Site_RMSD_to_Control",
+        "r3u_Active_Site_RMSD", "sn2_backside_occlusion", "chem_penalty", "SN2_Trajectory_Deviation_A",
+        "cross_interface_pae_mean", "catalytic_dist_A", "dist_nuc_base", "dist_base_acid",
+        "dist_nuc_base_internal", "ligand_reach", "scissile_cf_bde",
+    )
     CONTROL_JOB_PREFIX: str = "0000000"
     COL_TIER:     str = "degrader_tier"
     COL_PROT:     str = "Protein_Name"

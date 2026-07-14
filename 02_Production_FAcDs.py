@@ -2850,11 +2850,25 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     return angle, deviation, teflon_clashes, best_X.pos, best_C, aux
 
 def sigmoid(x: float, k: float = 1.0, x0: float = 0.0) -> float:
-    """Standard sigmoid function for soft-thresholding."""
+    """Soft threshold. The limit is decided by the SIGN OF k, not by the sign of (x - x0).
+
+    The overflow branch used to read `0.0 if x - x0 < 0 else 1.0`, which silently assumes k > 0. Two of
+    this pipeline's steepnesses are NEGATIVE (SOFT_K_NUC = -4.0, SOFT_K_TRIAD = -2.0) — they are meant to
+    DECREASE with distance. With a negative k that branch is inverted, so an enormous distance overflowed
+    exp() and returned 1.0: a PERFECT score.
+
+    That was not hypothetical. calculate_sn2_metrics returns 999.0 A as its 'no nucleophile' sentinel, and
+    999 A overflows for k = -4 (the threshold is 180.4 A). Every complex with no nucleophile at all was
+    being handed s_nuc = 1.000.
+
+    The limit of the logistic is set by the sign of k*(x - x0): it saturates to 1 when that product is
+    large and positive, to 0 when it is large and negative. That is what is computed here.
+    """
+    _z = k * (x - x0)
     try:
-        return 1 / (1 + math.exp(-k * (x - x0)))
+        return 1.0 / (1.0 + math.exp(-_z))
     except OverflowError:
-        return 0.0 if x - x0 < 0 else 1.0
+        return 1.0 if _z > 0 else 0.0
 
 def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
                        all_prot_atoms: Optional[list] = None) -> Dict[str, Any]:
@@ -4285,8 +4299,11 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                       (W_INTERACTIONS * min(1.0, interaction_density / CFG.BIND_INT_DENSITY_NORM)) - \
                       (W_CROSS_PAE * min(1.0, c_pae/CFG.BIND_CROSS_PAE_NORM)) + (W_CONF * conf)
 
-            score_v = max(min(score_v, CFG.BIND_LOGIT_CLAMP), -CFG.BIND_LOGIT_CLAMP)
-            binding_prob = 1.0 / (1.0 + math.exp(-score_v))
+            # Centre and scale the raw sum onto the range where a logistic actually resolves; without this
+            # every decent complex saturates at P > 0.99 and the score carries no information (CFG §9.x).
+            _z_bind = (score_v - CFG.BIND_LOGIT_CENTRE) / CFG.BIND_LOGIT_GAIN
+            _z_bind = max(min(_z_bind, CFG.BIND_LOGIT_CLAMP), -CFG.BIND_LOGIT_CLAMP)
+            binding_prob = 1.0 / (1.0 + math.exp(-_z_bind))
             data["binding_likelihood_computed"] = binding_prob
             data["binding_likelihood_calc"] = (
                 f"({W_IPTM} * {float(iptm_v):.2f}) + ({W_PLDDT} * {plddt_v/100.0:.2f}) + "
@@ -5068,12 +5085,28 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             safety net over the upstream per-field defaults so that no future
             column (or resume edge case) can leave a blank cell.
             """
+            """
+            0.0 IS NOT A NEUTRAL FILLER. For an INVERTED metric it is the OPTIMUM, so filling a missing
+            value with it does not mark the cell empty — it marks the complex PERFECT.
+
+                Dist_Nucleophile        0.0 A  = the nucleophile sitting ON the carbon (passes every gate)
+                Active_Site_RMSD        0.0 A  = a flawless match to the crystal
+                sn2_backside_occlusion  0.0    = no steric blockade whatsoever
+                chem_penalty            0.0    = no BDE or occlusion penalty at all
+
+            Those columns are filled with CFG.SENTINEL_UNDEFINED (999.0) — the value the rest of the
+            pipeline already uses for 'not measurable', and which every gate and every figure filters out.
+            Columns where 0.0 genuinely IS the worst case (an angle, a score, a confidence, a count) keep
+            the zero fill, because there the fill and the meaning agree.
+            """
             for _col in df_rank.columns:
-                if df_rank[_col].isna().any():
-                    if pd.api.types.is_numeric_dtype(df_rank[_col]):
-                        df_rank[_col] = df_rank[_col].fillna(0.0)
-                    else:
-                        df_rank[_col] = df_rank[_col].astype(object).fillna("N/A")
+                if not df_rank[_col].isna().any():
+                    continue
+                if pd.api.types.is_numeric_dtype(df_rank[_col]):
+                    _fill = CFG.SENTINEL_UNDEFINED if _col in CFG.INVERTED_METRIC_COLUMNS else 0.0
+                    df_rank[_col] = df_rank[_col].fillna(_fill)
+                else:
+                    df_rank[_col] = df_rank[_col].astype(object).fillna("N/A")
 
             atomic_to_csv(df_rank, rank_csv_path, index=False)
             rank_columns_count = len(df_rank.columns)

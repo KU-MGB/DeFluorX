@@ -321,6 +321,23 @@ _mic_dists_2d           = _utils_mod.mic_dists_2d
 clean_spines            = _utils_mod.clean_spines
 _calc_improper_dihedral = _utils_mod.calculate_improper_dihedral
 _ensure_box_3x3             = _utils_mod._ensure_box_3x3
+"""
+THE NUCLEOPHILE IS AN ASPARTATE. CFG SAYS SO; THIS SCRIPT NOW ASKS IT.
+
+Both call sites hardcoded {'ASP', 'GLU', 'ASH', 'GLH'} — a set that admits GLUTAMATE, which
+CFG.ROLE_EXPECTED_RESIDUES has never allowed and whose own comment forbids by name ("no Glu drift"). An
+unmapped glutamate could therefore usurp the mapped aspartate through the soft distance bias and be
+reported as the attacking residue.
+
+ASH is retained because it is the same aspartate under a force-field name for its protonated form — a
+question of NOMENCLATURE, not of identity. Whether that aspartate is actually deprotonated (and so able
+to attack) is decided in Step 05 by enforce_catalytic_protonation, which strips the acidic proton. The
+recognition set names the residue; the protonation policy makes it a nucleophile.
+"""
+_NUCLEOPHILE_RESIDUES = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Nucleophile"])
+_ACID_RESIDUES         = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Acid_Catalyst"])
+_BASE_RESIDUES         = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Base_Catalyst"])
+
 find_nucleophile_od_fallback = _utils_mod.find_nucleophile_od_fallback
 
 PLOT_LOCK = threading.Lock()
@@ -552,7 +569,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     min_eff      = float('inf')
     actual_dist  = float('inf')
     for res_key, data in res_dict.items():
-        if not data['O_idx'] or data['ptype'] not in {'ASP', 'GLU', 'ASH', 'GLH'}:
+        if not data['O_idx'] or data['ptype'] not in _NUCLEOPHILE_RESIDUES:
             continue
         d     = calculate_min_distance(frame_0, lig_c_idxs, data['O_idx'])
         bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_nuc and abs(data['resnum'] - mapped_nuc) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
@@ -572,7 +589,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         # Build candidate list: (resnum, od1_np, od2_np) for each ASP/ASH residue.
         _asp_cands = []
         for rk, rd in res_dict.items():
-            if rd['ptype'] not in {'ASP', 'ASH'}:
+            if rd['ptype'] not in _ACID_RESIDUES:
                 continue
             od_idxs = [i for i in rd['O_idx']
                        if cms_model.atom[i].pdbname.strip() in ('OD1', 'OD2')]
@@ -614,7 +631,10 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     idx_base = []
     best_base_key = None; min_eff = float('inf')
     for res_key, data in res_dict.items():
-        if not data['N_idx'] or data['ptype'] not in {'HIS', 'HIP', 'HIE', 'HID'}:
+        # CFG's set also carries the AMBER/CHARMM histidine names (HSD/HSE/HSP). The hardcoded set here
+        # listed only the OPLS ones, so a base named HSD/HSE/HSP would have been invisible — the Smart-Lock
+        # would have reported "no base found" on a structure that has one.
+        if not data['N_idx'] or data['ptype'] not in _BASE_RESIDUES:
             continue
         d     = calculate_min_distance(frame_0, idx_nuc, data['N_idx'])
         bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_base and abs(data['resnum'] - mapped_base) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
@@ -633,7 +653,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         best_acid_key = None; min_eff = float('inf')
         for res_key, data in res_dict.items():
             if (res_key == best_nuc_key or not data['O_idx']
-                    or data['ptype'] not in {'ASP', 'GLU', 'ASH', 'GLH'}):
+                    or data['ptype'] not in _NUCLEOPHILE_RESIDUES):
                 continue
             d     = calculate_min_distance(frame_0, idx_base, data['O_idx'])
             bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_acid and abs(data['resnum'] - mapped_acid) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
@@ -962,6 +982,14 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         _within = np.abs(_vb - _v_ref) <= _tol
         _need = float(CFG.MD_EQUIL_BLOCK_FRAC_MIN)
         _equil_b = next((_i for _i in range(_nb) if _within[_i:].mean() >= _need), _nb - 1)
+        """
+        The block test decided WHEN the box settled but never decided WHETHER it did. `_equil_b` fell back
+        to the last block when no window met the fraction — and the verdict below then ignored that
+        entirely and asked only whether the residual DRIFT was small. A box that oscillates around a
+        stable mean has near-zero drift and no settled window at all: it passed. The fraction of settled
+        blocks over the production window is therefore carried into the verdict as a first-class term.
+        """
+        _blocks_ok = bool(_within[_equil_b:].mean() >= _need)
         # The block's leading edge, not its midpoint: frames from the start of the settled block on
         # are samples.
         _equil_t = float(_t[_equil_b * _bs])
@@ -976,7 +1004,8 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         _ok_V = abs(_drift) <= float(CFG.MD_EQUIL_V_DRIFT_MAX_PCT_NS)
 
         _out.update({
-            "MD_Equilibrated": bool(_ok_T and _ok_V),
+            "MD_Equilibrated": bool(_ok_T and _ok_V and _blocks_ok),
+            "MD_Equil_Blocks_Settled_Frac": round(float(_within[_equil_b:].mean()), 3),
             "MD_Equil_Time_ps": round(_equil_t, 1),
             "MD_Mean_T_K": round(_mean_T, 2),
             "MD_SD_T_K": round(float(_T[_i0:].std()), 2),
@@ -2300,7 +2329,20 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
             d = np.linalg.norm(get_mic_vector(site['pos'], sp, box))
             if d < best_d:
                 best_d = d; best_dg = site['dG']
-        weight = (1.0 / (1.0 + np.exp(best_dg)) * 2.0) if best_d < match_r else 1.0
+        """
+        The weight is a Boltzmann-like occupancy of the WaterMap site, so the exponent must be
+        DIMENSIONLESS. `np.exp(best_dg)` with dG in kcal/mol is not: it implicitly divides by 1 kcal/mol,
+        which at 300 K is an effective temperature of ~503 K (RT = 0.596 kcal/mol). A water held by
+        -2 kcal/mol was being weighted as though it were held by -3.4 RT instead of -3.4... the numbers
+        happen to be close, but the quantity was not a Boltzmann factor at all, and it silently rescaled
+        with any change of energy unit.
+
+        dG/RT is dimensionless, and RT is the same RT the rest of the pipeline uses (CFG, 300 K).
+        The exponent is clipped because a strongly stabilised site can otherwise overflow exp().
+        """
+        _rt_wm = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+        _z_wm = float(np.clip(best_dg / _rt_wm, -60.0, 60.0))
+        weight = (1.0 / (1.0 + np.exp(_z_wm)) * 2.0) if best_d < match_r else 1.0
         total += weight
     return total
 
@@ -3978,11 +4020,32 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 if r.get("Fold_RMSD_A") is not None and r["Fold_RMSD_A"] == r["Fold_RMSD_A"]]
     _ca_mean = float(np.mean(_ca_vals)) if _ca_vals else float("nan")
     _ca_ok = bool(np.isfinite(_ca_mean) and _ca_mean <= float(CFG.MD_EQUIL_CA_RMSD_MAX_A))
-    if _equil.get("MD_Equilibrated") is True and _ca_vals and not _ca_ok:
-        console_info(f"    [!] {job_name}: box and thermostat settled, but the BACKBONE did not — "
-                     f"mean Ca RMSD {_ca_mean:.2f} A > {float(CFG.MD_EQUIL_CA_RMSD_MAX_A):.2f} A. "
-                     f"The fold is still moving; not equilibrated.")
-        _equil["MD_Equilibrated"] = False
+
+    """
+    AN UNVERIFIABLE GATE IS NOT A PASSED GATE.
+
+    The test used to read `if MD_Equilibrated and _ca_vals and not _ca_ok`. When _ca_vals is EMPTY — no
+    WaterMap reference, so no Kabsch superposition and every Fold_RMSD_A is NaN — the `and _ca_vals`
+    short-circuits and the structural half of the verdict is skipped in silence. A trajectory whose fold
+    was never checked was being reported as equilibrated, which is the one outcome the check exists to
+    prevent.
+
+    Missing evidence is now its own state: MD_Equilibrated becomes None (UNKNOWN), never True. None is
+    already this function's contract for 'could not determine' — it is what it returns on a parse failure
+    — so every consumer that guards on `is True` treats it as not-equilibrated, and nothing silently
+    inherits a pass it never earned.
+    """
+    if _equil.get("MD_Equilibrated") is True:
+        if not _ca_vals:
+            console_info(f"    [!] {job_name}: box and thermostat settled, but the backbone could NOT be "
+                         f"checked (no Ca RMSD — WaterMap reference absent). Equilibration is UNKNOWN, "
+                         f"not confirmed.")
+            _equil["MD_Equilibrated"] = None
+        elif not _ca_ok:
+            console_info(f"    [!] {job_name}: box and thermostat settled, but the BACKBONE did not — "
+                         f"mean Ca RMSD {_ca_mean:.2f} A > {float(CFG.MD_EQUIL_CA_RMSD_MAX_A):.2f} A. "
+                         f"The fold is still moving; not equilibrated.")
+            _equil["MD_Equilibrated"] = False
     _equil["MD_Equil_CA_RMSD_A"] = round(_ca_mean, 3) if np.isfinite(_ca_mean) else np.nan
 
     # Viability denominators use n_pocket (bound frames), not total frames.
@@ -4668,14 +4731,28 @@ def main():
         elif not _mmgbsa_csv.exists():
             console_info("MM-GBSA summary not found (Step 06 not run) — master written without ΔG_bind columns.")
 
-        # ── Defluorination verdict + propensity (the concrete turnover claim) ──────
-        # Propensity is a kcat-like rate proxy that fuses persistence and barrier:
-        #   Defluor_Propensity = P(strict-NAC) · exp(−ΔE‡ / RT)
-        # tiny in absolute terms but monotonic; Defluor_Propensity_Norm rescales it
-        # to the best candidate (0–1) for a readable ranking. Is_Defluorinating is the
-        # boolean gate: strict persistence AND real dwell AND surmountable barrier AND
-        # a non-uphill SN2 product. Thresholds are CFG (SSOT). Barrier absent → the
-        # claim cannot be made (verdict "Barrier pending"), never a false positive.
+        """
+        ── Defluorination verdict + propensity ───────────────────────────────────────────────────────
+
+            Defluor_Propensity = P(strict-NAC) · exp(−ΔE‡ / RT)
+
+        WHAT THIS IS, AND WHAT IT IS NOT. It is a monotonic RANKING PROXY. It is not a rate, and it must
+        not be quoted as one.
+
+        The exponent carries ΔE‡ — the ELECTRONIC barrier QSite returns from the scan. A rate constant
+        needs the GIBBS barrier: Eyring's k = (k_B·T/h)·exp(−ΔG‡/RT), and ΔG‡ = ΔE‡ + ZPE + thermal
+        corrections − TΔS‡. This pipeline runs no frequency calculation, so it has none of those terms.
+        For an enzymatic SN2 the activation entropy is not a rounding error, and the prefactor is absent
+        entirely.
+
+        What survives is the ORDERING: for two candidates treated identically, a lower ΔE‡ and a higher
+        NAC persistence give a higher propensity, and that is the only claim made of it.
+        Defluor_Propensity_Norm rescales it to the best candidate (0–1) for readability.
+
+        Is_Defluorinating is the boolean gate: strict persistence AND real dwell AND a surmountable
+        barrier AND a non-uphill SN2 product. Thresholds are CFG (SSOT). A missing barrier yields
+        "Barrier pending" — the claim is withheld, never converted into a false positive.
+        """
         _RT = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         def _p_strict(r) -> float:
             return max(0.0, float(r.get("Strict_Viability_Pct", 0.0) or 0.0)) / 100.0

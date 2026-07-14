@@ -2842,6 +2842,16 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                         p_mat[_ii, _jj] = np.nan
         p_df_f3 = pd.DataFrame(p_mat, index=corr_raw.index, columns=corr_raw.columns)
 
+        """
+        This is a SECOND, INDEPENDENT Benjamini-Hochberg family — the feature-correlation matrix — and it
+        is not the family written to 06_Statistical_Tests.csv (which corrects the panel tests and the
+        statistical battery together). Two families are legitimate: these are different questions asked of
+        different hypotheses, and pooling them would inflate m and cost power on both.
+
+        But a Spearman that appears in both is corrected against a different m in each, so its q here and
+        its q in the CSV WILL NOT MATCH. That is not an error; it is a fact a reader must be told, and it
+        is stated on the panel rather than left to be discovered.
+        """
         # Benjamini-Hochberg FDR on the UNIQUE upper-triangular pairs only
         # (N(N-1)/2 tests, not N(N-1)); the adjusted matrix is then mirrored.
         _n_feat_f7 = len(corr_cols)
