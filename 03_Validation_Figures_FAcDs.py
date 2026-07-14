@@ -7737,13 +7737,18 @@ _xn_CF_BOND_CUTOFF_A = 1.7
 
 _xn_IDEAL_SN2_ANGLE_DEG = 180.0
 
-_xn_NUCLEOPHILE_ATTACK_ATOMS = {
-    "ASP": ("OD1", "OD2"),
-    "GLU": ("OE1", "OE2"),
-    "SER": ("OG",),
-    "THR": ("OG1",),
-    "CYS": ("SG",),
-}
+"""
+FAcD attacks with an ASPARTATE and nothing else. The carboxylate's two oxygens are the only atoms that
+can be the nucleophile; WHICH aspartate it is varies by variant, and 02 records that per complex as
+Mapped_Nucleophile in the ranked CSV.
+
+There is no table of candidate residue types here on purpose. A generic ASP/GLU/SER/THR/CYS list — the
+kind a general-purpose structure tool ships with — let a SERINE win the geometry contest on 4 of 30
+Tier_4 complexes (SER147, SER149, SER163). A serine hydroxyl is a different enzyme's mechanism. The
+angle reported was geometrically real and mechanistically meaningless, which is the worst kind of wrong:
+it looks like data.
+"""
+_xn_NUCLEOPHILE_ATTACK_ATOMS = {"ASP": ("OD1", "OD2"), "ASH": ("OD1", "OD2")}
 
 @dataclass
 class _xn_AtomRecord:
@@ -7770,10 +7775,10 @@ class _xn_GeometryResult:
     status: str
 
 def _xn_calculate_angle(p1: gemmi.Position, p2: gemmi.Position, p3: gemmi.Position) -> float:
-    """
-    Calcola l'angolo p1-p2-p3 in gradi.
+    """The p1-p2-p3 angle in degrees.
 
-    Nel caso S_N2: p1 = O_nuc, p2 = C_pfas, p3 = F uscente.
+    For the SN2: p1 = the attacking Oδ of the catalytic aspartate, p2 = the ligand's α-carbon,
+    p3 = the leaving fluorine. 180° is a perfect backside attack.
     """
     v1 = np.array([p1.x - p2.x, p1.y - p2.y, p1.z - p2.z], dtype=float)
     v2 = np.array([p3.x - p2.x, p3.y - p2.y, p3.z - p2.z], dtype=float)
@@ -7807,7 +7812,7 @@ def _xn_iter_atoms_from_cif(cif_path: Path) -> Tuple[List[_xn_AtomRecord], List[
             for residue in chain:
                 bucket = ligand_atoms if _xn_is_ligand_residue(residue) else protein_atoms
                 for atom in residue:
-                    # Gli idrogeni non sono necessari per la geometria richiesta.
+                    # Hydrogens play no part in this geometry; skipping them keeps the parse cheap.
                     if atom.element.name == "H":
                         continue
                     bucket.append(_xn_AtomRecord(
@@ -7830,7 +7835,7 @@ def _xn_find_reactive_cf_pairs(lig_atoms: Sequence[_xn_AtomRecord]) -> List[Tupl
     return pairs
 
 def _xn_iter_nucleophile_atoms(protein_atoms: Sequence[_xn_AtomRecord]) -> Iterable[_xn_AtomRecord]:
-    """Restituisce gli atomi nucleofili candidati in ASP/GLU/SER/THR/CYS."""
+    """The Oδ atoms of the catalytic aspartate. `protein_atoms` is already confined to that residue."""
     for atom_record in protein_atoms:
         allowed_atoms = _xn_NUCLEOPHILE_ATTACK_ATOMS.get(atom_record.residue_name)
         if not allowed_atoms:
@@ -7839,19 +7844,34 @@ def _xn_iter_nucleophile_atoms(protein_atoms: Sequence[_xn_AtomRecord]) -> Itera
             yield atom_record
 
 def _xn_geometry_rank(distance_A: float, angle_deg: float) -> Tuple[float, float]:
-    """
-    Ordina i candidati bilanciando distanza corta e angolo vicino a 180 gradi.
+    """Rank the two carboxylate oxygens: short distance AND an angle near 180°.
 
-    Il primo termine combina distanza e deviazione angolare normalizzata; il
-    secondo mantiene la distanza come discriminante stabile in caso di pareggio.
+    The first term combines the distance with the normalised angular deviation; the second keeps the
+    distance as a stable tie-break when two candidates score alike.
     """
     angle_deviation = abs(_xn_IDEAL_SN2_ANGLE_DEG - angle_deg)
     combined = distance_A + (angle_deviation / 45.0)
     return combined, distance_A
 
-def _xn_compute_sn2_geometry(cif_path: Path) -> _xn_GeometryResult:
-    """Calcola la migliore geometria S_N2 direttamente dal CIF."""
+def _xn_compute_sn2_geometry(cif_path: Path, nuc_resnum: int | None = None) -> _xn_GeometryResult:
+    """The best SN2 geometry in one model, measured AT THE CATALYTIC NUCLEOPHILE.
+
+    THE NUCLEOPHILE IS ONE RESIDUE. FAcD attacks with an ASPARTATE — the residue 02 mapped for this
+    protein by global alignment (Mapped_Nucleophile: Asp110, Asp112, Asp109 …). Scanning the whole
+    protein for whichever ASP/GLU/SER/THR/CYS scores best on distance and angle lets a residue that does
+    no catalysis win the contest: measured on the Tier_4 cohort it picked a SERINE in 4 of 30 complexes
+    (SER147, SER149, SER163, at 3-4 A). A serine hydroxyl is a different enzyme's mechanism. The angle
+    it reports is geometrically real and mechanistically meaningless.
+
+    So the residue is passed in and the search is confined to its two carboxylate oxygens. Without it the
+    function REFUSES: there is no fallback scan, because the fallback scan is what produced the serine.
+    """
+    if nuc_resnum is None:
+        # No mapped aspartate, no measurement. Falling back to a whole-protein scan is precisely what
+        # put a serine in the results; an absent number is honest, a confident wrong one is not.
+        raise ValueError("no mapped catalytic nucleophile for this complex")
     lig_atoms, protein_atoms = _xn_iter_atoms_from_cif(cif_path)
+    protein_atoms = [a for a in protein_atoms if a.residue_seqid == int(nuc_resnum)]
     cf_pairs = _xn_find_reactive_cf_pairs(lig_atoms)
     if not lig_atoms:
         return _xn_empty_geometry("no_ligand_atoms")
@@ -7897,7 +7917,7 @@ def _xn_compute_sn2_geometry(cif_path: Path) -> _xn_GeometryResult:
     )
 
 def _xn_empty_geometry(status: str) -> _xn_GeometryResult:
-    """Risultato sentinella per modelli senza geometria S_N2 misurabile."""
+    """The sentinel result for a model with no measurable SN2 geometry — every field NaN, never 0.0."""
     return _xn_GeometryResult(
         sn2_distance_A=math.nan,
         sn2_angle_deg=math.nan,
@@ -8228,12 +8248,13 @@ def _xn__tier_boxstrip(ax, sub, tiers, val_col, ylabel, *, group_col='tier'):
     _xn__stat_header(ax, _xn__kruskal(sub, group_col, val_col, tiers))
     return ax
 
-def _xn__variance_rows_for_job(job_dir: Path) -> tuple:
+def _xn__variance_rows_for_job(args: tuple) -> tuple:
     """One complex: its 5 model CIFs parsed to rows. Runs in a worker process.
 
     Module-level and self-contained so it pickles for the process pool. Returns (rows, n_geom_fail)
     rather than logging: a worker writing to the run log would interleave its output with the others.
     """
+    job_dir, _nuc = args
     _mre = re.compile(r'_(model_\d+)\.json$')
     _rows, _fail = [], 0
     for cj in sorted(job_dir.glob('boltz_results_*/predictions/*/confidence_*_model_*.json')):
@@ -8249,7 +8270,7 @@ def _xn__variance_rows_for_job(job_dir: Path) -> tuple:
         except (OSError, ValueError):
             cd = {}
         try:
-            geo = _xn_compute_sn2_geometry(cif_path)
+            geo = _xn_compute_sn2_geometry(cif_path, _nuc)
             sn2_dist, sn2_ang = float(geo.sn2_distance_A), float(geo.sn2_angle_deg)
         except Exception:                                        # noqa: BLE001
             # A model with no nucleophile in range has no SN2 geometry; that is a real outcome, not an
@@ -8333,6 +8354,30 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     n_jobs = len(job_folders)
 
     """
+    Each complex is measured at ITS OWN catalytic aspartate — the residue 02 mapped for that protein by
+    global alignment. Without it the geometry engine scans the whole protein and can settle on a residue
+    that does no catalysis (on Tier_4 it chose a SERINE in 4 of 30), reporting an attack angle that is
+    geometrically real and mechanistically meaningless.
+    """
+    _nuc_by_job: dict = {}
+    _rank_csv = sorted((prod_dir).glob(CFG.GLOB_RANKED_CSV))
+    if _rank_csv:
+        try:
+            _rk = pd.read_csv(_rank_csv[-1], low_memory=False,
+                              usecols=["job_name", "Mapped_Nucleophile"])
+            for _jn, _mn in zip(_rk["job_name"], _rk["Mapped_Nucleophile"]):
+                _m = re.search(r"(\d+)\s*$", str(_mn))
+                if _m:
+                    _nuc_by_job[str(_jn)] = int(_m.group(1))
+        except Exception as _e:                                  # noqa: BLE001
+            reporter.log(f'  ! Could not read Mapped_Nucleophile ({type(_e).__name__}); '
+                         f'geometry will fall back to the whole-protein scan.')
+    _missing = sum(1 for p in job_folders if p.name not in _nuc_by_job)
+    if _missing:
+        reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile; those fall back to the scan.')
+    _tasks = [(p, _nuc_by_job.get(p.name)) for p in job_folders]
+
+    """
     The work is one independent gemmi parse per model CIF — five per complex, tens of thousands of
     complexes — with no shared state, so it parallelises cleanly across cores. Two cores are left free
     so the machine stays usable and a GPU job's feeder process is never starved.
@@ -8394,7 +8439,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     _n_geom_fail = 0
     with cf.ProcessPoolExecutor(max_workers=_n_proc) as _ex:
         _done = 0
-        for _job_rows, _fails in _ex.map(_xn__variance_rows_for_job, job_folders, chunksize=16):
+        for _job_rows, _fails in _ex.map(_xn__variance_rows_for_job, _tasks, chunksize=16):
             rows.extend(_job_rows)
             _n_geom_fail += _fails
             _done += 1
