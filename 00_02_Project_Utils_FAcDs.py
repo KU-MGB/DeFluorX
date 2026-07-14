@@ -409,18 +409,6 @@ def auto_label_colour(cfg, bg, threshold: float = 0.5) -> str:
             else cfg.VIS_BAR_LABEL_COLOURS_ON_DARK[0])
 
 
-def style_axes(ax, cfg, xlabel: str = "", ylabel: str = "") -> None:
-    """Axis labels, grid and draw order, exactly as every other figure in the pipeline has them.
-
-    The labels are set in plain weight at CFG.VIS_FONT_AXIS_LABEL; the grid sits BEHIND the data.
-    """
-    if xlabel:
-        ax.set_xlabel(xlabel, labelpad=6)
-    if ylabel:
-        ax.set_ylabel(ylabel, labelpad=6)
-    ax.grid(True, alpha=cfg.VIS_GRID_ALPHA, color=cfg.VIS_GRID_COLOUR,
-            linewidth=cfg.VIS_GRID_LINEWIDTH)
-    ax.set_axisbelow(True)
 
 
 def clean_spines(ax) -> None:
