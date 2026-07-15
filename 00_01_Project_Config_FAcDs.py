@@ -1940,8 +1940,9 @@ class CFG:
     defluorination-competent only when it (i) persists in a STRICT near-attack
     conformation for a real dwell, (ii) surmounts a QM/MM SN2 barrier at body
     temperature, and (iii) the SN2 product (F⁻ displaced onto the Asp nucleophile) is
-    not uphill. Defluorination_Propensity fuses persistence and barrier into a single
-    kcat-like rate proxy:  P(strict-NAC) · exp(−ΔE‡ / RT)  (RT from GAS_CONSTANT_KCAL ×
+    not uphill. Defluorination_Propensity fuses persistence and barrier into a single monotonic
+    RANKING proxy (not a rate — it carries the electronic barrier ΔE‡ only, with no ZPE, no thermal
+    correction and no entropy term):  P(strict-NAC) · exp(−ΔE‡ / RT)  (RT from GAS_CONSTANT_KCAL ×
     MMGBSA_TEMPERATURE_K). Rank candidates by that proxy, not by ΔG_bind.
     """
     '''

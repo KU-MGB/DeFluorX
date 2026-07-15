@@ -2069,7 +2069,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> s
             _sdf = _sdf.sort_values("Scientific_Rank",
                                     key=lambda s: pd.to_numeric(s, errors="coerce"))
         _csv_out = out_dir / CFG.FILE_MMGBSA_SUMMARY
-        _sdf.to_csv(_csv_out, index=False)
+        _utils_mod.atomic_write_csv(_sdf, _csv_out)
         _echo(f"  MM-GBSA summary table saved : {_csv_out.resolve()}")
     try:
         plot_mmgbsa_combined(out_dir, per_job, tiers, ligands, nspf)

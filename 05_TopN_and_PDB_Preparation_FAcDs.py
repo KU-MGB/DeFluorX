@@ -1511,7 +1511,7 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
     if not _summary:
         return None
     _sum_path = out_dir / "00_ESP_Charges_Summary.csv"
-    pd.DataFrame(_summary).to_csv(_sum_path, index=False)
+    _utils_mod.atomic_write_csv(pd.DataFrame(_summary), _sum_path)
 
     if not CFG.ESP_KEEP_SCRATCH:
         _n = 0
@@ -3460,7 +3460,7 @@ def prep_and_convert_phase(args):
             ["prep_sn2_angle", "job"], ascending=[False, True], kind="mergesort")
         _pg_path = dir_prep_clean.parent / "3_Comparative_Analysis" / "01_Prepared_Pose_Geometry.csv"
         _pg_path.parent.mkdir(parents=True, exist_ok=True)
-        _pg.to_csv(_pg_path, index=False)
+        _utils_mod.atomic_write_csv(_pg, _pg_path)
         _n_left = int(pd.to_numeric(_pg["prep_left_nac"], errors="coerce").fillna(0).sum())
         _da = pd.to_numeric(_pg["prep_d_angle"], errors="coerce").dropna()
         _dd = pd.to_numeric(_pg["prep_d_dist"], errors="coerce").dropna()
@@ -3782,7 +3782,7 @@ def topn_extraction_phase(args):
             # Write controls CSV
             if ctrl_csv_rows:
                 ctrl_csv_path = out_ctrl / "Controls_Scientific_Data.csv"
-                pd.DataFrame(ctrl_csv_rows).to_csv(ctrl_csv_path, index=False)
+                _utils_mod.atomic_write_csv(pd.DataFrame(ctrl_csv_rows), ctrl_csv_path)
 
             console_info(f"  -> Controls: {ctrl_extracted_raw} raw, {ctrl_extracted_prep} prepared structures saved.")
         else:
@@ -3979,7 +3979,7 @@ def topn_extraction_phase(args):
         if not _ctrl_df.empty:
             _ctrl_df["is_control"] = True
         _combined = pd.concat([subset, _ctrl_df], ignore_index=True)
-        _combined.to_csv(subset_csv_path, index=False)
+        _utils_mod.atomic_write_csv(_combined, subset_csv_path)
 
         # Save full per-complex FASTA (one entry per rank)
         fa_path = out_handover / f"{folder_tag}_All_Sequences.fasta"

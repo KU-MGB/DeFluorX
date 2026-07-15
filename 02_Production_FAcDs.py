@@ -3106,8 +3106,7 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
             # convex hull of atom CENTRES collapses to ~0 for a small/planar molecule (e.g.
             # fluoroacetate), so vdW spheres are required for a physical ligand volume.
             if len(P) == 0: return 0.0
-            _R = {"C":1.70,"N":1.55,"O":1.52,"F":1.47,"S":1.80,"P":1.80,"CL":1.75,"BR":1.85,"I":1.98}
-            r = np.array([_R.get(e, 1.70) for e in els], float)
+            r = np.array([CFG.VDW_RADII.get(e, 1.70) for e in els], float)  # SSOT: CFG.VDW_RADII
             lo = (P - r[:, None]).min(0); hi = (P + r[:, None]).max(0)
             gx = np.arange(lo[0], hi[0] + spacing, spacing)
             gy = np.arange(lo[1], hi[1] + spacing, spacing)
@@ -4755,8 +4754,14 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                             (_mech_e >= CFG.MECH_ELITE_LO and _B_e >= CFG.MECH_ELITE_CONSTELLATION)
                 if not _elite_ok:
                     data[CFG.COL_TIER] = "Tier_1B"
-                    _etag = (f"incomplete_machinery(mech={_mech_e:.2f}"
-                             f"<{CFG.MECH_ELITE_HI:g}, B={_B_e:.2f}<{CFG.MECH_ELITE_CONSTELLATION:g})")
+                    _fail = []
+                    if _mech_e < CFG.MECH_ELITE_HI:
+                        _fail.append(f"mech {_mech_e:.2f}<{CFG.MECH_ELITE_HI:g}")
+                    if _mech_e < CFG.MECH_ELITE_LO:
+                        _fail.append(f"mech {_mech_e:.2f}<{CFG.MECH_ELITE_LO:g} floor")
+                    if _B_e < CFG.MECH_ELITE_CONSTELLATION:
+                        _fail.append(f"B {_B_e:.2f}<{CFG.MECH_ELITE_CONSTELLATION:g}")
+                    _etag = f"incomplete_machinery({'; '.join(_fail)})"
                     _eprev = data.get("elite_demotion", "none")
                     data["elite_demotion"] = _etag if _eprev in ("", "none") else f"{_eprev}+{_etag}"
 

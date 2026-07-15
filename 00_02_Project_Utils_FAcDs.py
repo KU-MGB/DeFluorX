@@ -391,6 +391,22 @@ def write_json_atomic(path, payload: dict) -> None:
     _tmp.replace(path)
 
 
+def atomic_write_csv(df, path, **to_csv_kwargs) -> None:
+    """Write a DataFrame to CSV so a reader never sees a half-written file.
+
+    Same guarantee as write_json_atomic: the frame goes to a temporary file beside the target and is
+    renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the old file
+    or the complete new one, never a truncated hybrid a downstream step would parse as truth.
+    """
+    from pathlib import Path as _Path
+    path = _Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _tmp = path.with_suffix(path.suffix + ".tmp")
+    to_csv_kwargs.setdefault("index", False)
+    df.to_csv(_tmp, **to_csv_kwargs)
+    _tmp.replace(path)
+
+
 def auto_label_colour(cfg, bg, threshold: float = 0.5) -> str:
     """The contrast colour for a label written ON a filled mark, from the fill's luminance.
 

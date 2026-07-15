@@ -2519,6 +2519,12 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     lig_mol = next(
         (m.number for m in st.molecule
          if any(a.pdbres.strip() == lig_resname for a in m.atom)), None)
+    if lig_mol is None:
+        # The ligand IS the QM region's reactive core and its charge is always added to molchg; if it
+        # is not found, omitting it while still counting its charge gives Jaguar an electron-count
+        # mismatch that aborts the scan. Fail loudly instead.
+        raise ValueError(f"QSite QM region: ligand '{lig_resname}' not found in {mae_path.name} — "
+                         "cannot build a charge-consistent QM region.")
 
     # Each QM/MM cut row must name the protein molecule id (QSite matches the
     # residue within that molecule). Resolve it via the residue's backbone Cα,
@@ -2737,9 +2743,12 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     qsite_ff='opls3e' for the newer one. OPLS_2005 is the DEFAULT, so an unset &mmkey scores an OPLS4
     trajectory on a force field two generations older.
 
-    CFG.QSITE_MM_FF therefore carries 'qsite_ff=opls3e' — the closest available — and this is recorded
-    as a DECLARED LIMITATION rather than a fix: OPLS3e is not OPLS4. The QM region, where the bond
-    breaks, is unaffected; the mismatch is in the classical environment around it.
+CFG.QSITE_MM_FF is therefore EMPTY, so the &mmkey is empty and Impact falls back to its default
+    OPLS_2005: opls3e / S-OPLS cannot be used because it aborts every QSite job at Impact line 22 on a
+    frozen-orbital cut (00_01 §QSITE_MM_FF). This is a DECLARED LIMITATION, not a fix — OPLS_2005 is a
+    generation below the trajectory's OPLS4 — but it is the only MM force field QSite runs with these
+    cuts. The QM region, where the bond breaks, is unaffected; the mismatch is in the classical
+    environment around it.
     """
     _mmkey = f"&mmkey\n{CFG.QSITE_MM_FF}\n&\n" if getattr(CFG, "QSITE_MM_FF", "") else "&mmkey\n&\n"
     if getattr(CFG, "QSITE_MM_FF", ""):
@@ -4350,7 +4359,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     df_res = pd.DataFrame(results)
     if 'EAF_MSA' in df_res.columns and df_res['EAF_MSA'].notna().any():
         df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=50, min_periods=1).mean()
-    df_res.to_csv(job_out_dir / f"{job_name}_NAC_Data.csv", index=False)
+    _utils_mod.atomic_write_csv(df_res, job_out_dir / f"{job_name}_NAC_Data.csv")
 
     """
     The per-job statistics, written beside the per-frame table. Everything the dashboard prints and
@@ -4966,7 +4975,8 @@ def main():
 
         def _verdict(r):
             """
-            The turnover claim. Every leg must be MEASURED and must PASS: a quantity that could not
+            The competence claim (the verdict returns 'Defluorination-competent', not an observed
+            turnover). Every leg must be MEASURED and must PASS: a quantity that could not
             be computed withholds the verdict, it does not satisfy it. A missing ΔE_rxn is not a
             downhill ΔE_rxn — the thermodynamic leg asserts the SN2 product is not uphill, and an
             absent number is no evidence that it isn't. The barrier and the reaction energy are
@@ -5014,7 +5024,7 @@ def main():
                      f"ΔE_rxn≤{CFG.DEFLUOR_DERXN_MAX_KCAL} kcal/mol)")
 
         master_csv_path = master_out_dir / "08_MD_Master_Ranking.csv"
-        df_master.to_csv(master_csv_path, index=False)
+        _utils_mod.atomic_write_csv(df_master, master_csv_path)
         console_info(f"Total Simulations Validated : {len(df_master)}")
         console_info(f"Master Ranking Sheet Saved  : {master_csv_path.resolve()}")
         console_separator()

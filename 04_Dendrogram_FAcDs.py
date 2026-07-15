@@ -26,7 +26,7 @@ Date   : 15 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (ConsoleColours)
+  Imports from  : 00_02_Project_Utils_FAcDs.py  (console_info / console_separator)
   Reads         : <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
                   <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
@@ -127,9 +127,6 @@ def _load_module(name: str, path: Path):
 _utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
 _cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
 CFG             = _cfg_mod.CFG()
-ConsoleColours  = _utils_mod.ConsoleColours
-SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
-_console_title  = _utils_mod.console_title
 _console_info   = _utils_mod.console_info
 _console_sep    = _utils_mod.console_separator
 _setup_logging  = _utils_mod.setup_logging
@@ -148,9 +145,6 @@ COL_MAP = CFG.VIS_PHYLO_COLUMN_MAP
 # =============================================================================
 
 logger = None  # Initialised in main()
-
-def console_title(msg: str) -> None:
-    _console_title(msg, logger)
 
 def console_info(msg: str) -> None:
     _console_info(msg, logger)

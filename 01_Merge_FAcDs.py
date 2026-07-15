@@ -13,7 +13,7 @@ Date   : 15 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_FAcDs.py
   Role          : Sequence merger and pre-processing pipeline wrapper.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (ConsoleColours, clean_spines)
+  Imports from  : 00_02_Project_Utils_FAcDs.py  (clean_spines)
                   00_01_Project_Config_FAcDs.py  (CFG — PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   — merged, deduplicated sequence set
@@ -139,8 +139,6 @@ def _load_module(name: str, path: Path):
 _utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
 _cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
 CFG             = _cfg_mod.CFG()
-ConsoleColours  = _utils_mod.ConsoleColours
-SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 clean_spines    = _utils_mod.clean_spines
 
 # -------------------------------------------------------------------------------

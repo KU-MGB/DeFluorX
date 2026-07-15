@@ -433,7 +433,14 @@ def _write_statistical_tests(out_dir):
     # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once — a
     # duplicate would inflate the family denominator and write a repeated row to the CSV.
     _df = _df.drop_duplicates(subset=["test", "panel"], keep="first").reset_index(drop=True)
-    _df["q_BH"] = false_discovery_control(_df["p_raw"].to_numpy(float), method="bh")
+    # A non-finite p (a Kruskal-Wallis on all-identical groups, a zero-variance Spearman) would poison the
+    # q-values for the WHOLE family — false_discovery_control propagates the NaN. Set those aside (recorded
+    # with q_BH = NaN) so the finite tests are corrected among themselves.
+    _finite = np.isfinite(pd.to_numeric(_df["p_raw"], errors="coerce").to_numpy(float))
+    _df["q_BH"] = np.nan
+    if _finite.any():
+        _df.loc[_finite, "q_BH"] = false_discovery_control(
+            _df.loc[_finite, "p_raw"].to_numpy(float), method="bh")
     _df["significant_q<0.05"] = _df["q_BH"] < 0.05
     _df = _df.sort_values("q_BH").reset_index(drop=True)
     _path = _aux_dir(out_dir) / "06_Statistical_Tests.csv"
@@ -7762,7 +7769,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # ===============================================================================
-# SECTION: EXTENDED ANALYSIS FIGURES  [merged into the thematic subfolders]
+# SECTION 4B: EXTENDED ANALYSIS FIGURES
 # ===============================================================================
 """
 Eight panels merged in from the two more_Plots prototypes, each taken from whichever prototype drew
