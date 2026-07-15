@@ -1198,6 +1198,10 @@ def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
         if dv.empty:
             reporter.log("  ! Figure 18b skipped: no rows with UMAP coordinates")
             return
+        if len(dv) < 3:
+            # a 2-D KDE needs ≥ 3 non-collinear points; fewer gives a singular covariance (LinAlgError)
+            reporter.log(f"  ! Figure 18b skipped: only {len(dv)} UMAP row(s), too few for a density estimate")
+            return
         dv["_X"] = dv["UMAP_X"]; dv["_Y"] = dv["UMAP_Y"]
         pax = pa.copy(); pax["_X"] = pa["UMAP_X"]; pax["_Y"] = pa["UMAP_Y"]
         xy  = np.vstack([dv["_X"].values, dv["_Y"].values])
