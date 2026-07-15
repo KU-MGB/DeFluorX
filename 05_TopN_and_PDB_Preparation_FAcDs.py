@@ -3919,15 +3919,21 @@ def topn_extraction_phase(args):
         f.write("\n".join(unique_fa_lines))
 
     # --- Delivery Package Summary ---
+    # Lists everything Step 05 produced, in the order it sits on disk, so the log is a complete map of
+    # the deliverables (including the analysis figures and, when generated, the ESP charges).
+    _esp_dir = prep_dir / "4_Ligand_ESP_Charges"
     _dp_rows = [
-        ("1", "Raw PDBs + Figures",            str(raw_pdb_dir.resolve())),
-        ("2", "Prepared PDBs + Figures",       str(prep_pdb_dir.resolve())),
-        ("3", "Comparative Ramachandran Plots", str(out_rama.resolve())),
-        ("4", "Controls (Raw/Prep/CSV)",       str(out_ctrl.resolve())),
-        ("5", "Molecular Handover (FASTA/SDF/PDB)", str(out_handover.resolve())),
-        ("6", "Combined Scientific Data (CSV · in Handover)", str(subset_csv_path.resolve())),
-        ("7", "Step-05 Log (prep + extraction)", str((prep_dir / "00_TopN_and_Preparation_Log.txt").resolve())),
+        ("1", "Raw PDBs + PyMOL/PLIP figures",   str(raw_pdb_dir.resolve())),
+        ("2", "Prepared PDBs + PyMOL/PLIP figures", str(prep_pdb_dir.resolve())),
+        ("3", "Comparative Analysis · geometry CSV + pose-drift + machinery figures", str(final_dir.resolve())),
+        ("4", "Comparative Ramachandran plots",  str(out_rama.resolve())),
+        ("5", "Controls (raw/prep/CSV)",         str(out_ctrl.resolve())),
+        ("6", "Molecular Handover (FASTA/SDF/PDB + Combined Scientific Data CSV)", str(out_handover.resolve())),
     ]
+    if _esp_dir.is_dir():
+        _dp_rows.append(("7", "Ligand ESP charges (Jaguar) + summary + figure", str(_esp_dir.resolve())))
+    _dp_rows.append((str(len(_dp_rows) + 1), "Step-05 log (prep + extraction)",
+                     str((prep_dir / "00_TopN_and_Preparation_Log.txt").resolve())))
     _lw = max(max(len(r[1]) for r in _dp_rows), max(len(r[2]) for r in _dp_rows))
     console_info(f"\n{SEPARATOR_LIGHT}")
     console_info(f"  Delivery Package  │  Tiers: {', '.join(selected_tiers)}")
