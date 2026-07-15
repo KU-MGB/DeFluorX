@@ -168,9 +168,36 @@ EAF_TOKENS_PER_FRAME = int(CFG.EAF_TOKENS_PER_FRAME)
 # =============================================================================
 # SECTION 2: SMALL HELPERS
 # =============================================================================
+# Main-log file handle for this step, opened in main() once the run directory is known. Every _echo
+# line is mirrored to it (ANSI stripped), so Step 06 has the same 00_<StepName>.log every other step
+# writes. The per-\r progress bars (written straight to sys.stdout) are deliberately NOT mirrored —
+# a log does not want carriage-return redraws.
+_LOG_FH = None
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _open_step_log(physics_dir: Path) -> None:
+    """Open 6_Physics_Validation/00_SID_MMGBSA.log for this run (fresh each run)."""
+    global _LOG_FH
+    try:
+        physics_dir.mkdir(parents=True, exist_ok=True)
+        _LOG_FH = open(physics_dir / "00_SID_MMGBSA.log", "w", encoding="utf-8")
+        import atexit
+        atexit.register(lambda: _LOG_FH and not _LOG_FH.closed and _LOG_FH.close())
+    except Exception:
+        _LOG_FH = None
+
+
 def _echo(msg: str = "") -> None:
-    """Print to terminal immediately (flush) — keeps live progress visible."""
+    """Print to terminal immediately (flush) — keeps live progress visible — and mirror to the
+    step log file with ANSI colour codes stripped."""
     print(msg, flush=True)
+    if _LOG_FH is not None:
+        try:
+            _LOG_FH.write(_ANSI_RE.sub("", str(msg)) + "\n")
+            _LOG_FH.flush()
+        except Exception:
+            pass
 
 
 def out_eaf_frames(eaf_path: Path) -> int:
@@ -2168,6 +2195,7 @@ def main() -> int:
 
     run_dir = resolve_run_dir(args.run_dir)
     md_dir = _SCRIPT_DIR / run_dir / "6_Physics_Validation" / "MolecularDynamics"
+    _open_step_log(md_dir.parent)     # 6_Physics_Validation/00_SID_MMGBSA.log — mirrors this run's output
 
     if not md_dir.is_dir():
         _echo(f"ERROR: MolecularDynamics directory not found: {md_dir}")
