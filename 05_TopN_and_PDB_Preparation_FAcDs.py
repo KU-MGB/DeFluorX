@@ -982,6 +982,8 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     ax.set_xlim(-0.7, _n - 0.3)
     ax.set_ylim(_ymin, _ymax)
     ax.set_ylabel("Distance to mechanistic partner  (Å)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    from matplotlib.ticker import MultipleLocator
+    ax.yaxis.set_major_locator(MultipleLocator(0.2))     # finer gridlines for reading the tight spread
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
     # zone labels at the right edge, inside each band
@@ -1001,13 +1003,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["silver"],
                      markeredgecolor=CFG.VIS_INK["dark"], ms=5, label="control")])
     ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
-    fig.text(0.5, -0.02,
-             "Per residue: violin = distribution of all complexes at the minimised (MD-start) pose; points = "
-             "individual complexes (each MD-selected colour is one complex; grey = control). The left stem is "
-             "the MD-selected cohort's MEDIAN, CIF (open) → minimised (filled) — its preparation drift. "
-             "Controls are not pooled into the median (DeHa4 is a different enzyme).",
-             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.02, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.0, 1, 0.95))
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "02_Machinery_Engagement_Distribution.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")

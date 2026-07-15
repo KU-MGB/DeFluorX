@@ -2602,7 +2602,7 @@ class CFG:
     It is irrelevant to Step 07: QSite puts the ligand INSIDE the QM region, where DFT computes its
     density directly and never consults a point charge.
     """
-    ESP_CHARGES_ENABLE: bool         = False       # --esp on the Step-05 command line also turns it on
+    ESP_CHARGES_ENABLE: bool         = True        # ON by default: every Step-05 run writes 4_Ligand_ESP_Charges (Jaguar DFT, minutes/ligand); --esp also forces it
     ESP_KEEP_SCRATCH: bool           = False       # Jaguar leaves ~26 scratch files per ligand
                                                    # (babel.com, symtry.*, restart.*, *_tmp.mae …);
                                                    # they are deleted unless this is set
