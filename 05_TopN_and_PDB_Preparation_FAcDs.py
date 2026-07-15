@@ -820,11 +820,25 @@ def plot_nucleophile_stages(geom_rows: list, out_dir: Path) -> Path | None:
         return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
                 .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
 
+    # Vertical stage separators, one distinct colour each (CFG palette), so the three stages read as
+    # three columns rather than a single field. Muted, behind the data.
+    _stage_cols = (CFG.VIS_ACCENT["sky"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["magenta"])
+    for _sx, _sc in zip(_xs, _stage_cols):
+        ax.axvline(_sx, color=_sc, lw=1.4, alpha=0.35, zorder=1)
+
+    # Each MD-selected complex gets its own colourblind-safe colour (VIS_TREND_SERIES, cycled);
+    # every control stays grey. Colour is assigned in the plotted order so it is stable across runs.
+    # Stable colour per MD-selected complex, keyed on the sorted job name so the SAME complex gets the
+    # SAME colour in every figure of this set (this slopegraph and the machinery raincloud).
+    _md_jobs = sorted(j for j in df["job"] if not str(j).startswith(CFG.CONTROL_JOB_PREFIX))
+    _pal = CFG.VIS_TREND_SERIES
+    _md_colour = {j: _pal[_i % len(_pal)] for _i, j in enumerate(_md_jobs)}
+
     _lab = []            # (true_y, text, colour, is_md) for the right-edge labels, decluttered below
     for _, _r in df.iterrows():
         _md = not str(_r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
         _ys = [float(_r["cif_dist_nuc"]), float(_r["raw_dist_nuc"]), float(_r["prep_dist_nuc"])]
-        _col = CFG.VIS_ACCENT["blue"] if _md else CFG.VIS_INK["silver"]
+        _col = _md_colour[_r["job"]] if _md else CFG.VIS_INK["silver"]
         ax.plot(_xs, _ys, "-", color=_col, lw=2.1 if _md else 1.3,
                 alpha=0.95 if _md else 0.7, zorder=5 if _md else 3)
         ax.plot(_xs[:2], _ys[:2], "o", ms=6 if _md else 4.5, color=CFG.VIS_INK["white"],
@@ -860,15 +874,14 @@ def plot_nucleophile_stages(geom_rows: list, out_dir: Path) -> Path | None:
     ax.set_ylabel("Nucleophile → warhead-C distance  (Å)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
-    fig.suptitle("Nucleophile distance through preparation — CIF → RAW → Minimised",
-                 y=0.98, fontsize=CFG.VIS_FONT_AXIS_LABEL + 1.0, fontweight="bold")
-    _h = [_Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], lw=2.1, marker="o",
-                  markerfacecolor=CFG.VIS_ACCENT["blue"], markeredgecolor=CFG.VIS_INK["dark"],
-                  label="MD-selected complex"),
-          _Line2D([0], [0], color=CFG.VIS_INK["silver"], lw=1.3, marker="o",
-                  markerfacecolor=CFG.VIS_INK["silver"], markeredgecolor=CFG.VIS_INK["dark"],
-                  label="control")]
-    ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND)
+    _h = ([_Line2D([0], [0], color=_md_colour[_j], lw=2.1, marker="o",
+                   markerfacecolor=_md_colour[_j], markeredgecolor=CFG.VIS_INK["dark"],
+                   label=_short(_j))
+           for _j in _md_jobs]
+          + [_Line2D([0], [0], color=CFG.VIS_INK["silver"], lw=1.3, marker="o",
+                     markerfacecolor=CFG.VIS_INK["silver"], markeredgecolor=CFG.VIS_INK["dark"],
+                     label="control (grey)")])
+    ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND, ncol=1)
     fig.text(0.5, 0.005,
              "One line per complex. CIF and RAW coincide (conversion is lossless), so the slope to Minimised "
              "is the preparation drift. Green = reactive (≤ Tier_1A gate); red = beyond the relaxed NAC envelope.",
@@ -879,6 +892,247 @@ def plot_nucleophile_stages(geom_rows: list, out_dir: Path) -> Path | None:
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
+
+
+# The eight catalytic residues, in the order the figure stacks them: the reactive relay that does the
+# chemistry first, then the machinery that positions the substrate. Each entry is
+# (role_key, ranked-CSV column, short label, functional group, partner). The PARTNER is what the residue
+# actually engages mechanistically — and it is NOT the substrate for every residue. FAcD's catalysis is a
+# RELAY: the nucleophile attacks the substrate carbon, but the base (His) engages the NUCLEOPHILE, and the
+# acid (Asp) engages the BASE (the Asp–His dyad that polarises it, "not a ligand contact" per Step 02).
+# Measuring the acid or the base against the substrate would report them as "disengaged" when the dyad is
+# in fact intact, which is exactly backwards. So each residue is measured against its own partner:
+# "substrate" for the direct contacts, or another role_key for the relay links.
+_MACHINERY_ROLES = [
+    ("Nuc",     "Mapped_Nucleophile",  "Nucleophile → warhead C", "reactive",   "substrate"),
+    ("Base",    "Mapped_Base",         "Base → nucleophile",      "reactive",   "Nuc"),
+    ("Acid",    "Mapped_Acid",         "Acid → base (dyad)",      "reactive",   "Base"),
+    ("StabH",   "Mapped_Stabiliser_H", "F⁻ stabiliser → substrate", "stabiliser", "substrate"),
+    ("Clamp1",  "Mapped_Clamp1",       "Carboxylate clamp (Arg) → substrate", "clamp", "substrate"),
+    ("Clamp2",  "Mapped_Clamp2",       "Carboxylate clamp (Arg) → substrate", "clamp", "substrate"),
+    ("CradleW", "Mapped_Stabiliser_W", "Aromatic cradle (Trp) → substrate", "cradle", "substrate"),
+    ("CradleY", "Mapped_Stabiliser_Y", "Aromatic cradle (Tyr) → substrate", "cradle", "substrate"),
+]
+
+
+def load_machinery_map(prod_dir: Path) -> dict:
+    """Per-job residue numbers for ALL EIGHT catalytic roles, from 02's dynamic alignment
+    (the Mapped_* columns of the ranked CSV). Returns {job_name: {role_key: int|None}}.
+
+    This is the 8-residue superset of load_catalytic_anchor_map, which returns only the three
+    protonation-relevant roles. The extra five (the fluoride stabiliser, the two carboxylate
+    clamps, the two aromatic-cradle residues) are read only for the machinery-engagement figure,
+    never for protonation, so they live in their own loader rather than widening the anchor map."""
+    import re as _re
+    _rank = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or sorted(prod_dir.glob("*_Ranked_*.csv"))
+    if not _rank:
+        return {}
+    try:
+        _df = pd.read_csv(sorted(_rank)[-1], low_memory=False)
+    except Exception:
+        return {}
+    if "job_name" not in _df.columns:
+        return {}
+    def _num(v):
+        _m = _re.search(r"(\d+)\s*$", str(v))
+        return int(_m.group(1)) if _m else None
+    _out = {}
+    for _, _row in _df.iterrows():
+        _out[_row["job_name"]] = {rk: (_num(_row[col]) if col in _df.columns else None)
+                                  for rk, col, _lbl, _grp, _partner in _MACHINERY_ROLES}
+    return _out
+
+
+def measure_machinery_engagement(struct_path: Path, role_resnums: dict) -> dict:
+    """How close each catalytic residue sits to the substrate — the minimum heavy-atom distance from
+    the residue's SIDECHAIN to the nearest ligand heavy atom, for every mapped role.
+
+    'Engagement' is deliberately the sidechain-to-ligand contact distance, not the Cα distance: the
+    chemistry is done by the sidechains (the Asp carboxylate attacks, the His imidazole relays a proton,
+    the Arg guanidinium clamps the substrate carboxylate, the Trp/Tyr ring cradles it). A residue whose
+    backbone is in place but whose sidechain has swung away is DISENGAGED, and only the sidechain metric
+    catches that. Returns {role_key: min_distance_A}; a role with no mapped residue or no sidechain atoms
+    present is NaN so the figure can mark it 'not resolved' rather than draw a false contact."""
+    _AA = {"ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO",
+           "SER","THR","TRP","TYR","VAL","HID","HIE","HIP","ASH","GLH","LYN","HOH","WAT","NA","CL","SPC","T3P"}
+    _bb = {"N", "CA", "C", "O", "OXT", "H", "HA"}
+    _out = {rk: float("nan") for rk, *_ in _MACHINERY_ROLES}
+    try:
+        st = gemmi.read_structure(str(struct_path)); st.setup_entities(); st.remove_hydrogens()
+    except Exception:
+        return _out
+    _lig, _prot = [], []
+    for _ch in st[0]:
+        for _r in _ch:
+            (_prot if _r.name.strip().upper() in _AA else _lig).append(_r)
+    _lig = [r for r in _lig if len(r) > 2]
+    if not _lig:
+        return _out
+    _L = max(_lig, key=len)
+    _lig_pos = [a.pos for a in _L if a.element.name != "H"]
+    if not _lig_pos:
+        return _out
+    _by_num = {}
+    for _r in _prot:
+        _by_num.setdefault(_r.seqid.num, _r)
+
+    def _sidechain(_num):
+        if _num is None:
+            return None
+        _res = _by_num.get(int(_num))
+        if _res is None:
+            return None
+        _side = [a.pos for a in _res if a.element.name != "H" and a.name.strip().upper() not in _bb]
+        if not _side:                                    # glycine-like: no sidechain, use all heavy atoms
+            _side = [a.pos for a in _res if a.element.name != "H"]
+        return _side or None
+
+    _partner_of = {rk: partner for rk, _c, _l, _g, partner in _MACHINERY_ROLES}
+    for _rk, _num in (role_resnums or {}).items():
+        _side = _sidechain(_num)
+        if not _side:
+            continue
+        _partner = _partner_of.get(_rk, "substrate")
+        if _partner == "substrate":
+            _target = _lig_pos                            # residue → nearest substrate heavy atom
+        else:
+            _target = _sidechain((role_resnums or {}).get(_partner))   # residue → partner residue sidechain
+        if not _target:
+            continue
+        _out[_rk] = float(min(_sp.dist(_tp) for _sp in _side for _tp in _target))
+    return _out
+
+
+def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
+    """All eight catalytic residues in one mixed figure: for each residue, the cohort's engagement to
+    its mechanistic partner is drawn as a raincloud — a violin (the distribution across complexes at the
+    minimised, MD-start pose), a box (median and quartiles) inside it, and a strip of the individual
+    complexes on top (each MD-selected complex in its own colour, controls grey). A thin stem runs from
+    the CIF median down/up to the minimised median, so the drift of the whole cohort through preparation
+    is visible per residue. The three shaded bands read reactive contact → in contact → out of contact.
+
+    This is the cohort-level companion to the per-complex figures: it answers whether, across every
+    candidate, each piece of the machinery still sits where the chemistry needs it after minimisation —
+    the reactive relay (nucleophile → warhead C, base → nucleophile, acid → base dyad) drawn first and
+    heavier, then the substrate-positioning residues (fluoride stabiliser, carboxylate clamps, aromatic
+    cradle)."""
+    if not rows:
+        return None
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D as _Line2D
+    import matplotlib.patches as _mpatches
+    _utils_mod.apply_figure_style(CFG)
+
+    _react = float(CFG.NAC_DIST_STRICT)
+    _outer = float(getattr(CFG, "THRESHOLD_SALT_BRIDGE", 5.0))
+    _grp_col = {"reactive": CFG.VIS_BAND["high"], "stabiliser": CFG.VIS_BAND["moderate"],
+                "clamp": CFG.VIS_ACCENT["blue"], "cradle": CFG.VIS_INK["mid"]}
+    _pal = CFG.VIS_TREND_SERIES
+    _md_jobs = sorted(r["job"] for r in rows if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX))
+    _md_colour = {j: _pal[_i % len(_pal)] for _i, j in enumerate(_md_jobs)}
+
+    _n = len(_MACHINERY_ROLES)
+    fig, ax = plt.subplots(figsize=(1.55 * _n + 2.0, 8.2))
+    _allvals = [v for r in rows for _d in (r.get("cif_eng", {}), r.get("prep_eng", {}))
+                for v in _d.values() if v == v]
+    _ymax = min(max(_allvals) if _allvals else _outer, _outer + 3.0) + 0.4
+    _ymin = max(0.0, (min(_allvals) if _allvals else 0.0) - 0.3)
+    ax.axhspan(_ymin, _react, color=CFG.VIS_BAND["high_fill"], lw=0, zorder=0)
+    ax.axhspan(_react, _outer, color=CFG.VIS_BAND["mod_fill"], lw=0, zorder=0)
+    ax.axhspan(_outer, _ymax, color=CFG.VIS_BAND["low_fill"], lw=0, zorder=0)
+    ax.axhline(_react, ls="--", lw=1.1, color=CFG.VIS_INK["dark"], alpha=0.75, zorder=1)
+    ax.axhline(_outer, ls=":", lw=1.0, color=CFG.VIS_INK["ghost"], zorder=1)
+
+    _rng = np.random.default_rng(0)
+    for _i, (_rk, _col_name, _lbl, _grp, _partner) in enumerate(_MACHINERY_ROLES):
+        _gc = _grp_col.get(_grp, CFG.VIS_INK["dark"])
+        _prep = [r.get("prep_eng", {}).get(_rk) for r in rows]
+        _prep = [v for v in _prep if v == v]
+        _cif = [r.get("cif_eng", {}).get(_rk) for r in rows]
+        _cif = [v for v in _cif if v == v]
+        if len(_prep) >= 3:                      # violin needs a few points to form a shape
+            _vp = ax.violinplot([_prep], positions=[_i], widths=0.7, showextrema=False)
+            for _b in _vp["bodies"]:
+                _b.set_facecolor(_gc); _b.set_alpha(0.18); _b.set_edgecolor(_gc); _b.set_linewidth(0.8); _b.set_zorder(2)
+        if _prep:
+            _bp = ax.boxplot([_prep], positions=[_i], widths=0.26, patch_artist=True,
+                             showfliers=False, zorder=3,
+                             medianprops=dict(color=_gc, lw=2.0),
+                             boxprops=dict(facecolor=CFG.VIS_INK["white"], edgecolor=_gc, lw=1.2, alpha=0.9),
+                             whiskerprops=dict(color=_gc, lw=1.0), capprops=dict(color=_gc, lw=1.0))
+        # strip: each complex as a point, MD coloured, controls grey; small horizontal jitter
+        for _r in rows:
+            _v = _r.get("prep_eng", {}).get(_rk)
+            if _v != _v or _v is None:
+                continue
+            _md = not str(_r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
+            _pc = _md_colour[_r["job"]] if _md else CFG.VIS_INK["silver"]
+            ax.plot(_i + float(_rng.uniform(-0.12, 0.12)), _v, "o", ms=6 if _md else 4.5,
+                    color=_pc, markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=0.6,
+                    alpha=0.95 if _md else 0.75, zorder=6 if _md else 5)
+        # cohort drift stem: CIF median → minimised median
+        if _cif and _prep:
+            _mc, _mp = float(np.median(_cif)), float(np.median(_prep))
+            ax.plot([_i - 0.34, _i - 0.34], [_mc, _mp], "-", color=_gc, lw=1.4, alpha=0.7, zorder=4)
+            ax.plot([_i - 0.34], [_mc], "o", ms=5, markerfacecolor=CFG.VIS_INK["white"],
+                    markeredgecolor=_gc, markeredgewidth=1.2, zorder=5)
+            ax.plot([_i - 0.34], [_mp], "o", ms=5, color=_gc, zorder=5)
+
+    # separate the reactive relay (first 3) from the positioning machinery
+    _n_react = sum(1 for _rk, _c, _l, _g, _p in _MACHINERY_ROLES if _g == "reactive")
+    ax.axvline(_n_react - 0.5, ls="-", lw=0.8, color=CFG.VIS_INK["pale"], zorder=1)
+    ax.annotate("reactive relay", xy=((_n_react - 1) / 2, 1.0), xycoords=("data", "axes fraction"),
+                xytext=(0, 6), textcoords="offset points", ha="center", va="bottom",
+                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_BAND["high"], fontweight="bold")
+    ax.annotate("substrate-positioning machinery", xy=((_n_react + _n - 1) / 2, 1.0),
+                xycoords=("data", "axes fraction"), xytext=(0, 6), textcoords="offset points",
+                ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
+
+    ax.set_xticks(range(_n))
+    _xt = ax.set_xticklabels([_lbl for _rk, _c, _lbl, _g, _p in _MACHINERY_ROLES],
+                             rotation=30, ha="right", fontsize=CFG.VIS_FONT_ANNOT)
+    for _t, (_rk, _c, _lbl, _g, _p) in zip(_xt, _MACHINERY_ROLES):
+        _t.set_color(_grp_col.get(_g, CFG.VIS_INK["dark"]))
+        if _g == "reactive":
+            _t.set_fontweight("bold")
+    ax.set_xlim(-0.7, _n - 0.3)
+    ax.set_ylim(_ymin, _ymax)
+    ax.set_ylabel("Distance to mechanistic partner  (Å)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
+    ax.set_axisbelow(True)
+    # zone labels at the right edge, inside each band
+    for _yv, _yt, _yc in ((_react, f"reactive ≤{_react:g} Å", CFG.VIS_BAND["high"]),
+                          ((_react + _outer) / 2, f"in contact ≤{_outer:g} Å", CFG.VIS_INK["muted"]),
+                          (_ymax - 0.2, "out of contact", CFG.VIS_BAND["low"])):
+        ax.annotate(_yt, xy=(1.0, _yv), xycoords=("axes fraction", "data"), xytext=(-4, 0),
+                    textcoords="offset points", ha="right", va="center", style="italic",
+                    fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_yc, alpha=0.9)
+
+    _h = ([_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
+                   markeredgecolor=CFG.VIS_INK["dark"], ms=6, label="CIF median (stem top)"),
+           _Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["dark"],
+                   markeredgecolor="none", ms=6, label="minimised median (stem foot)")]
+          + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=_md_colour[_j],
+                     markeredgecolor=CFG.VIS_INK["dark"], ms=6, label=_short_job(_j)) for _j in _md_jobs]
+          + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["silver"],
+                     markeredgecolor=CFG.VIS_INK["dark"], ms=5, label="control")])
+    ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
+    fig.text(0.5, -0.02,
+             "Per residue: violin = cohort distribution at the minimised pose, box = median/quartiles, "
+             "points = individual complexes (each MD-selected colour is one complex; grey = control). "
+             "The stem at each residue runs from the CIF median to the minimised median — the cohort drift.",
+             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
+    fig.tight_layout(rect=(0, 0.02, 1, 0.95))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _path = out_dir / "03_Machinery_Engagement_Distribution.png"
+    fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+    return _path
+
+
+def _short_job(j):
+    return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
+            .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
 
 
 def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> dict:
@@ -3283,6 +3537,28 @@ def prep_and_convert_phase(args):
                 console_info(f"Nucleophile-distance figure → {_nfig.name}")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Nucleophile-distance figure skipped: {type(_e).__name__}: {_e}")
+
+        # ── All eight catalytic residues, cohort distribution CIF → minimised (raincloud) ─
+        try:
+            _mach_map = load_machinery_map(prod_dir)
+            _cif_dir_m = dir_raw.parent.parent / "2_Best_Complexes_CIFs"
+            _mach_rows = []
+            for _pp in sorted(dir_prep_clean.glob("*_Prepared.pdb")):
+                _job = _pp.name.replace("_Prepared.pdb", "")
+                _roles = _mach_map.get(_job)
+                if not _roles:
+                    continue
+                _chit = (next(iter(sorted(_cif_dir_m.glob(f"{_job}_model_*.cif"))), None)
+                         if _cif_dir_m.is_dir() else None)
+                _mach_rows.append({"job": _job,
+                                   "cif_eng": measure_machinery_engagement(_chit, _roles) if _chit else {},
+                                   "prep_eng": measure_machinery_engagement(_pp, _roles)})
+            if _mach_rows:
+                _dfig = plot_machinery_distribution(_mach_rows, _pg_path.parent)
+                if _dfig:
+                    console_info(f"Machinery-engagement figure → {_dfig.name}  ({len(_mach_rows)} complexes × 8 residues)")
+        except Exception as _e:                                   # noqa: BLE001
+            console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 
     """
     QM ligand charges — only when asked for. The step is minutes of DFT per ligand, and its product is
