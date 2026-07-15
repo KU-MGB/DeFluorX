@@ -1514,20 +1514,16 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
                  color=[_cols[min(i, 2)] for i in range(len(d))],
                  edgecolor=CFG.VIS_INK["dark"], linewidth=0.8, height=0.55, zorder=3)
     for _r, _v, _nf in zip(_b, d["q_alpha"], d["n_F"]):
-        ax.text(_v + 0.006, _r.get_y() + _r.get_height() / 2, f"{_v:+.3f}   ({_nf} F)",
-                va="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"], zorder=4)
+        _lx = _v + 0.006 if _v >= 0 else 0.006          # keep negative-bar labels inside the plot
+        ax.text(_lx, _r.get_y() + _r.get_height() / 2, f"{_v:+.3f}   ({_nf} F)",
+                va="center", ha="left", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"], zorder=4)
     ax.set_xlabel("QM (Jaguar ESP) charge on the α-carbon — the atom the nucleophile attacks  (e)")
     ax.set_xlim(0, max(d["q_alpha"]) * 1.32)
     ax.grid(True, axis="x", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
-    _lo, _hi = float(d["q_alpha"].min()), float(d["q_alpha"].max())
-    fig.text(0.5, 0.015,
-             f"{_hi / max(_lo, 1e-6):.0f}× spread in α-carbon electrophilicity across the substrates — "
-             f"the one quantity an SN2 rate turns on. OPLS4 assigns by atom type and cannot represent it.",
-             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        fig.tight_layout()
     _p = out_dir / "01_ESP_Alpha_Carbon_Charge.png"
     fig.savefig(_p, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
