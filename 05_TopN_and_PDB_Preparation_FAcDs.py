@@ -638,9 +638,13 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     df = df.dropna(subset=["raw_sn2_angle", "prep_sn2_angle"])
     if df.empty:
         return None
-    # Secondary key: rows arrive in thread-completion order, so equal angles would otherwise
-    # be ordered by whichever worker happened to finish first.
-    df = df.sort_values(["prep_sn2_angle", "job"], kind="mergesort").reset_index(drop=True)
+    # Group the two cohorts on the y-axis: controls together at the foot, MD-selected together above
+    # them, each block sorted by prepared angle. Reading the MD candidates as one contiguous set is
+    # clearer than interleaving them with the controls by angle. The 'job' secondary key keeps equal
+    # angles deterministic (rows otherwise arrive in thread-completion order).
+    df["_is_md"] = ~df["job"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
+    df = df.sort_values(["_is_md", "prep_sn2_angle", "job"],
+                        ascending=[True, True, True], kind="mergesort").reset_index(drop=True)
 
     _label = ["_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
               .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", "")
@@ -766,129 +770,6 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "01_Pose_Drift_CIF_to_Prepared.png"
-    fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-    plt.close(fig)
-    return _path
-
-
-def plot_nucleophile_stages(geom_rows: list, out_dir: Path) -> Path | None:
-    """The nucleophile–warhead distance through the three stages, as one line per complex.
-
-    A single, publication-clean slopegraph: for each complex the distance the tier was scored on (CIF,
-    the selected best Boltz model) is joined to the distance after gemmi conversion (RAW) and after
-    PrepWizard minimisation (the pose MD starts from). CIF → RAW is lossless, so those two points sit
-    together and the whole slope from RAW to Minimised is the preparation drift. The Tier_1A gate and the
-    relaxed-NAC envelope are drawn as reference lines so the reader sees at a glance which complexes leave
-    the reactive window during preparation and by how much."""
-    if not geom_rows:
-        return None
-    import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D as _Line2D
-    _utils_mod.apply_figure_style(CFG)
-
-    df = pd.DataFrame(geom_rows)
-    for _c in ("cif_dist_nuc", "raw_dist_nuc", "prep_dist_nuc"):
-        if _c not in df.columns:
-            df[_c] = np.nan
-        df[_c] = pd.to_numeric(df[_c], errors="coerce")
-    df["cif_dist_nuc"] = df["cif_dist_nuc"].fillna(df["raw_dist_nuc"])   # lossless fallback
-    df = df.dropna(subset=["raw_dist_nuc", "prep_dist_nuc"])
-    if df.empty:
-        return None
-    df = df.sort_values("prep_dist_nuc", kind="mergesort").reset_index(drop=True)
-
-    _gate = float(CFG.TIER_NUC_DIST[CFG.TIER_TOP])       # 3.0 Å Tier_1A ceiling
-    _relaxed = float(CFG.NAC_DIST_RELAXED)               # 3.8 Å relaxed NAC ceiling
-    _xs = [0.0, 1.0, 2.0]                                # CIF, RAW, Minimised
-
-    fig, ax = plt.subplots(figsize=(10.5, 0.34 * len(df) + 3.2))
-    _ymax = max(float(df[["cif_dist_nuc", "raw_dist_nuc", "prep_dist_nuc"]].max().max()), _relaxed) + 0.35
-    _ymin = min(float(df[["cif_dist_nuc", "raw_dist_nuc", "prep_dist_nuc"]].min().min()), _gate) - 0.25
-    # reference bands: reactive (≤ gate) green, relaxed (gate→relaxed) neutral, beyond relaxed red
-    ax.axhspan(_ymin, _gate, color=CFG.VIS_TINT["green"], alpha=0.5, lw=0, zorder=0)
-    ax.axhspan(_relaxed, _ymax, color=CFG.VIS_TINT["red"], alpha=0.5, lw=0, zorder=0)
-    ax.axhline(_gate, ls="--", lw=1.3, color=CFG.VIS_INK["dark"], alpha=0.8, zorder=1)
-    ax.axhline(_relaxed, ls=":", lw=1.2, color=CFG.VIS_INK["ghost"], zorder=1)
-    ax.annotate(f"Tier_1A gate  {_gate:.1f} Å", xy=(2.0, _gate), xytext=(4, 2),
-                textcoords="offset points", ha="right", va="bottom",
-                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"])
-    ax.annotate(f"relaxed NAC  {_relaxed:.1f} Å", xy=(2.0, _relaxed), xytext=(4, 2),
-                textcoords="offset points", ha="right", va="bottom",
-                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["ghost"])
-
-    def _short(j):
-        return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
-                .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
-
-    # Vertical stage separators, one distinct colour each (CFG palette), so the three stages read as
-    # three columns rather than a single field. Muted, behind the data.
-    _stage_cols = (CFG.VIS_ACCENT["sky"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["magenta"])
-    for _sx, _sc in zip(_xs, _stage_cols):
-        ax.axvline(_sx, color=_sc, lw=1.4, alpha=0.35, zorder=1)
-
-    # Each MD-selected complex gets its own colourblind-safe colour (VIS_TREND_SERIES, cycled);
-    # every control stays grey. Colour is assigned in the plotted order so it is stable across runs.
-    # Stable colour per MD-selected complex, keyed on the sorted job name so the SAME complex gets the
-    # SAME colour in every figure of this set (this slopegraph and the machinery raincloud).
-    _md_jobs = sorted(j for j in df["job"] if not str(j).startswith(CFG.CONTROL_JOB_PREFIX))
-    _pal = CFG.VIS_TREND_SERIES
-    _md_colour = {j: _pal[_i % len(_pal)] for _i, j in enumerate(_md_jobs)}
-
-    _lab = []            # (true_y, text, colour, is_md) for the right-edge labels, decluttered below
-    for _, _r in df.iterrows():
-        _md = not str(_r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
-        _ys = [float(_r["cif_dist_nuc"]), float(_r["raw_dist_nuc"]), float(_r["prep_dist_nuc"])]
-        _col = _md_colour[_r["job"]] if _md else CFG.VIS_INK["silver"]
-        ax.plot(_xs, _ys, "-", color=_col, lw=2.1 if _md else 1.3,
-                alpha=0.95 if _md else 0.7, zorder=5 if _md else 3)
-        ax.plot(_xs[:2], _ys[:2], "o", ms=6 if _md else 4.5, color=CFG.VIS_INK["white"],
-                markeredgecolor=_col, markeredgewidth=1.4 if _md else 1.0, zorder=6)
-        ax.plot([_xs[2]], [_ys[2]], "o", ms=7 if _md else 5, color=_col,
-                markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=0.8, zorder=6)
-        _lab.append((_ys[2], f"{_short(_r['job'])}  {_ys[2]:.2f}", _col, _md))
-
-    # Declutter the right-edge labels: several complexes land within ~0.1 Å of each other at the
-    # minimised stage, so their labels would overprint. Sort by true y and push any that are closer
-    # than a minimum spacing apart, then draw a thin leader from the shifted label back to its point.
-    _lab.sort(key=lambda t: t[0])
-    _span = _ymax - _ymin
-    _gap = _span * 0.033
-    _adj = [t[0] for t in _lab]
-    for _i in range(1, len(_adj)):
-        if _adj[_i] - _adj[_i - 1] < _gap:
-            _adj[_i] = _adj[_i - 1] + _gap
-    _over = _adj[-1] - _ymax if _adj and _adj[-1] > _ymax else 0.0     # if we ran off the top, slide all down
-    for (_ty, _txt, _c, _md), _ly in zip(_lab, _adj):
-        _ly -= _over
-        ax.annotate(_txt, xy=(2.0, _ty), xytext=(2.12, _ly),
-                    ha="left", va="center", fontsize=CFG.VIS_FONT_ANNOT - (0.0 if _md else 0.8),
-                    color=_c, fontweight="bold" if _md else "normal", zorder=7,
-                    arrowprops=dict(arrowstyle="-", color=_c, lw=0.6, alpha=0.6,
-                                    shrinkA=0, shrinkB=2) if abs(_ly - _ty) > _gap * 0.4 else None)
-
-    ax.set_xlim(-0.25, 2.9)
-    ax.set_ylim(_ymin, _ymax)
-    ax.set_xticks(_xs)
-    ax.set_xticklabels(["CIF\n(Boltz best complex)", "RAW\n(gemmi converted)", "Minimised\n(PrepWizard · MD start)"],
-                       fontsize=CFG.VIS_FONT_TICK)
-    ax.set_ylabel("Nucleophile → warhead-C distance  (Å)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
-    ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
-    ax.set_axisbelow(True)
-    _h = ([_Line2D([0], [0], color=_md_colour[_j], lw=2.1, marker="o",
-                   markerfacecolor=_md_colour[_j], markeredgecolor=CFG.VIS_INK["dark"],
-                   label=_short(_j))
-           for _j in _md_jobs]
-          + [_Line2D([0], [0], color=CFG.VIS_INK["silver"], lw=1.3, marker="o",
-                     markerfacecolor=CFG.VIS_INK["silver"], markeredgecolor=CFG.VIS_INK["dark"],
-                     label="control (grey)")])
-    ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND, ncol=1)
-    fig.text(0.5, 0.005,
-             "One line per complex. CIF and RAW coincide (conversion is lossless), so the slope to Minimised "
-             "is the preparation drift. Green = reactive (≤ Tier_1A gate); red = beyond the relaxed NAC envelope.",
-             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.02, 1, 0.96))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "02_Nucleophile_Distance_Stages.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -1051,15 +932,9 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
         _cif = [r.get("cif_eng", {}).get(_rk) for r in rows]
         _cif = [v for v in _cif if v == v]
         if len(_prep) >= 3:                      # violin needs a few points to form a shape
-            _vp = ax.violinplot([_prep], positions=[_i], widths=0.7, showextrema=False)
+            _vp = ax.violinplot([_prep], positions=[_i], widths=0.8, showextrema=False)
             for _b in _vp["bodies"]:
-                _b.set_facecolor(_gc); _b.set_alpha(0.18); _b.set_edgecolor(_gc); _b.set_linewidth(0.8); _b.set_zorder(2)
-        if _prep:
-            _bp = ax.boxplot([_prep], positions=[_i], widths=0.26, patch_artist=True,
-                             showfliers=False, zorder=3,
-                             medianprops=dict(color=_gc, lw=2.0),
-                             boxprops=dict(facecolor=CFG.VIS_INK["white"], edgecolor=_gc, lw=1.2, alpha=0.9),
-                             whiskerprops=dict(color=_gc, lw=1.0), capprops=dict(color=_gc, lw=1.0))
+                _b.set_facecolor(_gc); _b.set_alpha(0.20); _b.set_edgecolor(_gc); _b.set_linewidth(0.9); _b.set_zorder(2)
         # strip: each complex as a point, MD coloured, controls grey; small horizontal jitter
         for _r in rows:
             _v = _r.get("prep_eng", {}).get(_rk)
@@ -1067,16 +942,25 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
                 continue
             _md = not str(_r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
             _pc = _md_colour[_r["job"]] if _md else CFG.VIS_INK["silver"]
-            ax.plot(_i + float(_rng.uniform(-0.12, 0.12)), _v, "o", ms=6 if _md else 4.5,
+            ax.plot(_i + float(_rng.uniform(-0.14, 0.14)), _v, "o", ms=6.5 if _md else 4.5,
                     color=_pc, markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=0.6,
-                    alpha=0.95 if _md else 0.75, zorder=6 if _md else 5)
-        # cohort drift stem: CIF median → minimised median
-        if _cif and _prep:
-            _mc, _mp = float(np.median(_cif)), float(np.median(_prep))
-            ax.plot([_i - 0.34, _i - 0.34], [_mc, _mp], "-", color=_gc, lw=1.4, alpha=0.7, zorder=4)
-            ax.plot([_i - 0.34], [_mc], "o", ms=5, markerfacecolor=CFG.VIS_INK["white"],
-                    markeredgecolor=_gc, markeredgewidth=1.2, zorder=5)
-            ax.plot([_i - 0.34], [_mp], "o", ms=5, color=_gc, zorder=5)
+                    alpha=0.95 if _md else 0.7, zorder=6 if _md else 5)
+        # Drift stem: the MD-SELECTED cohort's median engagement, CIF → minimised. Only the MD-selected
+        # complexes are pooled here — those are the poses that go to MD, and pooling the controls (a
+        # different enzyme in the DeHa4 case) into one median would not be a meaningful number.
+        _cif_md = [r.get("cif_eng", {}).get(_rk) for r in rows
+                   if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)]
+        _cif_md = [v for v in _cif_md if v == v]
+        _prep_md = [r.get("prep_eng", {}).get(_rk) for r in rows
+                    if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)]
+        _prep_md = [v for v in _prep_md if v == v]
+        if _cif_md and _prep_md:
+            _mc, _mp = float(np.median(_cif_md)), float(np.median(_prep_md))
+            ax.plot([_i - 0.36, _i - 0.36], [_mc, _mp], "-", color=_gc, lw=1.6, alpha=0.8, zorder=4)
+            ax.plot([_i - 0.36], [_mc], "o", ms=6, markerfacecolor=CFG.VIS_INK["white"],
+                    markeredgecolor=_gc, markeredgewidth=1.4, zorder=5)
+            ax.plot([_i - 0.36], [_mp], "o", ms=6, color=_gc, markeredgecolor=CFG.VIS_INK["dark"],
+                    markeredgewidth=0.5, zorder=5)
 
     # separate the reactive relay (first 3) from the positioning machinery
     _n_react = sum(1 for _rk, _c, _l, _g, _p in _MACHINERY_ROLES if _g == "reactive")
@@ -1109,22 +993,23 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
                     fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_yc, alpha=0.9)
 
     _h = ([_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
-                   markeredgecolor=CFG.VIS_INK["dark"], ms=6, label="CIF median (stem top)"),
+                   markeredgecolor=CFG.VIS_INK["dark"], ms=6, label="MD-selected median @ CIF"),
            _Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["dark"],
-                   markeredgecolor="none", ms=6, label="minimised median (stem foot)")]
+                   markeredgecolor="none", ms=6, label="MD-selected median @ minimised")]
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=_md_colour[_j],
                      markeredgecolor=CFG.VIS_INK["dark"], ms=6, label=_short_job(_j)) for _j in _md_jobs]
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["silver"],
                      markeredgecolor=CFG.VIS_INK["dark"], ms=5, label="control")])
     ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
     fig.text(0.5, -0.02,
-             "Per residue: violin = cohort distribution at the minimised pose, box = median/quartiles, "
-             "points = individual complexes (each MD-selected colour is one complex; grey = control). "
-             "The stem at each residue runs from the CIF median to the minimised median — the cohort drift.",
+             "Per residue: violin = distribution of all complexes at the minimised (MD-start) pose; points = "
+             "individual complexes (each MD-selected colour is one complex; grey = control). The left stem is "
+             "the MD-selected cohort's MEDIAN, CIF (open) → minimised (filled) — its preparation drift. "
+             "Controls are not pooled into the median (DeHa4 is a different enzyme).",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
     fig.tight_layout(rect=(0, 0.02, 1, 0.95))
     out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "03_Machinery_Engagement_Distribution.png"
+    _path = out_dir / "02_Machinery_Engagement_Distribution.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -3529,14 +3414,6 @@ def prep_and_convert_phase(args):
                 console_info(f"Pose-drift figure → {_fig_p.name}")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Pose-drift figure skipped: {type(_e).__name__}: {_e}")
-
-        # ── Nucleophile distance through the three stages, as one clean slopegraph ───────
-        try:
-            _nfig = plot_nucleophile_stages(_prep_geom_rows, _pg_path.parent)
-            if _nfig:
-                console_info(f"Nucleophile-distance figure → {_nfig.name}")
-        except Exception as _e:                                   # noqa: BLE001
-            console_info(f"  ! Nucleophile-distance figure skipped: {type(_e).__name__}: {_e}")
 
         # ── All eight catalytic residues, cohort distribution CIF → minimised (raincloud) ─
         try:
