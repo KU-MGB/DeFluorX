@@ -2532,18 +2532,49 @@ class CFG:
     So the state each catalytic residue takes is fixed here by the MECHANISM it must perform, and
     PREPWIZARD_ENFORCE_PROTONATION applies it after PrepWizard, before anything is simulated.
 
-    Each entry: the hydrogens to REMOVE so the residue takes its required state. Deleting the proton
-    is what changes the state — Desmond's force-field templates read the charged (ASP) or neutral
-    (ASH) form from the hydrogens present.
+    The policy covers all eight catalytic residues (REF_ACTIVE_SITE_MAP), each keyed by its ROLE, so the
+    logic is driven entirely from here and never from a residue-type guess (there is no Asp-or-Glu or
+    Asp/Glu/Ser branch anywhere — every role has ONE canonical residue and its own protonation). Three
+    carry a MECHANISM-REQUIRED state PropKa cannot infer and are ENFORCED after PrepWizard: the aspartate
+    nucleophile and dyad aspartate must be deprotonated carboxylates (remove the HD2 carboxyl proton), and
+    the histidine base must be neutral HID (Nδ1-H present, Nε2 free). Guaranteeing HID means: HIP → remove
+    HE2; HID → unchanged; HIE → remove HE2 AND add the Nδ1-H (add_H), so no input tautomer is left as a
+    proton-less imidazole or an unconverted HIE. The other five (the two arginine clamps, the His155
+    fluoride stabiliser, the Trp156/Tyr217 cradle) take their standard state at PREPWIZARD_PROPKA_PH and are
+    declared here for their FUNCTION and as a QC identity check — they are not stripped (`enforce=False`).
+    The His155 tautomer is left to PropKa because the departing F⁻ it stabilises is not present at prep time.
+
+    `role_key` links each role to CFG.ROLE_EXPECTED_RESIDUES so the residue-identity guard is CFG-driven.
+    Deprotonation is read from the HYDROGENS, not the residue NAME: Schrödinger keeps the name ASP whether
+    or not the carboxyl carries its proton (ASH is an AMBER convention it never writes), so the observable
+    that distinguishes the two states is the HD2 proton, not an 'ASH' name test.
     """
     PREPWIZARD_ENFORCE_PROTONATION: bool = True
     CATALYTIC_PROTONATION_POLICY: dict = field(default_factory=lambda: {
-        "Nuc":  {"state": "deprotonated", "charge": -1, "strip_H": ("HD2", "HE2"),
-                 "why": "it attacks the warhead carbon; a neutral COOH cannot"},
-        "Acid": {"state": "deprotonated", "charge": -1, "strip_H": ("HD2", "HE2"),
-                 "why": "the dyad aspartate polarises the histidine; it accepts charge"},
-        "Base": {"state": "neutral HID",  "charge": 0,  "strip_H": ("HE2",),
-                 "why": "Nd1-H points at the dyad; the Ne2 lone pair takes the proton"},
+        "Nuc":   {"role_key": "Nucleophile",        "residue": "ASP", "state": "deprotonated (-1)",
+                  "strip_H": ("HD2",), "add_H": (), "enforce": True,
+                  "why": "the aspartate nucleophile attacks the warhead carbon; a neutral -COOH cannot"},
+        "Acid":  {"role_key": "Acid_Catalyst",      "residue": "ASP", "state": "deprotonated (-1)",
+                  "strip_H": ("HD2",), "add_H": (), "enforce": True,
+                  "why": "the dyad aspartate polarises the histidine base and accepts charge"},
+        "Base":  {"role_key": "Base_Catalyst",      "residue": "HIS", "state": "neutral HID",
+                  "strip_H": ("HE2",), "add_H": ("HD1",), "enforce": True,
+                  "why": "Nδ1-H points at the dyad aspartate; the free Nε2 lone pair abstracts the proton that activates the hydrolytic water"},
+        "Carb1": {"role_key": "Carboxylate_Clamp",  "residue": "ARG", "state": "protonated (+1)",
+                  "strip_H": (), "add_H": (), "enforce": False,
+                  "why": "guanidinium clamp on the substrate carboxylate; cationic at physiological pH"},
+        "Carb2": {"role_key": "Carboxylate_Clamp",  "residue": "ARG", "state": "protonated (+1)",
+                  "strip_H": (), "add_H": (), "enforce": False,
+                  "why": "second guanidinium clamp arm on the substrate carboxylate"},
+        "Stab_H":{"role_key": "Fluorine_Stabiliser","residue": "HIS", "state": "PropKa-assigned",
+                  "strip_H": (), "add_H": (), "enforce": False,
+                  "why": "H-bond donor stabilising the leaving fluoride; tautomer left to PropKa because the departing F⁻ is not present at prep time"},
+        "Stab_W":{"role_key": "Fluoride_Cradle",    "residue": "TRP", "state": "neutral",
+                  "strip_H": (), "add_H": (), "enforce": False,
+                  "why": "indole N-H donates one of the three halide-pocket H-bonds to the leaving fluoride"},
+        "Stab_Y":{"role_key": "Fluoride_Cradle",    "residue": "TYR", "state": "neutral",
+                  "strip_H": (), "add_H": (), "enforce": False,
+                  "why": "phenol O-H donates a halide-pocket H-bond and accepts charge along the SN2 axis (Yue 2021)"},
     })
     '''
     RMSD restraint for the clash-resolving minimisation. This is a GLOBAL, RMSD-AVERAGED restraint

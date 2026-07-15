@@ -1126,23 +1126,53 @@ def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> di
     return _out
 
 
+def _build_hd1_line(res_lines: list) -> str | None:
+    """Build the PDB line for a histidine Nδ1-H (HD1), needed to convert an HIE base to HID.
+
+    HD1 lies in the imidazole plane along the external bisector of the CG–ND1–CE1 angle, one N–H bond
+    length (1.01 Å) from ND1. The line is cloned from an existing hydrogen of the same residue (HE2,
+    the proton being removed) so the column layout, chain, resnum and residue name match exactly; only
+    the atom name and coordinates change. Returns None if ND1/CG/CE1 are not all present.
+    """
+    def _xyz(_l):
+        return np.array([float(_l[30:38]), float(_l[38:46]), float(_l[46:54])], float)
+    _by = {_l[12:16].strip().upper(): _l for _l in res_lines}
+    if not {"ND1", "CG", "CE1"}.issubset(_by) or "HE2" not in _by:
+        return None
+    _nd1, _cg, _ce1 = _xyz(_by["ND1"]), _xyz(_by["CG"]), _xyz(_by["CE1"])
+    _u = _cg - _nd1;  _u /= (np.linalg.norm(_u) or 1.0)
+    _v = _ce1 - _nd1; _v /= (np.linalg.norm(_v) or 1.0)
+    _d = -(_u + _v)
+    _n = np.linalg.norm(_d)
+    if _n < 1e-6:                        # CG/ND1/CE1 collinear — cannot place HD1
+        return None
+    _hd1 = _nd1 + (_d / _n) * 1.01
+    _tmpl = _by["HE2"]
+    _name = _tmpl[12:16].replace("HE2", "HD1")            # keep the template's justification
+    return (_tmpl[:12] + _name + _tmpl[16:30]
+            + f"{_hd1[0]:8.3f}{_hd1[1]:8.3f}{_hd1[2]:8.3f}" + _tmpl[54:])
+
+
 def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) -> dict:
     """Give each catalytic residue the protonation its ROLE requires (CFG §15).
 
-    PropKa assigns protonation per structure from a pKa prediction, without knowing which aspartate
-    is the nucleophile. It is not a tuning knob: it decides whether the chemistry can happen. A
-    controlled experiment — two systems identical but for one hydrogen, same build, same relaxation —
-    measured the cost of getting it wrong: with the catalytic histidine as HIP (+1) the SN2 attack
-    angle collapses 150° → 98° during the Desmond relaxation, while the neutral HID tautomer holds
-    at 170° / 3.77 Å, a pose that still passes relaxed NAC.
+    Every rule is read from CFG.CATALYTIC_PROTONATION_POLICY — one entry per catalytic role, each tied to
+    ONE canonical residue via `role_key` (CFG.ROLE_EXPECTED_RESIDUES). There is no residue-type guess
+    anywhere: no Asp-or-Glu, no Asp/Glu/Ser branch. Three roles carry a mechanism-required state PropKa
+    cannot infer (it does not know which aspartate is the nucleophile) and are ENFORCED; the other five are
+    verified for identity and logged for their function, but not modified.
 
-    The state is imposed by REMOVING the hydrogens that contradict the role — the force-field
-    templates read the charged (ASP) or neutral (ASH) form from the hydrogens present. A histidine
-    is only converted when its partner proton (HD1) is there; stripping HE2 from an HIE tautomer
-    would leave an imidazole with no proton at all, which is not a species that exists.
+    The cost of getting the trio wrong is measured, not theoretical: a controlled experiment (two systems
+    identical but for one hydrogen) collapses the SN2 attack angle 150° → 98° when the base is HIP (+1),
+    while the neutral HID tautomer holds at 170° / 3.77 Å. So:
+      · the aspartate nucleophile and dyad aspartate are deprotonated by removing the HD2 carboxyl proton
+        (Desmond reads the charge state from the hydrogens present; the residue keeps the name ASP);
+      · the histidine base is driven to HID and GUARANTEED there regardless of the input tautomer —
+        HIP → remove HE2; HID → unchanged; HIE → remove HE2 and build the Nδ1-H (never left proton-less,
+        never left as an unconverted HIE).
 
-    Returns {role: (resname, resnum, action)} for the run log. The structure is rewritten in place
-    only when something actually changes.
+    Returns {role: (resname, resnum, action)} for the run log. The structure is rewritten in place only
+    when something actually changes.
     """
     _policy = CFG.CATALYTIC_PROTONATION_POLICY
     if not anchors:
@@ -1154,7 +1184,7 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
             logger.warning(f"Protonation enforcement skipped for {job_name}: {e}")
         return {}
 
-    _drop, _report = set(), {}
+    _drop, _insert, _report = set(), {}, {}     # _insert: line index → [new lines to add after it]
     for _role, _num in anchors.items():
         _pol = _policy.get(_role)
         if _pol is None or not _num:
@@ -1165,42 +1195,69 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
             _report[_role] = ("?", _num, "residue not found")
             continue
         _rname = lines[_idx[0]][17:20].strip()
-        _names = {lines[i][12:16].strip() for i in _idx}
+        _names = {lines[i][12:16].strip().upper() for i in _idx}
 
-        """
-        Fail closed on an unexpected residue. The strip lists are role-specific and assume the role's
-        chemistry — ("HD2","HE2") for a carboxylate nucleophile/acid, ("HE2",) for the histidine base.
-        If the alignment ever maps a role onto a residue of a different type, deleting those atom names
-        does not impose a protonation state, it deletes whatever atoms happen to share the name and
-        corrupts the residue. CFG.ROLE_EXPECTED_RESIDUES already declares what each role may legally be;
-        anything else is a mapping failure and must be REPORTED, not silently rewritten.
-        """
-        _role_key = {"Nuc": "Nucleophile", "Acid": "Acid_Catalyst", "Base": "Base_Catalyst"}.get(_role)
-        _expected = CFG.ROLE_EXPECTED_RESIDUES.get(_role_key, set()) if _role_key else set()
+        # CFG-driven identity guard: fail closed if the alignment mapped this role onto a residue of a
+        # type CFG.ROLE_EXPECTED_RESIDUES does not permit — stripping/adding atoms there would corrupt it.
+        _expected = CFG.ROLE_EXPECTED_RESIDUES.get(_pol.get("role_key", ""), set())
         if _expected and _rname.upper() not in {r.upper() for r in _expected}:
             _report[_role] = (_rname, _num,
                               f"REFUSED — {_rname} is not a valid {_role} residue "
                               f"(expected {sorted(_expected)}); protonation not enforced")
             if logger:
                 logger.warning(f"[QC] {job_name}: {_role} mapped to {_rname}{_num}, which is not in "
-                               f"CFG.ROLE_EXPECTED_RESIDUES[{_role_key}] — refusing to strip hydrogens.")
+                               f"CFG.ROLE_EXPECTED_RESIDUES[{_pol.get('role_key')}] — not modified.")
             continue
 
-        if _rname.upper().startswith("HI") and "HE2" in _pol["strip_H"] and "HD1" not in _names:
-            _report[_role] = (_rname, _num, "left as-is (no HD1 to keep)")
+        # Roles that carry their standard state (clamp Arg, His155 stabiliser, Trp/Tyr cradle):
+        # declared for function + identity check only, never stripped.
+        if not _pol.get("enforce"):
+            _report[_role] = (_rname, _num, f"{_pol['state']} — not enforced ({_pol['why']})")
             continue
 
+        _strip = {h.upper() for h in _pol.get("strip_H", ())}
+
+        # Histidine base → GUARANTEE HID (Nδ1-H present, Nε2 free) for any input tautomer.
+        if _rname.upper().startswith("HI"):
+            _has_hd1, _has_he2 = "HD1" in _names, "HE2" in _names
+            if _has_hd1 and _has_he2:                       # HIP → HID
+                _drop.update(i for i in _idx if lines[i][12:16].strip().upper() == "HE2")
+                _act = "HIP → HID (removed HE2)"
+            elif _has_hd1:                                  # already HID
+                _act = "HID (already correct)"
+            elif _has_he2:                                  # HIE → HID: strip HE2, build HD1
+                _new = _build_hd1_line([lines[i] for i in _idx])
+                if _new is None:
+                    _report[_role] = (_rname, _num, "HIE — could not build HD1 (ring atoms missing); left as-is")
+                    if logger:
+                        logger.warning(f"[QC] {job_name}: base His{_num} is HIE and HD1 could not be "
+                                       f"built — left unconverted, verify by hand.")
+                    continue
+                _drop.update(i for i in _idx if lines[i][12:16].strip().upper() == "HE2")
+                _insert.setdefault(max(_idx), []).append(_new)
+                _act = "HIE → HID (removed HE2, added HD1)"
+            else:
+                _report[_role] = (_rname, _num, "no imidazole protons found; left as-is")
+                continue
+            _report[_role] = (_rname, _num, _act)
+            continue
+
+        # Aspartate nucleophile / dyad acid → deprotonated: remove the HD2 carboxyl proton.
         _removed = [lines[i][12:16].strip() for i in _idx
-                    if lines[i][12:16].strip() in _pol["strip_H"]]
-        for i in _idx:
-            if lines[i][12:16].strip() in _pol["strip_H"]:
-                _drop.add(i)
+                    if lines[i][12:16].strip().upper() in _strip]
+        _drop.update(i for i in _idx if lines[i][12:16].strip().upper() in _strip)
         _report[_role] = (_rname, _num,
                           f"{_pol['state']} (removed {', '.join(_removed)})" if _removed
                           else f"{_pol['state']} (already correct)")
 
-    if _drop:
-        pdb_path.write_text("\n".join(l for i, l in enumerate(lines) if i not in _drop) + "\n")
+    if _drop or _insert:
+        _out = []
+        for i, l in enumerate(lines):
+            if i in _drop:
+                continue
+            _out.append(l)
+            _out.extend(_insert.get(i, ()))
+        pdb_path.write_text("\n".join(_out) + "\n")
     return _report
 
 
@@ -1575,8 +1632,8 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     acid_ref = anchors.get("Acid") or cfg.DREAM_TEAM_REFS["Acid"]  # else 134
     base_ref = anchors.get("Base") or cfg.DREAM_TEAM_REFS["Base"]  # else 277
 
-    ASP_TYPES = {"ASP", "ASH"}
-    HIS_TYPES = {"HIS", "HIE", "HID", "HIP"}
+    ASP_TYPES = {r.upper() for r in cfg.ROLE_EXPECTED_RESIDUES["Nucleophile"]}
+    HIS_TYPES = {r.upper() for r in cfg.ROLE_EXPECTED_RESIDUES["Base_Catalyst"]}
 
     resnum_to_resname = {}
     resnum_to_atoms   = defaultdict(set)
@@ -1610,24 +1667,24 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     carboxylic acid cannot attack, so a protonated nucleophile is a catalytically DEAD enzyme.
 
     The state is read from the HYDROGENS, not from the residue NAME. Schrödinger's preparation keeps
-    the name ASP whether or not the carboxyl carries its proton — ASH is an AMBER convention — so a
-    name test never fires and the guard it was supposed to provide is silently absent. The carboxyl
-    proton (HD2 on Asp, HE2 on Glu) is the observable that actually distinguishes the two states.
+    the name ASP whether or not the carboxyl carries its proton — ASH is an AMBER convention it never
+    writes — so a name test never fires and the guard it was supposed to provide is silently absent.
+    The observable is the aspartate carboxyl proton itself (HD2, taken from the CFG policy so this and
+    the enforcement agree on exactly one atom); there is no Glu HE2 here, the nucleophile is an ASP.
 
-    This is a WARNING, not an edit: enforce_catalytic_protonation strips exactly these hydrogens from
-    the nucleophile, so the chemistry is already imposed. What was missing was the report telling you
-    when the preparation had handed over a dead enzyme in the first place.
+    This is a WARNING, not an edit: enforce_catalytic_protonation strips exactly this hydrogen from the
+    nucleophile, so the chemistry is already imposed. What was missing was the report telling you when
+    the preparation had handed over a dead enzyme in the first place.
     """
-    _CARBOXYL_H = {"HD2", "HE2"}
+    _CARBOXYL_H = {h.upper() for h in cfg.CATALYTIC_PROTONATION_POLICY["Nuc"]["strip_H"]}
     if nuc_found is not None:
         _nuc_atoms = resnum_to_atoms.get(nuc_found, set())
-        _protonated = bool(_nuc_atoms & _CARBOXYL_H) or resnum_to_resname.get(nuc_found) == "ASH"
-        if _protonated:
+        _present = _nuc_atoms & _CARBOXYL_H
+        if _present:
             _msg = (f"[QC] Nucleophile Asp{nuc_found} is PROTONATED "
-                    f"(carboxyl H present: {sorted(_nuc_atoms & _CARBOXYL_H) or 'named ASH'}) — a "
-                    f"deprotonated ASP is required for the SN2 defluorination. The protonation "
-                    f"enforcement strips it, but check PropKa/Epik pH: the preparation produced a "
-                    f"catalytically dead nucleophile.")
+                    f"(carboxyl H present: {sorted(_present)}) — a deprotonated ASP is required for the "
+                    f"SN2 defluorination. The protonation enforcement strips it, but check PropKa/Epik "
+                    f"pH: the preparation produced a catalytically dead nucleophile.")
             (logger.warning if logger else print)(_msg)
 
     """
