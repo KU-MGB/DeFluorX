@@ -3670,8 +3670,8 @@ def topn_extraction_phase(args):
 
     # Control output folders (always created)
     out_ctrl = final_dir / "05_Controls"
-    out_ctrl_raw  = out_ctrl / "1_Raw"
-    out_ctrl_prep = out_ctrl / "2_Prepared"
+    out_ctrl_raw  = out_ctrl / "1_Converted_Raw_PDB"
+    out_ctrl_prep = out_ctrl / "2_Prepared_PDBs"
     out_ctrl_raw.mkdir(parents=True, exist_ok=True)
     out_ctrl_prep.mkdir(parents=True, exist_ok=True)
 

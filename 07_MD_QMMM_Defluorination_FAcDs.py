@@ -4624,7 +4624,7 @@ def main():
 
     global logger
     logger = (_setup_logging(master_out_dir / "00_MD_Thermodynamics.log",
-                             "08_md_thermo_engine")
+                             "md_thermo_engine")
               if _setup_logging else None)
 
 

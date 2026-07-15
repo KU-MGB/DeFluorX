@@ -2836,23 +2836,62 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     n_scissile_f = sum(1 for c, x in valid_cx_pairs if c == best_C)
 
     '''
-    β-fluorination: fluorines on the carbons adjacent to the scissile α-carbon
-    (excluding the carboxylate head carbon). FA/DFA/TFA = 0; every perfluoro chain
-    (PFBA/PFOA…) ≥ 2; perfluoro-ether α-carbons (GenX) ≥ 2 via the CF3 branch. This
-    is the discriminator the α-only C–F BDE proxy misses (a perfluoro substrate reads
-    the same low BDE as fluoroacetate unless β-fluorination is counted).
+    β-withdrawal on the scissile α-carbon: electron-withdrawing groups adjacent to the α-carbon
+    inductively strengthen the α-C–F bond, so they raise the cleavage barrier beyond what the
+    α-only C–F BDE proxy sees (a perfluoro substrate otherwise reads the same low BDE as
+    fluoroacetate). The term counts, within one bond of the α-carbon and CROSSING a single ether
+    oxygen, each withdrawing unit — a vicinal fluorine and an ether oxygen each count as one:
+
+      · a vicinal carbon contributes its fluorines (straight perfluoro chains: PFBA/PFOA… ≥ 2);
+      · an ether oxygen bonded to the α-carbon or to a β-carbon contributes 1 for its own strong
+        −I withdrawal, plus the fluorines on the carbon(s) directly across it.
+
+    Crossing the ether oxygen is essential for the perfluoro-ether acids: without it the α-carbon
+    of C6O4 (ether O directly on the α-carbon) reads β = 0 and of ADONA reads β = 1 — both look
+    like difluoroacetate — because the perfluoro mass sits past the –O–. These oxa-perfluoro
+    carboxylic acids are a recognised recalcitrant PFAS subclass, not FAcD substrates
+    (Wackett 2022; O'Hagan 2008 on C–F bond strength). FA/DFA/TFA carry no vicinal EWG → β = 0.
+    Geminal fluorines on the α-carbon itself are NOT counted here — they are already in the
+    α-F-count C–F BDE lookup; counting them twice would double-charge the same bond.
     '''
     beta_f_count = 0
     if rd_mol is not None and mm_map is not None:
         try:
+            def _is_ether_o(_o, _from_idx):
+                # ether/oxa oxygen: single-bonded O with two heavy neighbours (not a carbonyl or
+                # carboxylate oxygen, which double-bonds or terminates)
+                if _o.GetSymbol() != "O":
+                    return False
+                if any(_b.GetBondTypeAsDouble() == 2.0 for _b in _o.GetBonds()):
+                    return False
+                return sum(1 for _n in _o.GetNeighbors() if _n.GetSymbol() != "H") == 2
+
+            def _f_on(_c):
+                return sum(1 for _x in _c.GetNeighbors() if _x.GetSymbol() == "F")
+
             _aidx = mm_map.get(best_C.name)
             if _aidx is not None:
-                for _nb in rd_mol.GetAtomWithIdx(_aidx).GetNeighbors():
-                    if _nb.GetSymbol() != "C":
-                        continue
-                    if sum(1 for x in _nb.GetNeighbors() if x.GetSymbol() == "O") >= 2:
-                        continue   # carboxylate / head carbon — not a β position
-                    beta_f_count += sum(1 for x in _nb.GetNeighbors() if x.GetSymbol() == "F")
+                _alpha = rd_mol.GetAtomWithIdx(_aidx)
+                for _nb in _alpha.GetNeighbors():
+                    if _nb.GetSymbol() == "F":
+                        continue                       # geminal F → α-BDE lookup, not β
+                    if _nb.GetSymbol() == "C":
+                        if sum(1 for x in _nb.GetNeighbors() if x.GetSymbol() == "O") >= 2:
+                            continue                   # carboxylate / head carbon — not a β position
+                        beta_f_count += _f_on(_nb)
+                        # an ether O on this β-carbon (ADONA): its −I plus the F across it
+                        for _x in _nb.GetNeighbors():
+                            if _x.GetIdx() == _alpha.GetIdx():
+                                continue
+                            if _is_ether_o(_x, _nb.GetIdx()):
+                                beta_f_count += 1
+                                beta_f_count += sum(_f_on(_y) for _y in _x.GetNeighbors()
+                                                    if _y.GetSymbol() == "C" and _y.GetIdx() != _nb.GetIdx())
+                    elif _is_ether_o(_nb, _alpha.GetIdx()):
+                        # ether O directly on the α-carbon (C6O4): its −I plus the F across it
+                        beta_f_count += 1
+                        beta_f_count += sum(_f_on(_y) for _y in _nb.GetNeighbors()
+                                            if _y.GetSymbol() == "C" and _y.GetIdx() != _alpha.GetIdx())
         except Exception:
             beta_f_count = 0
 

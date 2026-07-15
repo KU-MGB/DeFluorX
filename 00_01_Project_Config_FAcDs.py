@@ -897,7 +897,7 @@ class CFG:
     """
     CHEM_PEN_W_BDE: float    = 0.015   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
     CHEM_PEN_W_OCCL: float   = 0.13    # penalty per Å of backside occlusion above SN2_BACKSIDE_OCCL_MAX
-    CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-fluorine on the attack-carbon chain: β-fluorination inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-fluorine (β_F=0) receives no β term and is governed by the α-BDE/occlusion penalty above
+    CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-withdrawal unit on the attack-carbon environment: a vicinal fluorine and an ether/oxa oxygen each count as one (the β counter in 02 crosses a single ether O, so perfluoro-ether acids such as C6O4/ADONA are seen, not read as difluoroacetate). Each unit inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-withdrawal (β=0: FA/DFA/TFA) is governed by the α-BDE/occlusion penalty above
     # The angle fade applies to the backside-occlusion term ONLY: full at/below
     # CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. The BDE,
     # β-fluorination and containment terms do not fade — none of them is a trajectory
