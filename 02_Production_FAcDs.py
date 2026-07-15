@@ -1811,6 +1811,8 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
 def load_atoms_from_structure(cif_path):
     """Efficiently parses the predicted three-dimensional CIF structure into discrete atoms using Gemmi."""
     doc = gemmi.cif.read_file(str(cif_path))
+    if len(doc) == 0:
+        raise ValueError(f"empty/blockless CIF (0 data blocks) — likely a truncated Boltz output: {Path(cif_path).name}")
     st = gemmi.make_structure_from_block(doc.sole_block())
     prot, lig = [], []
     for model in st:
