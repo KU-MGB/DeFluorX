@@ -848,7 +848,7 @@ class CFG:
     """
     FEASIBILITY_FLOOR: float     = 0.10    # below the library minimum (PFOS, 0.16), so it never flattens a real gradient
     FEAS_BDE_LO: float           = 120.0   # kcal/mol; scissile C–F BDE ≤ this → no BDE penalty (FA 109.9, DFA 119.5 pass)
-    FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. TFA (127.5) lands graded (~0.38), not the floor, so it still ranks as a lead — but the Tier_1A bond-strength ceiling (TIER_ELITE_BDE_MAX, §8.5) caps it at Tier_1B regardless of its pose
+    FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. An α-CF3 carbon (scissile C–F 127.5) lands graded (~0.38), not on the floor, so it is not flattened onto the recalcitrant class; and 127.5 is below the Tier_1A bond-strength ceiling (TIER_ELITE_BDE_MAX = 128, §8.5), so eligibility for the elite tier is decided by the pose it earns, held near the tier floor by the graded C–F penalty rather than capped
     FEAS_BETA_PER_F: float       = 0.35    # per-β-fluorine penalty: f_beta = 1/(1 + this·β_F) (FA/DFA β=0; PFAS β≥2)
 
     # -------------------------------------------------------------------------------
@@ -1364,7 +1364,7 @@ class CFG:
     # Step 8.2: Attack angle minimum thresholds (°, lower bound)
     # -------------------------------------------------------------------------------
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). Surfaces a chemotype-clean set of native-substrate (FA/DFA) elite candidates on diverse enzymes. Perfluoroalkyl (β-fluorinated) chains are kept out of Tier_1A by the β-feasibility + containment penalties, not by this angle gate. An α-CF3 substrate (TFA, scissile C–F 127.5) is barred from Tier_1A by the bond-strength ceiling TIER_ELITE_BDE_MAX (§8.5) at ANY angle — geometry cannot repeal thermochemistry — and is capped at Tier_1B as a discovery lead for Step-07 QM/MM.
+        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). A geometry gate only: which complexes clear it is decided by the docked pose, not by ligand identity. Perfluoroalkyl (β-fluorinated) chains are held out of Tier_1A by the β-withdrawal + containment penalties, not by this angle gate. An α-CF3 carbon (scissile C–F 127.5) sits just below the bond-strength ceiling TIER_ELITE_BDE_MAX (128, §8.5), so it stays eligible for Tier_1A on a pose that earns it — held near the tier floor by the graded C–F penalty; only a scissile C–F ABOVE the ceiling is capped at Tier_1B (geometry cannot repeal thermochemistry).
         "Tier_1B": 165.0,
         "Tier_2A":    155.0,   # = NAC_ANGLE_STRICT
         "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
@@ -1425,10 +1425,10 @@ class CFG:
     property of the bond, not of the approach geometry, so no near-linear trajectory lowers it. Such
     a pose is capped at Tier_1B and remains a discovery lead for Step-07 QM/MM to adjudicate.
 
-    The ceiling sits above the α-CF3 class (127.5 kcal/mol), so an α-CF3 substrate such as
-    trifluoroacetate is eligible for Tier_1A when its geometry earns it. TFA is the hardest substrate
-    the hydrolytic SN2 mechanism can plausibly reach, and the pipeline surfaces it as a lead rather
-    than ruling it out a priori. The bond strength is not waived: it is carried as a flat, non-fading
+    The ceiling sits above the α-CF3 class (127.5 kcal/mol), so an α-CF3 carbon is eligible for
+    Tier_1A when its geometry earns it. An α-CF3 is the strongest scissile C–F the hydrolytic SN2
+    mechanism can plausibly reach; it remains eligible as a lead rather than being ruled out a priori.
+    The bond strength is not waived: it is carried as a flat, non-fading
     penalty on mechanistic_score_effective (CHEM_PEN_W_BDE × the excess over SCISSILE_CF_BDE_MAX),
     which costs an α-CF3 pose ~0.11 of mech score. Only the most crystal-perfect α-CF3 pose therefore
     survives the coupled elite gate — one lead, not a chemotype.
@@ -1483,11 +1483,11 @@ class CFG:
     geometry. A pose whose B is below its assigned tier's floor is moved to the highest tier it
     qualifies for; B below the Tier_2B floor → TIER_CONSTELLATION_FLOOR_TIER (B>0) or
     Tier_5_Decoy (B==0, constellation unmeasurable), with is_degrader cleared. geometric_tier
-    preserves the pre-demotion call. Calibrated on the control run: FA/DFA and the near-ideal
-    Tier_1A poses (B 0.62–0.81) are retained; only genuinely mis-assembled sites are downgraded.
+    preserves the pre-demotion call. The floor is set to retain a near-ideal Tier_1A pose (crystal-grade
+    constellation, B ≳ 0.62) while downgrading only a genuinely mis-assembled active site.
     """
     TIER_CONSTELLATION_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 0.55,   # RMSD ≲ 0.8 Å — eight-residue constellation floor (the coupled elite-machinery gate + pocket-fit cap do the elite separation; this floor admits all three controls FA/DFA/TFA whose best poses sit at B≈0.665–0.83)
+        "Tier_1A": 0.55,   # RMSD ≲ 0.8 Å — eight-residue constellation floor at crystal-grade agreement; the coupled elite-machinery gate + pocket-fit cap do the elite separation, so this floor is deliberately permissive (any pose with B ≳ 0.66 clears it)
         "Tier_1B": 0.45,   # RMSD ≲ 1.2 Å
         "Tier_2A": 0.35,   # RMSD ≲ 1.9 Å
         "Tier_2B": 0.25,   # RMSD ≲ 3.0 Å
