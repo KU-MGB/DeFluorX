@@ -1463,7 +1463,7 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
 
     console_info(f"  \u2714 {_ok}/{len(_pdbs)} ligand(s) charged  \u2192  {_sum_path.name}")
     console_info("  NEXT (by hand in Maestro \u2014 deliberately not automated):")
-    console_info("    1. Load <stem>_ESP.mae into the workspace.")
+    console_info(f"    1. Load the *_ESP.mae file(s) from {out_dir.name}/ ({_ok} ligand(s)) into the workspace.")
     console_info("    2. System Builder \u2192 Solvation tab \u2192 tick 'Use custom charges'.")
     console_info("    3. Select 'Partial charges from structure', then 'Apply to' \u2192 the ligand.")
     try:
