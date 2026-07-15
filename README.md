@@ -973,7 +973,7 @@ python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp  
    > step are therefore **finer than the structure is reproducible**. This is recorded, never gated on:
    > a prepared pose that has left the relaxed NAC envelope is *flagged*, never dropped.
 
-   Outputs: `3_Comparative_Analysis/00_Prepared_Pose_Geometry.csv` and
+   Outputs: `3_Comparative_Analysis/01_Prepared_Pose_Geometry.csv` and
    `01_Pose_Drift_CIF_to_Prepared.png`.
 5. **QM ligand charges** (`--esp` or `CFG.ESP_CHARGES_ENABLE`; **off by default**) — a Jaguar DFT
    single-point with `icfit=1` on each prepared ligand, writing `<ligand>_ESP.mae`.

@@ -769,7 +769,7 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     fig.tight_layout(rect=(0, 0.045, 1, 0.90))
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "01_Pose_Drift_CIF_to_Prepared.png"
+    _path = out_dir / "02_Pose_Drift_CIF_to_Prepared.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -1005,7 +1005,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
     fig.tight_layout(rect=(0, 0.0, 1, 0.95))
     out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "02_Machinery_Engagement_Distribution.png"
+    _path = out_dir / "03_Machinery_Engagement_Distribution.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -3389,7 +3389,7 @@ def prep_and_convert_phase(args):
     if _prep_geom_rows:
         _pg = pd.DataFrame(_prep_geom_rows).sort_values(
             ["prep_sn2_angle", "job"], ascending=[False, True], kind="mergesort")
-        _pg_path = dir_prep_clean.parent / "3_Comparative_Analysis" / "00_Prepared_Pose_Geometry.csv"
+        _pg_path = dir_prep_clean.parent / "3_Comparative_Analysis" / "01_Prepared_Pose_Geometry.csv"
         _pg_path.parent.mkdir(parents=True, exist_ok=True)
         _pg.to_csv(_pg_path, index=False)
         _n_left = int(pd.to_numeric(_pg["prep_left_nac"], errors="coerce").fillna(0).sum())
@@ -3639,18 +3639,18 @@ def topn_extraction_phase(args):
     folder_tag = f"{tier_label}_{top_n}hits" if top_n else "Selected"
 
     # Comparative Ramachandran plots (raw vs prepared) for the selected cohort.
-    out_rama = final_dir / f"1_{folder_tag}_Comparative_Ramachandran_Plots"
+    out_rama = final_dir / f"04_{folder_tag}_Comparative_Ramachandran_Plots"
     out_rama.mkdir(parents=True, exist_ok=True)
 
     # Control output folders (always created)
-    out_ctrl = final_dir / "2_Controls"
+    out_ctrl = final_dir / "05_Controls"
     out_ctrl_raw  = out_ctrl / "1_Raw"
     out_ctrl_prep = out_ctrl / "2_Prepared"
     out_ctrl_raw.mkdir(parents=True, exist_ok=True)
     out_ctrl_prep.mkdir(parents=True, exist_ok=True)
 
     # Molecular Handover Folder
-    out_handover = final_dir / f"3_{folder_tag}_Molecular_Handover_Files"
+    out_handover = final_dir / f"06_{folder_tag}_Molecular_Handover_Files"
     out_handover.mkdir(parents=True, exist_ok=True)
 
     # Initialise SDF Writer
@@ -3877,8 +3877,9 @@ def topn_extraction_phase(args):
         # Step 5.10: Save data & summary
         # -------------------------------------------------------------------------------
 
-        # Save CSV Data (hits + controls merged; controls appended with is_control flag)
-        subset_csv_path = final_dir / f"4_{folder_tag}_Combined_Scientific_Data.csv"
+        # Save CSV Data (hits + controls merged; controls appended with is_control flag). It lives in the
+        # Molecular Handover folder — it is the scientific metadata for exactly those handover complexes.
+        subset_csv_path = out_handover / f"{folder_tag}_Combined_Scientific_Data.csv"
         _ctrl_df = pd.DataFrame(ctrl_csv_rows) if ctrl_csv_rows else pd.DataFrame()
         if not _ctrl_df.empty:
             _ctrl_df = _ctrl_df.reindex(columns=subset.columns)
@@ -3924,7 +3925,7 @@ def topn_extraction_phase(args):
         ("3", "Comparative Ramachandran Plots", str(out_rama.resolve())),
         ("4", "Controls (Raw/Prep/CSV)",       str(out_ctrl.resolve())),
         ("5", "Molecular Handover (FASTA/SDF/PDB)", str(out_handover.resolve())),
-        ("6", "Combined Scientific Data (CSV)", str(subset_csv_path.resolve())),
+        ("6", "Combined Scientific Data (CSV · in Handover)", str(subset_csv_path.resolve())),
         ("7", "Step-05 Log (prep + extraction)", str((prep_dir / "00_TopN_and_Preparation_Log.txt").resolve())),
     ]
     _lw = max(max(len(r[1]) for r in _dp_rows), max(len(r[2]) for r in _dp_rows))
