@@ -894,7 +894,7 @@ python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z --no-variance
 
 > **`--no-variance`.** The two inter-model uncertainty panels need a per-model variance table, built by
 > re-parsing all five model CIFs for every complex (~58,000 × 5). It is built **once**, cached in
-> `00_Analysis_Data/boltz_qc_multimodel_variance.csv`, and reused thereafter; a later run validates it
+> `00_Analysis_Data/07_Boltz2_MultiModel_QC_Variance.csv`, and reused thereafter; a later run validates it
 > (schema, coverage, and whether any geometry actually resolved) and parses **only the complexes it is
 > missing**, so an interrupted build resumes rather than restarting. Progress is checkpointed every
 > 5,000 complexes. The cost is I/O, not CPU — the corpus is ~16 CPU-minutes of parsing but ~58 GB of
@@ -910,7 +910,7 @@ python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z --no-variance
 - **`06_PFAS_Scope_and_Synthesis/` (01–15):** radar profiles (top hits + tier reps), tier success rates, confidence × SN2 landscape, conflict composition, hidden gems, Euler overlap, top-25 multitarget proteins, top-tier PFAS breakdown, Sankey workflow, PFAS chain-length hexbin / composition / carbon-confidence-MW panels, **chain length by tier**, **Tier_1A cross-ligand heatmap**.
 - **`07_Diagnostic_and_MultiModel_Trends/` (01–09):** *(includes the merged **pillar divergence by tier**)* pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) — scatter panels annotated with Spearman ρ / p / n.
 
-**Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt` (legends for every figure the run actually produced; a figure that legitimately drew no data — Hidden Gems, when no complex is high-tier yet low-confidence — is listed under *Not produced in this run*, with the reason), `06_Statistical_Tests.csv`, `00_Validation_Figures.log`, `boltz_qc_multimodel_variance.csv` (per-model geometry + confidence; cached and reused).
+**Data outputs (`00_Analysis_Data/`):** `03_Final_Validated_Master.csv`, `04_ACTION_Rescue_Hidden_Gems.csv`, `05_Figure_Descriptions.txt` (legends for every figure the run actually produced; a figure that legitimately drew no data — Hidden Gems, when no complex is high-tier yet low-confidence — is listed under *Not produced in this run*, with the reason), `06_Statistical_Tests.csv`, `00_Validation_Figures.log`, `07_Boltz2_MultiModel_QC_Variance.csv` (per-model geometry + confidence; cached and reused).
 
 **Binding probability is calibrated (§9).** The raw weighted logit lives in [−2.5, +7.5] and a logistic
 saturates past |z| ≈ 4, so every decent complex was scoring P > 0.99 — a typical good complex 0.9979, the

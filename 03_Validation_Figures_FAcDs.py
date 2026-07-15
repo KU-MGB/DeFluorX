@@ -8377,7 +8377,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     confidence_score are read from the sibling confidence_*.json.
     """
     jobs_dir = prod_dir / '4_Prediction_Jobs'
-    target = _aux_dir(out_dir) / 'boltz_qc_multimodel_variance.csv'
+    target = _aux_dir(out_dir) / '07_Boltz2_MultiModel_QC_Variance.csv'
     if not jobs_dir.exists():
         reporter.log(f'  ! Multi-model variance: {jobs_dir} not found; cannot compute.')
         return target
@@ -8465,7 +8465,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     so the machine stays usable and a GPU job's feeder process is never starved.
     """
     _n_proc = max(1, (_os.cpu_count() or 4) - 2)
-    reporter.log(f'  ⧗ Building boltz_qc_multimodel_variance.csv — parsing {n_jobs:,} complexes '
+    reporter.log(f'  ⧗ Building 07_Boltz2_MultiModel_QC_Variance.csv — parsing {n_jobs:,} complexes '
                  f'× 5 model CIFs across {_n_proc} cores…')
 
     """
@@ -8597,8 +8597,8 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     if globals().get('_ALLOW_VARIANCE_COMPUTE', False):
         var_path = _xn__ensure_multimodel_variance_csv(_prod, _fig_root, reporter)
     else:
-        var_path = next((p for p in (_aux_dir(_fig_root) / 'boltz_qc_multimodel_variance.csv',
-                                     _prod / '4_Prediction_Jobs' / 'boltz_qc_multimodel_variance.csv')
+        var_path = next((p for p in (_aux_dir(_fig_root) / '07_Boltz2_MultiModel_QC_Variance.csv',
+                                     _prod / '4_Prediction_Jobs' / '07_Boltz2_MultiModel_QC_Variance.csv')
                          if p.exists()), None)
         if var_path is None:
             reporter.log('  · Figure 1: no per-model variance CSV; drawing the two geometry panels. '
