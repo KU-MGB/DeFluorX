@@ -279,7 +279,7 @@ else
     LOG_DIR="${SCRIPT_DIR}/0_FAcDs_Pipeline_Staging_Logs"
 fi
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/pipeline_$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="${LOG_DIR}/00_Pipeline_$(date +%Y%m%d_%H%M%S).log"
 
 # Fresh runs stream to a staging log until Step 02 creates the real run directory;
 # _STAGING_SYNC_DEST is then set to the run-dir copy so it can be re-synced after

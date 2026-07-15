@@ -5400,7 +5400,7 @@ def main():
     removed_folders_count = 0
 
     ts_now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    LOG_PATH = PROD / f"5_Boltz2_Log_{ts_now}.log"
+    LOG_PATH = PROD / "00_Boltz2_Production.log"
     CSV_PATH = PROD / f"6_Boltz2_FAcDs_Master_{ts_now}.csv"
     setup_logging(LOG_PATH)
 

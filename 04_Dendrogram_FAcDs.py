@@ -34,7 +34,7 @@ Date   : 15 July 2026 <───────────────────
                   <Run>/4_Dendrogram/03_Global_Master_Interactive_App.html
                   <Run>/4_Dendrogram/04_Global_Master_Delivery_Suite.zip
                   <Run>/4_Dendrogram/05_Tiers/<Tier>_*  (per-tier tree + HTML)
-                  <Run>/4_Dendrogram/00_Dendrogram_Log.txt
+                  <Run>/4_Dendrogram/00_Dendrogram.log
   Upstream      : 03_Validation_Figures_FAcDs.py → writes 03_Final_Validated_Master.csv
   Downstream    : None (terminal analysis step)
 ───────────────────────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ ReportManager = _utils_mod.ReportManager   # shared logger (00_02)
 def _make_reporter(out_dir: Path):
     """Construct the shared ReportManager with this step's log path/header/logger."""
     return ReportManager(
-        out_dir / "00_Dendrogram_Log.txt",
+        out_dir / "00_Dendrogram.log",
         "BOLTZ-2 PHYLOGENY PIPELINE REPORT",
         separator=SEPARATOR, rule_width=79, log_fn=console_info)
 
@@ -463,7 +463,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = _setup_logging(out_dir / "00_Dendrogram_Log.txt", "04_Dendrogram")
+    logger = _setup_logging(out_dir / "00_Dendrogram.log", "04_Dendrogram")
 
     # Locate validated master CSV produced by 03_Validation_Figures_FAcDs.py
     # (written under the 00_Analysis_Data subfolder; rglob covers legacy root too).

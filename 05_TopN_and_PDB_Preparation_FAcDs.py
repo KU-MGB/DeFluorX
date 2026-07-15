@@ -29,7 +29,7 @@ Date   : 15 July 2026 <───────────────────
                     1_Converted_Raw_PDB/   (raw PDBs + Figures/)
                     2_Prepared_PDBs/       (prepared PDBs + Figures/)
                     3_Comparative_Analysis/ (Ramachandran, Controls, handover, combined CSV)
-                    00_TopN_and_Preparation_Log.txt  (single log for both phases)
+                    00_TopN_and_Preparation.log  (single log for both phases)
   Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
   Downstream    : 06_SID_Prime-MMGBSA_FAcDs.py         → reads prepared PDBs / handover
                   07_MD_QMMM_Defluorination_FAcDs.py → reads prepared PDBs for MD/QM-MM
@@ -108,6 +108,7 @@ for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
 
 import shutil
 import csv
+import warnings
 import subprocess
 import tempfile
 import time
@@ -216,7 +217,7 @@ def setup_logging(prep_base_dir: Path) -> Path:
     """Initialises the preparation log via the shared utility."""
     global logger
     prep_base_dir.mkdir(parents=True, exist_ok=True)
-    master_log = prep_base_dir / "00_TopN_and_Preparation_Log.txt"
+    master_log = prep_base_dir / "00_TopN_and_Preparation.log"
     logger = _utils_mod.setup_logging(master_log, logger_name="pdb_prep", mode="w", timestamp=True)
     return master_log
 
@@ -766,7 +767,9 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
              f"Minimisation: mean |Δangle| {_da.abs().mean():.1f}° (max {_da.abs().max():.1f}°), "
              f"mean Δdistance {_dd.mean():+.2f} Å.   Blue labels = MD-selected.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.045, 1, 0.90))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        fig.tight_layout(rect=(0, 0.045, 1, 0.90))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "02_Pose_Drift_CIF_to_Prepared.png"
@@ -1003,7 +1006,9 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["silver"],
                      markeredgecolor=CFG.VIS_INK["dark"], ms=5, label="control")])
     ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
-    fig.tight_layout(rect=(0, 0.0, 1, 0.95))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        fig.tight_layout(rect=(0, 0.0, 1, 0.95))
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "03_Machinery_Engagement_Distribution.png"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -1518,7 +1523,9 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
              f"{_hi / max(_lo, 1e-6):.0f}× spread in α-carbon electrophilicity across the substrates — "
              f"the one quantity an SN2 rate turns on. OPLS4 assigns by atom type and cannot represent it.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
     _p = out_dir / "01_ESP_Alpha_Carbon_Charge.png"
     fig.savefig(_p, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
@@ -3094,7 +3101,7 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
 def setup_logging_extraction(output_dir: Path) -> Path:
     """Initialise the Top-N extraction log (separate handler from the prep log)."""
     global logger
-    log_file = output_dir / "00_TopN_and_Preparation_Log.txt"
+    log_file = output_dir / "00_TopN_and_Preparation.log"
     logger = _utils_mod.setup_logging(log_file, logger_name="extraction", mode="a", timestamp=True)
     return log_file
 
@@ -3933,7 +3940,7 @@ def topn_extraction_phase(args):
     if _esp_dir.is_dir():
         _dp_rows.append(("7", "Ligand ESP charges (Jaguar) + summary + figure", str(_esp_dir.resolve())))
     _dp_rows.append((str(len(_dp_rows) + 1), "Step-05 log (prep + extraction)",
-                     str((prep_dir / "00_TopN_and_Preparation_Log.txt").resolve())))
+                     str((prep_dir / "00_TopN_and_Preparation.log").resolve())))
     _lw = max(max(len(r[1]) for r in _dp_rows), max(len(r[2]) for r in _dp_rows))
     console_info(f"\n{SEPARATOR_LIGHT}")
     console_info(f"  Delivery Package  │  Tiers: {', '.join(selected_tiers)}")

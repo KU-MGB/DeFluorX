@@ -34,7 +34,7 @@ Date   : 15 July 2026 <───────────────────
                   <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
                   <Run>/3_Validation_Figures/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/05_Figure_Descriptions.txt
-                  <Run>/3_Validation_Figures/06_Analysis_Log.txt
+                  <Run>/3_Validation_Figures/00_Validation_Figures.log
   Upstream      : 02_Production_FAcDs.py → writes the master ranked CSV (incl. the pocket-fit
                   columns active_site_volume, ligand_volume, pocket_occupancy, fit_ratio,
                   ligand_fits) consumed here
@@ -80,7 +80,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 03_Final_Validated_Master.csv         <-- THE FINAL DATASET
     • 04_ACTION_Rescue_Hidden_Gems.csv      <-- MANUAL REVIEW LIST
     • 05_Figure_Descriptions.txt            <-- Per-figure description log
-    • 06_Analysis_Log.txt                   <-- Detailed Execution Log
+    • 00_Validation_Figures.log             <-- Detailed Execution Log
 
     [Figures — grouped folder-by-folder; each folder numbered in narrative order]
     ── 01_Ramachandran/ ── backbone-geometry validation of the controls
@@ -574,7 +574,7 @@ ReportManager = _utils_mod.ReportManager   # shared logger (00_02)
 def _make_reporter(out_dir: Path):
     """Construct the shared ReportManager with this step's log path/header/logger."""
     return ReportManager(
-        _aux_dir(out_dir) / "06_Analysis_Log.txt",
+        _aux_dir(out_dir) / "00_Validation_Figures.log",
         "BOLTZ-2 VALIDATION & PHYLOGENY REPORT ",
         separator=SEPARATOR_LIGHT, rule_width=80, log_fn=console_info)
 

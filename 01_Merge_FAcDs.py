@@ -155,9 +155,10 @@ AMBIGUOUS_AA = CFG.PREP_AMBIGUOUS_AA  # Non-standard amino acids for QC
 def setup_logger(output_path: Path) -> logging.Logger:
     """
     Initialises a dual-handler logger (File + Console).
-    Ensures that logs are saved alongside the output FASTA.
+    Log is saved beside the output FASTA as 00_Merge.log — the same 00_<StepName>.log naming every
+    step uses, so the log is instantly identifiable across the pipeline.
     """
-    log_file = output_path.with_suffix(".log")
+    log_file = output_path.parent / "00_Merge.log"
     logger = logging.getLogger("FASTA_Merger")
     logger.setLevel(logging.INFO)
 
