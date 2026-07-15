@@ -5075,7 +5075,7 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
     When analysis outputs were just wiped (full re-analysis) it finds ~0
     summaries, so the walk is silent unless we announce it up front.
     '''
-    console_info("   Walking job folders on disk (USB; ~1–2 min for 58k jobs, silent if outputs were wiped)...")
+    console_info("   Walking job folders on disk (USB; ~1–2 min on tens of thousands of jobs, silent if outputs were wiped)...")
     json_files = []
     for _scanned in sorted(runs_dir.rglob("*_summary.json")):
         json_files.append(_scanned)
@@ -5751,7 +5751,6 @@ def main():
         GPU predictions (boltz_results_*/) are preserved — only analysis
         artifacts are removed so changed parameters take full effect.
         """
-        console_info("Wiping per-job analysis outputs for full re-analysis...")
         _wipe_dirs = [d for d in sorted(D_RUNS.iterdir()) if d.is_dir() and d.name[0].isdigit()]
         _wiped = [0]
 
@@ -5773,7 +5772,7 @@ def main():
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _wipe_total or 1)) as _wex:
             for _done, _ in enumerate(_wex.map(_wipe_one, _wipe_dirs), 1):
                 if _done % 1000 == 0 or _done == _wipe_total:
-                    _tty_write(f"\r   Wiping analysis outputs {_done:,}/{_wipe_total:,}\033[K")
+                    _tty_write(f"\r   Wiping per-job analysis outputs for full re-analysis {_done:,}/{_wipe_total:,} ...\033[K")
         _tty_write("\r\033[K")
         console_info(f" -> Wiped analysis outputs for {_wiped[0]:,} job directories.")
 
