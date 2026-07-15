@@ -1461,13 +1461,15 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
         if _n:
             console_info(f"  Removed {_n} Jaguar scratch file(s); the .in/.out/.mae/.csv are kept for audit.")
 
-    console_info(f"  ✔ {_ok}/{len(_pdbs)} ligand(s) charged → {_sum_path.name}")
-    console_info("  NEXT (by hand, in Maestro System Builder — deliberately not automated):")
-    console_info("    load <stem>_ESP.mae → 'Use custom charges' → 'Partial charges from structure'.")
+    console_info(f"  \u2714 {_ok}/{len(_pdbs)} ligand(s) charged  \u2192  {_sum_path.name}")
+    console_info("  NEXT (by hand in Maestro \u2014 deliberately not automated):")
+    console_info("    1. Load <stem>_ESP.mae into the workspace.")
+    console_info("    2. System Builder \u2192 Solvation tab \u2192 tick 'Use custom charges'.")
+    console_info("    3. Select 'Partial charges from structure', then 'Apply to' \u2192 the ligand.")
     try:
         _f = plot_esp_alpha_carbon(_summary, out_dir)
         if _f:
-            console_info(f"  ESP figure → {_f.name}")
+            console_info(f"  ESP figure  →  {_f.name}")
     except Exception as _e:                                       # noqa: BLE001
         console_info(f"  ! ESP figure skipped: {type(_e).__name__}: {_e}")
     return _sum_path
@@ -2221,8 +2223,8 @@ def _parse_plip_xml(xml_path, lig, pro):
     """
     if _ANGLE_REJECTS:
         _msg = ", ".join(f"{_n} {_t}" for _t, _n in sorted(_ANGLE_REJECTS.items()))
-        console_info(f"      CFG geometry criteria rejected {sum(_ANGLE_REJECTS.values())} PLIP "
-                     f"contact(s) on angle: {_msg}")
+        console_info(f"    PLIP contacts rejected on the CFG angle criterion: "
+                     f"{sum(_ANGLE_REJECTS.values())} ({_msg})")
 
     return sorted(contacts_by_key.values(), key=lambda x: x["dist"])
 
@@ -3402,19 +3404,39 @@ def prep_and_convert_phase(args):
         _n_left = int(pd.to_numeric(_pg["prep_left_nac"], errors="coerce").fillna(0).sum())
         _da = pd.to_numeric(_pg["prep_d_angle"], errors="coerce").dropna()
         _dd = pd.to_numeric(_pg["prep_d_dist"], errors="coerce").dropna()
-        console_info(f"Prepared-pose geometry → {_pg_path.name}  ({len(_pg)} structures)")
+        console_separator()
+        console_info(f"  Prepared-pose geometry  (CIF \u2192 minimised)  \u2192  {_pg_path.name}")
+        console_info(SEPARATOR_LIGHT)
+
+        def _short_name(_j):
+            _p = str(_j).split("_")
+            return "_".join(_p[2:]) if len(_p) > 2 and _p[0].isdigit() else str(_j)
+        _c1 = max(30, min(40, max((len(_short_name(r["job"])) for _, r in _pg.iterrows()), default=30)))
+        _hn, _h22, _h11, _h4 = "\u2500" * _c1, "\u2500" * 22, "\u2500" * 11, "\u2500" * 4
+        console_info("  \u250c\u2500" + _hn + "\u2500\u252c\u2500" + _h22 + "\u2500\u252c\u2500" + _h22 + "\u2500\u252c\u2500" + _h11 + "\u2500\u252c\u2500" + _h4 + "\u2510")
+        _h_ang, _h_nuc = "SN2 angle CIF\u2192prep", "Nuc dist CIF\u2192prep"
+        console_info(f"  \u2502 {'Complex':<{_c1}} \u2502 {_h_ang:>22} \u2502 {_h_nuc:>22} \u2502 {'Attack O':<11} \u2502 NAC \u2502")
+        console_info("  \u251c\u2500" + _hn + "\u2500\u253c\u2500" + _h22 + "\u2500\u253c\u2500" + _h22 + "\u2500\u253c\u2500" + _h11 + "\u2500\u253c\u2500" + _h4 + "\u2524")
+        for _, _r in _pg.iterrows():
+            _a0, _a1 = _r.get("raw_sn2_angle"), _r.get("prep_sn2_angle")
+            _d0, _d1 = _r.get("raw_dist_nuc"), _r.get("prep_dist_nuc")
+            _ang = (f"{_a0:.1f}\u2192{_a1:.1f} ({_r.get('prep_d_angle'):+.1f}\u00b0)"
+                    if pd.notna(_a0) and pd.notna(_a1) else "\u2014")
+            _nuc = (f"{_d0:.2f}\u2192{_d1:.2f} ({_r.get('prep_d_dist'):+.2f})"
+                    if pd.notna(_d0) and pd.notna(_d1) else "\u2014")
+            _nac = "OUT" if int(_r.get("prep_left_nac", 0) or 0) else "in"
+            console_info(f"  \u2502 {_short_name(_r['job']):<{_c1}} \u2502 {_ang:>22} \u2502 {_nuc:>22} \u2502 {str(_r.get('prep_attack_o','')):<11} \u2502 {_nac:>3} \u2502")
+        console_info("  \u2514\u2500" + _hn + "\u2500\u2534\u2500" + _h22 + "\u2500\u2534\u2500" + _h22 + "\u2500\u2534\u2500" + _h11 + "\u2500\u2534\u2500" + _h4 + "\u2518")
         if len(_da):
-            console_info(f"  angle drift CIF→prepared : mean {_da.mean():+.1f}°  mean|Δ| {_da.abs().mean():.1f}°  max|Δ| {_da.abs().max():.1f}°")
-        if len(_dd):
-            console_info(f"  nucleophile drift        : mean {_dd.mean():+.2f} Å  max {_dd.max():+.2f} Å")
-        if _n_left:
-            console_info(f"  [!] {_n_left} prepared pose(s) LEFT the relaxed NAC envelope "
-                         f"(angle < {CFG.NAC_ANGLE_RELAXED:.0f}° or nuc > {CFG.NAC_DIST_RELAXED:.1f} Å). "
-                         f"Flagged, not dropped — see the CSV.")
+            _sfx = (f"  \u00b7  [!] {_n_left} pose(s) left the relaxed NAC envelope "
+                    f"(angle < {CFG.NAC_ANGLE_RELAXED:.0f}\u00b0 or nuc > {CFG.NAC_DIST_RELAXED:.1f} \u00c5) \u2014 flagged, not dropped"
+                    if _n_left else "")
+            console_info(f"  Drift  \u00b7  angle mean|\u0394| {_da.abs().mean():.1f}\u00b0 (max {_da.abs().max():.1f}\u00b0)  \u00b7  "
+                         f"nucleophile mean {_dd.mean():+.2f} \u00c5 (max {_dd.max():+.2f}){_sfx}")
         try:
             _fig_p = plot_pose_drift(_prep_geom_rows, _pg_path.parent)
             if _fig_p:
-                console_info(f"Pose-drift figure → {_fig_p.name}")
+                console_info(f"  Comparative figure  \u2192  {_fig_p.name}")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Pose-drift figure skipped: {type(_e).__name__}: {_e}")
 
@@ -3436,7 +3458,7 @@ def prep_and_convert_phase(args):
             if _mach_rows:
                 _dfig = plot_machinery_distribution(_mach_rows, _pg_path.parent)
                 if _dfig:
-                    console_info(f"Machinery-engagement figure → {_dfig.name}  ({len(_mach_rows)} complexes × 8 residues)")
+                    console_info(f"  Comparative figure  \u2192  {_dfig.name}  ({len(_mach_rows)} complexes \u00d7 8 residues)")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 
