@@ -2872,6 +2872,8 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             _aidx = mm_map.get(best_C.name)
             if _aidx is not None:
                 _alpha = rd_mol.GetAtomWithIdx(_aidx)
+                _seen_o: set = set()                    # count each ether O once: an oxirane O bridging
+                                                        # the α- and a β-carbon must not be double-charged
                 for _nb in _alpha.GetNeighbors():
                     if _nb.GetSymbol() == "F":
                         continue                       # geminal F → α-BDE lookup, not β
@@ -2881,14 +2883,16 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                         beta_f_count += _f_on(_nb)
                         # an ether O on this β-carbon (ADONA): its −I plus the F across it
                         for _x in _nb.GetNeighbors():
-                            if _x.GetIdx() == _alpha.GetIdx():
+                            if _x.GetIdx() == _alpha.GetIdx() or _x.GetIdx() in _seen_o:
                                 continue
                             if _is_ether_o(_x, _nb.GetIdx()):
+                                _seen_o.add(_x.GetIdx())
                                 beta_f_count += 1
                                 beta_f_count += sum(_f_on(_y) for _y in _x.GetNeighbors()
                                                     if _y.GetSymbol() == "C" and _y.GetIdx() != _nb.GetIdx())
-                    elif _is_ether_o(_nb, _alpha.GetIdx()):
+                    elif _nb.GetIdx() not in _seen_o and _is_ether_o(_nb, _alpha.GetIdx()):
                         # ether O directly on the α-carbon (C6O4): its −I plus the F across it
+                        _seen_o.add(_nb.GetIdx())
                         beta_f_count += 1
                         beta_f_count += sum(_f_on(_y) for _y in _nb.GetNeighbors()
                                             if _y.GetSymbol() == "C" and _y.GetIdx() != _alpha.GetIdx())

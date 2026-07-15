@@ -1114,8 +1114,11 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
 
     # Denominator is the number of frames Prime will actually see (stride applied), not the
     # raw trajectory length — otherwise the read percentage caps at 100/step and never reaches 100.
+    def _done_count():
+        with _lock:
+            return len(done)
     hb = ShardHeartbeat(shard_dir, f"MM-GBSA Rank {rank}", len(ranges), _scored,
-                        lambda: len(done), interval=interval)
+                        _done_count, interval=interval)
     with hb, cf.ThreadPoolExecutor(max_workers=conc) as pool:
         list(pool.map(lambda r: _run_shard(r[0], r[1][0], r[1][1]), list(enumerate(ranges))))
 

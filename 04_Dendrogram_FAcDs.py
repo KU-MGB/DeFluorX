@@ -276,7 +276,7 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     Deduplicate to one row per protein for the embedded HTML state.
     The full CSV (all ligand×protein rows) can be multi-MB and slow browsers.
     """
-    prot_col = next((c for c in ["protein", "Protein_Name"] if c in csv_df.columns), None)
+    prot_col = next((c for c in CFG.VIS_PHYLO_COLUMN_MAP["Protein_Name"] if c in csv_df.columns), None)
     if prot_col and len(csv_df) > len(labels):
         embed_df = csv_df.drop_duplicates(subset=[prot_col], keep="first")
     else:
@@ -306,7 +306,7 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
         zf.write(csv_path,  csv_path.name)
         zf.write(html_path, html_path.name)
 
-    _lig_col = next((c for c in ["Ligand_Name", "ligand"] if c in csv_df.columns), None)
+    _lig_col = next((c for c in CFG.VIS_PHYLO_COLUMN_MAP["Ligand_Name"] if c in csv_df.columns), None)
     _n_lig = int(csv_df[_lig_col].nunique()) if _lig_col else 0
     _lig_txt = f" × {_n_lig} ligands" if _n_lig else ""
     reporter.log(f"  ✓ Suite Generated: {prefix} ({len(labels)} proteins{_lig_txt}) -> {out_dir.resolve()}")
