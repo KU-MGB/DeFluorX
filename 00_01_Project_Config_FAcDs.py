@@ -2545,7 +2545,21 @@ class CFG:
         "Base": {"state": "neutral HID",  "charge": 0,  "strip_H": ("HE2",),
                  "why": "Nd1-H points at the dyad; the Ne2 lone pair takes the proton"},
     })
-    PREPWIZARD_RMSD_RESTRAIN: float  = 0.3  # Å — RMSD restraint for clash-resolving minimisation
+    '''
+    RMSD restraint for the clash-resolving minimisation. This is a GLOBAL, RMSD-AVERAGED restraint
+    over heavy atoms, not a per-atom cap: the buried backbone barely moves (measured Cα RMSD ~0.17 Å),
+    which spends most of the budget, so flexible surface atoms are free to move far more than the
+    average. Measured on the MD cohort at 0.3 Å, the reactive geometry drifts through two channels —
+    the small ligand relaxes (warhead C up to ~0.5 Å) and the freshly-deprotonated catalytic
+    carboxylate swings to find new H-bonds (Asp O up to ~0.8 Å) — and both move the SN2 angle and the
+    nucleophile distance away from the pose the screen selected. Tightening the restraint holds the
+    whole system closer to the Boltz pose, so the geometry MD starts from is nearer the one that was
+    scored. The trade is that a tighter restraint leaves less room to relax genuine clashes; 0.15 Å is
+    the compromise chosen to cut the drift while still resolving contacts, checked on the
+    MD-selected + control cohort. Raising it back toward 0.3 trusts the force field more and the
+    screen less.
+    '''
+    PREPWIZARD_RMSD_RESTRAIN: float  = 0.15  # Å — RMSD restraint for clash-resolving minimisation
     """
     PrepWizard's restrained-minimisation force field. Its own default is OPLS_2005 — a different
     force field from the one every downstream stage uses (the Desmond system build, the MD production
