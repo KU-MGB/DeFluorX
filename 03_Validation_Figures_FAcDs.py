@@ -9064,7 +9064,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
                 cval_norm = float(np.clip((cval_raw - lo) / (hi - lo), 0, 1))
                 ax.axhline(cval_norm, ls='--', lw=1.4, color=colour, alpha=0.85, zorder=1.5, label=f"{tlabel.split('  (')[0]} — DehH2+MFA control = {cval_norm:.2f}")
 
-    def _mw_signed(mcol):
+    def _mw_signed(mcol, label):
         if mcol is None or mcol not in df.columns:
             return None
         v = pd.to_numeric(df[mcol], errors='coerce')
@@ -9075,11 +9075,15 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
             return None
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
+        # The panel prints the raw p; register it so its q_BH is paid in the same family.
+        _register_p(f"Mann-Whitney U — {label} — Degraders vs non-degraders",
+                    "09_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
+                    effect_size_r=round(float(r), 4))
         return (float(p), float(r))
-    stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
+    stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv;  r > 0 = Degraders higher)']
     metric_map = [('BA_Score', ba_col), ('Affinity', aff_col), ('Pocket', pocket_col), ('IntDens', dens_col)]
     for label, mcol in metric_map:
-        res = _mw_signed(mcol)
+        res = _mw_signed(mcol, label)
         if res is None:
             stat_lines.append(f'{label:<9}: n/a')
         else:
@@ -9115,7 +9119,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
 
-    def _mw_signed_p1(mcol):
+    def _mw_signed_p1(mcol, label):
         if mcol is None or mcol not in df.columns:
             return None
         v = pd.to_numeric(df[mcol], errors='coerce')
@@ -9126,6 +9130,10 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
             return None
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
+        # The panel prints the raw p; register it so its q_BH is paid in the same family.
+        _register_p(f"Mann-Whitney U — {label} — Degraders vs non-degraders",
+                    "05_Evolutionary_Phylogeny", float(U), len(a) + len(b), float(p),
+                    effect_size_r=round(float(r), 4))
         return (float(p), float(r))
     if idc is not None:
         sns.violinplot(data=df, x=CFG.COL_TIER, y=idc, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='quartile', ax=ax1, zorder=2)
@@ -9136,8 +9144,8 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         ax1.set_xlabel('Catalytic degrader tier')
         ax1.set_ylabel('Sequence identity to control (%)')
         # panel title removed (user request)
-        res = _mw_signed_p1(idc)
-        stat_text = 'Degraders vs Non-Degraders (Mann–Whitney U)\n'
+        res = _mw_signed_p1(idc, 'Sequence Identity')
+        stat_text = 'Degraders vs Non-Degraders (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv)\n'
         if res:
             p, r = res
             stat_text += f'Sequence Identity: {_xo__fmt_p(p)} | r = {r:+.2f}'
@@ -9203,10 +9211,10 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
                 ax2r.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0,
                               capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel,
                               zorder=6)
-        stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  r > 0 = Degraders higher)']
+        stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv;  r > 0 = Degraders higher)']
         metric_map = [('Evo_Score', evo), ('Mech_Fpt', mech), ('Active_RMDA', rmsd)]
         for label, mcol in metric_map:
-            res = _mw_signed_p1(mcol)
+            res = _mw_signed_p1(mcol, label)
             if res is None:
                 stat_lines.append(f'{label:<12}: n/a')
             else:

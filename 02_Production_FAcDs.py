@@ -3096,7 +3096,11 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
         question directly — is there protein in the way, in every direction — and it degrades
         gracefully at the pocket mouth, where a hull test flips discontinuously.
         """
-        contain_cav, contain_s8, reach = 1.0, 1.0, 0.0
+        # contain_cav starts at 0.0 (worst containment): the ray-cast below overwrites it with the
+        # real measurement whenever it can run. If it cannot (no protein atoms to cast against, no
+        # ligand heavy atoms), the value stays failed rather than defaulting to perfect containment —
+        # an unmeasured pose must never read as ideally buried and skip the tier-gate penalty.
+        contain_cav, contain_s8, reach = 0.0, 1.0, 0.0
         if len(lpts) >= 1:
             # ligand_reach — head-to-tail span from the carboxylate carbon (the head held by the
             # Arg clamp and attacked by the nucleophile). A ligand shape descriptor, reported only.
@@ -3162,9 +3166,13 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
                    pocket_containment_site8=round(contain_s8, 3),
                    ligand_reach=round(reach, 2))
     except Exception as _e:
-        # pocket_containment_cavity feeds the tier gate: if it is missing the candidate is judged
-        # on an incomplete record, so the failure must be visible.
-        logger.debug(f"Pocket-fit metrics failed: {_e}")
+        # pocket_containment_cavity feeds the tier gate. A measurement that could not be taken must
+        # NOT read as perfect containment (the initial 1.0 in `out`) — that silently promotes an
+        # unmeasured pose. Fail it to 0.0 (worst containment → full penalty, kept out of the elite
+        # tier) and log loudly so the incomplete record is visible, not swallowed at DEBUG.
+        out["pocket_containment_cavity"] = 0.0
+        logger.warning(f"Pocket-fit metrics failed ({_e}); pocket_containment_cavity set to 0.0 "
+                       "(unmeasured — not promoted).")
     return out
 
 

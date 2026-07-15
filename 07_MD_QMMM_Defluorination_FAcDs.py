@@ -564,7 +564,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     frame_0 = tr[0]
     lig_c_idxs = [c for c, f in cf_pairs]
 
-    # 3. Nucleophile: closest ASP/GLU/SER oxygen to ligand C, biased by mapped_nuc
+    # 3. Nucleophile: closest ASP (aspartate Oδ) to ligand C, biased by mapped_nuc
     best_nuc_key = None
     min_eff      = float('inf')
     actual_dist  = float('inf')
@@ -647,13 +647,13 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
                      f"{res_dict[best_base_key]['ptype']} {res_dict[best_base_key]['resnum']} "
                      f"[Chain {res_dict[best_base_key]['chain']}]{ConsoleColours.ENDC}")
 
-    # 5. Acid: closest ASP/GLU oxygen to base, biased by mapped_acid
+    # 5. Acid: closest ASP (aspartate Oδ) to base, biased by mapped_acid
     idx_acid = []
     if idx_base:
         best_acid_key = None; min_eff = float('inf')
         for res_key, data in res_dict.items():
             if (res_key == best_nuc_key or not data['O_idx']
-                    or data['ptype'] not in _NUCLEOPHILE_RESIDUES):
+                    or data['ptype'] not in _ACID_RESIDUES):
                 continue
             d     = calculate_min_distance(frame_0, idx_base, data['O_idx'])
             bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_acid and abs(data['resnum'] - mapped_acid) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
@@ -4176,9 +4176,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         "Triad_Integrity_Pct":      round((n_triad   / n_pocket) * 100, 2) if n_pocket else 0.0,
         "NAC_Geom_Only_Pct":        round((n_nac     / n_pocket) * 100, 2) if n_pocket else 0.0,
         # Continuous strict-NAC residence in ns (real "time in position", not frame
-        # fraction). ns_per_frame = total simulated ns / analysed frames (uniform stride).
+        # fraction). ns_per_frame = total simulated ns / ALL analysed frames (uniform stride):
+        # sim_span covers the whole trajectory, so its denominator must be every analysed frame
+        # (total_frames_read), not the post-equilibration subset — otherwise the full span is
+        # divided by fewer frames and every dwell is scaled up.
         **_nac_dwell_stats([r.get("NAC_Strict_Pass", 0) for r in sampled],
-                           ((sim_span / 1000.0) / total) if total else 0.0),
+                           ((sim_span / 1000.0) / total_frames_read) if total_frames_read else 0.0),
         # The stride the dwell was measured at. A run of consecutive ANALYSED frames is only
         # evidence of continuous residence when every frame was analysed: at stride > 1 the
         # ligand may leave and re-enter the reactive geometry between two samples and the whole
