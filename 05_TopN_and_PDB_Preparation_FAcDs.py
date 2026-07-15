@@ -754,19 +754,24 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     return _path
 
 
-# The eight catalytic residues, in the order the figure stacks them: the reactive triad that does the
-# chemistry first, then the machinery that holds the substrate in place. Each entry is
-# (role_key, ranked-CSV column, short label, functional group). The group drives the colour band and
-# whether the row is emphasised.
+# The eight catalytic residues, in the order the figure stacks them: the reactive relay that does the
+# chemistry first, then the machinery that positions the substrate. Each entry is
+# (role_key, ranked-CSV column, short label, functional group, partner). The PARTNER is what the residue
+# actually engages mechanistically — and it is NOT the substrate for every residue. FAcD's catalysis is a
+# RELAY: the nucleophile attacks the substrate carbon, but the base (His) engages the NUCLEOPHILE, and the
+# acid (Asp) engages the BASE (the Asp–His dyad that polarises it, "not a ligand contact" per Step 02).
+# Measuring the acid or the base against the substrate would report them as "disengaged" when the dyad is
+# in fact intact, which is exactly backwards. So each residue is measured against its own partner:
+# "substrate" for the direct contacts, or another role_key for the relay links.
 _MACHINERY_ROLES = [
-    ("Nuc",     "Mapped_Nucleophile",  "Nucleophile (Asp)",  "reactive"),
-    ("Acid",    "Mapped_Acid",         "Acid (Asp)",         "reactive"),
-    ("Base",    "Mapped_Base",         "Base (His)",         "reactive"),
-    ("StabH",   "Mapped_Stabiliser_H", "F⁻ stabiliser (His)", "stabiliser"),
-    ("Clamp1",  "Mapped_Clamp1",       "Carboxylate clamp (Arg)", "clamp"),
-    ("Clamp2",  "Mapped_Clamp2",       "Carboxylate clamp (Arg)", "clamp"),
-    ("CradleW", "Mapped_Stabiliser_W", "Aromatic cradle (Trp)", "cradle"),
-    ("CradleY", "Mapped_Stabiliser_Y", "Aromatic cradle (Tyr)", "cradle"),
+    ("Nuc",     "Mapped_Nucleophile",  "Nucleophile → warhead C", "reactive",   "substrate"),
+    ("Base",    "Mapped_Base",         "Base → nucleophile",      "reactive",   "Nuc"),
+    ("Acid",    "Mapped_Acid",         "Acid → base (dyad)",      "reactive",   "Base"),
+    ("StabH",   "Mapped_Stabiliser_H", "F⁻ stabiliser → substrate", "stabiliser", "substrate"),
+    ("Clamp1",  "Mapped_Clamp1",       "Carboxylate clamp (Arg) → substrate", "clamp", "substrate"),
+    ("Clamp2",  "Mapped_Clamp2",       "Carboxylate clamp (Arg) → substrate", "clamp", "substrate"),
+    ("CradleW", "Mapped_Stabiliser_W", "Aromatic cradle (Trp) → substrate", "cradle", "substrate"),
+    ("CradleY", "Mapped_Stabiliser_Y", "Aromatic cradle (Tyr) → substrate", "cradle", "substrate"),
 ]
 
 
@@ -794,7 +799,7 @@ def load_machinery_map(prod_dir: Path) -> dict:
     _out = {}
     for _, _row in _df.iterrows():
         _out[_row["job_name"]] = {rk: (_num(_row[col]) if col in _df.columns else None)
-                                  for rk, col, _lbl, _grp in _MACHINERY_ROLES}
+                                  for rk, col, _lbl, _grp, _partner in _MACHINERY_ROLES}
     return _out
 
 
@@ -830,19 +835,31 @@ def measure_machinery_engagement(struct_path: Path, role_resnums: dict) -> dict:
     _by_num = {}
     for _r in _prot:
         _by_num.setdefault(_r.seqid.num, _r)
-    for _rk, _num in (role_resnums or {}).items():
+
+    def _sidechain(_num):
         if _num is None:
-            continue
+            return None
         _res = _by_num.get(int(_num))
         if _res is None:
-            continue
-        # sidechain heavy atoms; fall back to all heavy atoms for glycine-like cases
+            return None
         _side = [a.pos for a in _res if a.element.name != "H" and a.name.strip().upper() not in _bb]
-        if not _side:
+        if not _side:                                    # glycine-like: no sidechain, use all heavy atoms
             _side = [a.pos for a in _res if a.element.name != "H"]
+        return _side or None
+
+    _partner_of = {rk: partner for rk, _c, _l, _g, partner in _MACHINERY_ROLES}
+    for _rk, _num in (role_resnums or {}).items():
+        _side = _sidechain(_num)
         if not _side:
             continue
-        _out[_rk] = float(min(_sp.dist(_lp) for _sp in _side for _lp in _lig_pos))
+        _partner = _partner_of.get(_rk, "substrate")
+        if _partner == "substrate":
+            _target = _lig_pos                            # residue → nearest substrate heavy atom
+        else:
+            _target = _sidechain((role_resnums or {}).get(_partner))   # residue → partner residue sidechain
+        if not _target:
+            continue
+        _out[_rk] = float(min(_sp.dist(_tp) for _sp in _side for _tp in _target))
     return _out
 
 
@@ -901,7 +918,7 @@ def plot_machinery_drift(rows: list, out_dir: Path) -> Path | None:
         ax.axvspan(_react, _outer, color=CFG.VIS_BAND["mod_fill"], lw=0, zorder=0)
         ax.axvspan(_outer, _xmax, color=CFG.VIS_BAND["low_fill"], lw=0, zorder=0)
         _n_contact = _triad_ok = _triad_total = 0
-        for _i, (_rk, _col, _lbl, _grp) in enumerate(_MACHINERY_ROLES):
+        for _i, (_rk, _col, _lbl, _grp, _partner) in enumerate(_MACHINERY_ROLES):
             _yy = _y[_i]
             _a = _cif.get(_rk, float("nan")); _b = _prep.get(_rk, float("nan"))
             _emph = _grp == "reactive"
@@ -935,9 +952,9 @@ def plot_machinery_drift(rows: list, out_dir: Path) -> Path | None:
         ax.axvline(_react, ls="--", lw=1.2, color=CFG.VIS_INK["dark"], alpha=0.8, zorder=2)
         ax.axvline(_outer, ls=":", lw=1.1, color=CFG.VIS_INK["ghost"], zorder=2)
         ax.set_yticks(_y)
-        _yt = ax.set_yticklabels([lbl for _rk, _col, lbl, _grp in _MACHINERY_ROLES],
+        _yt = ax.set_yticklabels([lbl for _rk, _col, lbl, _grp, _partner in _MACHINERY_ROLES],
                                  fontsize=CFG.VIS_FONT_ANNOT - 0.5)
-        for _t, (_rk, _col, _lbl, _grp) in zip(_yt, _MACHINERY_ROLES):
+        for _t, (_rk, _col, _lbl, _grp, _partner) in zip(_yt, _MACHINERY_ROLES):
             _t.set_color(_grp_band.get(_grp, CFG.VIS_INK["dark"]))
             if _grp == "reactive":
                 _t.set_fontweight("bold")
@@ -954,7 +971,7 @@ def plot_machinery_drift(rows: list, out_dir: Path) -> Path | None:
         if _pi % _ncol == 0:
             pass
         if _pi >= (_nrow - 1) * _ncol:
-            ax.set_xlabel("Catalytic residue → substrate distance  (Å)")
+            ax.set_xlabel("Distance to mechanistic partner  (Å)\n(substrate for direct contacts; the linked residue for the Nuc–Base–Acid relay)")
 
     for _pi in range(_n, len(_axes)):
         _axes[_pi].axis("off")
@@ -974,9 +991,11 @@ def plot_machinery_drift(rows: list, out_dir: Path) -> Path | None:
     fig.suptitle("Catalytic machinery through preparation — does the substrate stay held for defluorination?",
                  y=1.015, fontsize=CFG.VIS_FONT_AXIS_LABEL + 1.0, fontweight="bold")
     fig.text(0.5, -0.01,
-             "Bold rows = reactive triad (nucleophile attacks the warhead carbon; acid/base run the proton relay). "
-             "Open circle = CIF, arrowhead = minimised. Only a complex whose triad stays in contact can still "
-             "defluorinate the pose the screen selected.",
+             "Each residue is measured against what it actually engages: the nucleophile against the warhead "
+             "carbon it attacks, the base against the nucleophile, the acid against the base (the Asp–His dyad — "
+             "NOT the substrate), and the clamps/cradle/stabiliser against the substrate they position. Bold = "
+             "reactive relay. Open circle = CIF, arrowhead = minimised. A complex can only defluorinate if the "
+             "relay survives minimisation intact.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
     fig.tight_layout(rect=(0, 0.0, 1, 0.94))
     out_dir.mkdir(parents=True, exist_ok=True)
