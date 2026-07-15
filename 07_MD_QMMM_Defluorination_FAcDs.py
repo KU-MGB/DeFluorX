@@ -1575,8 +1575,8 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
         _matrix, ax=ax, cmap=_cmap, vmin=_contact, vmax=_outer,
         annot=True, fmt=".1f", annot_kws={"fontsize": CFG.VIS_FONT_ANNOT},
         linewidths=0.6, linecolor="white",
-        cbar_kws={"label": f"Mean distance to warhead C in strict-NAC frames (Å)  ·  "
-                           f"{_contact:g} = reactive contact, {_outer:g} = electrostatic limit"},
+        cbar_kws={"label": f"Mean distance to warhead C in strict-NAC frames (Å)\n"
+                           f"{_contact:g} = reactive contact · {_outer:g} = electrostatic limit"},
     )
     ax.set_xlabel("Catalytic residue role  ·  green = engaged, red = out of contact")
     ax.set_ylabel("SN2 case (ligand · Scientific_Rank)")
@@ -2869,6 +2869,22 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
         if _o is None:
             return None
         _t = _o.read_text(errors="ignore")
+
+        # Impact-level abort: Impact dies during parameter assignment, BEFORE any SCF or
+        # scan point, so there is no "Skipping" line to catch further down — the failure is
+        # otherwise invisible and the QSite launcher still exits rc=0. The S-OPLS case is the
+        # one this pipeline meets: OPLS3e/OPLS4 (S-OPLS) is rejected on a frozen-orbital-cut
+        # QM region (QM bonded to MM, not H-capped), which is why CFG.QSITE_MM_FF selects
+        # OPLS_2005. Surface the exact Impact error so a dead job is never read as a barrier.
+        _die = re.search(r"%IMPACT-E \(die\):.*?\n(?:\s*%IMPACT-E:.*\n?)*", _t)
+        if _die or "Impact exited with an error" in _t:
+            _msg = re.sub(r"\s+", " ", _die.group(0)).strip() if _die else "Impact exited with an error"
+            if re.search(r"S-OPLS forcefield is only available", _t):
+                return ("Impact rejected the MM force field: S-OPLS (OPLS3e/OPLS4) is not allowed "
+                        "on a frozen-orbital-cut QM region. Set CFG.QSITE_MM_FF empty (OPLS_2005). "
+                        f"[{_msg}]")
+            return f"Impact aborted before any SCF step — no barrier possible. [{_msg}]"
+
         _skips = _t.count("Skipping to next scan point")
         if re.search(r"incorrect molecular charge|Odd number of electrons", _t, re.I) or _skips:
             _m = re.search(r"Molecular charge:\s*(-?\d+)", _t)

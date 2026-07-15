@@ -1829,17 +1829,32 @@ class CFG:
         if cmd_args.ffield == 'OPLS3e':
             qs_mmkey_dict['qsite_ff'] = 'opls3e'
 
-    — so QSite's classical region CANNOT run OPLS4. The best available is OPLS3e, and the DEFAULT is
-    OPLS_2005: left unset, the MM region would score an OPLS4 trajectory on a force field two
-    generations older, and the barrier would carry an energetic discontinuity that is not chemistry.
-    PrepWizard was found doing exactly this (defaulting to OPLS_2005 while everything downstream ran
-    OPLS4), so the assumption is worth stating rather than trusting.
+    — so QSite's classical region CANNOT run OPLS4. Of the two it offers, only OPLS_2005 is usable
+    HERE, and that is not a preference — it is forced by the QM/MM boundary. This QM region is bonded
+    to the MM region through FROZEN-ORBITAL cuts (residue-selective: sidechains severed at Cα, not
+    hydrogen-capped), and a live QSite run proves Impact refuses S-OPLS on exactly that geometry:
 
-    This is a DECLARED LIMITATION, not a fix: OPLS3e is closer to the trajectory's OPLS4 than
-    OPLS_2005 is, but it is not the same force field. The QM region — where the bond actually breaks —
-    is unaffected; the mismatch sits in the classical environment around it.
+        %IMPACT-E (die): S-OPLS forcefield is only available for QSite when the QM
+                         region is hydrogen capped or not bonded to the MM region
+
+    OPLS3e / OPLS4 belong to the S-OPLS family, so requesting 'opls3e' kills every QSite job at
+    Impact line 22 before a single SCF step — no barrier is produced. OPLS_2005 predates S-OPLS and
+    is the force field QSite's frozen-orbital methodology was built around, so it is the ONLY MM
+    force field that runs with this QM region.
+
+    OPLS_2005 is selected by EMITTING NO qsite_ff keyword. Schrodinger's own QSite driver only ever
+    writes 'qsite_ff=opls3e' (for the OPLS3e choice) and writes nothing for OPLS_2005, which is the
+    Impact default — so an empty &mmkey block IS the OPLS_2005 request. Writing 'qsite_ff=opls_2005'
+    would be an invented keyword the driver never emits. QSITE_MM_FF is therefore empty, and the
+    generator's else-branch warning (MM region falls back to OPLS_2005 while the trajectory ran
+    OPLS4) is the correct, on-the-record note of the resulting force-field mismatch.
+
+    The cost is honest and unavoidable: the trajectory was propagated under OPLS4, so the MM
+    environment in the barrier is scored two generations older. That mismatch sits in the classical
+    surroundings, not in the QM region where the bond breaks. A working OPLS_2005 QM/MM barrier is
+    the only barrier QSite can produce for a frozen-cut region; an opls3e request produces none.
     """
-    QSITE_MM_FF: str        = "qsite_ff=opls3e"   # &mmkey MM force field; OPLS4 is not offered by QSite
+    QSITE_MM_FF: str        = ""   # empty &mmkey → Impact default OPLS_2005, the only FF QSite runs with frozen cuts
     '''
     Solvation: the extracted frame carries its explicit TIP3P water box in the MM
     region, so no implicit-solvation keyword is emitted (an implicit model would
