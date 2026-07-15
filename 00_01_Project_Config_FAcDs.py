@@ -1969,8 +1969,6 @@ class CFG:
     # --- Step 10.4: Defluorination figure parameters (Step 07 reaction-profile,
     #     MM-GBSA-decomposition, and landscape plots) — all colours + thresholds
     #     here so no Step-07 figure hard-codes them (SSOT). ---
-    DEFLUOR_FLUORIDE_CHARGE_MIN: float  = -1.2   # Mulliken-charge window low bound when parsing the departing-F charge
-    DEFLUOR_FLUORIDE_CHARGE_MAX: float  = -0.4   # window high bound (rejects O / still-bonded F so only near-fluoride is tracked)
     '''
     Mulliken charge on the departing fluorine at or below which the C–F bond is declared
     cleaved. A free fluoride is −1 e; a covalent C–F fluorine sits near −0.25 e. Half-way
@@ -3068,6 +3066,8 @@ class CFG:
         assert _isclose(self.SOFT_NB_MIDPOINT, self.THRESHOLD_TRIAD_NB), "SOFT_NB_MIDPOINT must equal THRESHOLD_TRIAD_NB"
         assert _isclose(self.TIER_NUC_DIST["Tier_2A"], self.NAC_DIST_STRICT), "TIER_NUC_DIST['Tier_2A'] must equal NAC_DIST_STRICT"
         assert _isclose(self.TIER_NUC_DIST["Tier_2B"], self.NAC_DIST_RELAXED), "TIER_NUC_DIST['Tier_2B'] must equal NAC_DIST_RELAXED"
+        assert _isclose(self.TIER_ANGLE_MIN["Tier_2A"], self.NAC_ANGLE_STRICT), "TIER_ANGLE_MIN['Tier_2A'] must equal NAC_ANGLE_STRICT"
+        assert _isclose(self.TIER_ANGLE_MIN["Tier_2B"], self.NAC_ANGLE_RELAXED), "TIER_ANGLE_MIN['Tier_2B'] must equal NAC_ANGLE_RELAXED"
         assert _isclose(self.SUBSTRATE_ANGLE_MIN, self.TIER_ANGLE_MIN["Tier_1B"]), "SUBSTRATE_ANGLE_MIN must equal TIER_ANGLE_MIN['Tier_1B']"
         assert _isclose(self.INHIBITOR_ANGLE_MAX, self.NAC_ANGLE_RELAXED), "INHIBITOR_ANGLE_MAX must equal NAC_ANGLE_RELAXED"
         # The Boltzmann estimator must weight the ensemble at the temperature that ensemble was sampled

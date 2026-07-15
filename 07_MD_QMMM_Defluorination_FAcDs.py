@@ -2757,7 +2757,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         " molid chain  resnum   qmatom   mmatom\n"
         + ("\n".join(_cuts) + "\n" if _cuts else "")
         + " molid theory\n"
-        + (f"     {lig_mol}     qm\n" if lig_mol else "")
+        + (f"     {lig_mol}     qm\n" if lig_mol is not None else "")   # molid 0 is falsy but valid
         + "".join(f"     {wm}     qm\n" for wm in _qm_water_mols)
         + "&\n"
         "&zvar\n"
@@ -2927,9 +2927,8 @@ def _extract_scan_energies(text: str) -> "list[float]":
     relaxed-scan .out.
 
     QSite prints each converged scan point's QM/MM total as
-    ``Total Energy of the system...... -X.XXXXXE+03 kcal/mol`` — already kcal/mol
-    (this is the real format; an earlier version wrongly assumed hartree/SCFE and
-    also mis-converted the units). Hartree-based Jaguar layouts (scan-summary table,
+    ``Total Energy of the system...... -X.XXXXXE+03 kcal/mol`` — already kcal/mol,
+    so this layout is read as-is. Hartree-based Jaguar layouts (scan-summary table,
     SCFE) are supported as fallbacks and converted with HARTREE_TO_KCAL. Returns []
     if fewer than two points parse.
 
@@ -3471,8 +3470,15 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     eaf_rg   = load_eaf_scalar_series(eaf_path, "Rad_Gyration")
     # Estimate EAF time step: EAF samples at ~1 ps; use trajectory time range
     n_tr     = len(tr)
-    t_start  = tr[0].time  if hasattr(tr[0], 'time') else 0.0
-    t_end    = tr[-1].time if hasattr(tr[-1], 'time') else float(n_tr)
+    _has_time = hasattr(tr[0], 'time') and hasattr(tr[-1], 'time')
+    if not _has_time:
+        # Without frame timestamps the fallback below is a frame INDEX, not picoseconds — the
+        # equilibration cut and the NAC dwell would then be in frames, not ns. Desmond trajectories
+        # always carry .time, so this is a loud warning rather than a silent unit switch.
+        console_info("    [!] Trajectory frames carry no .time — equilibration/dwell fall back to FRAME "
+                     "indices (not ps); check the trajectory if these times look wrong.")
+    t_start  = tr[0].time  if _has_time else 0.0
+    t_end    = tr[-1].time if _has_time else float(n_tr)
     sim_span = max(t_end - t_start, 1.0)
     eaf_dt   = sim_span / len(eaf_msa) if len(eaf_msa) > 0 else 1.0
 
@@ -4538,7 +4544,7 @@ def _resolve_work_dir(raw: str) -> Path:
     parent = p.parent
     stem   = p.name
     matches = sorted(parent.glob(f"{stem}*"),
-                     key=lambda x: x.stat().st_mtime)
+                     key=lambda x: (x.stat().st_mtime, x.name))   # name breaks an mtime tie deterministically
     if matches:
         pv = matches[-1] / "6_Physics_Validation"
         pv.mkdir(parents=True, exist_ok=True)
@@ -4980,6 +4986,16 @@ def main():
                 return 0, "Barrier pending"
             if _der != _der:
                 return 0, "Reaction energy pending"
+            # Defluorination is, by definition, the C–F bond breaking: the product fluoride must have
+            # actually delocalised to free-fluoride (Mulliken charge ≤ QSITE_F_CHARGE_CLEAVED). A low
+            # barrier and downhill ΔE_rxn are necessary but not sufficient — a scan can look favourable
+            # without releasing the fluoride. Same parse as the barrier, so treat a missing value as
+            # pending, not as a fail.
+            _fqp = r.get("F_Charge_Product", np.nan)
+            if _fqp != _fqp:
+                return 0, "Fluoride charge pending"
+            if float(_fqp) > CFG.QSITE_F_CHARGE_CLEAVED:
+                return 0, "C–F not cleaved (fluoride not released)"
             _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
                    and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
                    and float(_bar) <= CFG.DEFLUOR_BARRIER_MAX_KCAL

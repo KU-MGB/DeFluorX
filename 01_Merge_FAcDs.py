@@ -291,9 +291,10 @@ def process_and_write(
         # -------------------------------------------------------------------------------
         # Step 4.2: Quality Control
         # -------------------------------------------------------------------------------
-        valid, _ = is_valid_protein(clean_seq)
+        valid, _reason = is_valid_protein(clean_seq)
         if not valid:
             stats["quality_fail"] += 1
+            logger.debug(f"  Quality fail [{rec.id}]: {_reason}")   # keep the cause (stop codon vs ambiguous)
             continue
 
         # -------------------------------------------------------------------------------

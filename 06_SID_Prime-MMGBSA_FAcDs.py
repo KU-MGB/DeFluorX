@@ -989,6 +989,15 @@ def _retrofit_frame_stamps(csv: Path, job_dir: Path, job_name: str, rank: str) -
           f"Step 07 needs it to align NAC frames with their binding energies.")
 
 
+def _csv_nonempty(p: Path) -> bool:
+    """True if p exists with content. A file that vanishes between the exists-check and the stat is
+    treated as absent rather than crashing the pool with FileNotFoundError (TOCTOU-safe)."""
+    try:
+        return p.is_file() and p.stat().st_size > 0
+    except OSError:
+        return False
+
+
 def _diagnose_shard_failure(slog: Path) -> "str | None":
     """Turn a shard's bare rc=1 into the actual cause, read from its log."""
     try:
@@ -1072,7 +1081,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
 
     def _run_shard(i: int, a: int, b: int) -> None:
         csv = _shard_csv(i)
-        if csv.is_file() and csv.stat().st_size > 0:      # resume: shard already scored
+        if _csv_nonempty(csv):                             # resume: shard already scored
             with _lock:
                 done[i] = csv
             return
@@ -1096,7 +1105,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
             with _lock:
                 failed.append(i)
             return
-        if rc != 0 or not (csv.is_file() and csv.stat().st_size > 0):
+        if rc != 0 or not _csv_nonempty(csv):
             _echo(f"\n  [Rank {rank}] shard {i:03d} (frames {a:,}–{b:,}) failed rc={rc} — see {slog.name}.")
             _why = _diagnose_shard_failure(slog)
             if _why:
@@ -1291,7 +1300,10 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
         try:
             _df = pd.read_csv(_csv)
             if MMGBSA_FRAME_COL not in _df.columns:
-                _stamp_frames(_df, 0, _total, max(1, _step_cfg), f"Rank {rank}").to_csv(_csv, index=False)
+                _stamped = _stamp_frames(_df, 0, _total, max(1, _step_cfg), f"Rank {rank}")
+                _tmp = _csv.with_suffix(".csv.tmp")
+                _stamped.to_csv(_tmp, index=False)
+                _tmp.replace(_csv)                 # atomic: a kill mid-write cannot corrupt the CSV
         except Exception as e:
             _echo(f"  [Rank {rank}] could not stamp frame indices on {_csv.name} ({e}).")
     return _csv

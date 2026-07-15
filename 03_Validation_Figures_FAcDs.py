@@ -429,6 +429,10 @@ def _write_statistical_tests(out_dir):
         return None
     from scipy.stats import false_discovery_control
     _df = pd.DataFrame(_PVALUES)
+    # A metric can be registered by both the central battery and a figure helper (e.g. the confidence
+    # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once — a
+    # duplicate would inflate the family denominator and write a repeated row to the CSV.
+    _df = _df.drop_duplicates(subset=["test", "panel"], keep="first").reset_index(drop=True)
     _df["q_BH"] = false_discovery_control(_df["p_raw"].to_numpy(float), method="bh")
     _df["significant_q<0.05"] = _df["q_BH"] < 0.05
     _df = _df.sort_values("q_BH").reset_index(drop=True)
@@ -2516,7 +2520,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             _kde_x18 = np.linspace(_lo18, _hi18, 300)
             for tier in existing_tiers18:
                 sub18_m = f18_df[f18_df[CFG.COL_TIER] == tier]
-                _min_kde = 1 if tier == CFG.TIER_TOP else 10
+                _min_kde = 2 if tier == CFG.TIER_TOP else 10   # gaussian_kde needs ≥ 2 points
                 if len(sub18_m) < _min_kde:
                     continue
                 _col18m = TIER_PALETTE.get(tier, CFG.VIS_INK["faint"])
@@ -3769,7 +3773,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                         _td12[CFG.COL_SN2].values
                     ]))
                     _ZZ12 = _kde12(_grid12).reshape(_XX12.shape)
-                    _ZZ12 = _ZZ12 / _ZZ12.max()
+                    _zmax12 = _ZZ12.max()
+                    if _zmax12 <= 0:              # all-zero KDE → skip (dividing gives NaN into contour)
+                        continue
+                    _ZZ12 = _ZZ12 / _zmax12
                     ax.contour(_XX12, _YY12, _ZZ12, levels=[0.25, 0.50, 0.90],
                                colors=[_col12], linewidths=[0.5, 1.0, 1.6],
                                alpha=0.70, zorder=_zi12 + 2)
@@ -4318,7 +4325,10 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
                     _kde14  = _gkde14(_vals14)
                     _y14    = np.linspace(np.min(_vals14), np.max(_vals14), 200)
                     _w14    = _kde14(_y14)
-                    _w14   /= _w14.max()
+                    _wmax14 = _w14.max()
+                    if _wmax14 <= 0:             # all-zero KDE → skip (division would NaN the violin)
+                        continue
+                    _w14   /= _wmax14
                     _w14   *= 0.35   # half-width of violin
                     ax.fill_betweenx(_y14, _ti14 - _w14, _ti14 + _w14,
                                      alpha=0.55, color=TIER_PALETTE.get(tier14, CFG.VIS_INK["faint"]))
@@ -9403,9 +9413,9 @@ def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None
             _fn(df, _dest, reporter)
             """
             A panel can return WITHOUT drawing — Figure 1 does exactly that when its inputs are missing.
-            The count is therefore taken from the file on disk, not from the absence of an exception:
-            the previous version logged the destination path and counted a success for a figure that was
-            never written, and reported '7/7' when six existed. A count that cannot fail is not a count.
+            The count is therefore taken from the file on disk, not from the absence of an exception: a
+            success is recorded only when the PNG is actually present, so the tally cannot credit a figure
+            that was never written. A count that cannot fail is not a count.
             """
             if (_dest / f"{_name}.png").exists():
                 reporter.log(f"  ✔ Saved: {_folder}/{_name}.png")

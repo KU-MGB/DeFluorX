@@ -359,6 +359,8 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
             return 0
     merged_hint = [f for f in fasta_files if any(t in f.name.lower() for t in ("merged", "_inp_", "inp_"))]
     fasta_path = max(merged_hint or fasta_files, key=_record_count)
+    if _record_count(fasta_path) == 0:      # every hinted file is empty → fall back to any non-empty FASTA
+        fasta_path = max(fasta_files, key=_record_count)
 
     fasta_dict = {}
     for r in SeqIO.parse(str(fasta_path), "fasta"):
@@ -444,7 +446,7 @@ def main():
     else:
         runs = sorted(
             [d for d in root_dir.iterdir() if d.is_dir() and "Boltz-2_Run_" in d.name],
-            key=lambda x: x.stat().st_mtime
+            key=lambda x: (x.stat().st_mtime, x.name)   # name breaks an mtime tie deterministically
         )
         if not runs:
             print("Error: No 'Boltz-2_Run_*' folders found in current directory.")
