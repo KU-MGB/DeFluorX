@@ -985,16 +985,20 @@ python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp  
    `02_Pose_Drift_CIF_to_Prepared.png` (per-complex angle + distance, CIF→RAW→minimised) and
    `03_Machinery_Engagement_Distribution.png` (all eight catalytic residues as a violin+strip raincloud,
    each measured against its mechanistic partner — the acid against the base dyad, not the substrate).
+   The log also prints a boxed per-complex geometry table (SN2 angle CIF→prep, nucleophile distance
+   CIF→prep, attack Oδ, and whether the prepared pose stayed inside the relaxed NAC envelope).
 5. **QM ligand charges** (`CFG.ESP_CHARGES_ENABLE`, **ON by default**; `--esp` forces it) — a Jaguar DFT
    single-point with `icfit=1` on each prepared ligand, writing `<ligand>_ESP.mae`. Every Step-05 run now
    produces `4_Ligand_ESP_Charges/`.
 
    > OPLS4 assigns ligand charges by atom type, so it cannot see the one quantity an SN2 rate turns on:
-   > how electrophilic the α-carbon is. The QM charge on that carbon runs **+0.023 (FA) → +0.126 (DFA) →
-   > +0.297 (TFA)** — a **13× spread** the force field flattens. The charges are **never injected**: they
-   > reach the physics only if you load the `.mae` **by hand** in Maestro System Builder ("Use custom
-   > charges" → "Partial charges from structure"). This step does not build a system and does not touch
-   > MD or WaterMap. It is irrelevant to Step 07, where QSite places the ligand *inside* the QM region.
+   > how electrophilic the α-carbon is. The QM charge on that carbon climbs across the substrates —
+   > **−0.079 (FA) → +0.236 (DFA) → +0.304 (TFA)**, and higher still for the larger PFAS — a spread the
+   > force field flattens. The charges are **never injected**: they reach the physics only if you load the
+   > `.mae` **by hand** in Maestro System Builder (tick "Use custom charges" → select "Partial charges from
+   > structure" → "Apply to" the ligand). One `_ESP.mae` is written per prepared complex; each MD system
+   > loads its own name-matched file. This step does not build a system and does not touch MD or WaterMap.
+   > It is irrelevant to Step 07, where QSite places the ligand *inside* the QM region.
 
    Outputs: `4_Ligand_ESP_Charges/00_ESP_Charges_Summary.csv` and `01_ESP_Alpha_Carbon_Charge.png`.
 
