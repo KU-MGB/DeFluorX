@@ -3436,7 +3436,7 @@ def prep_and_convert_phase(args):
         try:
             _fig_p = plot_pose_drift(_prep_geom_rows, _pg_path.parent)
             if _fig_p:
-                console_info(f"  Comparative figure  \u2192  {_fig_p.name}")
+                console_info(f"  \u2714 Comparative figure  \u2192  {_fig_p.name}")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Pose-drift figure skipped: {type(_e).__name__}: {_e}")
 
@@ -3458,7 +3458,7 @@ def prep_and_convert_phase(args):
             if _mach_rows:
                 _dfig = plot_machinery_distribution(_mach_rows, _pg_path.parent)
                 if _dfig:
-                    console_info(f"  Comparative figure  \u2192  {_dfig.name}  ({len(_mach_rows)} complexes \u00d7 8 residues)")
+                    console_info(f"  \u2714 Comparative figure  \u2192  {_dfig.name}  ({len(_mach_rows)} complexes \u00d7 8 residues)")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 
