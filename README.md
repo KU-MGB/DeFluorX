@@ -264,23 +264,23 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 
 ## 🕸 Code architecture graph
 
-A function-level knowledge graph of the whole pipeline (605 nodes · 1,222 edges ·
-38 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
-and regenerated on major code changes. **`CFG` is the top primary hub node (betweenness
-0.574)** — every module's thresholds and figure colours route through it, which is
-the single-source-of-truth architecture showing up structurally.
+A function-level knowledge graph of the whole pipeline (826 nodes · 1,701 edges ·
+51 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
+and regenerated on major code changes. **`CFG` is the top hub node (65 edges, the most
+connected)** — every module's thresholds and figure colours route through it, the
+single-source-of-truth architecture showing up structurally.
 
-The screenshot below shows the **full 605-node graph** coloured by its
-38 communities (module-level clusters listed in the side panel).
+The screenshot below shows the graph coloured by its communities (module-level
+clusters listed in the side panel).
 
-![FAcDs code graph — full 605-node graph coloured by community](docs/code_graph.png)
+![FAcDs code graph coloured by community](docs/code_graph.png)
 
 > [!NOTE]
-> The image above (`docs/code_graph.png`) is a **static** screenshot of the
-> interactive graph. For the live version (zoom, pan, community filter, node
-> search) open [`docs/code_graph.html`](docs/code_graph.html) locally (clone →
-> open in any browser). The audit trail (primary hub nodes, communities, surprising
-> connections) is in [`docs/code_graph_report.md`](docs/code_graph_report.md).
+> `docs/code_graph.html` (interactive — zoom, pan, community filter, node search) and
+> `docs/code_graph_report.md` (audit trail: hub nodes, communities, surprising
+> connections) are regenerated with the graph and are current. The static
+> `docs/code_graph.png` is a hand-captured screenshot of the interactive graph —
+> re-capture it from `code_graph.html` after a large refactor to refresh the picture.
 
 ---
 
