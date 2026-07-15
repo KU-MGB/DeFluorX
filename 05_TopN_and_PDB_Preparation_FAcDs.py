@@ -1189,18 +1189,23 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
         _pol = _policy.get(_role)
         if _pol is None or not _num:
             continue
-        _idx = [i for i, l in enumerate(lines)
-                if l.startswith(("ATOM", "HETATM")) and l[22:26].strip() == str(_num)]
-        if not _idx:
+        _expected = {r.upper() for r in CFG.ROLE_EXPECTED_RESIDUES.get(_pol.get("role_key", ""), set())}
+        _cand = [i for i, l in enumerate(lines)
+                 if l.startswith(("ATOM", "HETATM")) and l[22:26].strip() == str(_num)]
+        if not _cand:
             _report[_role] = ("?", _num, "residue not found")
             continue
+        # A residue number alone can collide across chains, or with a water/ligand sharing it. Key on the
+        # chain that actually carries this role's residue so only the intended residue is ever modified.
+        _chain = next((lines[i][21] for i in _cand
+                       if lines[i][17:20].strip().upper() in _expected), lines[_cand[0]][21])
+        _idx = [i for i in _cand if lines[i][21] == _chain]
         _rname = lines[_idx[0]][17:20].strip()
         _names = {lines[i][12:16].strip().upper() for i in _idx}
 
         # CFG-driven identity guard: fail closed if the alignment mapped this role onto a residue of a
         # type CFG.ROLE_EXPECTED_RESIDUES does not permit — stripping/adding atoms there would corrupt it.
-        _expected = CFG.ROLE_EXPECTED_RESIDUES.get(_pol.get("role_key", ""), set())
-        if _expected and _rname.upper() not in {r.upper() for r in _expected}:
+        if _expected and _rname.upper() not in _expected:
             _report[_role] = (_rname, _num,
                               f"REFUSED — {_rname} is not a valid {_role} residue "
                               f"(expected {sorted(_expected)}); protonation not enforced")
@@ -1217,8 +1222,10 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
 
         _strip = {h.upper() for h in _pol.get("strip_H", ())}
 
-        # Histidine base → GUARANTEE HID (Nδ1-H present, Nε2 free) for any input tautomer.
-        if _rname.upper().startswith("HI"):
+        # Histidine base → GUARANTEE HID (Nδ1-H present, Nε2 free) for any input tautomer. Keyed on the
+        # ROLE's canonical residue (CFG), so a CHARMM-named histidine (HSD/HSE/HSP) — admitted by the
+        # identity set — takes the His path, not the aspartate carboxyl strip.
+        if _pol.get("residue") == "HIS":
             _has_hd1, _has_he2 = "HD1" in _names, "HE2" in _names
             if _has_hd1 and _has_he2:                       # HIP → HID
                 _drop.update(i for i in _idx if lines[i][12:16].strip().upper() == "HE2")
@@ -1234,7 +1241,7 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
                                        f"built — left unconverted, verify by hand.")
                     continue
                 _drop.update(i for i in _idx if lines[i][12:16].strip().upper() == "HE2")
-                _insert.setdefault(max(_idx), []).append(_new)
+                _insert.setdefault(min(_idx), []).append(_new)   # anchor to the residue's first atom
                 _act = "HIE → HID (removed HE2, added HD1)"
             else:
                 _report[_role] = (_rname, _num, "no imidazole protons found; left as-is")
@@ -1253,10 +1260,9 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
     if _drop or _insert:
         _out = []
         for i, l in enumerate(lines):
-            if i in _drop:
-                continue
-            _out.append(l)
-            _out.extend(_insert.get(i, ()))
+            if i not in _drop:
+                _out.append(l)
+            _out.extend(_insert.get(i, ()))    # emit inserts even if the anchor line was dropped
         pdb_path.write_text("\n".join(_out) + "\n")
     return _report
 

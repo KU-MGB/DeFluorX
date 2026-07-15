@@ -1103,6 +1103,14 @@ Steps 06 and 07 read the Desmond and WaterMap outputs **by path and by job name*
 guessed from file content, so a mis-named job is silently invisible to the pipeline. Set up the runs
 exactly as below.
 
+> ⚠️ **Import the enforced `_Prepared.pdb` as-is — do NOT re-run Protein Preparation or re-assign
+> histidine tautomers in Maestro.** Step 05 has already imposed the catalytic protonation the mechanism
+> requires (deprotonated Asp nucleophile/dyad; the His base forced to **HID**, Nδ1-H present, Nε2 free).
+> Re-running PrepWizard / PROPKA on this structure lets it re-pick HIE or HIP for the base, which silently
+> undoes the enforced HID — and the wrong tautomer (HIP, +1) collapses the SN2 attack angle 170° → 98°
+> during Desmond relaxation. Load the prepared PDB straight into System Builder and solvate; do not
+> "prepare" it again.
+
 **Directory layout** (produced by Maestro; the pipeline only reads it):
 
 ```
