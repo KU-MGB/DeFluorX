@@ -3108,7 +3108,7 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
             # convex hull of atom CENTRES collapses to ~0 for a small/planar molecule (e.g.
             # fluoroacetate), so vdW spheres are required for a physical ligand volume.
             if len(P) == 0: return 0.0
-            r = np.array([CFG.VDW_RADII.get(e, 1.70) for e in els], float)  # SSOT: CFG.VDW_RADII
+            r = np.array([CFG.VDW_RADII.get(e, CFG.VDW_RADIUS_DEFAULT) for e in els], float)  # SSOT: CFG.VDW_RADII
             lo = (P - r[:, None]).min(0); hi = (P + r[:, None]).max(0)
             gx = np.arange(lo[0], hi[0] + spacing, spacing)
             gy = np.arange(lo[1], hi[1] + spacing, spacing)
@@ -4715,7 +4715,11 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     _ceiling = CFG.TIER_CONSTELLATION_FLOOR_TIER if _B > 0 else CFG.TIER_DECOY
                 if (_cur_t in _order and _ceiling in _order
                         and _order.index(_ceiling) > _order.index(_cur_t)):
-                    _tag = f"low_constellation(B={_B:g}<{_cfloors.get(_cur_t, 0):g})"
+                    # TIER_CONSTELLATION_MIN only defines floors for Tier_1A/1B/2A/2B, so a Tier_3 row
+                    # would read "B < 0" (the .get default). Report against the lowest defined floor —
+                    # the effective bar the row fell under — when _cur_t has no explicit floor.
+                    _disp_floor = _cfloors.get(_cur_t, min(_cfloors.values()) if _cfloors else 0.0)
+                    _tag = f"low_constellation(B={_B:g}<{_disp_floor:g})"
                     data[CFG.COL_TIER] = _ceiling
                     if _ceiling not in CFG.TIER_HIGH_QUALITY:
                         data["is_degrader"] = False
@@ -4725,7 +4729,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     # Regenerate the human-readable verdict so Justification / scientific_meaning
                     # name the final (post-constellation) tier the row actually holds.
                     _meaning = (f"Catalytic constellation below the {_cur_t} floor "
-                                f"(B={_B:g} < {_cfloors.get(_cur_t, 0):g}); the eight catalytic "
+                                f"(B={_B:g} < {_disp_floor:g}); the eight catalytic "
                                 f"residues are not assembled with crystal-grade geometry — "
                                 f"demoted to {_ceiling}.")
                     data["scientific_meaning"] = _meaning

@@ -1929,6 +1929,8 @@ class CFG:
     re-evaluation of the barrier rather than for the scan itself.
     """
     QSITE_SCF_IACC: int = 1
+    QSITE_SCF_VSHIFT: float = 5.0    # SCF level shift (stabilises convergence) — read at 07:2759
+    QSITE_SCF_MAXIT: int    = 200    # max SCF iterations — read at 07:2760
     QSITE_SCAN_BASIS: str = "6-31G**"        # basis for the relaxed scan points: the scan is many
                                              # SCF cycles, so it runs a cheaper basis than the
                                              # single-point QSITE_BASIS_SET

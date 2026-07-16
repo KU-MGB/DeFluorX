@@ -2756,9 +2756,9 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         f"dftname={CFG.QSITE_FUNCTIONAL}",
         "mmqm=1",                         # enable QM/MM
         "impversion=huge",
-        f"vshift={getattr(CFG, 'QSITE_SCF_VSHIFT', 5.0):g}",   # SCF level shift (stabilises convergence)
-        f"maxit={int(getattr(CFG, 'QSITE_SCF_MAXIT', 200))}",  # more SCF iterations
-        f"iacc={int(CFG.QSITE_SCF_IACC)}",                     # SCF accuracy grid (1 = robust/fast)
+        f"vshift={CFG.QSITE_SCF_VSHIFT:g}",    # SCF level shift (stabilises convergence)
+        f"maxit={int(CFG.QSITE_SCF_MAXIT)}",   # max SCF iterations
+        f"iacc={int(CFG.QSITE_SCF_IACC)}",     # SCF accuracy grid (1 = robust/fast)
         "nofail=1",                                            # a non-converged point is skipped, not fatal
         "mulken=1",                                            # print the Mulliken population analysis:
                                                                # without it Jaguar writes NO charge table

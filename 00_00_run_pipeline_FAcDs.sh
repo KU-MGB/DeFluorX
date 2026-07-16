@@ -615,7 +615,7 @@ if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
     fi
 fi
 
-run_step "06  SID + Prime MM-GBSA post-processing (*_SID-out.eaf + MM-GBSA)" \
+run_step "06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)" \
     python 06_Physics_Validation_FAcDs.py "$RUN_ID" --pipeline-mode
 
 run_step "07  MD thermodynamics + QM/MM engine" \
@@ -623,7 +623,8 @@ run_step "07  MD thermodynamics + QM/MM engine" \
 
 # Restore systemd-oomd after both Steps 06 and 07 have completed (only if masked).
 if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then
-    sudo systemctl unmask systemd-oomd.socket && sudo systemctl start systemd-oomd
+    sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
+    sudo systemctl start systemd-oomd 2>/dev/null || true
 fi
 
 # ── Footer ────────────────────────────────────────────────────────────────────

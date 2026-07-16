@@ -167,14 +167,19 @@ def install_environment(env_name: str):
 # -------------------------------------------------------------------------------
 
 def verify_environment() -> None:
-    """Verifies installed packages in the current environment and prints a checklist."""
+    """Verify the installed pipeline packages and HALT if a mandatory one is missing.
+
+    This is a non-optional gate (00_00 runs it before Step 01), so a missing boltz/colabfold/MDAnalysis/
+    rdkit/gemmi/torch must fail HERE with a non-zero exit — not print a red ✘ and let the run report PASS,
+    only to die hours later inside Step 01/02. PyMOL/PLIP are the exception: Step 05 auto-installs them, so
+    they are a ⚠, not a failure."""
     print("Verifying installed pipeline packages:")
+    _missing: list[str] = []
 
     # Python
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} Python           : {py_ver}")
 
-    # Helper to check package
     def check_pkg(name: str, import_name: str | None = None) -> None:
         import_name = import_name or name
         try:
@@ -183,6 +188,7 @@ def verify_environment() -> None:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} {name:<16} : {ver}")
         except ImportError:
             print(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} {name:<16} : Missing")
+            _missing.append(name)
 
     check_pkg("boltz")
     check_pkg("colabfold")
@@ -197,6 +203,7 @@ def verify_environment() -> None:
         print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} torch (CUDA)     : {torch.__version__} — {cuda_avail}")
     except ImportError:
         print(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} torch (CUDA)     : Missing")
+        _missing.append("torch")
 
     # PyMOL
     try:
@@ -223,6 +230,11 @@ def verify_environment() -> None:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : Available (binary located)")
         else:
             print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PLIP             : Missing (will be auto-installed in Step 05)")
+
+    if _missing:
+        print(f"\n  {ConsoleColours.FAIL}✘ Environment check FAILED — mandatory package(s) missing: "
+              f"{', '.join(_missing)}.{ConsoleColours.ENDC} Fix the conda env before running the pipeline.")
+        sys.exit(1)
 
 
 # =============================================================================

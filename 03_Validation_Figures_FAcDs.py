@@ -8289,8 +8289,14 @@ def _xn__thin(sub: pd.DataFrame, group_col: str, cap: int = _xn_STRIP_MAX_PER_GR
         parts.append(g)
     return pd.concat(parts, ignore_index=True) if parts else sub
 
-def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
-    """Kruskal-Wallis across the ordered groups, formatted for an on-panel annotation."""
+def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order, reg_name: str = None) -> str:
+    """Kruskal-Wallis across the ordered groups, formatted for an on-panel annotation.
+
+    reg_name is the name the test is REGISTERED under (defaults to val_col). Callers that pass a
+    renamed working column (e.g. every pillar copied to 'y') must pass the real column here, or all
+    their tests collapse onto one registry key ('Kruskal-Wallis — y across tier') and only the last
+    survives the BH-family dedup."""
+    _reg = reg_name or val_col
     groups = [sub.loc[sub[group_col] == t, val_col].dropna().values for t in order]
     groups = [g for g in groups if len(g) >= 2]
     if len(groups) < 2:
@@ -8301,9 +8307,9 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
     n = sum(len(g) for g in groups)
     eps2 = (H - len(groups) + 1) / (n - len(groups)) if n > len(groups) else np.nan
     # Register so this on-panel p pays the same BH multiplicity toll as the battery's tests and appears
-    # in 06_Statistical_Tests.csv — otherwise a reader cannot discover it was run. val_col keeps the
-    # three call sites (geometry / binding / pillars) distinct in the family.
-    _register_p(f"Kruskal-Wallis — {val_col} across {group_col}", "03_Extended_Panels",
+    # in 06_Statistical_Tests.csv — otherwise a reader cannot discover it was run. reg_name keeps the
+    # call sites (geometry / binding / the four pillars) distinct in the family.
+    _register_p(f"Kruskal-Wallis — {_reg} across {group_col}", "03_Extended_Panels",
                 float(H), int(n), float(p),
                 eps_sq=(round(float(eps2), 4) if np.isfinite(eps2) else None))
     return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
@@ -8894,7 +8900,7 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
         ax.set_ylabel(lab)
         ax.set_axisbelow(True)
         _xn__tidy_tier_ticks(ax, counts=counts)
-        _xn__stat_header(ax, _xn__kruskal(sub, 'tier', 'y', tiers))
+        _xn__stat_header(ax, _xn__kruskal(sub, 'tier', 'y', tiers, reg_name=pc))
         _xn__panel(ax, letter)
     _xn__save(fig, out_dir, _xn_FIG_NAMES['pillars'], reporter)
 
@@ -10410,7 +10416,9 @@ def main():
         df = analyse_conflicts(df, out_dir, reporter)
 
         enriched_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
-        df.to_csv(enriched_csv, index=False)
+        # Atomic: this is the ~370 MB deliverable 04 reads with no row-count check, so a killed run must
+        # not leave a truncated CSV consumed as truth. tmp + replace (as 05/06/07 do via this helper).
+        _utils_mod.atomic_write_csv(df, enriched_csv, index=False)
         reporter.log(f"  ✔ Saved: 01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")
 
         # Finalise 01_Analysis_Data before the figure steps: build the multi-model variance CSV here

@@ -161,7 +161,10 @@ def _make_reporter(out_dir: Path):
     return ReportManager(
         out_dir / "00_Dendrogram.log",
         "BOLTZ-2 PHYLOGENY PIPELINE REPORT",
-        separator=SEPARATOR, rule_width=79, log_fn=console_info)
+        # Non-logging log_fn: ReportManager.log already appends every line to the log file itself, so a
+        # logger-bound log_fn (console_info → logger → same file) would write each line twice. print keeps
+        # it on the console; the [LOG] append keeps it in the file, once.
+        separator=SEPARATOR, rule_width=79, log_fn=print)
 
 
 def clean_id(name: str) -> str:
@@ -376,6 +379,15 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         if clean_id(k) in _valid_clean_ids
     }
 
+    # Reporting only (does NOT change the matching): name the CSV proteins with no FASTA sequence, so
+    # their absence from the tree is logged rather than silent. The controls (3R3U_Control, DeHa4_Control)
+    # are absent by construction — their sequences are not in the merged FASTA.
+    _fasta_clean = {clean_id(k) for k in fasta_dict}
+    _unmatched = sorted(p for p in valid_csv_prots if clean_id(p) not in _fasta_clean)
+    if _unmatched:
+        reporter.log(f"  ℹ {len(_unmatched)} CSV protein(s) not in the merged FASTA, so absent from the "
+                     f"tree: {', '.join(_unmatched[:5])}{' …' if len(_unmatched) > 5 else ''}")
+
     if not global_seqs:
         reporter.log("  ! Name mismatch between FASTA and CSV — no sequences matched. Skipping global dendrogram.")
         return
@@ -458,6 +470,11 @@ def main():
     out_dir  = run_path / "4_Dendrogram"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Build the reporter FIRST: its __init__ opens the log "w" (writes the header), so doing it after
+    # _setup_logging would truncate the handler's first lines (e.g. "Loaded: <csv>"). Header first, then
+    # the logging handler appends.
+    reporter = _make_reporter(out_dir)
+
     global logger
     logger = _setup_logging(out_dir / "00_Dendrogram.log", "04_Dendrogram")
 
@@ -476,8 +493,6 @@ def main():
     csv_path = csv_candidates[0]
     df = pd.read_csv(csv_path, low_memory=False)
     console_info(f"Loaded: {csv_path.name} ({len(df):,} rows)")
-
-    reporter = _make_reporter(out_dir)
 
     try:
         generate_phylogenies(df, prod_dir, out_dir, reporter)
