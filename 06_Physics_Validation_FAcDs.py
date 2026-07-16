@@ -2271,15 +2271,23 @@ def _cancel_launched_jobs() -> None:
         pass
 
 
+_OOMD_GUARD: "OomdGuard | None" = None   # set in main once primed; restored on signal/atexit
+
+
 def _install_job_cleanup() -> None:
     """Cancel the run's job-server jobs on normal exit AND on SIGINT/SIGTERM/SIGHUP, so a killed script
-    never leaves WaterMap/MD jobs running under jobserverd."""
+    never leaves WaterMap/MD jobs running under jobserverd. The same handlers restore systemd-oomd:
+    the signal path re-raises with SIG_DFL and never unwinds the guard's `with`/atexit, so without this
+    a Ctrl-C would leave oomd masked and stopped on the host permanently."""
     import atexit
     import signal
     atexit.register(_cancel_launched_jobs)
+    atexit.register(lambda: _OOMD_GUARD and _OOMD_GUARD.restore())
 
     def _handler(signum, _frame):
         _cancel_launched_jobs()
+        if _OOMD_GUARD is not None:
+            _OOMD_GUARD.restore()               # unmask systemd-oomd before the process dies on the signal
         signal.signal(signum, signal.SIG_DFL)   # restore default and re-raise for the correct exit status
         os.kill(os.getpid(), signum)
 
@@ -2442,8 +2450,26 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
     from schrodinger.application.desmond.packages import topo
     esp = {a.pdbname.strip(): a.partial_charge for a in structure.StructureReader.read(str(esp_mae)).atom}
     model = cmsmod.Cms(str(out_cms))
-    _n_comp0 = len(model.comp_ct)
-    _n_atom0 = sum(1 for _ in model.atom)
+
+    def _partition_state(m):
+        """A healthy Desmond build partitions the full_system atoms across component CTs, so
+        sum(comp_ct atoms) == fsys atoms and a solvent CT is present. A build whose partition
+        collapsed into the full_system alone (R_1 shipped comp_ct sum 4702 vs fsys 28009, no
+        solvent CT) fails both tests."""
+        _sum = sum(ct.atom_total for ct in m.comp_ct)
+        _has_solvent = any("water" in (ct.title or "").lower() for ct in m.comp_ct)
+        return (_sum == m.atom_total and _has_solvent), _sum, _has_solvent
+
+    # Guard the file AS READ, before any write. The earlier delta guard (comp_ct/atoms before vs
+    # after) passed an already-collapsed file unchanged — for R_1 the count was 1→1. Assert the
+    # absolute invariant instead, so a corrupt build is refused rather than re-written on resume.
+    _ok0, _sum0, _solv0 = _partition_state(model)
+    if not _ok0:
+        raise RuntimeError(
+            f"reapply_esp_to_cms: {out_cms.name} is not a healthy build "
+            f"(sum(comp_ct)={_sum0:,} vs fsys={model.atom_total:,}, solvent_ct={_solv0}); "
+            f"refusing to touch it. Rebuild the system (restore from the *_3-out.tgz archive).")
+
     n_lig = applied = 0
     for ct in model.comp_ct:
         if not any(a.pdbres.strip() == "LIG" for a in ct.atom):
@@ -2454,22 +2480,19 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
                 if a.pdbname.strip() in esp:
                     ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
                     applied += 1
-    # Atomic write, with a component-CT / atom-count guard. A Cms.write() that flattens the
-    # component partition (protein/ions/water) into the full_system CT alone leaves an
-    # unusable build — MM-GBSA and topo.read_cms iterate comp_ct. Write to a sibling .tmp,
-    # re-read, and require the partition survive before replacing the good file; a collapsed
-    # write is raised, never installed over the original.
+    # Atomic write, re-asserting the same invariant on the written .tmp. A Cms.write() that
+    # flattens the partition leaves an unusable build (MM-GBSA and topo.read_cms iterate comp_ct);
+    # the collapsed write is raised and never replaces the good file.
     _tmp = out_cms.with_suffix(out_cms.suffix + ".tmp")
     model.write(str(_tmp))
     _chk = cmsmod.Cms(str(_tmp))
-    _n_comp1 = len(_chk.comp_ct)
-    _n_atom1 = sum(1 for _ in _chk.atom)
-    if _n_comp1 != _n_comp0 or _n_atom1 != _n_atom0:
+    _ok1, _sum1, _solv1 = _partition_state(_chk)
+    if not _ok1 or _chk.atom_total != model.atom_total:
         _tmp.unlink(missing_ok=True)
         raise RuntimeError(
             f"reapply_esp_to_cms: write corrupted the built system "
-            f"(comp_ct {_n_comp0}→{_n_comp1}, atoms {_n_atom0:,}→{_n_atom1:,}); "
-            f"refusing to overwrite {out_cms.name}.")
+            f"(sum(comp_ct) {_sum0:,}→{_sum1:,}, fsys {model.atom_total:,}→{_chk.atom_total:,}, "
+            f"solvent_ct {_solv0}→{_solv1}); refusing to overwrite {out_cms.name}.")
     _tmp.replace(out_cms)
 
     msys, cms = topo.read_cms(str(out_cms))
@@ -2514,26 +2537,21 @@ def _md_msj(time_ps: float, interval_ps: float) -> str:
 
 
 def _unpack_md_production(wd: Path, jobname: str) -> None:
-    """Unpack the production stage so the job dir matches a Maestro MD job (07/06 read them flat).
+    """Repoint the cms to the production trajectory the job dir already holds (07/06 read them flat).
 
-    multisim archives every stage as {job}_N-out.tgz; the last (production) holds the trajectory and
-    energy. 07 auto-extracts the trajectory recursively, but reads {job}.ene ONLY at the job-dir root
-    (the NPT-equilibration check). Extract the production {job}_N_trj → {job}_trj and {job}_N.ene →
-    {job}.ene at the root, then drop the now-redundant production tgz. Relax-stage tgz are left as-is.
+    multisim leaves the PRODUCTION stage (7) at the job-dir root as {job}_trj + {job}.ene and archives
+    ONLY the earlier stages as {job}_N-out.tgz — the production stage is never archived. So an archived
+    tgz is always an equilibration stage (the last is the restrained 24 ps NPT relax); installing one as
+    production would silently score an unequilibrated trajectory. Require the real {job}_trj at the root
+    and repoint the cms to it; if it is absent the MD did not finish, so raise rather than fall back.
     """
-    import tarfile
-
-    def _seg(p: Path) -> int:
-        m = re.search(r"_(\d+)-out\.tgz$", p.name)
-        return int(m.group(1)) if m else -1
-
     cms = wd / f"{jobname}-out.cms"
 
     def _repoint_cms() -> None:
-        """Repoint the cms's s_chorus_trajectory_file from the staged name ({job}_N_trj) to the
-        renamed {job}_trj. multisim writes the production-stage trajectory name into the cms; after we
-        rename the trajectory, thermal_mmgbsa (Prime MM-GBSA) and 07 both resolve the trajectory from
-        this reference, so a stale name aborts MM-GBSA with 'No trajectory found associated with CMS'."""
+        """Repoint the cms's s_chorus_trajectory_file from the staged name ({job}_N_trj) to {job}_trj.
+        multisim writes the production-stage trajectory name into the cms; thermal_mmgbsa (Prime
+        MM-GBSA) and 07 both resolve the trajectory from this reference, so a stale name aborts MM-GBSA
+        with 'No trajectory found associated with CMS'."""
         if not cms.exists():
             return
         try:
@@ -2544,30 +2562,14 @@ def _unpack_md_production(wd: Path, jobname: str) -> None:
         except Exception:
             pass
 
-    # multisim leaves the PRODUCTION stage's trajectory at the root as {job}_trj; earlier stages are the
-    # archived _N-out.tgz. If the production _trj is already present, we are done — never extract an
-    # archived stage over it (tgzs[-1] can be a restrained NPT/equilibration stage, not production, and
-    # installing that as production would silently score the wrong trajectory).
     if (wd / f"{jobname}_trj").exists():
         _repoint_cms()
         return
-    tgzs = sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_seg)
-    if not tgzs:
-        return
-    prod = tgzs[-1]
-    n = _seg(prod)
-    stage = wd / f"{jobname}_{n}"
-    with tarfile.open(str(prod)) as tf:
-        tf.extractall(str(wd))
-    for src_name, dst_name in ((f"{jobname}_{n}_trj", f"{jobname}_trj"),
-                               (f"{jobname}_{n}.ene", f"{jobname}.ene")):
-        src = stage / src_name
-        dst = wd / dst_name
-        if src.exists() and not dst.exists():
-            shutil.move(str(src), str(dst))
-    shutil.rmtree(stage, ignore_errors=True)
-    prod.unlink(missing_ok=True)                          # trajectory now lives extracted at the root
-    _repoint_cms()                                         # repoint the cms so Prime MM-GBSA finds it
+    raise RuntimeError(
+        f"{jobname}: production trajectory {jobname}_trj is not at the job-dir root. multisim leaves "
+        f"stage-7 (production) _trj/.ene there and archives only the earlier equilibration stages, so "
+        f"there is no production tgz to fall back to — an archived stage is a 24 ps NPT relax, not "
+        f"production. The MD did not finish; re-run it for this rank.")
 
 
 def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int) -> Path:
@@ -2886,8 +2888,10 @@ def main() -> int:
 
     # Prompt for the (optional) sudo password NOW, up front, so the run is fully unattended
     # afterwards — the user can walk away and SID / MM-GBSA stay protected from systemd-oomd.
+    global _OOMD_GUARD
     _guard = OomdGuard(active=not a.pipeline_mode)
     _guard.__enter__()
+    _OOMD_GUARD = _guard        # reachable from the signal/atexit handlers so a kill still unmasks oomd
 
     if "merge" in stages:
         _section(f"Step 1/4 — Import + ESP merge  ({len(entries)} complex)")

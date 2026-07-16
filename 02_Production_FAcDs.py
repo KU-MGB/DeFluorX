@@ -3835,22 +3835,25 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         """
         UNKNOWN CHEMISTRY IS BARRED FROM ELITE, NOT ANNIHILATED.
 
-        When the scissile centre could not be resolved (_chem_unknown), the BDE is the sentinel and the
-        occlusion was never measured. Feeding the sentinel into the penalty would subtract ~13 from the
-        mechanistic score and bury the complex in Tier_5 — punishing it for a mapping failure rather than
-        for its chemistry, and destroying a candidate that may be perfectly good.
+        A penalty is invented from a non-measurement in neither term: a sentinel BDE (scissile centre
+        unresolved) and an unmeasured backside occlusion are each zeroed, so a mapping failure cannot
+        subtract ~13 from the mechanistic score and bury an otherwise-good candidate in Tier_5.
 
-        The honest position is narrower: we do not know, so we do not PROMOTE. No numeric penalty is
-        invented from a sentinel, and the complex is barred from the elite tier (below). It keeps its
-        geometry-earned rank and is flagged, so a human can see exactly which complexes were never
-        chemically verified instead of finding them silently at the top or silently at the bottom.
+        The honest position is narrower: we do not know, so we do not PROMOTE. Each penalty is gated on
+        ITS OWN measurement rather than the aggregate _chem_unknown flag — a resolved BDE keeps its real
+        C–F penalty even when the occlusion map failed (that failure sets _chem_unknown, and zeroing the
+        BDE with it would silently drop the penalty on, e.g., an α-CF3 whose count came from the
+        map-independent fallback). _chem_unknown still bars the complex from the elite tier (below), and
+        it is flagged, so a human sees exactly which complexes were never chemically verified.
         """
-        if _chem_unknown:
-            _occl_pen = 0.0
-            _bde_pen  = 0.0
+        if scissile_cf_bde >= CFG.SENTINEL_UNDEFINED:
+            _bde_pen  = 0.0            # BDE unresolved (sentinel) — do not invent a penalty
+        else:
+            _bde_pen  = CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
+        if not _occl_measured:
+            _occl_pen = 0.0            # backside occlusion never measured
         else:
             _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
-            _bde_pen  = CFG.CHEM_PEN_W_BDE  * max(0.0, scissile_cf_bde   - CFG.SCISSILE_CF_BDE_MAX)
         _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
         _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)

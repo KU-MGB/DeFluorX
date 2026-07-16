@@ -1159,9 +1159,11 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
 
     Every rule is read from CFG.CATALYTIC_PROTONATION_POLICY — one entry per catalytic role, each tied to
     ONE canonical residue via `role_key` (CFG.ROLE_EXPECTED_RESIDUES). There is no residue-type guess
-    anywhere: no Asp-or-Glu, no Asp/Glu/Ser branch. Three roles carry a mechanism-required state PropKa
-    cannot infer (it does not know which aspartate is the nucleophile) and are ENFORCED; the other five are
-    verified for identity and logged for their function, but not modified.
+    anywhere: no Asp-or-Glu, no Asp/Glu/Ser branch. Only the three roles PropKa cannot infer — the
+    aspartate nucleophile, the dyad aspartate and the histidine base — are carried in `anchors`
+    (load_catalytic_anchor_map builds it from the Nuc/Acid/Base Mapped_* columns) and are ENFORCED here.
+    The other five CATALYTIC_PROTONATION_POLICY roles are enforce=False (never modified) and are NOT loaded
+    into `anchors`, so this function neither re-verifies their identity nor logs them.
 
     The cost of getting the trio wrong is measured, not theoretical: a controlled experiment (two systems
     identical but for one hydrogen) collapses the SN2 attack angle 150° → 98° when the base is HIP (+1),

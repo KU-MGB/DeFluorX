@@ -2595,7 +2595,9 @@ class CFG:
     HE2; HID → unchanged; HIE → remove HE2 AND add the Nδ1-H (add_H), so no input tautomer is left as a
     proton-less imidazole or an unconverted HIE. The other five (the two arginine clamps, the His155
     fluoride stabiliser, the Trp156/Tyr217 cradle) take their standard state at PREPWIZARD_PROPKA_PH and are
-    declared here for their FUNCTION and as a QC identity check — they are not stripped (`enforce=False`).
+    declared here for their FUNCTION only (`enforce=False`, never stripped). They are NOT loaded into the
+    Step-05 anchor map, so they are not currently re-verified for identity — enforcement and the identity
+    guard both act on Nuc/Acid/Base alone.
     The His155 tautomer is left to PropKa because the departing F⁻ it stabilises is not present at prep time.
 
     `role_key` links each role to CFG.ROLE_EXPECTED_RESIDUES so the residue-identity guard is CFG-driven.

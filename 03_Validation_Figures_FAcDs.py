@@ -753,8 +753,15 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
     _missed = {k: [] for k in _keys}
     for _prot, _s in zip(_adf.get("protein", range(len(_adf))), _adf["active_site_mapping"].fillna("")):
         try:
-            _m = _json.loads(_s)
+            _m = _json.loads(_s) if _s else None
         except Exception:
+            _m = None
+        if not isinstance(_m, dict):
+            # An absent or unparseable mapping produced NO residues — this is the coverage-evidence
+            # CSV, so count the protein as missed for every role. Skipping it (the old `continue`)
+            # let an alignment that mapped nothing read as fully mapped (missing is not zero-missed).
+            for k in _keys:
+                _missed[k].append(str(_prot))
             continue
         for k in _keys:
             if _m.get(k) is None:
