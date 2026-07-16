@@ -3066,7 +3066,7 @@ class CFG:
     PHYS_MD_PRESSURE_BAR: float = 1.01325      # NPT pressure
     PHYS_MD_TIMESTEP_PS: tuple = (0.002, 0.002, 0.006)   # bonded / near / far RESPA time steps
     PHYS_MD_SEED: int          = 2024          # velocity-randomisation seed (reproducible)
-    PHYS_MD_THERMOSTAT_TAU: float = 0.1        # ps  MTK thermostat relaxation time
+    PHYS_MD_THERMOSTAT_TAU: float = 1.0        # ps  MTK thermostat relaxation time (vendor PRODUCTION value; 0.1 is an equilibration/Langevin setting and over-couples the NHC)
     PHYS_MD_BAROSTAT_TAU: float   = 2.0        # ps  MTK barostat relaxation time
     PHYS_MD_ENESEQ_PS: float   = 1.2           # ps  energy-record (.ene) interval
     PHYS_WM_NS: float          = 5.0           # WaterMap production length (ns)

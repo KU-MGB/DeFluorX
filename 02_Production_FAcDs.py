@@ -3849,7 +3849,9 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
         _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
-        _cont     = float(results.get("pocket_containment_cavity", 1.0) or 1.0)
+        # No `or`: compute_pocket_fit deliberately fails an unmeasured/solvent-exposed pose to 0.0 so it
+        # takes the full containment penalty; `or 1.0` would launder that back to "ideally buried" (best case).
+        _cont     = float(results.get("pocket_containment_cavity", 0.0))
         _cont_pen = CFG.CONTAIN_PEN_W * max(0.0, CFG.CONTAIN_PEN_TARGET - _cont)
         mech_effective = max(0.0, mech_score - _chem_pen - _cont_pen)
         results["chem_penalty"]              = round(_chem_pen, 3)

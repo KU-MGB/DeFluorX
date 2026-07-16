@@ -2189,7 +2189,9 @@ def _build_msj(lig_indices: str) -> str:
         f'  ion_awaydistance = {CFG.PHYS_ION_EXCLUDE_A}\n'
         f'  ion_awayfrom = [ {lig_indices} ]\n'
         f'}}\n'
-        f'assign_forcefield {{ forcefield = "{CFG.PHYS_FORCEFIELD}" }}\n'
+        # The `water` key is REQUIRED: assign_forcefield defaults water to SPC and re-stamps every
+        # solvent residue, so build_geometry's solvent="TIP3P" (box geometry only) is silently overridden.
+        f'assign_forcefield {{ forcefield = "{CFG.PHYS_FORCEFIELD}" water = "{CFG.PHYS_SOLVENT_MODEL}" }}\n'
     )
 
 
@@ -2434,24 +2436,44 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
     from schrodinger.application.desmond.packages import topo
     esp = {a.pdbname.strip(): a.partial_charge for a in structure.StructureReader.read(str(esp_mae)).atom}
     model = cmsmod.Cms(str(out_cms))
+    n_lig = applied = 0
     for ct in model.comp_ct:
         if not any(a.pdbres.strip() == "LIG" for a in ct.atom):
             continue
         for a in ct.atom:
-            if a.pdbres.strip() == "LIG" and a.pdbname.strip() in esp:
-                ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
+            if a.pdbres.strip() == "LIG":
+                n_lig += 1
+                if a.pdbname.strip() in esp:
+                    ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
+                    applied += 1
     model.write(str(out_cms))
 
     msys, cms = topo.read_cms(str(out_cms))
     bad = []
+    verified = 0
+    lig_sum = 0.0
     for i, a in enumerate(cms.atom):
         if a.pdbres.strip() == "LIG":
+            lig_sum += msys.atom(i).charge
             want = esp.get(a.pdbname.strip())
-            if want is not None and abs(msys.atom(i).charge - want) > 1e-3:
+            if want is None:
+                continue
+            if abs(msys.atom(i).charge - want) > 1e-3:
                 bad.append(f"{a.pdbname.strip()} FF={msys.atom(i).charge:+.4f} ESP={want:+.4f}")
-    if bad:
-        raise RuntimeError("ESP charges did NOT reach the MD force field: " + "; ".join(bad))
-    return round(sum(esp.values()), 4)
+            else:
+                verified += 1
+    # Fail-CLOSED: the whole point of this function is to guarantee ESP reached the force field. A
+    # ligand PDB-name mismatch after System Builder writes nothing, verifies nothing and — under the old
+    # `if bad` test — passed silently while returning the ESP file's own sum. Require every LIG atom.
+    if n_lig == 0:
+        raise RuntimeError("reapply_esp_to_cms: no LIG atoms in the built cms.")
+    if applied != n_lig or verified != n_lig or bad:
+        raise RuntimeError(
+            f"ESP charges did NOT reach the MD force field for all {n_lig} LIG atoms "
+            f"(applied {applied}, verified {verified})"
+            + ("; " + "; ".join(bad) if bad else "")
+            + " — likely a ligand PDB-name mismatch after System Builder.")
+    return round(lig_sum, 4)   # the sum READ BACK from the engine, not from the ESP file
 
 
 # -----------------------------------------------------------------------------
@@ -2498,8 +2520,12 @@ def _unpack_md_production(wd: Path, jobname: str) -> None:
         except Exception:
             pass
 
-    if (wd / f"{jobname}_trj").exists() and (wd / f"{jobname}.ene").exists():
-        _repoint_cms()          # trajectory already extracted (e.g. re-run) — ensure the cms points at it
+    # multisim leaves the PRODUCTION stage's trajectory at the root as {job}_trj; earlier stages are the
+    # archived _N-out.tgz. If the production _trj is already present, we are done — never extract an
+    # archived stage over it (tgzs[-1] can be a restrained NPT/equilibration stage, not production, and
+    # installing that as production would silently score the wrong trajectory).
+    if (wd / f"{jobname}_trj").exists():
+        _repoint_cms()
         return
     tgzs = sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_seg)
     if not tgzs:
