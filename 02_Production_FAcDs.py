@@ -3631,32 +3631,37 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         # occlusion; a complex whose RDKit mapping failed has an UNKNOWN one, and the two must not be
         # written the same way. The flag below separates them.
         backside_occlusion = 0.0
-        _occl_measured = bool(best_c_atom is not None and target_x_pos is not None and rd_mol and mm_map)
+        # The attack carbon must be present IN the map, not merely somewhere in a non-empty map:
+        # mm_map.get(best_c_atom.name) is None means this very centre was not resolved, so its
+        # backside is UNKNOWN, not zero. Fold that into the measured flag or occlusion silently
+        # reads 0.0 (= the best case for an inverted metric) while chem_verified stays 1.
+        _c_idx = mm_map.get(best_c_atom.name) if (best_c_atom is not None and mm_map) else None
+        _occl_measured = bool(best_c_atom is not None and target_x_pos is not None
+                              and rd_mol and mm_map and _c_idx is not None)
         if not _occl_measured:
             _chem_unknown = True
-        if best_c_atom is not None and target_x_pos is not None and rd_mol and mm_map:
-            _c_idx = mm_map.get(best_c_atom.name)
-            if _c_idx is not None:
-                _invm = {v: k for k, v in mm_map.items()}
-                _name2pos = {a.name: a.pos for a in lig_atoms_obj}
-                _cp = best_c_atom.pos
-                _ux, _uy, _uz = _cp.x - target_x_pos.x, _cp.y - target_x_pos.y, _cp.z - target_x_pos.z
-                _un = math.sqrt(_ux*_ux + _uy*_uy + _uz*_uz) or 1.0
-                _ux, _uy, _uz = _ux/_un, _uy/_un, _uz/_un
-                try:
-                    _crd = rd_mol.GetAtomWithIdx(_c_idx)
-                    for _nb in _crd.GetNeighbors():
-                        _el = _nb.GetSymbol().upper()
-                        if _el in ("C", "H"):   # chain carbons / H: negligible backside crowding
-                            continue
-                        _pp = _name2pos.get(_invm.get(_nb.GetIdx()))
-                        if _pp is None:
-                            continue
-                        _vx, _vy, _vz = _pp.x - _cp.x, _pp.y - _cp.y, _pp.z - _cp.z
-                        _vn = math.sqrt(_vx*_vx + _vy*_vy + _vz*_vz) or 1.0
-                        if (_vx*_ux + _vy*_uy + _vz*_uz) / _vn > 0.0:   # approach-hemisphere substituent
-                            backside_occlusion += CFG.VDW_RADII.get(_el, CFG.VDW_RADIUS_DEFAULT)
-                except Exception: pass
+        if _occl_measured:
+            _invm = {v: k for k, v in mm_map.items()}
+            _name2pos = {a.name: a.pos for a in lig_atoms_obj}
+            _cp = best_c_atom.pos
+            _ux, _uy, _uz = _cp.x - target_x_pos.x, _cp.y - target_x_pos.y, _cp.z - target_x_pos.z
+            _un = math.sqrt(_ux*_ux + _uy*_uy + _uz*_uz) or 1.0
+            _ux, _uy, _uz = _ux/_un, _uy/_un, _uz/_un
+            try:
+                _crd = rd_mol.GetAtomWithIdx(_c_idx)
+                for _nb in _crd.GetNeighbors():
+                    _el = _nb.GetSymbol().upper()
+                    if _el in ("C", "H"):   # chain carbons / H: negligible backside crowding
+                        continue
+                    _pp = _name2pos.get(_invm.get(_nb.GetIdx()))
+                    if _pp is None:
+                        continue
+                    _vx, _vy, _vz = _pp.x - _cp.x, _pp.y - _cp.y, _pp.z - _cp.z
+                    _vn = math.sqrt(_vx*_vx + _vy*_vy + _vz*_vz) or 1.0
+                    if (_vx*_ux + _vy*_uy + _vz*_uz) / _vn > 0.0:   # approach-hemisphere substituent
+                        backside_occlusion += CFG.VDW_RADII.get(_el, CFG.VDW_RADIUS_DEFAULT)
+            except Exception:
+                _chem_unknown = True   # a crash mid-measurement is unmeasured, not zero
 
         results["scissile_cf_bde"] = round(scissile_cf_bde, 1)
         results["sn2_backside_occlusion"] = round(backside_occlusion, 2)

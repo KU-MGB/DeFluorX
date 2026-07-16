@@ -1201,6 +1201,12 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     with hb, cf.ThreadPoolExecutor(max_workers=conc) as pool:
         list(pool.map(lambda r: _run_shard(r[0], r[1][0], r[1][1]), list(enumerate(ranges))))
 
+    # Each shard's thermal_mmgbsa -NJOBS should block, but if a build submits its Prime batch to
+    # jobserverd and returns early, a shard's Prime subjobs can outlive the pool. Drain any job
+    # whose name carries this rank's prefix before returning, so the next rank's MD never shares the
+    # scratch disk with a still-running Prime batch (the serial path drains at run_mmgbsa's tail).
+    _await_mmgbsa_jobserver(f"{job_name}_mmgbsa")
+
     if failed or len(done) != len(ranges):
         _echo(f"    ✘ Incomplete   : {len(done)}/{len(ranges)} shards scored, "
               f"{len(failed)} failed. Re-running Step 06 resumes from the finished shards "
@@ -2436,6 +2442,8 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
     from schrodinger.application.desmond.packages import topo
     esp = {a.pdbname.strip(): a.partial_charge for a in structure.StructureReader.read(str(esp_mae)).atom}
     model = cmsmod.Cms(str(out_cms))
+    _n_comp0 = len(model.comp_ct)
+    _n_atom0 = sum(1 for _ in model.atom)
     n_lig = applied = 0
     for ct in model.comp_ct:
         if not any(a.pdbres.strip() == "LIG" for a in ct.atom):
@@ -2446,7 +2454,23 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
                 if a.pdbname.strip() in esp:
                     ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
                     applied += 1
-    model.write(str(out_cms))
+    # Atomic write, with a component-CT / atom-count guard. A Cms.write() that flattens the
+    # component partition (protein/ions/water) into the full_system CT alone leaves an
+    # unusable build — MM-GBSA and topo.read_cms iterate comp_ct. Write to a sibling .tmp,
+    # re-read, and require the partition survive before replacing the good file; a collapsed
+    # write is raised, never installed over the original.
+    _tmp = out_cms.with_suffix(out_cms.suffix + ".tmp")
+    model.write(str(_tmp))
+    _chk = cmsmod.Cms(str(_tmp))
+    _n_comp1 = len(_chk.comp_ct)
+    _n_atom1 = sum(1 for _ in _chk.atom)
+    if _n_comp1 != _n_comp0 or _n_atom1 != _n_atom0:
+        _tmp.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"reapply_esp_to_cms: write corrupted the built system "
+            f"(comp_ct {_n_comp0}→{_n_comp1}, atoms {_n_atom0:,}→{_n_atom1:,}); "
+            f"refusing to overwrite {out_cms.name}.")
+    _tmp.replace(out_cms)
 
     msys, cms = topo.read_cms(str(out_cms))
     bad = []
