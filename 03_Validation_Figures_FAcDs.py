@@ -1225,7 +1225,7 @@ def _tt_add_legend(fig, handles):
                bbox_to_anchor=(0.5, 0.02), ncol=4,
 
                title=f"Degrader tier  (★ = {CFG.TIER_TOP} highlighted; ● = scatter background)",
-               title_fontsize=9.0)
+               )
 
 
 def _tt_new_fig():
@@ -1238,8 +1238,8 @@ def _tt_new_fig():
 def _tt_style(ax, xlabel, ylabel, title=None):
     # `title` accepted for call-site compatibility but intentionally not rendered
     # (figures carry no titles).
-    ax.set_xlabel(xlabel, fontsize=11, labelpad=6)
-    ax.set_ylabel(ylabel, fontsize=11, labelpad=6)
+    ax.set_xlabel(xlabel,  labelpad=6)
+    ax.set_ylabel(ylabel,  labelpad=6)
     ax.tick_params(labelsize=9)
     ax.set_axisbelow(True)
     ax.grid(True, alpha=0.18, color=CFG.VIS_INK["pale"], linewidth=0.5)
@@ -1702,8 +1702,8 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax.set_xticklabels(existing_tiers, rotation=35, ha="right", fontsize=10)
         for tick, tier in zip(ax.get_xticklabels(), existing_tiers):
             tick.set_color(TIER_PALETTE.get(tier, "black"))
-        ax.set_xlabel("Degrader Tier", fontsize=11)
-        ax.set_ylabel("Number of complexes", fontsize=11)
+        ax.set_xlabel("Degrader Tier", )
+        ax.set_ylabel("Number of complexes", )
         ax.yaxis.grid(True, linestyle=":", alpha=0.3, zorder=0)
         ax.set_axisbelow(True)
 
@@ -1906,9 +1906,9 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         # Right axis (KDE density): amber tick labels matching the amber density gridlines
         ax2.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_right"])
         ax2.yaxis.label.set_color(CFG.VIS_ACCENT["axis_right"])
-        ax.set_xlabel("Sequence Identity to Reference DeHa4 Control  (%)", fontsize=11)
-        ax.set_ylabel("Number of Protein–Ligand Complexes  (stacked by tier)", fontsize=11)
-        ax2.set_ylabel("KDE Density  (probability density)", fontsize=9, rotation=270, labelpad=14)
+        ax.set_xlabel("Sequence Identity to Reference DeHa4 Control  (%)", )
+        ax.set_ylabel("Number of Protein–Ligand Complexes  (stacked by tier)", )
+        ax2.set_ylabel("KDE Density  (probability density)",  rotation=270, labelpad=14)
 
         """
         Dual-colour grid system:
@@ -2011,14 +2011,14 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                                fancybox=True,
                               handler_map={tuple: _HT02(ndivide=None, pad=0.2)},
                               title="Tier (bars = counts, KDE lines ● median)",
-                              title_fontsize=8.0,
+                              
                               bbox_to_anchor=(0.01, 0.93))
         except Exception:
             _leg7 = ax.legend(_bar_hdls_02, _bar_lbls_02,
                               loc="upper left", ncol=3,
                                fancybox=True,
                               title="Tier (bars = counts, KDE lines ● median)",
-                              title_fontsize=8.0,
+                              
                               bbox_to_anchor=(0.01, 0.93))
         _leg7.set_zorder(20)
 
@@ -2141,8 +2141,8 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             ax.set_xticklabels([f"{v}%" for v in range(0, 101, 10)],
                                fontsize=8, rotation=45, ha="right")
             ax.set_xlabel("Proportion of complexes in each sequence identity grade  (%)",
-                          fontsize=11)
-            ax.set_ylabel("Degrader Tier", fontsize=11)
+                          )
+            ax.set_ylabel("Degrader Tier", )
             ax.xaxis.grid(True, color=CFG.VIS_INK["tick"], linewidth=0.65, zorder=0)
             ax.set_axisbelow(True)
 
@@ -2377,8 +2377,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax.yaxis.label.set_color(CFG.VIS_ACCENT["axis_left"])
             ax.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_left"], linewidth=0.5, linestyle="-", alpha=0.20, zorder=0)
             ax.set_axisbelow(True)
-            ax.set_xlabel("Degrader Tier", fontsize=11)
-            ax.set_ylabel("AI Quality Score  (Boltz Confidence / pTM / ipTM;  0–1 scale)", fontsize=11)
+            ax.set_xlabel("Degrader Tier", )
+            ax.set_ylabel("AI Quality Score  (Boltz Confidence / pTM / ipTM;  0–1 scale)", )
 
             # Legend: single horizontal row, top-right, above data
             from matplotlib.patches import Patch as _Patch10
@@ -2622,8 +2622,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.setp(ax_right.get_yticklabels(), visible=False)
             # Marginal density panels: top = pTM (shared x), right = ipTM (shared y).
             # No panel titles — orientation follows the shared 2-D axes.
-            ax_top.set_ylabel("pTM density", fontsize=7, labelpad=2)
-            ax_right.set_xlabel("ipTM density", fontsize=7, labelpad=2)
+            ax_top.set_ylabel("pTM density",  labelpad=2)
+            ax_right.set_xlabel("ipTM density",  labelpad=2)
             ax_top.set_axisbelow(True)
             ax_right.set_axisbelow(True)
             ax_top.tick_params(axis="y", labelsize=7.0)
@@ -2633,14 +2633,14 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
 
             ax.set_xlim(_lo18, _hi18)
             ax.set_ylim(_lo18, _hi18)
-            ax.set_xlabel("pTM — Global Fold Confidence  (0–1)", fontsize=11)
-            ax.set_ylabel("ipTM — Interface Confidence  (0–1)", fontsize=11)
+            ax.set_xlabel("pTM — Global Fold Confidence  (0–1)", )
+            ax.set_ylabel("ipTM — Interface Confidence  (0–1)", )
             ax.tick_params(axis="both", labelsize=9)
             ax.grid(True, color=CFG.VIS_INK["grid"], linewidth=0.5, alpha=0.6, zorder=1)
             # Legend: placed in the top KDE marginal (left side) to keep scatter uncluttered
             ax_top.legend(handles=_leg18, loc="upper left", ncol=3,
                            fancybox=True,
-                          title="Tier  (◆ = median pTM, ipTM)", title_fontsize=7.0,
+                          title="Tier  (◆ = median pTM, ipTM)", 
                           bbox_to_anchor=(0.0, 1.0))
             plt.tight_layout()
             _stat_box(ax, _wilcoxon_ptm_iptm(df), "lower right")
@@ -2794,8 +2794,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             ax.set_yticks(_y_ticks_f6)
             ax.set_yticklabels([f"{t:.1f}" for t in _y_ticks_f6])
             ax.tick_params(axis="y", labelsize=7)
-            ax.set_xlabel("Degrader Tier", fontsize=11)
-            ax.set_ylabel("Active Site RMSD (Å)  — lower = better", fontsize=10)
+            ax.set_xlabel("Degrader Tier", )
+            ax.set_ylabel("Active Site RMSD (Å)  — lower = better", )
             ax.text(0.99, 0.99, " ",
                     ha="right", va="top", fontsize=7, color=CFG.VIS_INK["ghost"], style="italic",
                     transform=ax.transAxes)
@@ -3311,7 +3311,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                            fontsize=8.5)
                 axes_f08[-1].set_xlabel(
                     "Normalised Mean Score per Tier  (0 = worst, 1 = best within metric)",
-                    fontsize=11)
+                    )
 
                 from matplotlib.lines import Line2D as _L08
                 _leg08 = [_L08([0],[0], marker="o", color="w",
@@ -3431,8 +3431,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                           color=CFG.VIS_INK["dark"],
                           bbox=dict(boxstyle="round,pad=0.25", fc="white",
                                     ec=CFG.VIS_INK["palest"], alpha=0.95, linewidth=0.6))
-            ax19.set_xlabel("Mechanistic State", fontsize=11)
-            ax19.set_ylabel("Degrader Tier", fontsize=11)
+            ax19.set_xlabel("Mechanistic State", )
+            ax19.set_ylabel("Degrader Tier", )
             ax19.set_xticklabels(ax19.get_xticklabels(), rotation=15, ha="right", fontsize=9)
             # Colour y-tick labels by tier (same palette as all other figures)
             for tick in ax19.get_yticklabels():
@@ -3516,8 +3516,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                   alpha=0.75, linewidth=0.5))
         ax.set_ylim(-0.02, 1.06)
         ax.set_yticks(sorted({0.0, 0.2, 0.4, 0.6, 0.8, 1.0, round(_mfm, 2), round(_mfs, 2)}))
-        ax.set_xlabel("Degrader Tier", fontsize=11)
-        ax.set_ylabel("Mechanistic Score  (anchor set + graded SN2 angle; config §5.1)", fontsize=10)
+        ax.set_xlabel("Degrader Tier", )
+        ax.set_ylabel("Mechanistic Score  (anchor set + graded SN2 angle; config §5.1)", )
         ax.set_xticks(range(len(existing_tiers)))
         _xtlbl10 = []
         for _t10 in existing_tiers:
@@ -3758,8 +3758,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_xticks([30, 45, 90, 130] + sorted(set(_ecdf_angles)) + [180])
         ax.set_yticks([i/10 for i in range(0, 11)])
         ax.set_yticklabels([f"{i*10}%" for i in range(0, 11)])
-        ax.set_xlabel("SN2 Attack Angle (°)  — 180° = ideal linear nucleophilic back-attack", fontsize=11)
-        ax.set_ylabel("Cumulative Fraction of Complexes in Tier", fontsize=11)
+        ax.set_xlabel("SN2 Attack Angle (°)  — 180° = ideal linear nucleophilic back-attack", )
+        ax.set_ylabel("Cumulative Fraction of Complexes in Tier", )
         # upper left — ECDF lines fan right so top-left is always clear
         from matplotlib.lines import Line2D as _L11
         _hdr11 = _L11([0],[0], color="none", linewidth=0, label="Tier (●=median)")
@@ -3877,8 +3877,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_yticks(range(0, 181, 20))
         _nuc_lbl = CFG.REF_ACTIVE_SITE_MAP["Nuc"]
         ax.set_xlabel(f'{_nuc_lbl["res"]}{_nuc_lbl["id"]} Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry',
-                      fontsize=10)
-        ax.set_ylabel("SN2 Attack Angle (°)  — 180° = perfect linear back-attack", fontsize=10)
+                      )
+        ax.set_ylabel("SN2 Attack Angle (°)  — 180° = perfect linear back-attack", )
         ax.text(0.01, 0.01,
                 f"n = {len(plot_df12):,} complexes shown  |  {n_excluded12:,} excluded (dist = 0 or dist ≥ 5 Å)",
                 transform=ax.transAxes, fontsize=7.5, color=CFG.VIS_INK["mid"], style="italic", va="bottom",
@@ -3959,8 +3959,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axa.set_xticks(range(len(_abins)))
             _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=8)
             _axa.set_ylim(0, 1.18)
-            _axa.set_xlabel("Active-site integrity  (fraction of the 8 catalytic residues placed)", fontsize=11)
-            _axa.set_ylabel(f"Catalytic constellation score  (0–1 vs {CFG.REFERENCE_PDB_ID} crystal)", fontsize=11)
+            _axa.set_xlabel("Active-site integrity  (fraction of the 8 catalytic residues placed)", )
+            _axa.set_ylabel(f"Catalytic constellation score  (0–1 vs {CFG.REFERENCE_PDB_ID} crystal)", )
             _axa.legend(loc="upper right",  ncol=2)
             _axa.grid(True, color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.75, zorder=0); _axa.set_axisbelow(True)
 
@@ -4002,8 +4002,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                              linewidths=0.9, label=f"MD-ready (n={len(_mdb)})")
             _axb.axvline(_BF, ls="--", color=CFG.VIS_ACCENT["bad"], lw=1.4, alpha=0.7,
                          label=f"Criterion-B floor for {CFG.TIER_TOP} ({_BF:g})")
-            _axb.set_xlabel("Catalytic constellation score  (reactive-geometry match, 0–1)", fontsize=11)
-            _axb.set_ylabel("Cumulative fraction", fontsize=11)
+            _axb.set_xlabel("Catalytic constellation score  (reactive-geometry match, 0–1)", )
+            _axb.set_ylabel("Cumulative fraction", )
             """
             The legend is stacked in one narrow column at the top left — the one corner no ECDF
             crosses, since every tier is still flat at zero below a constellation score of ~0.17.
@@ -4059,7 +4059,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     _axc.annotate(f"{_v:.1f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
                                   va="center", fontsize=8, color=CFG.VIS_INK["dark"])
                 _axc.set_xlim(_keep.bde.min() - 2.0, _keep.bde.max() + 2.5)
-                _axc.set_xlabel(f"Scissile C–F BDE  (kcal/mol)   ·   gate > {_BDE_MAX:g}", fontsize=11)
+                _axc.set_xlabel(f"Scissile C–F BDE  (kcal/mol)   ·   gate > {_BDE_MAX:g}", )
                 _axc.set_yticks(_y)
                 _axc.set_yticklabels(_keep["lig"], fontsize=9.5, fontweight="bold")
                 for _tl, _cc in zip(_axc.get_yticklabels(), _cols):
@@ -4075,7 +4075,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     _axc2.annotate(f"{_v:.2f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
                                    va="center", fontsize=8, color=CFG.VIS_INK["dark"])
                 _axc2.set_xlim(-0.05, max(_keep.occ.max() + 0.5, _OCC_MAX + 0.5))
-                _axc2.set_xlabel(f"Backside steric occlusion  (Σ vdW, Å)   ·   gate > {_OCC_MAX:g}", fontsize=11)
+                _axc2.set_xlabel(f"Backside steric occlusion  (Σ vdW, Å)   ·   gate > {_OCC_MAX:g}", )
                 _axc2.tick_params(labelleft=False)
                 _axc.set_ylim(-0.8, len(_keep) - 0.2)
 
@@ -4170,8 +4170,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 # Left axis: steel-blue tick labels matching the blue gridlines
                 ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
                 ax.yaxis.label.set_color(CFG.VIS_ACCENT["axis_left"])
-                ax.set_xlabel("Degrader Tier", fontsize=11)
-                ax.set_ylabel("Interaction type proportion  (%)  —  annotation = mean count", fontsize=11)
+                ax.set_xlabel("Degrader Tier", )
+                ax.set_ylabel("Interaction type proportion  (%)  —  annotation = mean count", )
 
             # Right axis: Fluorine Engagement Ratio connected line per tier
             if _has_f16:
@@ -4232,7 +4232,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 ax_r15.set_yticks([0, 0.25, 0.50, 0.75, 1.00])
                 ax_r15.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
                 ax_r15.set_ylabel("Fluorine Engagement Ratio  (interacting F / total F per ligand)",
-                                  fontsize=11, rotation=270, labelpad=14, color=CFG.VIS_ACCENT["axis_right"])
+                                   rotation=270, labelpad=14, color=CFG.VIS_ACCENT["axis_right"])
                 ax_r15.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_right"], labelsize=9)
                 """
                 Rotated zone labels — left side of figure, written bottom-to-top
@@ -4295,8 +4295,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                annot=True, fmt=".0f", annot_kws={"size": 8},
                                linewidths=0.4, linecolor="white",
                                cbar_kws={"label": "Proportion (%)", "shrink": 0.8})
-                ax_hm.set_xlabel("Degrader Tier  —  Interaction Type Proportion (%)", fontsize=9.5)
-                ax_hm.set_ylabel("Interaction Type", fontsize=10)
+                ax_hm.set_xlabel("Degrader Tier  —  Interaction Type Proportion (%)", )
+                ax_hm.set_ylabel("Interaction Type", )
                 ax_hm.tick_params(axis="x", labelrotation=45, labelsize=8.5)
                 ax_hm.tick_params(axis="y", labelrotation=0,  labelsize=8)
             else:
@@ -4429,8 +4429,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                         fontweight="bold", rotation=90, transform=ax.transAxes,
                         bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=_zec14,
                                   alpha=0.80, linewidth=0.5))
-            ax.set_xlabel("Degrader Tier", fontsize=11)
-            ax.set_ylabel("Fluorine Engagement Ratio  (interacting F / total F)", fontsize=11)
+            ax.set_xlabel("Degrader Tier", )
+            ax.set_ylabel("Fluorine Engagement Ratio  (interacting F / total F)", )
             ax.set_xticks(range(len(valid_t16)))
             ax.set_xticklabels(valid_t16, rotation=35, ha="right", fontsize=9)
             for tick16x, tier16x in zip(ax.get_xticklabels(), valid_t16):
@@ -4513,7 +4513,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 if _qtop12 >= 0.9:
                     _qtop12 = 1.0
                 ax.set_ylim(max(0.0, _qlo12 - _qpad12), _qtop12)
-                ax.set_ylabel(_qual_lbl, fontsize=11)
+                ax.set_ylabel(_qual_lbl, )
             else:
                 ax.set_visible(False)
 
@@ -4545,7 +4545,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                   f"{yi:.2f}", ha="center", va="bottom", fontsize=8,
                                   color=CFG.VIS_ACCENT["vermillion"], fontweight="bold", zorder=8)
                 ax_r.set_ylabel("Active-site contact density  (interactions per complex)",
-                                fontsize=11, rotation=270, labelpad=14, color=CFG.VIS_ACCENT["vermillion"])
+                                 rotation=270, labelpad=14, color=CFG.VIS_ACCENT["vermillion"])
                 ax_r.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["vermillion"], labelsize=9)
 
             ax.set_xticks(range(len(existing_tiers)))
@@ -4558,7 +4558,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             # Right axis (contact density): amber labels matching amber gridlines
             ax_r.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_right"])
             ax_r.yaxis.label.set_color(CFG.VIS_ACCENT["axis_right"])
-            ax.set_xlabel("Degrader Tier", fontsize=11)
+            ax.set_xlabel("Degrader Tier", )
 
             # Dual-colour grids: left-axis = steel-blue; right-axis = amber
             ax.set_axisbelow(True)
@@ -4638,8 +4638,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                             color=_txt_col20,
                             bbox=dict(boxstyle="round,pad=0.15", fc=_bg_col20,
                                       ec="white", linewidth=0.6, alpha=0.88))
-                ax.set_xlabel("Degrader Tier", fontsize=11)
-                ax.set_ylabel("Active-site contact density  (interactions per complex)", fontsize=11)
+                ax.set_xlabel("Degrader Tier", )
+                ax.set_ylabel("Active-site contact density  (interactions per complex)", )
                 ax.set_xticks(range(len(valid_t20)))
                 ax.set_xticklabels(valid_t20, rotation=35, ha="right", fontsize=9)
                 for _tick20x, _tier20x in zip(ax.get_xticklabels(), valid_t20):
@@ -4746,13 +4746,13 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                       linewidth=0.5, alpha=0.85))
             if _be_hi > _be_lo:
                 ax.set_ylim(_be_lo, _be_hi)
-            ax.set_ylabel("Binding probability  (sigmoid of interaction density, cross-PAE, confidence)", fontsize=11, color=CFG.VIS_ACCENT["axis_left"])
+            ax.set_ylabel("Binding probability  (sigmoid of interaction density, cross-PAE, confidence)",  color=CFG.VIS_ACCENT["axis_left"])
             ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=9)
             ax.set_xticks(range(len(existing_tiers)))
             ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=9)
             for _txk, _tt in zip(ax.get_xticklabels(), existing_tiers):
                 _txk.set_color(TIER_PALETTE.get(_tt, "black"))
-            ax.set_xlabel("Degrader tier", fontsize=11)
+            ax.set_xlabel("Degrader tier", )
             ax.set_axisbelow(True)
             ax.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_left"], linewidth=0.55, alpha=0.20, zorder=0)
             ax.xaxis.grid(False)
@@ -4815,8 +4815,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                     ax.annotate(_lg, (_xx, _yy), textcoords="offset points", xytext=(5, 4),
                                 fontsize=7.0, fontweight="bold", color=CFG.VIS_INK["ink_pure"], zorder=9)
 
-        ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", fontsize=10)
-        ax.set_ylabel("UMAP Dimension 2", fontsize=10)
+        ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", )
+        ax.set_ylabel("UMAP Dimension 2", )
         ax.grid(False)
         ax.legend(loc="lower left")
         plt.tight_layout()
@@ -5092,7 +5092,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             ax19L.axvline(25, color=CFG.VIS_INK["faint"], lw=0.7, ls=":", zorder=2.4)
             ax19L.axvline(50, color=CFG.VIS_INK["faint"], lw=0.7, ls=":", zorder=2.4)
             ax19L.axvline(75, color=CFG.VIS_INK["faint"], lw=0.7, ls=":", zorder=2.4)
-            ax19L.set_xlabel("Percentage of complexes (%)", fontsize=9)
+            ax19L.set_xlabel("Percentage of complexes (%)", )
             ax19L.tick_params(axis="x", labelsize=8)
             # Legend: single row, 70% font (7.5→5.25), inside bottom-right
             ax19L.legend(loc="lower right", ncol=3,
@@ -5155,8 +5155,8 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                                          ec=_col19, alpha=0.92, linewidth=0.8),
                                zorder=8)
 
-            ax19R.set_xlabel("Boltz Model Confidence", fontsize=9)
-            ax19R.set_ylabel("SN2 Attack Angle (°)", fontsize=9)
+            ax19R.set_xlabel("Boltz Model Confidence", )
+            ax19R.set_ylabel("SN2 Attack Angle (°)", )
             ax19R.tick_params(axis="both", labelsize=8)
 
             # Zone / threshold labels — all inside the axes, single line each
@@ -5294,12 +5294,12 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         ax_f2.set_xlim(0, 100)
         # Clamp y-range to exactly the number of tiers — prevents blank canvas below
         ax_f2.set_ylim(-0.55, len(tier_rows_f2) - 0.45)
-        ax_f2.set_xlabel("Percentage of complexes within tier  (%)", fontsize=11)
+        ax_f2.set_xlabel("Percentage of complexes within tier  (%)", )
         ax_f2.set_xticks([0, 25, 50, 75, 100])
         ax_f2.set_xticklabels(["0%", "25%", "50%", "75%", "100%"])
         ax_f2.set_axisbelow(True)
         ax_f2.xaxis.grid(True, alpha=0.30, linestyle=":", color=CFG.VIS_INK["ghost"], zorder=0)
-        #ax_f2.set_title("Conflict-Category Composition by Degrader Tier", fontsize=13, pad=10)
+        #ax_f2.set_title("Conflict-Category Composition by Degrader Tier",  pad=10)
 
         # Top-right badge: total jobs | tiered count — lifted above the axes frame
         ax_f2.text(0.99, 1.06,
@@ -5403,7 +5403,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                                   loc="upper center", bbox_to_anchor=(0.5, -0.10),
                                   ncol=len(present_cats_f2),
                                     fancybox=True,
-                                  title="Conflict Category", title_fontsize=8)
+                                  title="Conflict Category", )
         _leg02_obj.set_zorder(20)
 
         fig_f2.tight_layout(rect=[0, 0.07, 1, 1])
@@ -5527,7 +5527,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax21.set_xlabel(
                     f"Normalised Score  ({_x21_phys_lbl} / {_x21_ai_lbl})  "
                     "(0 = lowest · 100 = highest)",
-                    fontsize=10)
+                    )
                 _all_tick_vals21 = [0, 5, 10, 15, 20, 25, 33, 50, 67, 80, 90, 100]
                 _tick_lbl_map21  = {0: "0%", 5: "5%", 10: "10%", 15: "15%",
                                     20: "20%", 25: "25%", 33: "33rd", 50: "50%",
@@ -5568,7 +5568,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax21.legend(handles=_lh21, loc="lower right",
                              fancybox=True, ncol=2,
                             title="Marker type  |  Tier (line colour)",
-                            title_fontsize=7.5)
+                            )
 
                 # Badge: summary stats
                 n_gems21 = len(gems)
@@ -5975,9 +5975,9 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         ax.set_xlabel(
             "Number of unique PFAS ligands degraded  "
             "(best tier per protein–ligand pair; Tier-5 decoys excluded)",
-            fontsize=10)
+            )
         ax.set_ylabel("Protein  (top 25, ranked by quality-weighted degradation breadth)",
-                      fontsize=10)
+                      )
         ax.tick_params(axis="y", labelsize=9)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -6002,7 +6002,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             if _any_top23 > 0 else "")
         fig23a.legend(handles=legend_h23, loc="lower center",
                       ncol=len(legend_h23), frameon=False,
-                      title=_title23, title_fontsize=9)
+                      title=_title23, )
         # Figure title removed per request.
         plt.tight_layout(rect=[0, 0.07, 1, 1])
         plt.savefig(out_dir / "Figure_24a_Top25_Multitarget_Proteins.png",
@@ -6110,9 +6110,9 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
         ax.set_yticklabels(prots, fontsize=8)
         ax.invert_yaxis()
         ax.set_xlabel("Number of PFAS degraded  (each block = one PFAS; block label = its tier)",
-                      fontsize=10)
+                      )
         ax.set_ylabel(f"Top-tier proteins  (reach {_tshort(top_tier)} on ≥1 PFAS;  ★×N = {_tshort(top_tier)} count)",
-                      fontsize=10)
+                      )
         for _s in ("top", "right", "left"):
             ax.spines[_s].set_visible(False)
         ax.xaxis.grid(True, color=CFG.VIS_INK["hairline"], linewidth=0.5, zorder=0)
@@ -6122,7 +6122,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
                  if l in set(deg[deg["prot"].isin(prots)]["lig"])]
         leg = [_mp.Patch(color=lig_colour[l], label=l) for l in shown]
         ax.legend(handles=leg, loc="center left", bbox_to_anchor=(1.01, 0.5),
-                   frameon=False, title="PFAS ligand", title_fontsize=8)
+                   frameon=False, title="PFAS ligand", )
         plt.tight_layout()
         out = out_dir / "Figure_24b_TopTier_Protein_PFAS_Breakdown.png"
         plt.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -6680,8 +6680,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         for _bx25, _bl25 in zip(_bin_xmids25, _bin_toplbls25):
             axA.text(_bx25, 184, _bl25, ha="center", va="top",
                      fontsize=7.5, color=CFG.VIS_INK["soft"], style="italic")
-        axA.set_xlabel("Total fluorine count  (proxy for carbon chain length)", fontsize=11)
-        axA.set_ylabel("SN2 Attack Angle (°)", fontsize=11)
+        axA.set_xlabel("Total fluorine count  (proxy for carbon chain length)", )
+        axA.set_ylabel("SN2 Attack Angle (°)", )
         # One row: the entry count is the tiers plus the rolling median plus the MD stars, so the
         # column count has to include all three or the legend wraps. markerscale shrinks the MD star
         # to the legend's own scale — the plotted star is deliberately large to be findable in a
@@ -6786,8 +6786,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         for _tk, _bc in zip(axB.get_xticklabels(), _bin_cols_25):
             _tk.set_color(_bc)
         axB.tick_params(axis="x", pad=16)   # room for the outcome/tier mini-tags
-        axB.set_ylabel("Percentage of complexes (%)", fontsize=10)
-        axB.set_xlabel("PFAS chain-length bin", fontsize=10)
+        axB.set_ylabel("Percentage of complexes (%)", )
+        axB.set_xlabel("PFAS chain-length bin", )
         axB.spines["top"].set_visible(False)
         axB.spines["right"].set_visible(False)
         axB.yaxis.grid(True, color=CFG.VIS_INK["mist"], linewidth=0.7, zorder=0)
@@ -6808,7 +6808,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _leg_oc25 = axB.legend(
             handles=_oc_h25, labels=[h.get_label() for h in _oc_h25],
             loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=len(_oc_h25),
-             title="Left bar — mechanistic outcome", title_fontsize=8,
+             title="Left bar — mechanistic outcome", 
              fancybox=True)
         _leg_oc25.get_title().set_fontweight("bold")
         _leg_oc25._legend_box.align = "left"
@@ -6816,7 +6816,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _leg_ti25 = axB.legend(
             handles=_ti_h25, labels=[h.get_label() for h in _ti_h25],
             loc="lower right", bbox_to_anchor=(1.0, 1.01), ncol=len(_ti_h25),
-             title="Right bar — degrader tier", title_fontsize=8,
+             title="Right bar — degrader tier", 
              fancybox=True)
         _leg_ti25.get_title().set_fontweight("bold")
         _leg_ti25._legend_box.align = "right"
@@ -6963,8 +6963,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             axL.set_xticks(_pos25)
             axL.set_xticklabels(_labels25, fontsize=8)
             axL.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)",
-                           fontsize=10)
-            axL.set_ylabel("Catalytic competence  (soft score · degrader fraction, 0–1)", fontsize=10)
+                           )
+            axL.set_ylabel("Catalytic competence  (soft score · degrader fraction, 0–1)", )
             axL.spines["top"].set_visible(False)
             axL.set_ylim(0.0, 1.10)
             axL.set_xlim(-0.6, len(_groups25) - 0.4)
@@ -7151,8 +7151,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.axvline(sub["asv"].median(), color=CFG.VIS_INK["ghost"], linestyle=":", linewidth=1.0, alpha=0.6, zorder=2)
             ax.axhline(sub["lv"].median(), color=CFG.VIS_INK["ghost"], linestyle=":", linewidth=1.0, alpha=0.6, zorder=2)
             ax.set_xlim(0, _xlim); ax.set_ylim(0, _ylim)
-            ax.set_xlabel("Active-site cavity volume  (Å³)", fontsize=11)
-            ax.set_ylabel("Ligand molecular volume  (Å³)", fontsize=11)
+            ax.set_xlabel("Active-site cavity volume  (Å³)", )
+            ax.set_ylabel("Ligand molecular volume  (Å³)", )
             _ovf_n = int((sub["lv"] > sub["asv"]).sum())
             _ovf = _ovf_n / len(sub) * 100
             ax.text(0.02, 0.98, f"{_ovf:.1f}% of complexes overfill the pocket "
@@ -7165,7 +7165,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _ss01 = _spear_str(sub["asv"], sub["lv"], "XN-01 pocket volume vs ligand volume")
             ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=5,
 
-                      title=_ss01, title_fontsize=8)
+                      title=_ss01, )
             plt.tight_layout()
             _o = out_dir / "01_Pocket_vs_Ligand_Volume.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7281,8 +7281,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                     fontsize=7.5, color=CFG.VIS_INK["shadow"], style="italic")
             ax.set_xticks(_pos02); ax.set_xticklabels(labels, fontsize=8)
             ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)",
-                          fontsize=10)
-            ax.set_ylabel("Fraction of the ligand contained  (0–1)", fontsize=11)
+                          )
+            ax.set_ylabel("Fraction of the ligand contained  (0–1)", )
             ax.yaxis.grid(True, ls=":", alpha=0.35)
             ax.set_axisbelow(True)
             plt.tight_layout()
@@ -7329,8 +7329,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                         transform=ax.transAxes, ha="right", va="top", fontsize=7.5,
                         style="italic", color=CFG.VIS_INK["charcoal"])
             ax.set_xticks(range(len(groups))); ax.set_xticklabels(labels, fontsize=8)
-            ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)", fontsize=10)
-            ax.set_ylabel("Pocket occupancy  (ligand vol / cavity vol)", fontsize=11)
+            ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)", )
+            ax.set_ylabel("Pocket occupancy  (ligand vol / cavity vol)", )
             ax.legend(loc="upper left",   ncol=1)
             plt.tight_layout()
             _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
@@ -7367,8 +7367,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 ax.scatter([i], [s["mean"]], color=TIER_PALETTE.get(t, CFG.VIS_INK["faint"]), s=180,
                            zorder=5, edgecolors="black", linewidths=1.2)
             ax.set_ylim(-0.02, 1.06)
-            ax.set_xlabel("Degrader tier", fontsize=11)
-            ax.set_ylabel("Multi-model degrader consensus  (fraction of 5 models)", fontsize=10)
+            ax.set_xlabel("Degrader tier", )
+            ax.set_ylabel("Multi-model degrader consensus  (fraction of 5 models)", )
             _tier_ticklabels(ax, tiers, stats)
             ax.yaxis.grid(True, color=CFG.VIS_INK["tick"], linewidth=0.6, alpha=0.7, zorder=0)
             ax.set_axisbelow(True)
@@ -7431,11 +7431,11 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.set_xticks(_order06)
             ax.set_xticklabels([f"{c:.2g}\n(n={int((sub['cons'] == c).sum()):,})" for c in _levels],
                                fontsize=8)
-            ax.set_xlabel("Multi-model degrader consensus  (fraction of 5 models)", fontsize=11)
-            ax.set_ylabel("Boltz-2 model confidence", fontsize=11)
+            ax.set_xlabel("Multi-model degrader consensus  (fraction of 5 models)", )
+            ax.set_ylabel("Boltz-2 model confidence", )
             _ss06 = _spear_str(sub["cons"], sub["conf"], "XN-06 pose consensus vs confidence")
             ax.legend(loc="lower right",
-                      title=_ss06, title_fontsize=8.5)
+                      title=_ss06, )
             plt.tight_layout()
             _o = out_dir / "04_Confidence_vs_Consensus.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7511,10 +7511,10 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 # rather than as a floating stat box inside the data.
                 _ss07 = _spear_str(_pdat["x"], _pdat["y"], "XN-07 inter-model geometry spread")
                 if _ss07:
-                    _axi.set_title(_ss07, fontsize=9, fontweight="bold", color=CFG.VIS_INK["ink_deep"], pad=6)
-                _axi.set_xlabel(_xl, fontsize=10)
+                    _axi.set_title(_ss07,  fontweight="bold", color=CFG.VIS_INK["ink_deep"], pad=6)
+                _axi.set_xlabel(_xl, )
                 if _yl:
-                    _axi.set_ylabel(_yl, fontsize=10)
+                    _axi.set_ylabel(_yl, )
             # Single-row legend spanning the top of the figure (above both panels).
             _h07, _l07 = axes[0][0].get_legend_handles_labels()
             fig.legend(_h07, _l07, loc="lower left", bbox_to_anchor=(0.02, 0.99),
@@ -7596,8 +7596,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 axL.text(len(_pos) - 0.55, _fy + 0.012, _flbl, ha="right", va="bottom",
                          fontsize=8, color=_fc, fontweight="bold", zorder=4)
             axL.set_ylim(0.0, 1.06); axL.set_xlim(-0.6, len(_pos) - 0.4)
-            axL.set_ylabel("Effective mechanistic score  (box = distribution)", fontsize=10)
-            axL.set_xlabel("Ligand max extent (Å)  →  larger", fontsize=10)
+            axL.set_ylabel("Effective mechanistic score  (box = distribution)", )
+            axL.set_xlabel("Ligand max extent (Å)  →  larger", )
             axL.set_xticks(_pos); axL.set_xticklabels([f"{c:.1f}" for c in _cent], rotation=90, fontsize=8)
             axL.spines["top"].set_visible(False)
             axL.yaxis.grid(True, color=CFG.VIS_ACCENT_DEEP["leaf"], alpha=0.28, linewidth=0.7, zorder=0)
@@ -7609,7 +7609,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _cln08, = axR.plot(_pos, _cmn, color=CFG.VIS_ACCENT_DEEP["cyan"], lw=1.8, ls=(0, (5, 3)), marker="s",
                                markersize=5, zorder=5, label="Mean pocket containment")
             axR.set_ylim(0.0, 1.06); axR.grid(False)
-            axR.set_ylabel("Catalytic hit-rate  ·  pocket containment", fontsize=10)
+            axR.set_ylabel("Catalytic hit-rate  ·  pocket containment", )
             from matplotlib.lines import Line2D as _L2D08
             _mln08.set_label("Mean effective mech score")
             _hln08.set_label("Catalytic hit-rate (≥ Tier_2A)")
@@ -7717,8 +7717,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                    ms=6, mec="white", mew=0.7, zorder=6, label="Mean nuc. distance")
                 axL.set_ylim(2.0, 5.0); axL.set_xlim(-0.6, len(_pos09) - 0.15)
                 axL.yaxis.set_major_locator(_MLoc09(0.25))
-                axL.set_ylabel("Reactive-carbon → catalytic-residue distance (Å)", fontsize=10.5)
-                axL.set_xlabel("PFAS carbon number  →  larger ligand", fontsize=10)
+                axL.set_ylabel("Reactive-carbon → catalytic-residue distance (Å)", )
+                axL.set_xlabel("PFAS carbon number  →  larger ligand", )
                 axL.set_xticks(_pos09); axL.set_xticklabels([f"C{int(g)}" for g in _grps09], fontsize=8)
                 axL.spines["top"].set_visible(False)
                 axL.yaxis.grid(True, color=CFG.VIS_RAMP["blue"][2], alpha=0.28, lw=0.6, zorder=0)   # left (Å) grid
@@ -7761,7 +7761,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                         axL.scatter(_mx09, _my09, label=f"MD-selected (n={len(_mx09)})",
                                     **({**_MD_STAR_KW, "s": 300}))
 
-                axR.set_ylim(0, 1.02); axR.set_ylabel("Catalytic metric (0–1)", fontsize=10)
+                axR.set_ylim(0, 1.02); axR.set_ylabel("Catalytic metric (0–1)", )
                 axR.yaxis.set_major_locator(_MLoc09(0.1))
                 axR.yaxis.grid(True, color=CFG.VIS_RAMP["orange"][1], alpha=0.30, lw=0.6, ls=(0, (4, 3)), zorder=0)  # right grid
                 _leg09 = [_P09(facecolor=_SOFT_F09, edgecolor=_SOFT_C09, label="Nuc. distance (box)"),
@@ -7843,8 +7843,8 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         ax.set_ylim(0, 1.18)
         ax.set_yticks(np.arange(0, 1.01, 0.2))
         ax.set_ylabel("Diffusion-sample consensus\n(fraction of samples independently reaching a degrader tier)",
-                      fontsize=10)
-        ax.set_xlabel("Degrader Tier", fontsize=11)
+                      )
+        ax.set_xlabel("Degrader Tier", )
         ax.yaxis.grid(True, ls=":", alpha=0.35)
         ax.set_axisbelow(True)
         _md10 = _md_ready_df(df)
@@ -8762,7 +8762,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
                      fancybox=True,
 
                    title='Degrader tier   ·   gate tags (A/B/C on the rules)',
-                   title_fontsize=7.5)
+                   )
         _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
         return
     try:
@@ -8999,7 +8999,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     # empty, so the legend sits there — attached to the panel, over nothing.
     ax.legend(handles=handles + [_grey], title='Degradation tier  (cell label = tier)',
               loc='lower center', bbox_to_anchor=(0.5, 1.015), ncol=len(handles) + 1,
-              fontsize=CFG.VIS_FONT_LEGEND, title_fontsize=CFG.VIS_FONT_LEGEND + 0.5, frameon=False)
+              fontsize=CFG.VIS_FONT_LEGEND,  frameon=False)
     _xn__save(fig, out_dir, _xn_FIG_NAMES['validation'], reporter)
 
 
@@ -9302,7 +9302,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         ax2r = ax2.twinx()
         ax2r.set_ylim(0, 1.05)
         ax2r.set_ylabel('normalised (0–1)   ·   RMSD inverted, 1.0 = best',
-                        fontsize=CFG.VIS_FONT_AXIS_LABEL - 1.5, color=CFG.VIS_INK["muted"])
+                         color=CFG.VIS_INK["muted"])
         ax2r.tick_params(axis='y', labelsize=CFG.VIS_FONT_TICK, colors=CFG.VIS_INK["muted"])
         ax2r.grid(False)
 

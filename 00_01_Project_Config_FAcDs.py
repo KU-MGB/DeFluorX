@@ -2094,6 +2094,7 @@ class CFG:
     VIS_FONT_AXIS_LABEL: float  = 11.0   # x/y axis labels — plain weight
     VIS_FONT_TICK: float        = 9.0    # tick labels
     VIS_FONT_LEGEND: float      = 8.0    # legend entries (one size for every figure, every step)
+    VIS_FONT_LEGEND_TITLE: float = 8.5   # legend title (one size everywhere; slightly above the entries)
     VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6

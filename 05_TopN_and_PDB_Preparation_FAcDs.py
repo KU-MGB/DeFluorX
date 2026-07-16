@@ -985,7 +985,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
             _t.set_fontweight("bold")
     ax.set_xlim(-0.7, _n - 0.3)
     ax.set_ylim(_ymin, _ymax)
-    ax.set_ylabel("Distance to mechanistic partner  (Å)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax.set_ylabel("Distance to mechanistic partner  (Å)", )
     from matplotlib.ticker import MultipleLocator
     ax.yaxis.set_major_locator(MultipleLocator(0.2))     # finer gridlines for reading the tight spread
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
@@ -2470,7 +2470,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
                frameon=True,
               edgecolor="#CCCCCC",
               title=f'{"PLIP interactions" if mode=="plip" else "Interactions"}  |  Residue type  |  Ligand atoms',
-              title_fontsize=8.5)
+              )
 
     try:
         canvas.print_figure(str(out_png), dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight",

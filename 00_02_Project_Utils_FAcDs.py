@@ -364,6 +364,7 @@ def apply_figure_style(cfg) -> None:
         "xtick.labelsize": cfg.VIS_FONT_TICK,
         "ytick.labelsize": cfg.VIS_FONT_TICK,
         "legend.fontsize": cfg.VIS_FONT_LEGEND,
+        "legend.title_fontsize": cfg.VIS_FONT_LEGEND_TITLE,
         "legend.framealpha": cfg.VIS_LEGEND_FRAME_ALPHA,
         "legend.fancybox": True,
         "legend.labelspacing": cfg.VIS_LEGEND_LABELSPACING,

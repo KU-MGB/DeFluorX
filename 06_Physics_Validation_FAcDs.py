@@ -2040,7 +2040,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
 
                title="Relative ranking only — GB overstabilises anionic PFAS: compare candidates, "
                      "never absolute values",
-               title_fontsize=8.5)
+               )
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
