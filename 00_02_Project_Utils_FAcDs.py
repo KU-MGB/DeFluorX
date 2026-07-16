@@ -7,7 +7,7 @@ spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
 All downstream scripts import from here — never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <────────────────────────────────────────────────────────
+Date   : 20 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_02_Project_Utils_FAcDs.py

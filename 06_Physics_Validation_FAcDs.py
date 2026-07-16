@@ -17,11 +17,12 @@ Per run, in phases (all complexes at each phase before the next):
   3. build    — Desmond System Builder: minimise-volume, orthorhombic TIP3P box (10 Å
                 buffer, OPLS4), auto-neutralise + 0.15 M NaCl, then write the ESP charges
                 into the built .cms force field and HARD-VERIFY (→ 04_System_Builder).
-  4. MD       — Desmond MD (relax + NPT production) → 05_MD_Simulations. As each MD
-                FINISHES on the GPU, its SID (event_analysis + analyze_simulation → *_SID-out.eaf)
-                and Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind) run on the CPU in the
-                background while the NEXT MD runs on the GPU — one SID+MM-GBSA at a time.
-                A final pass draws the per-job + combined MM-GBSA figures.
+  4. MD       — Desmond MD (relax + NPT production) → 05_MD_Simulations. Strictly sequential
+                per rank: MD (GPU), then its SID (event_analysis + analyze_simulation →
+                *_SID-out.eaf), then Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind), each
+                blocking to completion before the next rank starts — nothing overlaps, so no two
+                Prime batches share the scratch disk. A final pass draws the per-job + combined
+                MM-GBSA figures.
 
 MM-GBSA (end-state binding ΔG over the ensemble) is complementary to the QSite QM/MM
 reaction barrier (Step 07): it scores BINDING, not C–F cleavage.
@@ -32,7 +33,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) — in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 16 July 2026 <─────────────────────────────────────────────────────────
+Date   : 20 July 2026 <─────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_FAcDs.py [Boltz-2_Run_Directory] [options]
@@ -123,7 +124,6 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 
 # Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter. The ESP/build/
@@ -178,7 +178,7 @@ apply_figure_style = _utils_mod.apply_figure_style
 auto_label_colour = _utils_mod.auto_label_colour
 apply_figure_style(CFG)   # one typography definition for every figure the pipeline draws
 
-# Auto-set SCHRODINGER if the env var is absent (mirrors the 08 engine default).
+# Auto-set SCHRODINGER if the env var is absent (Step 07 QM/MM uses the same default).
 os.environ.setdefault("SCHRODINGER", "/opt/schrodinger")
 SCHRODINGER = os.environ["SCHRODINGER"]
 SCHROD_RUN = os.path.join(SCHRODINGER, "run")
@@ -721,7 +721,7 @@ def resolve_run_dir(run_arg: str | None) -> str:
 # =============================================================================
 # SECTION 6: SCAN PHASE
 # =============================================================================
-def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
+def scan_jobs(job_dirs: list[Path]) -> list[Path]:
     """Classify every desmond_md_job_R_* directory and return the subset
     that still needs SID analysis (READY or INCOMPLETE).
     """
@@ -1724,7 +1724,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     _echo(f"    ✔ Figure       : {out_path.name}")
 
 
-def plot_mmgbsa_combined(out_dir: Path, per_job: list, tiers: dict,
+def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                          ligands: "dict | None" = None, nspf: "dict | None" = None) -> None:
     """Compare ΔG_bind across the ranks, three ways.
 
@@ -2176,7 +2176,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
         _utils_mod.atomic_write_csv(_sdf, _csv_out)
         _echo(f"  MM-GBSA summary table saved : {_csv_out.resolve()}")
     try:
-        plot_mmgbsa_combined(out_dir, per_job, tiers, ligands, nspf)
+        plot_mmgbsa_combined(out_dir, per_job, ligands, nspf)
     except Exception as e:
         _echo(f"  [!] MM-GBSA combined plot failed ({e}) — skipped.")
     if _failed:
@@ -2479,9 +2479,8 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
         _has_solvent = any("water" in (ct.title or "").lower() for ct in m.comp_ct)
         return (_sum == m.atom_total and _has_solvent), _sum, _has_solvent
 
-    # Guard the file AS READ, before any write. The earlier delta guard (comp_ct/atoms before vs
-    # after) passed an already-collapsed file unchanged — for R_1 the count was 1→1. Assert the
-    # absolute invariant instead, so a corrupt build is refused rather than re-written on resume.
+    # Guard the file AS READ, before any write: assert the absolute partition invariant so an already
+    # collapsed build (sum(comp_ct) != fsys, or no solvent CT) is refused rather than re-written on resume.
     _ok0, _sum0, _solv0 = _partition_state(model)
     if not _ok0:
         raise RuntimeError(
@@ -2770,7 +2769,7 @@ def _parse_args_merged():
     ap.add_argument("--wm-ns", type=float, default=CFG.PHYS_WM_NS)
     ap.add_argument("--lig-dist", type=float, default=CFG.PHYS_WM_SITE_A)
     ap.add_argument("--stages", default=",".join(STAGES_ALL),
-                    help="subset of {merge,watermap,build,md}; SID+MM-GBSA are pipelined with md")
+                    help="subset of {merge,watermap,build,md}; SID+MM-GBSA run sequentially inside the md stage")
     ap.add_argument("--out", default=None)
     ap.add_argument("--pipeline-mode", action="store_true",
                     help="called from 00_00_run_pipeline_FAcDs.sh; delegates oomd masking to the runner.")
@@ -2901,7 +2900,7 @@ def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
     _log(f"[md] R_{rank} {a.md_ns} ns production ({a.md_frames} frames, "
          f"NPT {CFG.MD_EQUIL_TARGET_T:g} K, relax + production)…")
     run_md(setup_cms, f"desmond_md_job_R_{rank}", md_dir, a.md_ns, a.md_frames)
-    _ok(f"[md] R_{rank} ✔ {md_cms.name} — SID + MM-GBSA queued (CPU)")
+    _ok(f"[md] R_{rank} ✔ {md_cms.name} — SID + MM-GBSA next (CPU, sequential)")
     return md_dir
 
 
@@ -3014,7 +3013,7 @@ def main() -> int:
                 if jd is None:
                     continue
                 try:
-                    process_jobs(scan_jobs([jd], md_dir))              # 2) SID  (blocking)
+                    process_jobs(scan_jobs([jd]))              # 2) SID  (blocking)
                     if run_mmgbsa(jd, jd.name, _rank_of(jd.name)) is None:
                         _mmgbsa_status = "warn"                         # 3) MM-GBSA (blocking)
                 except Exception as exc:

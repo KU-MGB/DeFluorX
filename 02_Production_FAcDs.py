@@ -15,7 +15,7 @@ re-run, not the ligand/protein list. Only the canonical directory layout and
 job-naming scheme are supported.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <────────────────────────────────────────────────────────
+Date   : 20 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_FAcDs.py

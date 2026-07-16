@@ -24,7 +24,7 @@ It combines four evidence streams into the master ranking + figures:
 All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 16 July 2026 <────────────────────────────────────────────────────────
+Date   : 20 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_MD_QMMM_Defluorination_FAcDs.py
@@ -3136,20 +3136,7 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
                          "endpoint, not a saddle the reaction passes through. No TS resolved (a steric "
                          "wall or a scan window that stops short of it). Barrier reported as NaN.")
             return _empty
-        if _imax == 0:
-            """
-            The maximum is the FIRST scan point, so there is no reactant well inside the window to
-            measure a barrier FROM: the scan either starts past the transition state or falls
-            monotonically along this coordinate. Guarding it here also removes a latent crash —
-            min(e[:0]) on the empty slice raises ValueError, which the enclosing handler would have
-            turned into a bare NaN with no explanation of why.
-            """
-            console_info("    [!] QSite scan is at its maximum on the FIRST point — no reactant well "
-                         "inside the scan window, so no barrier can be measured from it (the scan "
-                         "starts past the TS, or is downhill throughout). Reported as NaN.")
-            return _empty
         _react = min(e[:_imax])          # reactant well: strictly before the TS, never the product
-        _imin = e.index(_react)
         _energy_kcal = [round(x - _react, 3) for x in e]   # relative to the reactant minimum
         """
         The reaction coordinate is READ from the output, never rebuilt by index: nofail=1 means a
