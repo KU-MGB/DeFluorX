@@ -596,7 +596,7 @@ DEFAULT_METRICS = {
     "pocket_occupancy": 0.0,                # ligand_volume / active_site_volume (convex-hull proxy; not a tier input)
     "fit_ratio": 0.0,                       # (ligand_max_extent/2) / active_site_radius (convex-hull proxy; not a tier input)
     "ligand_fits": 0,                       # 1 = ligand within the convex-hull envelope on both proxies
-    "pocket_containment_cavity": 1.0,       # frac of ligand heavy atoms enclosed by the PROTEIN cavity (ray-cast buriedness ≥ BURIAL_MIN) — the tier-gate term
+    "pocket_containment_cavity": 0.0,       # frac of ligand heavy atoms enclosed by the PROTEIN cavity — default WORST (matches compute_pocket_fit's unmeasured→0.0), so a failed complex is not written to the CSV as ideally buried and does not bias 03's plotted means upward
     "pocket_containment_site8": 1.0,        # frac of ligand heavy atoms within SITE8_SHELL_A of the eight mapped active-site residues (catalytic engagement; reported)
     "ligand_buriedness_mean": 0.0,          # mean per-atom buriedness (blocked ray fraction) — continuous companion to pocket_containment_cavity
     "ligand_reach": 0.0,                    # Å; farthest ligand atom from the carboxylate anchor (molecular reach out of the pocket)

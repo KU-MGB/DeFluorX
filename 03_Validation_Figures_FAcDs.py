@@ -2060,6 +2060,8 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 _chi2_f11, _p_f11, _dof_f11, _ = _chi2_cont(ct11.values)
                 _chi2_str = (f"χ²({_dof_f11}) = {_chi2_f11:.1f},  "
                              f"p {'< 0.001' if _p_f11 < 0.001 else f'= {_p_f11:.3f}'}")
+                _register_p("Chi-square — grade × tier", "11_Grade_by_Tier",
+                            float(_chi2_f11), int(ct11.values.sum()), float(_p_f11), dof=int(_dof_f11))
             except Exception:
                 _chi2_str = ""
 
@@ -3418,6 +3420,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _chi2_09, _p_09, _dof_09, _ = _chi2_f09(_cross_raw.values)
                 _chi2_stat = (f"χ²({_dof_09}) = {_chi2_09:.1f},  "
                               f"p {'< 0.001' if _p_09 < 0.001 else f'= {_p_09:.3f}'}")
+                _register_p("Chi-square — interaction-density band × tier", "19_Interaction_Density_by_Tier",
+                            float(_chi2_09), int(_cross_raw.values.sum()), float(_p_09), dof=int(_dof_09))
             except Exception:
                 _chi2_stat = ""
 
@@ -8108,7 +8112,7 @@ _ALLOW_VARIANCE_COMPUTE = True
 
 _xn_STRIP_MAX_PER_GROUP = 250
 
-_xn__RNG = np.random.default_rng(CFG.RANDOM_SEED if hasattr(CFG, "RANDOM_SEED") else 42)
+_xn__RNG = np.random.default_rng(int(CFG.ANALYSIS_SEED))   # CFG has no RANDOM_SEED — that branch was always 42
 
 
 
@@ -8293,6 +8297,12 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
     # and says nothing about how large the tier separation actually is.
     n = sum(len(g) for g in groups)
     eps2 = (H - len(groups) + 1) / (n - len(groups)) if n > len(groups) else np.nan
+    # Register so this on-panel p pays the same BH multiplicity toll as the battery's tests and appears
+    # in 06_Statistical_Tests.csv — otherwise a reader cannot discover it was run. val_col keeps the
+    # three call sites (geometry / binding / pillars) distinct in the family.
+    _register_p(f"Kruskal-Wallis — {val_col} across {group_col}", "03_Extended_Panels",
+                float(H), int(n), float(p),
+                eps_sq=(round(float(eps2), 4) if np.isfinite(eps2) else None))
     return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
 
 # The extended panels are filed in the thematic subfolders alongside the figures they belong with,
@@ -9004,7 +9014,10 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 
-_xo_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
+# One definition of "Degraders" for the whole script: the statistical battery uses CFG.TIER_HIGH_QUALITY
+# (TIER_ORDER[:4] = Tier_1A/1B/2A/2B), and these panels emit rows under the SAME "Degraders vs
+# non-degraders" label, so they must split on the same set or the CSV carries two contradictory contrasts.
+_xo_ELITE_TIERS = list(getattr(CFG, "TIER_HIGH_QUALITY", ["Tier_1A", "Tier_1B", "Tier_2A", "Tier_2B"]))
 
 
 def _xo__minmax(s):

@@ -4207,8 +4207,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         # sim_span covers the whole trajectory, so its denominator must be every analysed frame
         # (total_frames_read), not the post-equilibration subset — otherwise the full span is
         # divided by fewer frames and every dwell is scaled up.
+        # ns_per_frame is NaN when the trajectory carries no .time: sim_span is then a FRAME COUNT, not
+        # ps, so a dwell built from it would invent ~1 ps/frame (10 ns from 10,000 frames). NaN makes
+        # _nac_dwell_stats yield NaN dwells and _verdict withholds — as the stride>1 leg already does —
+        # rather than reporting a fabricated residence time.
         **_nac_dwell_stats([r.get("NAC_Strict_Pass", 0) for r in sampled],
-                           ((sim_span / 1000.0) / total_frames_read) if total_frames_read else 0.0),
+                           (((sim_span / 1000.0) / total_frames_read)
+                            if (_has_time and total_frames_read) else float("nan"))),
         # The stride the dwell was measured at. A run of consecutive ANALYSED frames is only
         # evidence of continuous residence when every frame was analysed: at stride > 1 the
         # ligand may leave and re-enter the reactive geometry between two samples and the whole
@@ -4619,25 +4624,28 @@ def main():
 
     # Auto-detect all available MD rank indices — scan MD, WaterMaps, and
     # 7_MD_Thermodynamics_Results so that every rank already processed is included.
+    # Always scan the ranks that actually exist on disk — the MD cohort is SPARSE (whole-library
+    # Scientific_Rank, e.g. {1, 2, 8}), so `--ranks N` must not mean the literal 1..N (that silently
+    # skips R_8 when N=3). It means the N lowest-numbered ranks that were actually run.
     _auto_rank_list: list[int] = []
+    _found_ranks: set[int] = set()
+    for _scan_root in [
+        work_dir / "05_MD_Simulations",
+        work_dir / "03_WaterMaps",
+        work_dir.parent / "7_MD_Thermodynamics_Results",
+    ]:
+        if _scan_root.exists():
+            for _d in sorted(_scan_root.iterdir()):
+                if _d.is_dir():
+                    _m = re.search(r'(?:_R_|[Rr]ank[_\s]?)(\d+)', _d.name)
+                    if _m:
+                        _found_ranks.add(int(_m.group(1)))
+    _avail = sorted(_found_ranks)
     if args.ranks is None:
-        _found_ranks: set[int] = set()
-        for _scan_root in [
-            work_dir / "05_MD_Simulations",
-            work_dir / "03_WaterMaps",
-            work_dir.parent / "7_MD_Thermodynamics_Results",
-        ]:
-            if _scan_root.exists():
-                for _d in sorted(_scan_root.iterdir()):
-                    if _d.is_dir():
-                        _m = re.search(r'(?:_R_|[Rr]ank[_\s]?)(\d+)', _d.name)
-                        if _m:
-                            _found_ranks.add(int(_m.group(1)))
-        if _found_ranks:
-            _auto_rank_list = sorted(_found_ranks)
-            args.ranks = max(_found_ranks)
-        else:
-            args.ranks = 5
+        _auto_rank_list = _avail
+        args.ranks = max(_found_ranks) if _found_ranks else 5
+    else:
+        _auto_rank_list = _avail[:args.ranks] if _avail else list(range(1, args.ranks + 1))
 
     master_out_dir = work_dir.parent / "7_MD_Thermodynamics_Results"
     master_out_dir.mkdir(parents=True, exist_ok=True)

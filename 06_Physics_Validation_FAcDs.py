@@ -1222,7 +1222,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
             return None
         _a, _b = ranges[i]
         frames.append(_stamp_frames(_df, _a, _b, max(1, step), f"Rank {rank} shard {i:03d}"))
-    merged = job_dir / f"{job_name}_mmgbsa-prime-out.csv"
+    merged = job_dir / f"{job_name}{CFG.SUFFIX_MMGBSA_CSV}"
     _all = pd.concat(frames, ignore_index=True)
     _tmp = merged.with_suffix(".csv.tmp")
     _all.to_csv(_tmp, index=False)
@@ -1257,6 +1257,12 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     """Run thermal_mmgbsa.py on <job>-out.cms inside its MD folder. Idempotent:
     returns the existing CSV when already computed. Returns the results CSV path
     or None on failure."""
+    # The disable gate lives HERE, not only in run_mmgbsa_phase: the sequential MD loop calls
+    # run_mmgbsa() directly, so gating only in the phase wrapper would run the whole Prime batch and
+    # then print "disabled — skipped".
+    if not getattr(CFG, "MMGBSA_RUN", True):
+        _echo("    ✘ Skipped      : MM-GBSA disabled (CFG.MMGBSA_RUN = False).")
+        return None
     cms_file = job_dir / f"{job_name}-out.cms"
     if not cms_file.is_file():
         _echo(f"    ✘ Skipped      : no {cms_file.name} — the MD simulation has not finished.")
@@ -2329,7 +2335,9 @@ def discover_handover(run: Path) -> list:
     {rank, stem, prepared} sorted by rank, so the output folders (R_{rank}) match the handover exactly.
     """
     base = run / "5_TopN_and_Preparation" / "3_Comparative_Analysis"
-    hos = sorted(base.glob("06_*_Molecular_Handover_Files"))
+    # Newest by mtime, NOT lexical: 05 names the folder 06_<tier>_<count>hits_… and never removes stale
+    # ones, so a lexical [-1] sorts 06_…_3hits_… AFTER 06_…_12hits_… and would run the older, smaller cohort.
+    hos = sorted(base.glob("06_*_Molecular_Handover_Files"), key=lambda p: p.stat().st_mtime)
     if not hos:
         sys.exit(f"No handover folder (06_*_Molecular_Handover_Files) under {base}")
     ho = hos[-1]
@@ -2719,10 +2727,14 @@ def export_watermap_csv(wm_maegz: Path, csv_path: Path) -> int:
             "#HB(PW)": _p(a, "r_watermap_hbond_pw"),
             "#HB(LW)": _p(a, "r_watermap_hbond_lw"),
         })
-    with open(csv_path, "w", newline="") as fh:
+    # Atomic write: a kill between copy2(maegz) and this open() must not leave a truncated CSV that the
+    # existence-only resume gate then treats as done. tmp + replace, so the CSV appears whole or not at all.
+    _tmp = csv_path.with_suffix(csv_path.suffix + ".tmp")
+    with open(_tmp, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()) if rows else ["Site"])
         w.writeheader()
         w.writerows(rows)
+    _tmp.replace(csv_path)
     return n
 
 
@@ -2767,6 +2779,20 @@ def _complex_label(entry: dict, ranked_map: dict) -> str:
             f"{row.get('Protein_Name', '')}").rstrip(" ×")
 
 
+def _hydrate(entry: dict, ranked_map: dict, dirs: dict) -> None:
+    """Populate the keys every phase reads — esp / base / complex_mae — from pure lookups, with NO side
+    effects (no copy, no merge). _phase_merge sets these as a by-product, so a --stages run that skips
+    'merge' would otherwise KeyError inside build/md/watermap; run this up front for every entry instead."""
+    stem, rank = entry["stem"], entry["rank"]
+    if entry.get("esp") is None:
+        entry["esp"] = find_esp(dirs["esp"], stem)
+    row = ranked_map.get(stem)
+    if row is None:
+        raise RuntimeError(f"no ranked-CSV row (job_name) matches handover stem {stem}")
+    entry.setdefault("base", _resnum(row.get("Mapped_Base", "")))
+    entry.setdefault("complex_mae", dirs["esp_cx"] / f"R_{rank}_{stem}_ESP_Complex.mae")
+
+
 def _phase_merge(entry: dict, ranked_map: dict, dirs: dict) -> None:
     """Import the prepared complex + write the ESP charges → 01_Prepared_Proteins / 02_ESP_Charged_Complexes."""
     rank, stem, prepared = entry["rank"], entry["stem"], entry["prepared"]
@@ -2802,9 +2828,16 @@ def _phase_watermap(entry: dict, dirs: dict, a) -> None:
     try:
         wmout = run_watermap(entry["complex_mae"], f"watermap_R_{rank}", wm_dir, a.wm_ns, a.lig_dist)
         n = export_watermap_csv(wmout, csv_out)
-        _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
+        if n <= 0:
+            # export writes NO csv when the maegz carries no dG site, so claiming ✔ here would print a
+            # success for a file that does not exist and the next run's existence-gate would re-run the
+            # whole multi-hour WaterMap anyway. Report it as a skip so it is visible and retried.
+            _warn(f"[watermap] R_{rank} produced 0 hydration sites — no CSV written; will retry next run.")
+        else:
+            _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
     except Exception as exc:
-        _fail(f"[watermap] R_{rank} ✗ FAILED after 3 tries — SKIPPED, continuing. {str(exc).splitlines()[0]}")
+        _fail(f"[watermap] R_{rank} ✗ FAILED after 3 tries — SKIPPED, continuing. "
+              f"{(str(exc).splitlines() or ['<no message>'])[0]}")
 
 
 def _phase_build(entry: dict, dirs: dict) -> None:
@@ -2845,6 +2878,10 @@ def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
     md_dir = dirs["md"] / f"desmond_md_job_R_{rank}"; md_dir.mkdir(parents=True, exist_ok=True)
     md_cms = md_dir / f"desmond_md_job_R_{rank}-out.cms"
     if md_cms.exists():
+        # Repoint the cms to {job}_trj on resume too: a kill between multisim's -out.cms and the unpack
+        # would otherwise leave the cms pointing at the staged {job}_N_trj and MM-GBSA aborts with
+        # "No trajectory found associated with CMS". Idempotent (returns cheaply when already flat).
+        _unpack_md_production(md_dir, f"desmond_md_job_R_{rank}")
         _ok(f"[md] R_{rank} ✔ already done ({md_cms.name}) — skipping"); return md_dir
     if not setup_cms.exists():
         raise RuntimeError(f"no built system {setup_cms.name} — build first")
@@ -2895,6 +2932,19 @@ def main() -> int:
           f"site {a.lig_dist:g} Å · stages {sorted(stages)}")
 
     ok, failed = [], []
+
+    # Hydrate esp/base/complex_mae for every entry up front (pure lookups), so any --stages subset —
+    # not just a run that includes 'merge' — has the keys the later phases read. Without this,
+    # --stages build/md/watermap KeyError inside the phase and (for watermap) the retry handler swallows
+    # it, so main returns 0 = PASS having produced nothing.
+    for e in entries:
+        try:
+            _hydrate(e, ranked_map, dirs)
+        except Exception as exc:
+            _fail(f"[hydrate] R_{e['rank']} FAILED — {(str(exc).splitlines() or ['<no message>'])[0]}")
+            e["_skip"] = True
+            failed.append((_complex_label(e, ranked_map),
+                           f"hydrate: {(str(exc).splitlines() or ['<no message>'])[0]}"))
 
     # Prompt for the (optional) sudo password NOW, up front, so the run is fully unattended
     # afterwards — the user can walk away and SID / MM-GBSA stay protected from systemd-oomd.
