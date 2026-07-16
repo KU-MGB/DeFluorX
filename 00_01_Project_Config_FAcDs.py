@@ -2217,6 +2217,61 @@ class CFG:
         "Hydrophobic":   "#937860",
     })
     """
+    Step-05 ball-and-stick interaction diagram (InteractionMap + PLIP). The shared bond types read
+    their colour straight from BOND_TYPE_COLOUR above (so the H-bond here is the H-bond in every other
+    figure); only the diagram-only types that BOND_TYPE_COLOUR does not carry are defined here.
+    INTERACTION_DIAGRAM_STYLE carries the per-type line geometry (width, dash pattern, whether the
+    distance label is drawn); the colour is looked up separately, never duplicated.
+    """
+    INTERACTION_DIAGRAM_EXTRA_COLOUR: dict = field(default_factory=lambda: {
+        "arom_hbond": "#17A589",
+        "water":      "#5DADE2",
+        "pistack":    "#2471A3",
+        "pication":   "#7D3C98",
+    })
+    INTERACTION_DIAGRAM_STYLE: dict = field(default_factory=lambda: {
+        "hbond":       (2.2, (0, (6, 3)),        True),
+        "arom_hbond":  (1.9, (0, (5, 2, 1, 2)),  True),
+        "halogen":     (2.0, (0, (4, 2)),        True),
+        "salt":        (2.0, (0, (3, 2)),        True),
+        "water":       (1.5, (0, (2, 2)),        True),
+        "pistack":     (1.8, (0, (5, 2)),        False),
+        "pication":    (1.8, (0, (4, 2)),        False),
+        "hydrophobic": (0.9, (0, (2, 4)),        False),
+        "contact":     (0.9, (0, (2, 4)),        False),
+    })
+    """
+    Residue-type and ligand-element colours for the same Step-05 diagram: the residue node fill and its
+    legend swatch read the same entry here, so a node can never disagree with its own legend.
+    """
+    RESIDUE_TYPE_COLOUR: dict = field(default_factory=lambda: {
+        "ASP": "#C0392B", "GLU": "#C0392B",
+        "ARG": "#2471A3", "LYS": "#2471A3",
+        "HIS": "#1E8449", "TRP": "#7D3C98", "TYR": "#BA4A00",
+        "SER": "#117A65", "THR": "#117A65", "ASN": "#117A65", "GLN": "#117A65",
+        "PHE": "#6C3483",
+        "LEU": "#626567", "ILE": "#626567", "VAL": "#626567",
+        "ALA": "#626567", "GLY": "#626567", "PRO": "#626567",
+        "MET": "#7E5109", "CYS": "#7E5109",
+    })
+    LIGAND_ELEMENT_COLOUR: dict = field(default_factory=lambda: {
+        "C": "#2C3E50", "N": "#1A5276", "O": "#A93226",
+        "F": "#1D8348", "S": "#D4AC0D", "other": "#717D7E",
+    })
+    """
+    Step-01 merge QC figure (sequence length / identity distributions). Master = the seed set, Secondary
+    = the expanded BLAST set, Total = the combined line/labels; grey_fill and box_edge are the KDE fill
+    and the stats-box edge.
+    """
+    MERGE_QC_COLOUR: dict = field(default_factory=lambda: {
+        "Master":    "#2181B9",
+        "Secondary": "#F1590D",
+        "Total":     "#333333",
+        "Bg":        "#FFFFFF",
+        "grey_fill": "#C0C0C0",
+        "box_edge":  "#CCCCCC",
+    })
+    """
     Ordered series palettes. Indexed, never name-picked, so a figure cannot silently reorder its scale.
     RADAR carries one colour per plotted ligand; TREND one per metric on a multi-metric trend panel.
     """
@@ -2798,7 +2853,7 @@ class CFG:
     SUFFIX_NAC_DATA:    str = "_NAC_Data.csv"                 # 07 writes → 07 figures read
     FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
     FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes → 07 reads
-    FILE_VALIDATED_MASTER: str = "03_Final_Validated_Master.csv" # 03 writes → 04 reads
+    FILE_VALIDATED_MASTER: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source — 02's ranked CSV is authoritative.
 
     # ===============================================================================
     # SECTION 17: PRIME MM-GBSA  (Step 06 — end-state binding free energy)
@@ -2829,26 +2884,7 @@ class CFG:
     MMGBSA_LIGAND_ASL: str  = "res.ptype LIG"   # ASL passed to thermal_mmgbsa via its -lig_asl flag so Prime scores the correct molecule (matches Step 07's --lig LIG convention). A heavily fluorinated PFAS can be misassigned as solvent by auto-detection; empty string "" reverts to auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
-    MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/MolecularDynamics/ (path derived, not hardcoded)
-    SCHRODINGER_SCRATCH_SUBDIR: str = "_Schrodinger_Scratch"  # job scratch dir under the run's MolecularDynamics working folder (large disk); keeps Prime's hundreds-of-GB per-subjob staging off /tmp on the OS disk
-    SCHRODINGER_SCRATCH_COOLDOWN_SEC: int = 60  # settle window after the last job finishes: the job server is still flushing/copying outputs back to the working folders, so wait before deleting the scratch dir
-    """
-    End-of-run housekeeping for the two Schrödinger directories.
-
-    _Schrodinger_Scratch (SCHRODINGER_SCRATCH_SUBDIR) is the CLIENT's TMPDIR — pure transient
-    working space, deleted after the settle window above.
-
-    _Schrodinger_JobServer (SCHRODINGER_JOBSERVER_SUBDIR) is NOT scratch: it is the job-server
-    daemon's home (jobdb.sqlite, filestore/, logs/, bin/). Deleting it under a live daemon is
-    what produces 'Error locating localhost job server config' and kills every submission. What
-    actually GROWS inside it is the per-job filestore and logs, so the safe cleanup is to delete
-    COMPLETED JOBS from the server (`jsc delete`), leaving the daemon and its database intact.
-    Removing the whole directory is only ever safe with the server stopped and idle; it is
-    off by default (the next run recreates it, but it costs a server restart).
-    """
-    SCHRODINGER_JOBSERVER_PURGE_COMPLETED: bool = True   # `jsc delete` finished jobs → frees filestore/logs, daemon stays up
-    SCHRODINGER_JOBSERVER_REMOVE_WHEN_IDLE: bool = False # stop the idle server and delete its whole home dir (only when nothing is queued)
-    SCHRODINGER_JOBSERVER_SUBDIR: str = "_Schrodinger_JobServer"  # working-disk directory (at the project root) that becomes the Schrödinger job server's scratch `tmpdir`. A Prime MM-GBSA / QSite run stages hundreds of GB of per-subjob scratch under the server's tmpdir (the localhost entry of $SCHRODINGER/schrodinger.hosts); its /tmp default (OS disk) is what overflows and kills the job (rc=1, copy_file_range: no space left on device). ensure_jobserver_on_working_disk (00_03) points that tmpdir here and applies it LIVE via `jsc admin reload-hosts` — no server stop, no killed job. Env vars (SCHRODINGER_TMPDIR/TMPDIR) alone do NOT move an already-running server's scratch.
+    MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/05_MD_Simulations/ (path derived, not hardcoded)
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Failed Prime minimisations. A small PFAS ligand cannot bind at −1000 kcal/mol; frames that
@@ -3006,6 +3042,40 @@ class CFG:
     ensemble against a Boltzmann distribution it was never drawn from.
     """
     MMGBSA_TEMPERATURE_K: float = 300.0       # K — MUST equal MD_EQUIL_TARGET_T (the sampled ensemble)
+
+    # ===============================================================================
+    # SECTION 17b: ESP PHYSICS — System Builder / MD / WaterMap simulation (Step 06)
+    # ===============================================================================
+    """
+    Simulation settings for the Step-06 explicit-solvent physics: Desmond System Builder,
+    MD production, and WaterMap. The MD thermostat set point is MD_EQUIL_TARGET_T (defined
+    above) — the same number the equilibration check and MM-GBSA read, so the run has one
+    temperature, not three.
+    """
+    PHYS_SOLVENT_MODEL: str    = "TIP3P"       # explicit water model for the MD solvent box
+    PHYS_FORCEFIELD: str       = "OPLS4"       # force field for System Builder + MD
+    PHYS_BOX_SHAPE: str        = "orthorhombic"
+    PHYS_BOX_BUFFER_A: float   = 10.0          # Å solute-to-wall buffer (minimum-image)
+    PHYS_SALT_CONC_M: float    = 0.15          # M background NaCl
+    PHYS_SALT_POS_ION: str     = "Na"
+    PHYS_SALT_NEG_ION: str     = "Cl"
+    PHYS_COUNTERION: str       = "Na"          # neutralising counter-ion (systems are net-anionic)
+    PHYS_ION_EXCLUDE_A: float  = 5.0           # Å keep ions/salt this far from the ligand (a Na+ on Asp-Oδ corrupts the NAC)
+    PHYS_MD_NS: float          = 1000.0        # MD production length (ns)
+    PHYS_MD_FRAMES: int        = 100000        # trajectory frames → interval = PHYS_MD_NS*1000/PHYS_MD_FRAMES ps
+    PHYS_MD_PRESSURE_BAR: float = 1.01325      # NPT pressure
+    PHYS_MD_TIMESTEP_PS: tuple = (0.002, 0.002, 0.006)   # bonded / near / far RESPA time steps
+    PHYS_MD_SEED: int          = 2024          # velocity-randomisation seed (reproducible)
+    PHYS_MD_THERMOSTAT_TAU: float = 0.1        # ps  MTK thermostat relaxation time
+    PHYS_MD_BAROSTAT_TAU: float   = 2.0        # ps  MTK barostat relaxation time
+    PHYS_MD_ENESEQ_PS: float   = 1.2           # ps  energy-record (.ene) interval
+    PHYS_WM_NS: float          = 5.0           # WaterMap production length (ns)
+    PHYS_WM_SITE_A: float      = 10.0          # Å active-site radius analysed around the ligand
+    PHYS_WM_RETAIN_LIGAND: bool = True         # holo — ligand kept as the active-site reference
+    PHYS_WM_MAX_TRIES: int     = 3             # GCMC is stochastic: retry this many times, then SKIP the WaterMap
+    PHYS_TEST_MD_NS: float     = 5.0           # --test overrides (fast validation, ~30 min end-to-end)
+    PHYS_TEST_MD_FRAMES: int   = 500
+    PHYS_TEST_WM_NS: float     = 2.0
 
     # ===============================================================================
     # SECTION 18: MD-READY SELECTION  (gates heavy downstream compute — Steps 05→07)

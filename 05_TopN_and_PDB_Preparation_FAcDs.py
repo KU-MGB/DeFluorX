@@ -31,8 +31,9 @@ Date   : 15 July 2026 <───────────────────
                     3_Comparative_Analysis/ (Ramachandran, Controls, handover, combined CSV)
                     00_TopN_and_Preparation.log  (single log for both phases)
   Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
-  Downstream    : 06_SID_Prime-MMGBSA_FAcDs.py         → reads prepared PDBs / handover
-                  07_MD_QMMM_Defluorination_FAcDs.py → reads prepared PDBs for MD/QM-MM
+  Downstream    : 06_Physics_Validation_FAcDs.py       → reads the MD-selected handover (R{N}_*.pdb
+                                                          + *_ESP.mae) → WaterMap · System Builder · MD · SID · MM-GBSA
+                  07_MD_QMMM_Defluorination_FAcDs.py   → reads the MD/WaterMap outputs for QM/MM defluorination
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -562,7 +563,7 @@ def generate_raw_step(job_name: str, best_cif: Path, dir_raw: Path, rank: str, r
                 if recorded_source == best_cif.name:
                     return {"job": job_name, "status": "Renamed", "rank": rank}
                 else:
-                    raw_pdb_path.unlink() # Renamed file was stale
+                    raw_pdb_path.unlink() # source tag mismatch after rename — drop the stale file
             except Exception as e:
                 if logger: logger.debug(f"Failed to rename raw PDB {old_file.name}: {e}")
 
@@ -918,7 +919,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     _n = len(_MACHINERY_ROLES)
     fig, ax = plt.subplots(figsize=(1.55 * _n + 2.0, 8.2))
     _allvals = [v for r in rows for _d in (r.get("cif_eng", {}), r.get("prep_eng", {}))
-                for v in _d.values() if v == v]
+                for v in _d.values() if v is not None and v == v]
     _ymax = min(max(_allvals) if _allvals else _outer, _outer + 3.0) + 0.4
     _ymin = max(0.0, (min(_allvals) if _allvals else 0.0) - 0.3)
     ax.axhspan(_ymin, _react, color=CFG.VIS_BAND["high_fill"], lw=0, zorder=0)
@@ -931,9 +932,9 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     for _i, (_rk, _col_name, _lbl, _grp, _partner) in enumerate(_MACHINERY_ROLES):
         _gc = _grp_col.get(_grp, CFG.VIS_INK["dark"])
         _prep = [r.get("prep_eng", {}).get(_rk) for r in rows]
-        _prep = [v for v in _prep if v == v]
+        _prep = [v for v in _prep if v is not None and v == v]
         _cif = [r.get("cif_eng", {}).get(_rk) for r in rows]
-        _cif = [v for v in _cif if v == v]
+        _cif = [v for v in _cif if v is not None and v == v]
         if len(_prep) >= 3:                      # violin needs a few points to form a shape
             _vp = ax.violinplot([_prep], positions=[_i], widths=0.8, showextrema=False)
             for _b in _vp["bodies"]:
@@ -953,10 +954,10 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
         # different enzyme in the DeHa4 case) into one median would not be a meaningful number.
         _cif_md = [r.get("cif_eng", {}).get(_rk) for r in rows
                    if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)]
-        _cif_md = [v for v in _cif_md if v == v]
+        _cif_md = [v for v in _cif_md if v is not None and v == v]
         _prep_md = [r.get("prep_eng", {}).get(_rk) for r in rows
                     if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)]
-        _prep_md = [v for v in _prep_md if v == v]
+        _prep_md = [v for v in _prep_md if v is not None and v == v]
         if _cif_md and _prep_md:
             _mc, _mp = float(np.median(_cif_md)), float(np.median(_prep_md))
             ax.plot([_i - 0.36, _i - 0.36], [_mc, _mp], "-", color=_gc, lw=1.6, alpha=0.8, zorder=4)
@@ -2294,23 +2295,25 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
     Shared matplotlib renderer for both InteractionMap (distance-based) and
     PLIP (XML-based) diagrams.  mode='distance' or 'plip'.
     """
-    # Interaction type → (linewidth, linestyle, colour, show_dist_label)
-    _ITYPE_STYLE = {
-        "hbond":       (2.2, (0, (6, 3)),  "#E67E22", True),
-        "arom_hbond":  (1.9, (0, (5, 2, 1, 2)), "#16A085", True),
-        "halogen":     (2.0, (0, (4, 2)),  "#1D8348", True),
-        "salt":        (2.0, (0, (3, 2)),  "#C0392B", True),
-        "water":       (1.5, (0, (2, 2)),  "#5DADE2", True),
-        "pistack":     (1.8, (0, (5, 2)),  "#2471A3", False),
-        "pication":    (1.8, (0, (4, 2)),  "#7D3C98", False),
-        "hydrophobic": (0.9, (0, (2, 4)),  "#BDC3C7", False),
-        "contact":     (0.9, (0, (2, 4)),  "#BDC3C7", False),
+    # Interaction type → colour, unified with CFG.BOND_TYPE_COLOUR (shared bond types) so the H-bond
+    # here is the H-bond in every other figure; the diagram-only types come from CFG. Line geometry
+    # (width, dash, show-distance) is CFG.INTERACTION_DIAGRAM_STYLE. Nothing is hardcoded here.
+    _bond = CFG.BOND_TYPE_COLOUR
+    _itype_col = {
+        "hbond":       _bond["H-Bond"],
+        "salt":        _bond["Salt Bridge"],
+        "halogen":     _bond["Halogen"],
+        "hydrophobic": _bond["Hydrophobic"],
+        "contact":     _bond["Hydrophobic"],
+        **CFG.INTERACTION_DIAGRAM_EXTRA_COLOUR,       # arom_hbond, water, pistack, pication
     }
-    _DIST_COL = {"hbond": ("#884400","#FDEBD0","#E67E22"),
-                 "arom_hbond": ("#0B5345","#D1F2EB","#16A085"),
-                 "halogen": ("#0A3D0A","#D5F5E3","#1D8348"),
-                 "salt": ("#7B241C","#FADBD8","#C0392B"),
-                 "water": ("#1A5276","#D6EAF8","#5DADE2")}
+    # (linewidth, linestyle, colour, show_dist_label) per interaction type
+    _ITYPE_STYLE = {_k: (_lw, _ls, _itype_col[_k], _sd)
+                    for _k, (_lw, _ls, _sd) in CFG.INTERACTION_DIAGRAM_STYLE.items()}
+    # Distance-label pill: text + edge in the interaction colour, on a white fill (derived, not a
+    # second hand-picked palette).
+    _DIST_COL = {_k: (_itype_col[_k], "#FFFFFF", _itype_col[_k])
+                 for _k in ("hbond", "arom_hbond", "halogen", "salt", "water")}
 
     # Dynamic axis bounds — zoom in when few residues to eliminate blank space
     _all_x = [p[0] for p in lig_2d] + [v[0] for v in res_2d.values()]
@@ -2418,29 +2421,21 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
                 ha="center", va="center", fontsize=7,
                 color="white", alpha=0.9, zorder=7)
 
-    # Unified legend (bottom, all entries in one block)
-    _leg = [
-        _mpatches.Patch(color="#E67E22", label="H-bond"),
-        _mpatches.Patch(color="#16A085", label="Aromatic H-bond"),
-        _mpatches.Patch(color="#1D8348", label="Halogen bond"),
-        _mpatches.Patch(color="#C0392B", label="Salt bridge"),
-        _mpatches.Patch(color="#5DADE2", label="Water bridge"),
-        _mpatches.Patch(color="#2471A3", label="π-stack"),
-        _mpatches.Patch(color="#7D3C98", label="π-cation"),
-        _mpatches.Patch(color="#BDC3C7", label="Contact"),
-        _Line2D([],[],color="none", label=""),
-        _mpatches.Patch(color="#C0392B", label="ASP/GLU"),
-        _mpatches.Patch(color="#2471A3", label="ARG/LYS"),
-        _mpatches.Patch(color="#1E8449", label="HIS"),
-        _mpatches.Patch(color="#7D3C98", label="TRP/PHE"),
-        _mpatches.Patch(color="#BA4A00", label="TYR"),
-        _mpatches.Patch(color="#117A65", label="SER/THR/ASN/GLN"),
-        _mpatches.Patch(color="#626567", label="Hydrophobic"),
-        _Line2D([],[],color="none", label=""),
-    ]
+    # Unified legend (bottom, one block). Every swatch reads the SAME source the diagram drew from:
+    # interaction colours from _itype_col, residues from _IM_RES_COLORS, atoms from _IM_ELEM_COLORS —
+    # so a legend key can never disagree with the mark it explains.
+    _leg = [_mpatches.Patch(color=_itype_col[_k], label=_lbl) for _k, _lbl in (
+        ("hbond", "H-bond"), ("arom_hbond", "Aromatic H-bond"), ("halogen", "Halogen bond"),
+        ("salt", "Salt bridge"), ("water", "Water bridge"), ("pistack", "π-stack"),
+        ("pication", "π-cation"), ("contact", "Contact"))]
+    _leg.append(_Line2D([], [], color="none", label=""))
+    _leg += [_mpatches.Patch(color=_IM_RES_COLORS[_rep], label=_lbl) for _rep, _lbl in (
+        ("ASP", "ASP/GLU"), ("ARG", "ARG/LYS"), ("HIS", "HIS"), ("TRP", "TRP/PHE"),
+        ("TYR", "TYR"), ("SER", "SER/THR/ASN/GLN"), ("LEU", "Hydrophobic"))]
+    _leg.append(_Line2D([], [], color="none", label=""))
     # Append atom entries inline so everything sits in one box
-    for elem, ec in [("C","#2C3E50"),("N","#1A5276"),("O","#A93226"),("F","#1D8348")]:
-        _leg.append(_mpatches.Patch(color=ec, label=f"Lig {elem}"))
+    for elem in ("C", "N", "O", "F"):
+        _leg.append(_mpatches.Patch(color=_IM_ELEM_COLORS[elem], label=f"Lig {elem}"))
 
     """
     Dynamic legend: anchor just below the lowest content point (circle bottom
@@ -2546,20 +2541,8 @@ _IM_RING_ATOMS = {
     "TRP": {"CG","CD1","CD2","NE1","CE2","CE3","CZ2","CZ3","CH2"},
     "HIS": {"CG","ND1","CD2","CE1","NE2"},
 }
-_IM_RES_COLORS = {
-    "ASP":"#C0392B","GLU":"#C0392B",
-    "ARG":"#2471A3","LYS":"#2471A3",
-    "HIS":"#1E8449","TRP":"#7D3C98","TYR":"#BA4A00",
-    "SER":"#117A65","THR":"#117A65","ASN":"#117A65","GLN":"#117A65",
-    "PHE":"#6C3483",
-    "LEU":"#626567","ILE":"#626567","VAL":"#626567",
-    "ALA":"#626567","GLY":"#626567","PRO":"#626567",
-    "MET":"#7E5109","CYS":"#7E5109",
-}
-_IM_ELEM_COLORS = {
-    "C":"#2C3E50","N":"#1A5276","O":"#A93226",
-    "F":"#1D8348","S":"#D4AC0D","other":"#717D7E",
-}
+_IM_RES_COLORS = CFG.RESIDUE_TYPE_COLOUR       # node fill + legend, single source
+_IM_ELEM_COLORS = CFG.LIGAND_ELEMENT_COLOUR
 _IM_HYDROPHOBIC = {"LEU","ILE","VAL","PHE","TRP","PRO","MET","ALA","GLY","CYS"}
 _IM_AA3 = {
     "ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE",
@@ -3175,18 +3158,6 @@ def prep_and_convert_phase(args):
     run_path = root / args.run_folder_name
     if not run_path.exists(): sys.exit(f"Run path missing: {run_path}")
 
-    # Keep Schrödinger (PrepWizard) job scratch on the run's own working disk,
-    # never /tmp on the OS disk. The modern jobserverd stages subjob scratch under
-    # its own server directory (not SCHRODINGER_TMPDIR), so relocate that too; the
-    # env vars remain as belt-and-braces for tools that still honour them.
-    _utils_mod.ensure_jobserver_on_working_disk(
-        str(SCHRODINGER_PATH), _REPO_DIR,
-        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"))
-    _scratch = run_path / "5_TopN_and_Preparation" / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
-    _scratch.mkdir(parents=True, exist_ok=True)
-    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
-    os.environ["TMPDIR"] = str(_scratch)
-
     # Paths — one consolidated Step-05 folder for both phases (prep + extraction)
     analysis_dir   = run_path / "5_TopN_and_Preparation"
     dir_raw        = analysis_dir / "1_Converted_Raw_PDB"
@@ -3477,7 +3448,14 @@ def prep_and_convert_phase(args):
         _h_ang, _h_nuc = "SN2 angle CIF\u2192prep", "Nuc dist CIF\u2192prep"
         console_info(f"  \u2502 {'Complex':<{_c1}} \u2502 {_h_ang:>22} \u2502 {_h_nuc:>22} \u2502 {'Attack O':<11} \u2502 NAC \u2502")
         console_info("  \u251c\u2500" + _hn + "\u2500\u253c\u2500" + _h22 + "\u2500\u253c\u2500" + _h22 + "\u2500\u253c\u2500" + _h11 + "\u2500\u253c\u2500" + _h4 + "\u2524")
-        for _, _r in _pg.iterrows():
+
+        def _row_group_key(_j):
+            """Group the rows so each family prints together: identified hits first, then the control
+            families (3R3U, DeHa4) as blocks; within a block, ordered by short name."""
+            _s = str(_j)
+            _m = re.search(r"_([A-Za-z0-9]+)_Control", _s)
+            return (1 if _m else 0, _m.group(1) if _m else "", _short_name(_j))
+        for _r in sorted(_pg.to_dict("records"), key=lambda _rr: _row_group_key(_rr["job"])):
             _a0, _a1 = _r.get("raw_sn2_angle"), _r.get("prep_sn2_angle")
             _d0, _d1 = _r.get("raw_dist_nuc"), _r.get("prep_dist_nuc")
             _ang = (f"{_a0:.1f}\u2192{_a1:.1f} ({_r.get('prep_d_angle'):+.1f}\u00b0)"
@@ -4094,14 +4072,6 @@ def main():
     _ESP_REQUESTED = bool(args.esp)
     prep_and_convert_phase(args)
     topn_extraction_phase(args)
-    # Remove Schrödinger scratch now the prep/extraction jobs are done and outputs
-    # are in the working folders (mirrors the temp-thumbnail cleanup in 03). Guarded
-    # on the dir name so only the dedicated scratch folder can ever be removed.
-    _scratch = (Path.cwd() / args.run_folder_name / "5_TopN_and_Preparation"
-                / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch"))
-    if _scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch") and _scratch.exists():
-        time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 5))  # let outputs settle first
-        shutil.rmtree(_scratch, ignore_errors=True)
     _utils_mod.print_elapsed(_t0, "05_TopN_and_PDB_Preparation_FAcDs.py")
 
 

@@ -27,7 +27,7 @@ Date   : 15 July 2026 <───────────────────
   Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
   Imports from  : 00_02_Project_Utils_FAcDs.py  (console_info / console_separator)
-  Reads         : <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
+  Reads         : <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
                   <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
                   <Run>/4_Dendrogram/02_Global_Master_Matrix_Data.csv
@@ -35,7 +35,7 @@ Date   : 15 July 2026 <───────────────────
                   <Run>/4_Dendrogram/04_Global_Master_Delivery_Suite.zip
                   <Run>/4_Dendrogram/05_Tiers/<Tier>_*  (per-tier tree + HTML)
                   <Run>/4_Dendrogram/00_Dendrogram.log
-  Upstream      : 03_Validation_Figures_FAcDs.py → writes 03_Final_Validated_Master.csv
+  Upstream      : 03_Validation_Figures_FAcDs.py → writes 03_Figure_Enriched_Dataset.csv
   Downstream    : None (terminal analysis step)
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -461,17 +461,15 @@ def main():
     global logger
     logger = _setup_logging(out_dir / "00_Dendrogram.log", "04_Dendrogram")
 
-    # Locate validated master CSV produced by 03_Validation_Figures_FAcDs.py
-    # (written under the 00_Analysis_Data subfolder; rglob covers legacy root too).
+    # Locate the figure-enriched dataset produced by 03_Validation_Figures_FAcDs.py
+    # (written under 00_Analysis_Data; the root and rglob lookups cover a non-default out_dir layout).
     csv_candidates = (
         sorted(val_dir.glob(f"00_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
         sorted(val_dir.glob(CFG.FILE_VALIDATED_MASTER)) or
-        sorted(val_dir.rglob(CFG.FILE_VALIDATED_MASTER)) or
-        sorted(val_dir.glob("*_Validated_Master*.csv")) or
-        sorted(val_dir.rglob("*_Master_*.csv"))
+        sorted(val_dir.rglob(CFG.FILE_VALIDATED_MASTER))
     )
     if not csv_candidates:
-        print(f"Error: No validated master CSV found in {val_dir.resolve()}")
+        print(f"Error: No {CFG.FILE_VALIDATED_MASTER} found in {val_dir.resolve()}")
         print("       Run 03_Validation_Figures_FAcDs.py first to generate it.")
         sys.exit(1)
 

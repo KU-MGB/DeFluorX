@@ -384,12 +384,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     # -------------------------------------------------------------------------------
     # Step 5.1: Palette Definition (Unified Consistency)
     # -------------------------------------------------------------------------------
-    PALETTE = {
-        "Master":    "#2181B9",  # Strong Blue
-        "Secondary": "#F1590D",  # Orange
-        "Total":     "#333333",  # Dark Grey/Black
-        "Bg":        "#FFFFFF"
-    }
+    PALETTE = CFG.MERGE_QC_COLOUR       # single source (00_01 §visual palettes)
 
     # Configure Matplotlib fonts
     plt.rcParams["font.family"] = "sans-serif"
@@ -464,12 +459,12 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
         # Priority 2: Inside the Input Bar (Dark Text)
         elif inp > (kp + width_threshold):
              ax1.text(kp + (max_val*0.02), i, label_text, va="center", ha="left",
-                      fontsize=9, fontweight="bold", color="#333333")
+                      fontsize=9, fontweight="bold", color=PALETTE["Total"])
 
         # Priority 3: Outside (Dark Text)
         else:
              ax1.text(inp + (max_val*0.02), i, label_text, va="center", ha="left",
-                      fontsize=9, fontweight="bold", color="#333333")
+                      fontsize=9, fontweight="bold", color=PALETTE["Total"])
 
     apply_clean_spines(ax1)
     ax1.spines["left"].set_visible(False)
@@ -537,7 +532,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                 kde_total = gaussian_kde(all_lengths)
                 y_total = kde_total(x_grid)
                 # Stronger grey fill
-                ax3.fill_between(x_grid, y_total, color="#C0C0C0", alpha=0.3)
+                ax3.fill_between(x_grid, y_total, color=PALETTE["grey_fill"], alpha=0.3)
                 ax3.plot(x_grid, y_total, color=PALETTE["Total"], linewidth=2.5, label=f"Combined Final (N={len(all_lengths)})")
 
                 mean_val = np.mean(all_lengths)
@@ -557,7 +552,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                 )
                 ax3.text(0.98, 0.95, stats_text, transform=ax3.transAxes, va="top", ha="right",
                          fontsize=10, fontfamily="monospace",
-                         bbox=dict(facecolor="white", edgecolor="#CCCCCC", boxstyle="round,pad=0.6", alpha=0.95))
+                         bbox=dict(facecolor="white", edgecolor=PALETTE["box_edge"], boxstyle="round,pad=0.6", alpha=0.95))
 
             except Exception as e:
                 logger.debug(f"Skipped KDE plot for combined data due to math error: {e}")
@@ -684,7 +679,7 @@ def main():
     logger.info(f"  Mean Length           : {final_mean}")
     logger.info("\nFiles Saved:")
     logger.info(f"  1. FASTA : {out_path.resolve()}")
-    logger.info(f"  2. LOG   : {out_path.with_suffix('.log').resolve()}")
+    logger.info(f"  2. LOG   : {(out_path.parent / '00_Merge.log').resolve()}")
     if plot_path != "FAILED":
         logger.info(f"  3. PLOTS : {plot_path.resolve()}")
 

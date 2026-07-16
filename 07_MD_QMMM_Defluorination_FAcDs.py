@@ -32,11 +32,11 @@ Date   : 15 July 2026 <───────────────────
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — all thresholds + tier metadata)
                   00_02_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
-  Reads         : <Run>/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
+  Reads         : <Run>/6_Physics_Validation/05_MD_Simulations/desmond_md_job_R_N/*-out.cms
                                                                /*_trj/   (dir carrying the _R_N rank token; *Rank_N* also matched)
                                                                /*.eaf
-                  <Run>/6_Physics_Validation/WaterMaps/watermap_R_N.csv  (Maestro WM export)
-                  <Run>/6_Physics_Validation/WaterMaps/watermap_R_N/*_wm.maegz
+                  <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N.csv  (Step-06 WaterMap export)
+                  <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
                   <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
@@ -56,7 +56,9 @@ Date   : 15 July 2026 <───────────────────
                   <Run>/7_MD_Thermodynamics_Results/13_MMGBSA_Decomposition_AllRanks.png
                   <Run>/7_MD_Thermodynamics_Results/14_Machinery_Engagement_AllRanks.png
                     (the same two reactive-pose figures, merged across candidates)
-  Upstream      : 06_SID_Prime-MMGBSA_FAcDs.py   → produces *_SID-out.eaf + Prime MM-GBSA summary consumed here
+  Upstream      : 06_Physics_Validation_FAcDs.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
+                                                    produces the MD trajectories, WaterMap CSVs,
+                                                    *_SID-out.eaf + Prime MM-GBSA summary consumed here
                   05_TopN_and_PDB_Preparation_FAcDs.py → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
@@ -69,8 +71,8 @@ Date   : 15 July 2026 <───────────────────
      not process GROMACS or AMBER trajectories without prior conversion.
   3. Memory & I/O: Reading large trajectories (1000+ frames) at stride 1 is
      extremely I/O intensive; recommend high-speed NVMe or local scratch disk.
-  4. WaterMap Export: Relies on manual Maestro export of WaterMap CSV/MAE files
-     matching the Rank_N naming convention.
+  4. WaterMap Input: Reads the WaterMap CSV/MAE that Step 06 produces under
+     03_WaterMaps/ (watermap_R_N.csv + watermap_R_N/*_wm.maegz).
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
@@ -87,7 +89,7 @@ Arguments:
     --stride N        Analyse every N-th trajectory frame (1 = all frames).
                       Higher values trade accuracy for speed.     Default: 1
     --ranks  N        Number of top-ranked MD jobs to process (Rank_1 … Rank_N).
-                      Default: auto-detected from directories in MolecularDynamics/
+                      Default: auto-detected from directories in 05_MD_Simulations/
     --nuc    RESNUM   Fallback nucleophile residue number if alignment map absent.
                       Default: 110  (FAcD canonical Asp110)
     --base   RESNUM   Fallback catalytic base residue number.
@@ -1815,18 +1817,18 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         _xhi = max(float(x.max()) * 1.12, Y * 1.5)
         _ylo = min(float(y.min()) * 0.9, 0.0)
         _yhi = max(float(y.max()) * 1.12, (Z * 1.25 if _has_bar else float(y.max()) * 1.12))
-        _C = getattr(CFG, "DEFLUOR_FIG_COLOUR", {})
+        _C = CFG.DEFLUOR_FIG_COLOUR
         ax.set_xlim(0, _xhi); ax.set_ylim(_ylo, _yhi)
         if _has_bar:
             ax.add_patch(plt.Rectangle((Y, _ylo), _xhi - Y, Z - _ylo,
-                                       color=_C.get("gate", "#22C55E"), alpha=0.09, zorder=0))
-            ax.axhline(Z, color=_C.get("gate_line", "#16A34A"), ls="--", lw=1.2, zorder=1)
-            ax.axvline(Y, color=_C.get("gate_line", "#16A34A"), ls="--", lw=1.2, zorder=1)
+                                       color=_C["gate"], alpha=0.09, zorder=0))
+            ax.axhline(Z, color=_C["gate_line"], ls="--", lw=1.2, zorder=1)
+            ax.axvline(Y, color=_C["gate_line"], ls="--", lw=1.2, zorder=1)
             ax.text(_xhi * 0.98, _ylo + (Z - _ylo) * 0.5,
                     f"defluorination-competent\n(dwell ≥ {Y:g} ns, ΔE‡ ≤ {Z:g})",
-                    ha="right", va="center", fontsize=8, color=_C.get("gate_text", "#15803D"), style="italic")
-        sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else _C.get("scatter", "#3B82F6")),
-                        cmap="viridis", vmin=0, vmax=1, edgecolor=_C.get("edge", "#334155"),
+                    ha="right", va="center", fontsize=8, color=_C["gate_text"], style="italic")
+        sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else _C["scatter"]),
+                        cmap="viridis", vmin=0, vmax=1, edgecolor=_C["edge"],
                         linewidth=0.8, alpha=0.92, zorder=5)
         for xi, yi, lab in zip(x, y, d["_label"]):
             ax.annotate(str(lab), (xi, yi), fontsize=7, xytext=(4, 4),
@@ -1922,7 +1924,7 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
     """Gather, per candidate: the per-frame NAC table, the frame-stamped MM-GBSA table, and the
     alignment map that names each catalytic residue in that homolog."""
     run_dir = out_dir.parent
-    md = run_dir / "6_Physics_Validation" / "MolecularDynamics"
+    md = run_dir / "6_Physics_Validation" / "05_MD_Simulations"
     out = []
     for d in sorted(out_dir.glob("Rank_*")):
         m = re.match(r"Rank_(\d+)_", d.name)
@@ -3326,7 +3328,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # ── Locate the MD job folder for this R-number first ───────────────────────
     # Flexible discovery: try every directory pattern Desmond/pipeline may produce.
-    _md_root   = work_dir / "MolecularDynamics"
+    _md_root   = work_dir / "05_MD_Simulations"
     _candidates = [
         _md_root / f"desmond_md_job_R_{rank}",
         _md_root / f"desmond_md_job_Rank_{rank}",
@@ -3436,7 +3438,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                      f"{len(tr):,} total frames (lazy)")
 
     # ── WaterMap spatial sites (maegz) — flexible naming discovery ───────────
-    _wm_root = work_dir / "WaterMaps"
+    _wm_root = work_dir / "03_WaterMaps"
     # Find any subdirectory carrying the rank token: 'watermap_R_N'
     # (exact '_R_{rank}' suffix so R_1 ≠ R_10) or a '*Rank_N*' name.
     _wm_dir_candidates = (
@@ -4578,7 +4580,7 @@ def main():
     parser.add_argument("--stride", type=int, default=1,
                         help="Frame stride (1 = all frames, default).")
     parser.add_argument("--ranks",  type=int, default=None,
-                        help="Number of ranked jobs (default: auto-detect from MolecularDynamics dirs)")
+                        help="Number of ranked jobs (default: auto-detect from 05_MD_Simulations dirs)")
     parser.add_argument("--nuc",    type=int, default=DREAM_TEAM_REF.get('Nuc', 110),  help="Fallback nucleophile resnum")
     parser.add_argument("--base",   type=int, default=DREAM_TEAM_REF.get('Base', 277), help="Fallback base resnum")
     parser.add_argument("--acid",   type=int, default=DREAM_TEAM_REF.get('Acid', 134), help="Fallback acid resnum")
@@ -4600,17 +4602,6 @@ def main():
     raw_dir  = args.run_dir or args.dir or "."
     work_dir = _resolve_work_dir(raw_dir)
 
-    # Keep Schrödinger (QSite/Jaguar/Desmond) job scratch on the run's own working
-    # disk, never /tmp on the OS disk. The modern jobserverd stages subjob scratch
-    # under its own server directory (not SCHRODINGER_TMPDIR), so relocate that too;
-    # the env vars remain as belt-and-braces for tools that still honour them.
-    _utils_mod.ensure_jobserver_on_working_disk(
-        os.environ["SCHRODINGER"], _REPO_DIR,
-        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"))
-    _scratch = work_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
-    _scratch.mkdir(parents=True, exist_ok=True)
-    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
-    os.environ["TMPDIR"] = str(_scratch)
 
     # Auto-detect all available MD rank indices — scan MD, WaterMaps, and
     # 7_MD_Thermodynamics_Results so that every rank already processed is included.
@@ -4618,8 +4609,8 @@ def main():
     if args.ranks is None:
         _found_ranks: set[int] = set()
         for _scan_root in [
-            work_dir / "MolecularDynamics",
-            work_dir / "WaterMaps",
+            work_dir / "05_MD_Simulations",
+            work_dir / "03_WaterMaps",
             work_dir.parent / "7_MD_Thermodynamics_Results",
         ]:
             if _scan_root.exists():
@@ -4649,8 +4640,8 @@ def main():
     )
     console_info(f"Run Directory    : {work_dir.parent}")
     console_info(f"Physics Validation : {work_dir}")
-    console_info(f"MD Simulations   : {work_dir / 'MolecularDynamics'}")
-    console_info(f"WaterMaps        : {work_dir / 'WaterMaps'}")
+    console_info(f"MD Simulations   : {work_dir / '05_MD_Simulations'}")
+    console_info(f"WaterMaps        : {work_dir / '03_WaterMaps'}")
     console_info(f"Output           : {master_out_dir}")
     console_info(f"Ligand Resname   : {args.lig}")
     console_info(f"Frame Stride     : {args.stride} (requested){' — all frames' if args.stride == 1 else f' — 1-in-{args.stride} sampled'}")
@@ -4886,7 +4877,7 @@ def main():
         # terminal ranking couples non-covalent binding thermodynamics with the QSite
         # reaction barrier. Both keys are coerced to numeric before the join. A missing or
         # partial summary (Step 06 not run) is non-fatal — the ΔG columns are left absent.
-        _mmgbsa_csv = (work_dir / "MolecularDynamics"
+        _mmgbsa_csv = (work_dir / "05_MD_Simulations"
                        / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
                        / CFG.FILE_MMGBSA_SUMMARY)
         if _mmgbsa_csv.exists() and "Scientific_Rank" in df_master.columns:
@@ -5067,31 +5058,6 @@ def main():
             except Exception as e:
                 console_info(f"  [!] {label.split('(')[0].strip()} failed: {e}")
 
-    """
-    Remove the Schrödinger scratch once QSite and the analysis jobs are done and their outputs
-    are back in the working folders. Two guards, because this deletes a directory a live job may
-    still be writing into: the name must be the dedicated scratch folder (never an arbitrary
-    path), and the job server must have nothing left alive — a Desmond MD or a QSite job still
-    running keeps its files here, and pulling the directory out from under it destroys the run.
-    """
-    if _scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch") and _scratch.exists():
-        time.sleep(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 60))   # let outputs settle
-        _alive = 0
-        try:
-            _r = _sp.run([os.path.join(os.environ["SCHRODINGER"], "jsc"), "list"],
-                         capture_output=True, text=True, timeout=60)
-            for _line in (_r.stdout or "").splitlines():
-                _m = re.match(r"^([0-9a-f]{8})\s+(\S+)\s+(.*?)\s+[A-Z][a-z]{2}-\d{2}\s", _line)
-                if _m and re.search(r"running|waiting|launched|submitted|% done",
-                                    _m.group(3).strip(), re.I):
-                    _alive += 1
-        except Exception:
-            _alive = 0
-        if _alive:
-            console_info(f"  [i] {_alive} job(s) still on the job server (Desmond MD, QSite, …) — "
-                         f"scratch directory kept; deleting it under a live job would break it.")
-        else:
-            shutil.rmtree(_scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":

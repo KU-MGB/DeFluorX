@@ -1,77 +1,92 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 06  |  Desmond SID + Prime MM-GBSA Post-Processing
+FAcDs Pipeline  |  Step 06  |  ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA
 ===============================================================================
-Runs Schrödinger Event Analysis (event_analysis.py) and Simulation Interaction
-Diagram analysis (analyze_simulation.py) on completed Desmond molecular
-dynamics trajectories, producing the *_SID-out.eaf files that are consumed
-downstream by 07_MD_QMMM_Defluorination_FAcDs.py.
+Builds and runs the full explicit-solvent physics for every MD-selected complex,
+using the Jaguar ESP partial charges on the ligand so the reactive α-carbon
+carries its true electrophilicity (the property SN2 defluorination depends on),
+then post-processes each trajectory — all in one pass, one merged log.
 
-It then runs Prime MM-GBSA (thermal_mmgbsa.py <job>-out.cms) on every completed
-MD job — the end-state ligand binding free energy over the MD ensemble — and
-plots per-job + combined ΔG_bind. MM-GBSA is complementary to the QSite QM/MM
-reaction barrier (Step 07): it scores BINDING, not C–F bond cleavage.
+Per run, in phases (all complexes at each phase before the next):
+  1. import   — copy the prepared complex (05's R{N}_<stem>.pdb handover) as-is and
+                write the ESP charges onto it (→ 01_Prepared_Proteins, 02_ESP_Charged_Complexes).
+  2. WaterMap — hydration-site thermodynamics around the ligand, holo (→ 03_WaterMaps).
+                Each WaterMap is tried up to 3× (GCMC is stochastic); after 3 it is
+                SKIPPED (red) and the run continues — a missing WaterMap never fails its complex.
+  3. build    — Desmond System Builder: minimise-volume, orthorhombic TIP3P box (10 Å
+                buffer, OPLS4), auto-neutralise + 0.15 M NaCl, then write the ESP charges
+                into the built .cms force field and HARD-VERIFY (→ 04_System_Builder).
+  4. MD       — Desmond MD (relax + NPT production) → 05_MD_Simulations. As each MD
+                FINISHES on the GPU, its SID (event_analysis + analyze_simulation → *_SID-out.eaf)
+                and Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind) run on the CPU in the
+                background while the NEXT MD runs on the GPU — one SID+MM-GBSA at a time.
+                A final pass draws the per-job + combined MM-GBSA figures.
 
-Uses the central CFG / ProjectUtils modules for logging, console styling, and
-conventions shared across the pipeline. Runs under the project 'PFAS' conda
-environment and shells out to $SCHRODINGER/run for the Schrödinger interpreter
-— it does NOT need to be launched with $SCHRODINGER/run.
+MM-GBSA (end-state binding ΔG over the ensemble) is complementary to the QSite QM/MM
+reaction barrier (Step 07): it scores BINDING, not C–F cleavage.
+
+Uses the central CFG / ProjectUtils modules. The ESP/build/WaterMap/MD stage bodies
+import `schrodinger` in-process, so the script runs under the Schrödinger Python; it
+may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_...py`
+(project conda env) — in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026
+Date   : 16 July 2026
 ===============================================================================
-Usage (standalone):
-  python 06_SID_Prime-MMGBSA_FAcDs.py [Boltz-2_Run_Directory]
+Usage:
+  python 06_Physics_Validation_FAcDs.py [Boltz-2_Run_Directory] [options]
 
-Usage (from pipeline runner — oomd already managed by 00_00_run_pipeline):
-  python 06_SID_Prime-MMGBSA_FAcDs.py [Boltz-2_Run_Directory] --pipeline-mode
+  --test            quick run: WaterMap 2 ns · MD 5 ns/500 frames (~30 min end-to-end)
+  --md-ns   N       MD production length (ns)          [default 1000]
+  --md-frames N     MD trajectory frames               [default 100000]
+  --wm-ns   N       WaterMap production length (ns)     [default 5]
+  --lig-dist N      WaterMap active-site radius (Å)     [default 10]
+  --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (SID+MM-GBSA pipelined with md)
+  --out     DIR     output root                         [default <run>/6_Physics_Validation]
+  --pipeline-mode   called from 00_00_run_pipeline_FAcDs.sh (delegates oomd masking to the runner)
 
 -------------------------------------------------------------------------------
 Dependency Map
 -------------------------------------------------------------------------------
-  Script        : 06_SID_Prime-MMGBSA_FAcDs.py
-  Role          : Step 06 — Desmond post-simulation post-processing.
-                  Produces EAF interaction files for the Step 07 MD engine.
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — project metadata)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, logging, banners)
-  Reads         : Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*-out.cms
-                  Boltz-2_Run_X/6_Physics_Validation/MolecularDynamics/desmond_md_job_R_N/*_trj
-  Writes        : .../desmond_md_job_R_N/*_SID-in.eaf, *_SID-out.eaf, *.log
-                  .../desmond_md_job_R_N/*_mmgbsa-prime-out.csv  (per-frame ΔG_bind,
-                      carrying a `Frame` column: the trajectory frame each scored
-                      structure came from — Step 07 joins on it)
-                  .../desmond_md_job_R_N/_MMGBSA_Shards/  (per-shard logs + CSVs; kept
-                      so an interrupted MM-GBSA resumes instead of restarting)
-                  .../MolecularDynamics/Prime_MMGBSA/00_MMGBSA_Summary.csv
-                  .../MolecularDynamics/Prime_MMGBSA/01_MMGBSA_Combined_AllRanks.png
-                  .../MolecularDynamics/Prime_MMGBSA/Rank_NN_MMGBSA_Profile_*.png
-  Upstream      : Desmond molecular dynamics simulations (manual Maestro step).
-  Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (Step 07; consumes EAF output).
+  Script        : 06_Physics_Validation_FAcDs.py
+  Role          : Step 06 — build + run the ESP-charged explicit-solvent physics
+                  (WaterMap, System Builder, MD) and post-process it (SID + MM-GBSA).
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG), 00_02_Project_Utils_FAcDs.py (utils)
+  Reads         : <Run>/5_TopN_and_Preparation/3_Comparative_Analysis/
+                       06_<tier>_<count>hits_Molecular_Handover_Files/R{N}_<stem>.pdb  (N=Scientific_Rank, SSOT)
+                  <Run>/5_TopN_and_Preparation/4_Ligand_ESP_Charges/<stem>_ESP.mae
+                  <Run>/1_Boltz2_Production/*Ranked*.csv  (job_name → Mapped_Base)
+  Writes        : <out>/01_Prepared_Proteins/R{N}_<stem>.pdb
+                  <out>/02_ESP_Charged_Complexes/R_N_<stem>_ESP_Complex.mae
+                  <out>/03_WaterMaps/watermap_R_N/*_wm.maegz + watermap_R_N.csv
+                  <out>/04_System_Builder/desmond_setup_R_N/desmond_setup_R_N-out.cms
+                  <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
+                       *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
+                  <out>/05_MD_Simulations/Prime_MMGBSA/{00_MMGBSA_Summary.csv, combined + per-rank PNGs}
+                  <out>/00_SID_MMGBSA.log  (single merged, colour-preserving log; `tail -f` it)
+  Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
+  Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
 -------------------------------------------------------------------------------
 The Critic's Corner: Known Limitations & Failure Points
 -------------------------------------------------------------------------------
-  1. Sudo (OPTIONAL): Masking systemd-oomd needs root. Standalone, the script
-     offers to prime sudo; if sudo is unavailable or skipped it continues in
-     NORMAL mode (oomd not masked). Under the pipeline runner (--pipeline-mode)
-     oomd masking is owned by the runner across Steps 07 and 08 (also optional).
-  2. Trajectory Volume: Processing 100,000 frames sequentially is time-intensive
-     (typically 10–15 hours). Do not run multiple instances concurrently.
-  3. Local I/O Capping: Relies on -LOCAL to prevent huge tmp partition writes;
-     requires sufficient disk space in the destination filesystem.
-  4. No Desmond Jobs: If no completed Desmond jobs are found, the script exits
-     with status 0 (non-fatal). The pipeline runner continues to Step 07,
-     which will then report that no EAF files are present.
-  5. MM-GBSA Cost: Prime minimises every scored structure, and the cost is linear
-     in their number — CFG.MMGBSA_STEP_SIZE is the only knob that changes the
-     wall-clock by an order of magnitude. Step 06 runs the trajectory as concurrent
-     frame-range shards, so the read is parallel and overlaps Prime; concurrency is
-     capped by free RAM (Prime dominates it), not by core count alone.
-  6. MM-GBSA Validity: GB implicit solvent overstabilises anionic PFAS, so ΔG_bind is
-     a RELATIVE ranking only; it scores binding, not the QSite reaction barrier. A
-     fraction of a percent of frames are failed minimisations (ΔG of hundreds of
-     kcal/mol); they are flagged (N_Failed_Minimisations) and excluded from the
-     figure's scale, and the MEDIAN is reported because they drag the mean.
+  1. GPU serialisation: build/MD/WaterMap use the single GPU, run one at a time. The
+     SID+MM-GBSA of a finished MD run on the CPU (one at a time) overlapping the next
+     MD on the GPU — the pipelining that saves wall-clock.
+  2. WaterMap ligand is NOT ESP-charged: WaterMap rebuilds ligand charges with its own
+     S-OPLS/TIP4P (its GCMC μ_excess is calibrated only for TIP4P). Correct for water
+     thermodynamics; ESP lives in the MD/QSite branch where C–F electrophilicity matters.
+  3. WaterMap launch: run via `bash -lc` with a detached login-shell env + a /tmp scratch
+     (copied back); a job inheriting the $SCHRODINGER/run session, or given an absolute
+     input path, cannot stage its GCMC ligand companion and dies at stage 8.
+  4. MM-GBSA cost: Prime minimises every scored structure; cost is linear in their number
+     (CFG.MMGBSA_STEP_SIZE is the order-of-magnitude knob). Concurrent frame-shards are
+     capped by free /tmp (each stages ~22 GB) — the disk-aware subjob cap, not USB relocation.
+  5. MM-GBSA validity: GB implicit solvent overstabilises anionic PFAS → ΔG_bind is a
+     RELATIVE ranking only, complementary to the QSite barrier. A fraction of a percent of
+     frames are failed minimisations (flagged, excluded from the figure scale; MEDIAN reported).
+  6. Sudo (OPTIONAL): masking systemd-oomd needs root; standalone offers to prime sudo,
+     else continues in NORMAL mode. Under --pipeline-mode the runner owns oomd masking.
 ===============================================================================
 -------------------------------------------------------------------------------
 Scientific References:
@@ -94,16 +109,30 @@ Scientific References:
 
 import argparse
 import concurrent.futures as cf
+import csv
+import glob
 import importlib.util as _ilu
 import math
 import os
 import shutil
+import shlex
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
+
+# Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter. The ESP/build/
+# WaterMap/MD stage bodies import `schrodinger` in-process, so the script must run under
+# $SCHRODINGER/run; this lets it also be launched as a plain `python 06_...py` (project conda env).
+try:
+    import schrodinger  # noqa: F401
+except ModuleNotFoundError:
+    _schro = os.environ.get("SCHRODINGER", "/opt/schrodinger")
+    os.execv(f"{_schro}/run", [f"{_schro}/run", "python3", os.path.abspath(__file__), *sys.argv[1:]])
 
 import numpy as np
 import pandas as pd
@@ -153,10 +182,16 @@ os.environ.setdefault("SCHRODINGER", "/opt/schrodinger")
 SCHRODINGER = os.environ["SCHRODINGER"]
 SCHROD_RUN = os.path.join(SCHRODINGER, "run")
 
-_SEP = "============================================================================="
-_RULE = "─────────────────────────────────────────────────────────────────────────"
+_SEP  = _utils_mod.SEPARATOR_HEAVY   # ═×80 — house major boundary
+_RULE = _utils_mod.SEPARATOR_LIGHT   # ─×80 — house step / subsection rule
 _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length is unreadable
 EXIT_WARN = 3   # step completed but a complementary part (MM-GBSA) was deferred/failed; the pipeline runner renders WARN and continues (0=PASS, 1=hard error, 3=warn)
+
+# Schrödinger jobs run under jobserverd, independent of this process — so on Ctrl-C / kill they would
+# outlive the script. Every WaterMap/build/MD job name is registered here BEFORE submit and removed only
+# on clean completion; a signal/atexit handler cancels whatever is still registered (see _install_job_cleanup).
+_LAUNCHED_JOBS: "set[str]" = set()
+_CLEANUP_DONE = False
 
 # Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
 # completion gate (is_eaf_complete): threshold = EAF_TOKENS_PER_FRAME · traj_frames.
@@ -190,14 +225,41 @@ def _open_step_log(physics_dir: Path) -> None:
 
 def _echo(msg: str = "") -> None:
     """Print to terminal immediately (flush) — keeps live progress visible — and mirror to the
-    step log file with ANSI colour codes stripped."""
+    step log file KEEPING ANSI colour, so `tail -f` of the merged log shows the same green/red."""
     print(msg, flush=True)
     if _LOG_FH is not None:
         try:
-            _LOG_FH.write(_ANSI_RE.sub("", str(msg)) + "\n")
+            _LOG_FH.write(str(msg) + "\n")
             _LOG_FH.flush()
         except Exception:
             pass
+
+
+# Colour helpers used by the ESP/build/WaterMap/MD phase functions (single merged log).
+SCHRO = SCHRODINGER
+_C = _utils_mod.ConsoleColours
+
+
+def _log(m: str = "") -> None:
+    _echo(f"  {m}")
+
+
+def _ok(m: str) -> None:
+    _echo(f"  {_C.OKGREEN}{m}{_C.ENDC}")
+
+
+def _fail(m: str) -> None:
+    _echo(f"  {_C.FAIL}{m}{_C.ENDC}")
+
+
+def _warn(m: str) -> None:
+    _echo(f"  {_C.WARNING}[!] {m}{_C.ENDC}")
+
+
+def _section(title: str) -> None:
+    """House-style section header — bold title + light rule (matches ReportManager.section in 00_02)."""
+    _echo(f"\n{_C.BOLD}{title}{_C.ENDC}")
+    _echo(_RULE)
 
 
 def out_eaf_frames(eaf_path: Path) -> int:
@@ -646,7 +708,8 @@ def resolve_run_dir(run_arg: str | None) -> str:
         _echo(f"Auto-detected run directory: {chosen}")
         return chosen
     _echo("ERROR: Run directory not specified and no Boltz-2_Run_* found.")
-    _echo("Usage: python 06_SID_Prime-MMGBSA_FAcDs.py [Boltz-2_Run_Directory]")
+    _echo("Usage: python 06_Physics_Validation_FAcDs.py <Boltz-2_Run_Directory>/ [--test]")
+    _echo("  quick test (WaterMap 2 ns · MD 5 ns): python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/ --test")
     sys.exit(1)
 
 
@@ -861,9 +924,8 @@ def _diagnose_mmgbsa_failure(job_dir: Path, job_name: str) -> "str | None":
     if re.search(r"no space left on device|copy_file_range.*no space", text, re.I):
         return ("DISK FULL — the Schrödinger job server ran out of space staging "
                 "per-subjob scratch (each Prime subjob copies the multi-GB complexes "
-                "file). This is the job-SERVER directory filling up, not SCHRODINGER_TMPDIR; "
-                "relocate it onto the working disk with "
-                "`jsc local-server-dir --set <working-disk>` (server stopped), then retry.")
+                "file). Free space on the job server's scratch disk (its tmpdir, /tmp by "
+                "default) or lower the concurrent subjob count, then retry.")
     if re.search(r"licen[sc]e", text, re.I) and re.search(r"error|fail|not available|checkout", text, re.I):
         return "LICENSE — a Prime/PLOP (PSP_PLOP) license was unavailable; check FlexLM."
     m = re.search(r"^ERROR:.*$", text, re.M)
@@ -1187,9 +1249,8 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     copy of the complexes file (~22 GB here), so N concurrent subjobs need ~N × 22 GB of
     scratch. The cores-minus-reserve figure above is the target; it is only reduced when
     the disk that actually holds the scratch cannot hold that many copies. Probe THAT disk
-    (SCHRODINGER_TMPDIR, relocated to the run's working disk at start-up) — not /tmp, which
-    is irrelevant once the job-server has been relocated and would otherwise throttle the
-    run for no reason.
+    (SCHRODINGER_TMPDIR if the environment sets it, else /tmp — the job server's default
+    scratch location).
     """
     try:
         import shutil as _sh
@@ -1946,30 +2007,18 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
-def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> str:
+def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> str:
     """Run + plot MM-GBSA for every completed MD job (idempotent).
 
     Returns a status the caller maps to the pipeline step result:
-      • "ok"       — every eligible job produced a ΔG_bind CSV (or none eligible);
-      • "deferred" — the phase was skipped because scratch could not be guaranteed
-                     off /tmp (a live job blocked relocation) — nothing computed;
-      • "warn"     — the phase ran but ≥1 job's MM-GBSA failed (e.g. Prime rc=1).
-    "deferred"/"warn" let the pipeline report WARN (not a false PASS) without
-    hard-aborting: MM-GBSA is complementary to the QSite barrier, so Step 07 still
-    runs. "disabled" (CFG.MMGBSA_RUN=False) is an intentional no-op → "ok"."""
+      • "ok"   — every eligible job produced a ΔG_bind CSV (or none eligible);
+      • "warn" — the phase ran but ≥1 job's MM-GBSA failed (e.g. Prime rc=1).
+    "warn" lets the pipeline report WARN (not a false PASS) without hard-aborting:
+    MM-GBSA is complementary to the QSite barrier, so Step 07 still runs.
+    "disabled" (CFG.MMGBSA_RUN=False) is an intentional no-op → "ok"."""
     if not getattr(CFG, "MMGBSA_RUN", False):
         _echo("  MM-GBSA disabled (CFG.MMGBSA_RUN = False) — skipped.")
         return "ok"
-    if not scratch_ok:
-        # The job-server scratch dir is still on the OS disk (relocation deferred —
-        # typically because another job is running). A 100k-frame Prime run would
-        # copy hundreds of GB there and die after hours; skip it rather than burn
-        # the time. SID above has already run. Re-run this step once the disk is
-        # relocated (no live jobs) to compute MM-GBSA.
-        _echo("  MM-GBSA SKIPPED — Schrödinger job-server scratch is not on the "
-              "working disk (see the [job-server] note above). Re-run 06 once the "
-              "server dir is relocated and no other job is running.")
-        return "deferred"
     job_dirs = sorted(
         (d for d in md_dir.iterdir()
          if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)
@@ -2083,225 +2132,738 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, scratch_ok: bool = True) -> s
 
 
 # =============================================================================
-# SECTION 9: END-OF-RUN HOUSEKEEPING (Schrödinger scratch + job-server home)
+# SECTION 9: ESP PHYSICS — MSJ BUILDERS & DETACHED JOB ENVIRONMENT
 # =============================================================================
-def _jsc_jobs() -> "tuple[list[str], int]":
-    """(completed job IDs, number still alive). Alive = Running/Waiting/anything not finished.
 
-    Reads `jsc list`; an unreachable server yields (no ids, 0 alive) so callers treat it as
-    'nothing of ours is running' rather than crashing.
+STAGES_ALL = ("merge", "watermap", "build", "md")   # execution order: WaterMap needs only the ESP complex
+
+def _build_msj(lig_indices: str) -> str:
+    """Desmond System Builder .msj — every physical setting from CFG (§17b PHYS_*).
+
+    Explicit-solvent box (PHYS_SOLVENT_MODEL, PHYS_BOX_SHAPE, PHYS_BOX_BUFFER_A), auto-neutralise
+    with PHYS_COUNTERION, PHYS_SALT_CONC_M background salt, and PHYS_FORCEFIELD. Ions/salt are kept
+    ≥ PHYS_ION_EXCLUDE_A from the ligand so a counter-ion never lands on the Asp-Oδ and corrupts the
+    NAC; ion_awayfrom takes the 1-based LIG atom indices.
     """
-    jsc = Path(SCHRODINGER) / "jsc"
-    if not jsc.is_file():
-        return [], 0
-    try:
-        r = subprocess.run([str(jsc), "list"], capture_output=True, text=True, timeout=60)
-    except Exception:
-        return [], 0
+    return (
+        f'task {{ task = "desmond:auto" }}\n'
+        f'build_geometry {{\n'
+        f'  add_counterion = {{ ion = "{CFG.PHYS_COUNTERION}" number = "neutralize_system" }}\n'
+        f'  box = {{ shape = "{CFG.PHYS_BOX_SHAPE}" size = [{CFG.PHYS_BOX_BUFFER_A} {CFG.PHYS_BOX_BUFFER_A} {CFG.PHYS_BOX_BUFFER_A} ] size_type = "buffer" }}\n'
+        f'  override_forcefield = "{CFG.PHYS_FORCEFIELD}"\n'
+        f'  rezero_system = false\n'
+        f'  salt = {{ concentration = {CFG.PHYS_SALT_CONC_M} negative_ion = "{CFG.PHYS_SALT_NEG_ION}" positive_ion = "{CFG.PHYS_SALT_POS_ION}" }}\n'
+        f'  solvent = "{CFG.PHYS_SOLVENT_MODEL}"\n'
+        f'  ion_awaydistance = {CFG.PHYS_ION_EXCLUDE_A}\n'
+        f'  ion_awayfrom = [ {lig_indices} ]\n'
+        f'}}\n'
+        f'assign_forcefield {{ forcefield = "{CFG.PHYS_FORCEFIELD}" }}\n'
+    )
+
+
+def _md_production(time_ps: float, interval_ps: float) -> str:
+    """MD production stage appended to the Desmond relaxation protocol (minimise + staged NVT/NPT
+    equilibration with restraints, then production). NPT at MD_EQUIL_TARGET_T / PHYS_MD_PRESSURE_BAR,
+    RESPA PHYS_MD_TIMESTEP_PS, energies every PHYS_MD_ENESEQ_PS ps — all from CFG §17b.
     """
-    `jsc list` is single-space aligned and its Status may itself contain a space ("1% done"),
-    so neither a two-space split nor a plain field split is safe. Anchor on the Created date
-    (Mon-DD) and take everything between the job name and that date as the status:
+    temp = CFG.MD_EQUIL_TARGET_T                                   # one temperature for MD + MM-GBSA
+    dt = " ".join(str(x) for x in CFG.PHYS_MD_TIMESTEP_PS)
+    return (
+        f'\nsimulate {{\n'
+        f'  title       = "Production MD"\n'
+        f'  time        = {time_ps}\n'
+        f'  timestep    = [{dt} ]\n'
+        f'  temperature = {temp}\n'
+        f'  pressure    = [{CFG.PHYS_MD_PRESSURE_BAR} isotropic ]\n'
+        f'  ensemble = {{ class = NPT method = MTK thermostat.tau = {CFG.PHYS_MD_THERMOSTAT_TAU} barostat.tau = {CFG.PHYS_MD_BAROSTAT_TAU} }}\n'
+        f'  randomize_velocity = {{ first = 0.0 interval = inf temperature = {temp} seed = {CFG.PHYS_MD_SEED} }}\n'
+        f'  eneseq.interval    = {CFG.PHYS_MD_ENESEQ_PS}\n'
+        f'  trajectory = {{ interval = {interval_ps} center = solute write_velocity = false }}\n'
+        f'}}\n'
+    )
 
-        ee9d84d8 desmond_md_job_1IVO_extend Running  Jul-13 01:46 3h24m shark
-        1c987b28 ..._mmgbsa_shard002-prime  1% done  Jul-12 11:07 7m41s shark
+
+def _clean_job_env() -> dict:
+    """A fresh login-shell environment for launching WaterMap, detached from the $SCHRODINGER/run session.
+
+    The script runs under $SCHRODINGER/run, which sets PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/
+    SCHRODINGER_EXEC. A WaterMap job that inherits those cannot stage its GCMC ligand companion to the
+    sub-job and dies at stage 8. A plain login-shell environment — critically with $SCHRODINGER on PATH
+    so the sub-stages find the multisim/watermap utilities — lets the job run as it would from a
+    terminal. Paired with the `bash -lc` launch in run_watermap.
     """
-    done, alive = [], 0
-    for line in (r.stdout or "").splitlines():
-        m = re.match(r"^([0-9a-f]{8})\s+(\S+)\s+(.*?)\s+[A-Z][a-z]{2}-\d{2}\s", line)
-        if not m:
-            continue
-        jid, status = m.group(1), m.group(3).strip().lower()
-        if re.search(r"running|waiting|launched|submitted|% done", status):
-            alive += 1
-        elif re.search(r"completed|finished|died|killed|stopped|incorporated", status):
-            done.append(jid)
-    return done, alive
+    keep = ("HOME", "USER", "LOGNAME", "DISPLAY", "LANG", "LC_ALL", "TERM", "SSH_AUTH_SOCK",
+            "SCHRODINGER_LICENSE_FILE", "SCHRODINGER_CUSTOM_MONOMER_DB_PATH")
+    env = {k: os.environ[k] for k in keep if k in os.environ}
+    env["SCHRODINGER"] = SCHRO
+    env["PATH"] = f"{SCHRO}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    env["TMPDIR"] = os.environ.get("TMPDIR", "/tmp")
+    env.setdefault("USER", os.environ.get("USER", os.environ.get("LOGNAME", "user")))
+    env.setdefault("LOGNAME", env["USER"])
+    env.setdefault("LANG", "C.UTF-8")
+    return env
 
 
-def cleanup_schrodinger_dirs(scratch: Path) -> None:
-    """End-of-run housekeeping for the two Schrödinger directories.
+def _cancel_launched_jobs() -> None:
+    """Cancel every still-registered job on the job server. Idempotent (guarded), safe to call twice.
 
-    Only ever runs when NOTHING is left alive on the job server — a live job still writes into
-    both of these, and removing them under it is exactly what produces 'Error locating localhost
-    job server config' (and kills every subsequent submission). A settle window first lets the
-    server flush and copy outputs back to the working folders before anything is deleted.
+    `jsc list` defaults to active jobs (RUNNING/WAITING/PAUSED); the JobId is column 0 and the job name
+    column 1. Only names THIS run registered are matched, so a concurrent user's jobs are never touched.
     """
-    _cool = int(getattr(CFG, "SCHRODINGER_SCRATCH_COOLDOWN_SEC", 60))
-    _echo("")
-    _echo(f"Housekeeping — waiting {_cool}s for the job server to flush its outputs before cleaning up.")
-    time.sleep(_cool)
-
-    _done, _alive = _jsc_jobs()
-    if _alive:
-        _echo(f"  ⚠ {_alive} job(s) still on the server — nothing removed. Both Schrödinger "
-              f"directories are left intact (deleting them under a live job breaks it).")
+    global _CLEANUP_DONE
+    if _CLEANUP_DONE or not _LAUNCHED_JOBS:
         return
+    _CLEANUP_DONE = True
+    names = set(_LAUNCHED_JOBS)
+    try:
+        out = subprocess.run([f"{SCHRO}/jsc", "list", "-j"], capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        return
+    ids = [p[0] for ln in out.splitlines()
+           if len(p := ln.split()) >= 2 and p[1] in names]
+    if not ids:
+        return
+    try:
+        _echo(f"\n  {_C.WARNING}[cleanup] script exiting — cancelling {len(ids)} running job(s): "
+              f"{', '.join(sorted(names))}{_C.ENDC}")
+        subprocess.run([f"{SCHRO}/jsc", "cancel", *ids], timeout=90)
+    except Exception:
+        pass
 
-    # 1. Client scratch: pure transient working space. Name-guarded so only the dedicated
-    #    folder can ever be removed, never an arbitrary path.
-    if (scratch.name == getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
-            and scratch.exists()):
-        shutil.rmtree(scratch, ignore_errors=True)
-        _echo(f"  ✔ Removed the client scratch directory ({scratch.name}) — transient working space.")
 
-    # 2. Job-server home: NOT scratch. It holds the daemon's jobdb, filestore, logs and binaries,
-    #    and it must survive. What grows is the per-job filestore/logs, so delete the COMPLETED
-    #    jobs from the server and leave the daemon running.
-    _js = _SCRIPT_DIR / getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer")
-    if getattr(CFG, "SCHRODINGER_JOBSERVER_PURGE_COMPLETED", True) and _done:
-        try:
-            subprocess.run([str(Path(SCHRODINGER) / "jsc"), "delete", *_done],
-                           capture_output=True, text=True, timeout=300)
-            _echo(f"  ✔ Purged {len(_done)} completed job(s) from the job server — frees its "
-                  f"filestore and logs, daemon stays up.")
-        except Exception as e:
-            _echo(f"  ⚠ Could not purge completed jobs ({e}) — {_js.name} keeps their files.")
+def _install_job_cleanup() -> None:
+    """Cancel the run's job-server jobs on normal exit AND on SIGINT/SIGTERM/SIGHUP, so a killed script
+    never leaves WaterMap/MD jobs running under jobserverd."""
+    import atexit
+    import signal
+    atexit.register(_cancel_launched_jobs)
 
-    """
-    Removing the job server's home entirely is only safe with the server STOPPED and idle; the
-    next run recreates it (at the cost of a server restart). Off by default — the directory is
-    the daemon's install, not junk.
-    """
-    if getattr(CFG, "SCHRODINGER_JOBSERVER_REMOVE_WHEN_IDLE", False) and _js.exists():
+    def _handler(signum, _frame):
+        _cancel_launched_jobs()
+        signal.signal(signum, signal.SIG_DFL)   # restore default and re-raise for the correct exit status
+        os.kill(os.getpid(), signum)
+
+    for _s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         try:
-            subprocess.run([str(Path(SCHRODINGER) / "jsc"), "local-server-stop"],
-                           capture_output=True, text=True, timeout=120)
-            time.sleep(3)
-            shutil.rmtree(_js, ignore_errors=True)
-            _echo(f"  ✔ Stopped the idle job server and removed {_js.name}; the next run recreates it.")
-        except Exception as e:
-            _echo(f"  ⚠ Could not remove {_js.name} ({e}) — left in place.")
-    elif _js.exists():
-        try:
-            _sz = sum(f.stat().st_size for f in _js.rglob("*") if f.is_file()) / 2**30
-            _echo(f"  ℹ Kept {_js.name} ({_sz:.1f} GB) — this is the job server's home (jobdb, "
-                  f"filestore, logs, binaries), not scratch. Deleting it under a live daemon "
-                  f"breaks every submission. Set CFG.SCHRODINGER_JOBSERVER_REMOVE_WHEN_IDLE = True "
-                  f"to have it stopped and removed when idle.")
+            signal.signal(_s, _handler)
         except Exception:
             pass
 
 
-# =============================================================================
-# SECTION 10: MAIN
-# =============================================================================
-def main() -> int:
-    # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
-    # and the log grows triple bars with nothing between them.
-    _utils_mod.install_console_rule_filter()
-    parser = argparse.ArgumentParser(
-        description=f"{CFG.PROJECT_NAME} Step 06 — Desmond SID + Prime MM-GBSA Post-Processing")
-    parser.add_argument("run_dir", nargs="?", default=None,
-                        help="Boltz-2_Run_* directory (auto-detect latest if omitted)")
-    parser.add_argument("--pipeline-mode", action="store_true",
-                        help="Set when called from 00_00_run_pipeline_FAcDs.sh; "
-                             "delegates systemd-oomd masking to the pipeline runner.")
-    args = parser.parse_args()
+# -----------------------------------------------------------------------------
+# SECTION 10: INPUT DISCOVERY (handover complexes + ESP charges)
+# -----------------------------------------------------------------------------
+def _resnum(v) -> int:
+    m = re.search(r"(\d+)", str(v or ""))
+    return int(m.group(1)) if m else 0
 
-    t0 = time.perf_counter()
-    print_script_banner("06_SID_Prime-MMGBSA_FAcDs.py",
-                        "Step 06 — Desmond SID + Prime MM-GBSA Post-Processing")
 
-    if not os.path.isfile(SCHROD_RUN):
-        _echo(f"ERROR: Schrödinger 'run' not found at {SCHROD_RUN}. "
-              f"Set the SCHRODINGER environment variable.")
-        return 1
+def newest_ranked_csv(run: Path) -> Path:
+    prod = run / "1_Boltz2_Production"
+    cands = (sorted(prod.glob(CFG.GLOB_RANKED_CSV), key=lambda p: p.stat().st_mtime) or
+             sorted(prod.glob("*Ranked*.csv"), key=lambda p: p.stat().st_mtime))
+    if not cands:
+        sys.exit(f"No ranked CSV ({CFG.GLOB_RANKED_CSV}) under {prod}")
+    return cands[-1]
 
-    run_dir = resolve_run_dir(args.run_dir)
-    md_dir = _SCRIPT_DIR / run_dir / "6_Physics_Validation" / "MolecularDynamics"
-    _open_step_log(md_dir.parent)     # 6_Physics_Validation/00_SID_MMGBSA.log — mirrors this run's output
 
-    if not md_dir.is_dir():
-        _echo(f"ERROR: MolecularDynamics directory not found: {md_dir}")
-        return 1
+def ranked_rows_by_jobname(ranked_csv: Path) -> dict:
+    """Map job_name → ranked-CSV row, so each handover complex can look up its Mapped_Base etc."""
+    with open(ranked_csv, newline="") as fh:
+        return {r.get("job_name", "").strip(): r for r in csv.DictReader(fh)}
 
+
+def discover_handover(run: Path) -> list:
+    """Discover the MD-selected complexes from 05's handover folder — the single source of truth.
+
+    05 writes `06_<tier>_<count>hits_Molecular_Handover_Files/R{N}_<stem>.pdb`, where N is the complex's
+    Scientific_Rank (so the third selected hit can be R8, not R3). This keys the whole run on that same
+    N and stem — never on MD_Rank, which is only a 1..k position over the selected set. Returns a list of
+    {rank, stem, prepared} sorted by rank, so the output folders (R_{rank}) match the handover exactly.
     """
-    Keep ALL Schrödinger job scratch on the run's own (large) working disk, never
-    /tmp on the OS disk. Prime MM-GBSA replicates the multi-GB complexes file into
-    every subjob's scratch dir — hundreds of GB on a 100k-frame trajectory — which
-    exhausts a small /tmp mid-job (the cause of a silent Prime rc=1 after hours).
-    TWO mechanisms:
-      1. The authoritative one — set the job server's scratch `tmpdir` (the
-         localhost entry of $SCHRODINGER/schrodinger.hosts) to the working disk and
-         apply it LIVE with `jsc admin reload-hosts`. This works on a RUNNING server
-         (no stop, no killed job), so MM-GBSA still runs when another job happens to be
-         active. This is what actually prevents the /tmp overflow.
-      2. Belt-and-braces — point SCHRODINGER_TMPDIR/TMPDIR at the working disk for
-         any tool that still honours them (driver-side temp, non-server steps).
+    base = run / "5_TopN_and_Preparation" / "3_Comparative_Analysis"
+    hos = sorted(base.glob("06_*_Molecular_Handover_Files"))
+    if not hos:
+        sys.exit(f"No handover folder (06_*_Molecular_Handover_Files) under {base}")
+    ho = hos[-1]
+    out = []
+    for pdb in sorted(ho.glob("R*_*.pdb")):
+        m = re.match(r"R(\d+)_(.+)\.pdb$", pdb.name)
+        if m:
+            out.append({"rank": int(m.group(1)), "stem": m.group(2), "prepared": pdb})
+    if not out:
+        sys.exit(f"No R<N>_<stem>.pdb handover complexes in {ho.name}")
+    ranks = [e["rank"] for e in out]
+    if len(ranks) != len(set(ranks)):
+        sys.exit(f"Duplicate handover ranks in {ho.name}: {ranks} — each R{{N}} must be unique")
+    return sorted(out, key=lambda e: e["rank"])
+
+
+def find_esp(esp_dir: Path, stem: str) -> Path:
+    """The ESP .mae for one complex, matched exactly by stem (05 writes <stem>_ESP.mae)."""
+    hits = sorted(esp_dir.glob(f"{stem}_ESP.mae"))
+    if len(hits) != 1:
+        raise RuntimeError(f"{len(hits)} matches for {stem}_ESP.mae in {esp_dir.name} (expected 1)")
+    return hits[0]
+
+
+# -----------------------------------------------------------------------------
+# SECTION 11: STAGE 1 — ESP MERGE
+# -----------------------------------------------------------------------------
+def merge_esp(prepared_pdb: Path, esp_mae: Path, out_mae: Path, base_resnum: int) -> dict:
+    """Write the ESP ligand charges onto the prepared holo complex, matched strictly by atom name.
+
+    Every LIG atom name must be present in the ESP map; a missing name raises rather than silently
+    taking a positional charge (a wrong-atom charge is invisible downstream). The catalytic-base
+    protonation state at Mapped_Base is reported and warned on when it is not HID.
     """
-    _scratch = md_dir / getattr(CFG, "SCHRODINGER_SCRATCH_SUBDIR", "_Schrodinger_Scratch")
-    _scratch.mkdir(parents=True, exist_ok=True)
-    # Export the working-disk scratch BEFORE ensure_jobserver: if it (re)starts the job-server
-    # daemon (only ever when idle), the daemon inherits these and runs every Prime subjob under
-    # the USB scratch instead of /tmp. The daemon's own TMPDIR — not local-server-dir and not a
-    # client-set var on a live daemon — is what governs where subjob working dirs are created.
-    os.environ["SCHRODINGER_TMPDIR"] = str(_scratch)
-    os.environ["TMPDIR"] = str(_scratch)
-    _scratch_ok = _utils_mod.ensure_jobserver_on_working_disk(
-        SCHRODINGER, _SCRIPT_DIR,
-        getattr(CFG, "SCHRODINGER_JOBSERVER_SUBDIR", "_Schrodinger_JobServer"),
-        echo=lambda m="": _echo(f"  {m}"))
+    from schrodinger import structure
+    cx = structure.StructureReader.read(str(prepared_pdb))
+    _esp_st = structure.StructureReader.read(str(esp_mae))
+    esp_by_name = {a.pdbname.strip(): a.partial_charge for a in _esp_st.atom}
+    esp_formal = round(sum(a.formal_charge for a in _esp_st.atom))     # the ligand's true net charge (e.g. −1 for a carboxylate)
+    lig = [a for a in cx.atom if a.pdbres.strip() == "LIG"]
+    if not lig:
+        raise RuntimeError(f"no LIG atoms in {prepared_pdb.name}")
+    missing = sorted({a.pdbname.strip() for a in lig} - set(esp_by_name))
+    if missing:
+        raise RuntimeError(f"LIG atoms absent from ESP map (name mismatch): {', '.join(missing)}")
 
-    _echo(_SEP)
-    _echo("Step 06 — Desmond SID analysis, then Prime MM-GBSA rescoring")
-    _echo(f"  Run directory        : {run_dir}")
-    _echo(f"  MD trajectories      : {md_dir}")
-    _echo(f"  Schrödinger scratch  : {_scratch}")
-    _echo("                         (on the run's working disk — never /tmp, so a large "
-          "Prime job cannot fill the OS disk)")
-    _echo(_SEP)
+    tot = 0.0
+    for a in lig:
+        a.partial_charge = esp_by_name[a.pdbname.strip()]
+        tot += a.partial_charge
 
-    job_dirs = sorted(
-        (d for d in md_dir.iterdir()
-         if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
-        key=_natural_rank,
-    )
-    if not job_dirs:
-        _echo("SKIP — no desmond_md_job_R_* directories in MolecularDynamics yet; "
-              "MD not run for this cohort. Nothing to post-process (SID + MM-GBSA skipped).")
+    # A neutral/corrupt ESP file (charges never written, or run on the wrong protonation state) sums to
+    # a net charge that does not match the ligand's formal charge. Building MD on a mis-charged ligand
+    # silently changes the α-carbon electrophilicity the SN2 depends on, so refuse rather than proceed.
+    if round(tot) != esp_formal:
+        raise RuntimeError(
+            f"ESP net charge {tot:+.3f} e (rounds to {round(tot):+d}) ≠ ligand formal charge "
+            f"{esp_formal:+d} in {esp_mae.name} — the ESP charges look wrong/neutral; refusing to "
+            f"build MD on a mis-charged ligand")
+
+    base_state = "?"
+    for res in cx.residue:
+        if res.resnum == base_resnum and res.pdbres.strip().startswith(("HI", "HS")):
+            hs = {a.pdbname.strip() for a in res.atom} & {"HD1", "HE2"}
+            base_state = ("HID" if hs == {"HD1"} else "HIP" if hs == {"HD1", "HE2"}
+                          else "HIE" if hs == {"HE2"} else "bare")
+            break
+
+    out_mae.parent.mkdir(parents=True, exist_ok=True)
+    cx.write(str(out_mae))
+    return {"lig_atoms": len(lig), "lig_charge_sum": round(tot, 4), "base_state": base_state}
+
+
+# -----------------------------------------------------------------------------
+# SECTION 12: STAGE 2 — SYSTEM BUILDER (minimise-volume + build + ESP into force field)
+# -----------------------------------------------------------------------------
+def _lig_atom_indices(complex_mae: Path) -> str:
+    from schrodinger import structure
+    st = structure.StructureReader.read(str(complex_mae))
+    return " ".join(str(a.index) for a in st.atom if a.pdbres.strip() == "LIG")
+
+
+def run_build(complex_mae: Path, jobname: str, wd: Path) -> Path:
+    """Reorient the complex to the smallest orthorhombic box, then solvate/ionise it with Desmond.
+
+    Minimise-volume (the System Builder GUI operation) is a rigid rotation applied before the buffer
+    is added, so the box fits the complex and is not oversized (fewer waters, faster MD). ESP charges
+    and the NAC geometry are rotation-invariant.
+    """
+    from schrodinger import structure
+    from schrodinger.application.desmond.system_builder_util import DesmondBoxSize
+    st = structure.StructureReader.read(str(complex_mae))
+    DesmondBoxSize().minimizeVolume([st])
+    oriented = wd / f"{jobname}_minvol.mae"
+    st.write(str(oriented))
+    msj = wd / "build.msj"
+    msj.write_text(_build_msj(_lig_atom_indices(oriented)))
+    out_cms = wd / f"{jobname}-out.cms"
+    _LAUNCHED_JOBS.add(jobname)                       # cancelled on Ctrl-C/kill if it does not finish
+    subprocess.run([f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
+                    "-maxjob", "1", "-m", str(msj), "-o", str(out_cms), str(oriented), "-WAIT"],
+                   cwd=str(wd), check=True)
+    _LAUNCHED_JOBS.discard(jobname)
+    return out_cms
+
+
+def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
+    """Write the ESP ligand charges into the .cms ffio_block — the charges the MD engine integrates.
+
+    The ffio_block (not the m_atom partial_charge) is what Desmond reads; ffio.site is 1-indexed and
+    matched to the ligand atoms by name. After writing, the .cms is re-read through msys (the engine's
+    own charges) and any LIG atom still differing from ESP raises — a silent revert to OPLS4 would
+    invalidate the defluorination result. Idempotent: re-running only re-verifies an already-ESP .cms.
+    """
+    from schrodinger import structure
+    from schrodinger.application.desmond import cms as cmsmod
+    from schrodinger.application.desmond.packages import topo
+    esp = {a.pdbname.strip(): a.partial_charge for a in structure.StructureReader.read(str(esp_mae)).atom}
+    model = cmsmod.Cms(str(out_cms))
+    for ct in model.comp_ct:
+        if not any(a.pdbres.strip() == "LIG" for a in ct.atom):
+            continue
+        for a in ct.atom:
+            if a.pdbres.strip() == "LIG" and a.pdbname.strip() in esp:
+                ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
+    model.write(str(out_cms))
+
+    msys, cms = topo.read_cms(str(out_cms))
+    bad = []
+    for i, a in enumerate(cms.atom):
+        if a.pdbres.strip() == "LIG":
+            want = esp.get(a.pdbname.strip())
+            if want is not None and abs(msys.atom(i).charge - want) > 1e-3:
+                bad.append(f"{a.pdbname.strip()} FF={msys.atom(i).charge:+.4f} ESP={want:+.4f}")
+    if bad:
+        raise RuntimeError("ESP charges did NOT reach the MD force field: " + "; ".join(bad))
+    return round(sum(esp.values()), 4)
+
+
+# -----------------------------------------------------------------------------
+# SECTION 13: STAGE 3 — MOLECULAR DYNAMICS
+# -----------------------------------------------------------------------------
+def _md_msj(time_ps: float, interval_ps: float) -> str:
+    relax = Path(f"{SCHRO}/mmshare-v7.3/data/desmond/desmond_npt_relax.msj")
+    if not relax.exists():
+        relax = next(iter(glob.glob(f"{SCHRO}/mmshare-*/data/desmond/desmond_npt_relax.msj")), None)
+    if not relax or not Path(relax).exists():
+        raise RuntimeError("desmond_npt_relax.msj not found — refusing to run production on an "
+                           "unequilibrated box (equilibration must precede production).")
+    return Path(relax).read_text() + _md_production(time_ps=time_ps, interval_ps=interval_ps)
+
+
+def _unpack_md_production(wd: Path, jobname: str) -> None:
+    """Unpack the production stage so the job dir matches a Maestro MD job (07/06 read them flat).
+
+    multisim archives every stage as {job}_N-out.tgz; the last (production) holds the trajectory and
+    energy. 07 auto-extracts the trajectory recursively, but reads {job}.ene ONLY at the job-dir root
+    (the NPT-equilibration check). Extract the production {job}_N_trj → {job}_trj and {job}_N.ene →
+    {job}.ene at the root, then drop the now-redundant production tgz. Relax-stage tgz are left as-is.
+    """
+    import tarfile
+
+    def _seg(p: Path) -> int:
+        m = re.search(r"_(\d+)-out\.tgz$", p.name)
+        return int(m.group(1)) if m else -1
+
+    if (wd / f"{jobname}_trj").exists() and (wd / f"{jobname}.ene").exists():
+        return
+    tgzs = sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_seg)
+    if not tgzs:
+        return
+    prod = tgzs[-1]
+    n = _seg(prod)
+    stage = wd / f"{jobname}_{n}"
+    with tarfile.open(str(prod)) as tf:
+        tf.extractall(str(wd))
+    for src_name, dst_name in ((f"{jobname}_{n}_trj", f"{jobname}_trj"),
+                               (f"{jobname}_{n}.ene", f"{jobname}.ene")):
+        src = stage / src_name
+        dst = wd / dst_name
+        if src.exists() and not dst.exists():
+            shutil.move(str(src), str(dst))
+    shutil.rmtree(stage, ignore_errors=True)
+    prod.unlink(missing_ok=True)                          # trajectory now lives extracted at the root
+
+
+def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int) -> Path:
+    time_ps = time_ns * 1000.0
+    interval_ps = max(round(time_ps / max(frames, 1), 4), 1.0)
+    msj = wd / "md.msj"
+    msj.write_text(_md_msj(time_ps, interval_ps))
+    out_cms = wd / f"{jobname}-out.cms"
+    _LAUNCHED_JOBS.add(jobname)                           # cancelled on Ctrl-C/kill if it does not finish
+    subprocess.run([f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
+                    "-SUBHOST", "localhost", "-maxjob", "1", "-m", str(msj), "-o", str(out_cms),
+                    str(system_cms), "-WAIT"], cwd=str(wd), check=True)
+    _LAUNCHED_JOBS.discard(jobname)
+    _unpack_md_production(wd, jobname)                    # {job}_trj/ + {job}.ene at the job-dir root
+    return out_cms
+
+
+# -----------------------------------------------------------------------------
+# SECTION 14: STAGE 4 — WATERMAP (+ CSV export for Step 07)
+# -----------------------------------------------------------------------------
+def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_dist: float) -> Path:
+    """Run WaterMap through Schrödinger's own WaterMapInput, on a local scratch, and copy the result back.
+
+    WaterMapInput splits the complex into receptor + ligand, tags the ct types, truncates the protein
+    to the active site and writes the GPU msj (S-OPLS ligand, TIP4P water, holo via retain_ligand). It
+    is driven in-process with real floats because the watermap_inp CLI would multiply a string
+    simulation_time. The job runs in a /tmp scratch under a minimal environment (see _clean_job_env and
+    Critic's Corner note 3); a WaterMap-GPU licence shortfall is retried from the checkpoint.
+    """
+    from schrodinger import structure
+    from schrodinger.application.watermap import watermap_inp
+    cx = structure.StructureReader.read(str(complex_mae))
+    lig_idx = [a.index for a in cx.atom if a.pdbres.strip() == "LIG"]
+    if not lig_idx:
+        raise RuntimeError(f"no LIG atoms in {complex_mae.name} for WaterMap")
+    ligand = cx.extract(lig_idx)
+    protein = cx.copy()
+    protein.deleteAtoms(lig_idx)
+    wm = watermap_inp.WaterMapInput(protein, ligand, retain_ligand=bool(CFG.PHYS_WM_RETAIN_LIGAND),
+                                    ligand_distance=float(lig_dist), simulation_time=float(time_ns))
+
+    scratch = Path(tempfile.mkdtemp(prefix=f"{jobname}_wm_"))
+    cwd = os.getcwd()
+    ok = False
+    try:
+        os.chdir(str(scratch))
+        wm.write(jobname)                             # writes {jobname}-in.maegz + {jobname}.msj
+        os.chdir(cwd)
+        in_mae, msj = scratch / f"{jobname}-in.maegz", scratch / f"{jobname}.msj"
+        src = scratch / f"{jobname}_wm.maegz"
+        log = scratch / f"{jobname}_multisim.log"
+        ckpt = scratch / f"{jobname}-multisim_checkpoint"
+        last_tail = ""
+        max_tries = CFG.PHYS_WM_MAX_TRIES
+        _LAUNCHED_JOBS.add(jobname)                    # cancelled on Ctrl-C/kill if it does not finish
+        for attempt in range(1, max_tries + 1):
+            if attempt > 1 and ckpt.exists():
+                cmd = [f"{SCHRO}/watermap", "-JOBNAME", jobname, "-HOST", "localhost",
+                       "-RESTART", ckpt.name, "-WAIT"]
+            else:
+                cmd = [f"{SCHRO}/watermap", "-JOBNAME", jobname, "-HOST", "localhost",
+                       "-m", msj.name, in_mae.name, "-WAIT"]   # basenames: cwd is the scratch
+            # Launch through a bash login shell with a detached environment (see _clean_job_env), and
+            # with the input given by BASENAME from the scratch cwd. Both matter: a job that inherits the
+            # $SCHRODINGER/run session, or is handed an absolute input path, fails to stage its GCMC ligand
+            # companion to the sub-job and dies at stage 8.
+            try:
+                subprocess.run(["bash", "-lc", " ".join(shlex.quote(c) for c in cmd)],
+                               cwd=str(scratch), check=True, env=_clean_job_env())
+            except subprocess.CalledProcessError:
+                pass                                  # the driver may exit non-zero; the maegz is authoritative
+            if src.exists():
+                break
+            # WaterMap is stochastic (GCMC) and licence-contended: the SAME input often succeeds on a
+            # rerun. Retry up to 3 times, resuming from the checkpoint; licence shortfalls wait longer.
+            lines = log.read_text().splitlines() if log.exists() else []
+            last_tail = "\n".join(lines[-30:]) if lines else "(no multisim log)"
+            if attempt < max_tries:
+                wait = 240 if any(("not enough total licenses" in ln) or ("FAILED_PRECONDITION" in ln)
+                                  for ln in lines) else 60
+                _log(f"[watermap] {jobname}: attempt {attempt}/{max_tries} produced no output — "
+                     f"retrying in {wait} s")
+                time.sleep(wait)
+        if log.exists():
+            shutil.copy2(log, wd / f"{jobname}_multisim.log")
+        if not src.exists():
+            lines = log.read_text().splitlines() if log.exists() else []
+            key = next((ln.strip() for ln in reversed(lines)
+                        if any(t in ln for t in ("not enough total licenses", "not found", "ERROR:",
+                                                 "Error:", "Exception", "FAILED"))),
+                       "(cause not in log — see scratch)")
+            raise RuntimeError(f"WaterMap produced no {src.name}.\n"
+                               f"    cause  : {key}\n"
+                               f"    scratch: {scratch}  (kept for debug)\n"
+                               f"    log    :\n{last_tail}")
+        _LAUNCHED_JOBS.discard(jobname)                # server job has finished (WAIT returned with a maegz)
+        out = wd / f"{jobname}_wm.maegz"
+        shutil.copy2(src, out)
+        cluster = scratch / f"{jobname}-cluster.maegz"
+        if cluster.exists():
+            shutil.copy2(cluster, wd / cluster.name)
+        ok = True
+        return out
+    finally:
+        os.chdir(cwd)
+        if ok:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+def export_watermap_csv(wm_maegz: Path, csv_path: Path) -> int:
+    """Export the hydration sites to the CSV Step 07 reads: Site, Occupancy, dH, -TdS, dG, #HB(WW/PW/LW).
+
+    Property names are the actual keys on a completed *_wm.maegz site structure:
+      dG=r_watermap_deltaG  dH=r_watermap_deltaH  -TdS=r_watermap_-TdeltaS  occupancy=r_watermap_occupancy
+      H-bonds=r_watermap_hbond_ww/pw/lw  site=i_watermap_site_num  (dH + (-TdS) = dG holds).
+    A site is any atom carrying dG; atoms without it are skipped.
+    """
+    from schrodinger import structure
+    _DG = ("r_watermap_deltaG", "r_watermap_free_energy")
+    st = None
+    for s in structure.StructureReader(str(wm_maegz)):
+        if any(any(a.property.get(k) is not None for k in _DG) for a in s.atom):
+            st = s
+            break
+    if st is None:
         return 0
 
-    to_run = scan_jobs(job_dirs, md_dir)
+    def _p(a, *keys):
+        for k in keys:
+            v = a.property.get(k)
+            if v is not None:
+                return v
+        return None
 
-    """
-    Mask oomd (standalone only); the context manager restores it on exit. Both
-    SID and MM-GBSA run inside the guard. MM-GBSA runs even when no SID work is
-    pending, since it only needs completed MD jobs (-out.cms).
-    """
-    run_root = _SCRIPT_DIR / run_dir
-    with OomdGuard(active=not args.pipeline_mode):
-        if to_run:
-            process_jobs(to_run)
-        else:
-            _echo("SID analysis: nothing to do — every MD job is either already analysed or "
-                  "not finished simulating. Moving on to Prime MM-GBSA.")
-        _mmgbsa_status = run_mmgbsa_phase(md_dir, run_root, scratch_ok=_scratch_ok)
+    rows, n = [], 0
+    for a in st.atom:
+        dg = _p(a, *_DG)
+        if dg is None:
+            continue
+        n += 1
+        rows.append({
+            "Site": _p(a, "i_watermap_site_num", "i_watermap_sitenum") or n,
+            "Occupancy": _p(a, "r_watermap_occupancy", "r_watermap_density"),
+            "dH (kcal/mol)": _p(a, "r_watermap_deltaH", "r_watermap_potential_energy_relative"),
+            "-TdS (kcal/mol)": _p(a, "r_watermap_-TdeltaS", "r_watermap_entropy"),
+            "dG (kcal/mol)": dg,
+            "#HB(WW)": _p(a, "r_watermap_hbond_ww"),
+            "#HB(PW)": _p(a, "r_watermap_hbond_pw"),
+            "#HB(LW)": _p(a, "r_watermap_hbond_lw"),
+        })
+    with open(csv_path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()) if rows else ["Site"])
+        w.writeheader()
+        w.writerows(rows)
+    return n
 
-    _echo("")
-    cleanup_schrodinger_dirs(_scratch)
-    _echo(_SEP)
-    # Report the true outcome. SID always ran; MM-GBSA is complementary, so a
-    # deferred/failed MM-GBSA is a WARNING (distinct exit EXIT_WARN), not a hard
-    # error — the pipeline runner renders WARN and continues to Step 07 rather than
-    # printing a false PASS or aborting.
-    if _mmgbsa_status == "deferred":
-        _echo("Desmond SID post-processing complete; MM-GBSA DEFERRED (scratch not on "
-              "the working disk — re-run once no job is running and the server dir is "
-              "relocated).")
-        _echo(_SEP)
-        print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
-        return EXIT_WARN
-    if _mmgbsa_status == "warn":
-        _echo("Desmond SID post-processing complete; MM-GBSA completed with FAILURES "
-              "(see the per-rank cause above).")
-        _echo(_SEP)
-        print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
-        return EXIT_WARN
-    _echo("All available Desmond SID + MM-GBSA post-processing jobs completed successfully.")
-    _echo(_SEP)
-    print_elapsed(t0, "06_SID_Prime-MMGBSA_FAcDs.py")
-    return 0
+
+
+# =============================================================================
+# SECTION 15: MAIN
+# =============================================================================
+def _parse_args_merged():
+    ap = argparse.ArgumentParser(
+        description=f"{CFG.PROJECT_NAME} Step 06 — ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA",
+        epilog=("examples:\n"
+                "  production : python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/\n"
+                "  quick test : python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/ --test"),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("run_folder", nargs="?", default=None,
+                    help="Boltz-2_Run_* directory (auto-detect latest if omitted)")
+    ap.add_argument("--test", action="store_true",
+                    help=f"quick run: WaterMap {CFG.PHYS_TEST_WM_NS:g} ns · MD {CFG.PHYS_TEST_MD_NS:g} ns/{CFG.PHYS_TEST_MD_FRAMES} frames")
+    ap.add_argument("--md-ns", type=float, default=CFG.PHYS_MD_NS)
+    ap.add_argument("--md-frames", type=int, default=CFG.PHYS_MD_FRAMES)
+    ap.add_argument("--wm-ns", type=float, default=CFG.PHYS_WM_NS)
+    ap.add_argument("--lig-dist", type=float, default=CFG.PHYS_WM_SITE_A)
+    ap.add_argument("--stages", default=",".join(STAGES_ALL),
+                    help="subset of {merge,watermap,build,md}; SID+MM-GBSA are pipelined with md")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--pipeline-mode", action="store_true",
+                    help="called from 00_00_run_pipeline_FAcDs.sh; delegates oomd masking to the runner.")
+    a = ap.parse_args()
+    if a.test:
+        a.md_ns, a.md_frames, a.wm_ns = CFG.PHYS_TEST_MD_NS, CFG.PHYS_TEST_MD_FRAMES, CFG.PHYS_TEST_WM_NS
+    stages = [s.strip() for s in a.stages.split(",") if s.strip()]
+    unknown = [s for s in stages if s not in STAGES_ALL]
+    if unknown:
+        sys.exit(f"Unknown --stages token(s): {', '.join(unknown)}  (valid: {', '.join(STAGES_ALL)})")
+    a.stage_set = set(stages)
+    return a
+
+
+def _complex_label(entry: dict, ranked_map: dict) -> str:
+    row = ranked_map.get(entry["stem"], {})
+    return (f"R_{entry['rank']}  {row.get('Ligand_Name', '') or entry['stem']} × "
+            f"{row.get('Protein_Name', '')}").rstrip(" ×")
+
+
+def _phase_merge(entry: dict, ranked_map: dict, dirs: dict) -> None:
+    """Import the prepared complex + write the ESP charges → 01_Prepared_Proteins / 02_ESP_Charged_Complexes."""
+    rank, stem, prepared = entry["rank"], entry["stem"], entry["prepared"]
+    esp = find_esp(dirs["esp"], stem)
+    row = ranked_map.get(stem)
+    if row is None:
+        raise RuntimeError(f"no ranked-CSV row (job_name) matches handover stem {stem}")
+    base = _resnum(row.get("Mapped_Base", ""))
+    entry["esp"], entry["base"] = esp, base
+    entry["complex_mae"] = dirs["esp_cx"] / f"R_{rank}_{stem}_ESP_Complex.mae"
+    shutil.copy2(prepared, dirs["prot"] / prepared.name)
+    rep = merge_esp(prepared, esp, entry["complex_mae"], base)
+    _base_ok = rep["base_state"] == "HID"
+    _base_c = _C.OKGREEN if _base_ok else _C.WARNING
+    _echo(f"\n  {_C.BOLD}{_complex_label(entry, ranked_map)}{_C.ENDC}")
+    _echo(f"       {_C.OKGREEN}✔{_C.ENDC} imported     → {dirs['prot'].name}/")
+    _echo(f"       {_C.OKGREEN}✔{_C.ENDC} ESP merged   → {dirs['esp_cx'].name}/")
+    _echo(f"         ligand    {rep['lig_atoms']} atoms · charge {rep['lig_charge_sum']:+.3f} e")
+    _echo(f"         base      His{base} {_base_c}{rep['base_state']}{_C.ENDC}")
+    if not _base_ok:
+        _warn(f"catalytic base His{base} is {rep['base_state']}, not HID — geometry may be corrupted")
+
+
+def _phase_watermap(entry: dict, dirs: dict, a) -> None:
+    """WaterMap around the ESP complex → 03_WaterMaps (holo). 3 tries, then SKIP (never fails the complex)."""
+    rank = entry["rank"]
+    wm_dir = dirs["wm"] / f"watermap_R_{rank}"; wm_dir.mkdir(parents=True, exist_ok=True)
+    csv_out = dirs["wm"] / f"watermap_R_{rank}.csv"
+    if list(wm_dir.glob("*_wm.maegz")) and csv_out.exists():
+        _ok(f"[watermap] R_{rank} already done ({csv_out.name}) — skipping"); return
+    _log(f"[watermap] R_{rank} {a.wm_ns} ns (holo, {a.lig_dist} Å active site, S-OPLS/TIP4P), "
+         f"up to {CFG.PHYS_WM_MAX_TRIES} tries…")
+    try:
+        wmout = run_watermap(entry["complex_mae"], f"watermap_R_{rank}", wm_dir, a.wm_ns, a.lig_dist)
+        n = export_watermap_csv(wmout, csv_out)
+        _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
+    except Exception as exc:
+        _fail(f"[watermap] R_{rank} ✗ FAILED after 3 tries — SKIPPED, continuing. {str(exc).splitlines()[0]}")
+
+
+def _phase_build(entry: dict, dirs: dict) -> None:
+    """Desmond System Builder (minimise-volume) + write ESP into the .cms force field → 04_System_Builder."""
+    rank = entry["rank"]
+    sb_dir = dirs["sb"] / f"desmond_setup_R_{rank}"; sb_dir.mkdir(parents=True, exist_ok=True)
+    setup_cms = sb_dir / f"desmond_setup_R_{rank}-out.cms"
+    entry["setup_cms"] = setup_cms
+    if not entry["complex_mae"].exists():
+        raise RuntimeError(f"no ESP complex {entry['complex_mae'].name} — merge first")
+    if setup_cms.exists():
+        q = reapply_esp_to_cms(setup_cms, entry["esp"])
+        _ok(f"[build] R_{rank} ✔ already built — ESP re-verified (sum {q:+.3f} e)")
+    else:
+        _log(f"[build] R_{rank} System Builder (minimize-volume, {CFG.PHYS_SOLVENT_MODEL}, "
+             f"{CFG.PHYS_FORCEFIELD}, {CFG.PHYS_SALT_CONC_M} M {CFG.PHYS_SALT_POS_ION}{CFG.PHYS_SALT_NEG_ION})…")
+        setup_cms = run_build(entry["complex_mae"], f"desmond_setup_R_{rank}", sb_dir)
+        entry["setup_cms"] = setup_cms
+        q = reapply_esp_to_cms(setup_cms, entry["esp"])
+        _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
+
+
+def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
+    """Desmond MD (relax + production) → 05_MD_Simulations; unpack _trj/.ene. Returns the job dir for SID/MM-GBSA."""
+    rank = entry["rank"]
+    setup_cms = entry.get("setup_cms") or (dirs["sb"] / f"desmond_setup_R_{rank}" / f"desmond_setup_R_{rank}-out.cms")
+    md_dir = dirs["md"] / f"desmond_md_job_R_{rank}"; md_dir.mkdir(parents=True, exist_ok=True)
+    md_cms = md_dir / f"desmond_md_job_R_{rank}-out.cms"
+    if md_cms.exists():
+        _ok(f"[md] R_{rank} ✔ already done ({md_cms.name}) — skipping"); return md_dir
+    if not setup_cms.exists():
+        raise RuntimeError(f"no built system {setup_cms.name} — build first")
+    reapply_esp_to_cms(setup_cms, entry["esp"])          # re-verify ESP reached the FF before integrating
+    _log(f"[md] R_{rank} {a.md_ns} ns production ({a.md_frames} frames, "
+         f"NPT {CFG.MD_EQUIL_TARGET_T:g} K, relax + production)…")
+    run_md(setup_cms, f"desmond_md_job_R_{rank}", md_dir, a.md_ns, a.md_frames)
+    _ok(f"[md] R_{rank} ✔ {md_cms.name} — SID + MM-GBSA queued (CPU)")
+    return md_dir
+
+
+def main() -> int:
+    _utils_mod.install_console_rule_filter()   # collapse stacked separator rules
+    _install_job_cleanup()                     # Ctrl-C/kill → cancel the run's job-server jobs, no orphans
+    t0 = time.perf_counter()
+    a = _parse_args_merged()
+    stages = a.stage_set
+
+    if not os.path.isfile(SCHROD_RUN):
+        print(f"ERROR: Schrödinger 'run' not found at {SCHROD_RUN}."); return 1
+
+    run = (Path(a.run_folder).resolve() if a.run_folder
+           else (_SCRIPT_DIR / resolve_run_dir(None)).resolve())
+    out_root = Path(a.out) if a.out else run / "6_Physics_Validation"
+    dirs = {
+        "esp":    run / "5_TopN_and_Preparation" / "4_Ligand_ESP_Charges",
+        "prot":   out_root / "01_Prepared_Proteins",
+        "esp_cx": out_root / "02_ESP_Charged_Complexes",
+        "wm":     out_root / "03_WaterMaps",
+        "sb":     out_root / "04_System_Builder",
+        "md":     out_root / "05_MD_Simulations",
+    }
+    for d in (dirs["prot"], dirs["esp_cx"], dirs["wm"], dirs["sb"], dirs["md"]):
+        d.mkdir(parents=True, exist_ok=True)
+
+    _open_step_log(out_root)   # 6_Physics_Validation/00_SID_MMGBSA.log (colour-preserving, fresh)
+    print_script_banner("06_Physics_Validation_FAcDs.py",
+                        "ESP Physics — WaterMap → System Builder → MD → SID → MM-GBSA")
+
+    ranked = newest_ranked_csv(run)
+    ranked_map = ranked_rows_by_jobname(ranked)
+    entries = discover_handover(run)
+    _echo(f"  Run Name    : {run.name}")
+    _echo(f"  Ranked CSV  : {ranked.name}")
+    _echo(f"  Handover    : {len(entries)} complex(es) — ranks {[e['rank'] for e in entries]}")
+    _echo(f"  Output root : {out_root}")
+    _echo(f"  Settings    : MD {a.md_ns:g} ns/{a.md_frames} fr · WaterMap {a.wm_ns:g} ns · "
+          f"site {a.lig_dist:g} Å · stages {sorted(stages)}")
+
+    ok, failed = [], []
+
+    if "merge" in stages:
+        _section(f"Step 1/4 — Import + ESP merge  ({len(entries)} complex)")
+        for e in entries:
+            try:
+                _phase_merge(e, ranked_map, dirs)
+            except Exception as exc:
+                _fail(f"[merge] R_{e['rank']} FAILED — {str(exc).splitlines()[0]}")
+                e["_skip"] = True; failed.append((_complex_label(e, ranked_map), f"merge: {str(exc).splitlines()[0]}"))
+
+    if "watermap" in stages:
+        _section(f"Step 2/4 — WaterMap  ({a.wm_ns:g} ns)")
+        for e in entries:
+            if e.get("_skip"):
+                continue
+            _phase_watermap(e, dirs, a)
+
+    if "build" in stages:
+        _section("Step 3/4 — System Builder  (minimise-volume)")
+        for e in entries:
+            if e.get("_skip"):
+                continue
+            try:
+                _phase_build(e, dirs)
+            except Exception as exc:
+                _fail(f"[build] R_{e['rank']} FAILED — {str(exc).splitlines()[0]}")
+                e["_skip"] = True; failed.append((_complex_label(e, ranked_map), f"build: {str(exc).splitlines()[0]}"))
+
+    _mmgbsa_status = "ok"
+    if "md" in stages:
+        _section(f"Step 4/4 — MD  ({a.md_ns:g} ns)  +  pipelined SID / MM-GBSA (CPU)")
+        import queue as _queue
+        q: "_queue.Queue" = _queue.Queue()
+        worker_fail: list = []
+
+        def _worker() -> None:
+            # One SID+MM-GBSA at a time (CPU) while MD runs on the GPU; both idempotent.
+            while True:
+                jd = q.get()
+                if jd is None:
+                    q.task_done(); break
+                try:
+                    process_jobs(scan_jobs([jd], dirs["md"]))
+                    run_mmgbsa(jd, jd.name, _rank_of(jd.name))
+                except Exception as exc:
+                    worker_fail.append((jd.name, str(exc).splitlines()[0]))
+                q.task_done()
+
+        run_root = run
+        with OomdGuard(active=not a.pipeline_mode):
+            wt = threading.Thread(target=_worker, name="sid_mmgbsa", daemon=True); wt.start()
+            for e in entries:
+                if e.get("_skip"):
+                    continue
+                try:
+                    jd = _phase_md(e, dirs, a)
+                    if jd is not None:
+                        q.put(jd)                       # queue SID+MM-GBSA (background CPU)
+                        ok.append(_complex_label(e, ranked_map))
+                except Exception as exc:
+                    _fail(f"[md] R_{e['rank']} FAILED — {str(exc).splitlines()[0]}")
+                    failed.append((_complex_label(e, ranked_map), f"md: {str(exc).splitlines()[0]}"))
+            q.put(None); wt.join()                       # drain the SID+MM-GBSA queue
+
+            _section("Finalise — SID scan + MM-GBSA plots")
+            md_dir = dirs["md"]
+            job_dirs = sorted((d for d in md_dir.iterdir()
+                               if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
+                              key=_natural_rank)
+            if job_dirs:
+                process_jobs(scan_jobs(job_dirs, md_dir))       # any SID not yet done (idempotent)
+                _mmgbsa_status = run_mmgbsa_phase(md_dir, run_root)   # plots + combined (reads pre-computed CSVs)
+        for jn, why in worker_fail:
+            _warn(f"[sid/mmgbsa] {jn}: {why}")
+
+    _section(f"Summary — {len(ok)} ok, {len(failed)} failed  (stages {sorted(stages)})")
+    for t in ok:
+        _echo(f"  {_C.OKGREEN}✔{_C.ENDC} {t}")
+    for t, why in failed:
+        _echo(f"  {_C.FAIL}✗{_C.ENDC} {t}  →  {why}")
+    print_elapsed(t0, "06_Physics_Validation_FAcDs.py")
+    return EXIT_WARN if (failed or _mmgbsa_status == "warn") else 0
 
 
 if __name__ == "__main__":

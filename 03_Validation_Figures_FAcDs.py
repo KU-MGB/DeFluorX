@@ -31,14 +31,15 @@ Date   : 15 July 2026 <───────────────────
                     05_Ligand_Interactions_and_Chemical_Space/ 01_*.png … 08_*.png
                     06_PFAS_Scope_and_Synthesis/            01_*.png … 13_*.png
                     07_Diagnostic_and_MultiModel_Trends/    01_*.png … 09_*.png  (pocket-fit + consensus + competence)
-                  <Run>/3_Validation_Figures/03_Final_Validated_Master.csv
+                  <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
                   <Run>/3_Validation_Figures/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/05_Figure_Descriptions.txt
                   <Run>/3_Validation_Figures/00_Validation_Figures.log
   Upstream      : 02_Production_FAcDs.py → writes the master ranked CSV (incl. the pocket-fit
                   columns active_site_volume, ligand_volume, pocket_occupancy, fit_ratio,
                   ligand_fits) consumed here
-  Downstream    : 04_Dendrogram_FAcDs.py  → reads 03_Final_Validated_Master.csv
+  Downstream    : 04_Dendrogram_FAcDs.py  → reads 03_Figure_Enriched_Dataset.csv (figure columns
+                  only; the authoritative rank stays in 02's ranked CSV)
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -77,7 +78,7 @@ Purpose:
 -------------------------------------------------------------------------------
 Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     [Data — written to the folder root]
-    • 03_Final_Validated_Master.csv         <-- THE FINAL DATASET
+    • 03_Figure_Enriched_Dataset.csv        <-- ranked CSV + figure columns (PCA/UMAP/Pareto/conflict); NOT a rank source
     • 04_ACTION_Rescue_Hidden_Gems.csv      <-- MANUAL REVIEW LIST
     • 05_Figure_Descriptions.txt            <-- Per-figure description log
     • 00_Validation_Figures.log             <-- Detailed Execution Log
@@ -251,6 +252,7 @@ CFG        = _cfg_mod.CFG()
 ConsoleColours  = _utils_mod.ConsoleColours
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
+SEPARATOR_DASH  = _utils_mod.SEPARATOR_DASH
 _setup_logging  = _utils_mod.setup_logging
 _console_title  = _utils_mod.console_title
 _console_info   = _utils_mod.console_info
@@ -669,8 +671,9 @@ def calculate_pareto_fronts(df: pd.DataFrame, objectives: list, maximize: list) 
 
 def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.DataFrame, list[str]]:
     """
-    Prefer ranked CSV (has Scientific_Rank + Ranking_Score_Calc used by downstream steps).
-    Fall back to master CSV if ranked not yet generated.
+    Load the ranked CSV from Step 02 (has Scientific_Rank + the tier/MD_Selected columns the
+    figures key on). Ranked-only: no master-CSV fallback — a missing ranked CSV is a hard error,
+    since every figure axis and the enriched dataset depend on Scientific_Rank.
     """
     candidates = sorted(list(prod_dir.glob("*_Ranked_*.csv")))
     if not candidates: raise FileNotFoundError("No Ranked CSV found in Production folder.")
@@ -9412,27 +9415,42 @@ def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None
     global _xn__PROD_DIR
     _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"
 
-    _ok = 0
+    """
+    Render each panel, then report. The status line is collected (not printed inside the loop) so the
+    per-panel results can be shown together, sorted by destination folder — otherwise they print in
+    route order, interleaved with the variance-engine progress a panel emits while drawing, and read as
+    a random ladder. A panel can return WITHOUT drawing (Figure 1 does when its inputs are missing), so
+    success is judged by the PNG on disk, never by the absence of an exception — a count that cannot
+    fail is not a count.
+    """
+    _results = []                                                # (folder, name, status) — status: ok | empty | error
     for _folder, _name, _fn in _XN_EXT_ROUTES:
         _dest = out_dir / _folder
         _dest.mkdir(parents=True, exist_ok=True)
         try:
             _fn(df, _dest, reporter)
-            """
-            A panel can return WITHOUT drawing — Figure 1 does exactly that when its inputs are missing.
-            The count is therefore taken from the file on disk, not from the absence of an exception: a
-            success is recorded only when the PNG is actually present, so the tally cannot credit a figure
-            that was never written. A count that cannot fail is not a count.
-            """
-            if (_dest / f"{_name}.png").exists():
-                reporter.log(f"  ✔ Saved: {_folder}/{_name}.png")
-                _ok += 1
-            else:
-                reporter.log(f"  ! {_folder}/{_name}.png NOT written — the panel drew nothing.")
+            _results.append((_folder, _name, "ok" if (_dest / f"{_name}.png").exists() else "empty"))
         except Exception as _e:                                  # noqa: BLE001
-            reporter.log(f"  ! {_folder}/{_name} skipped: {type(_e).__name__}: {_e}")
+            reporter.log(f"    {ConsoleColours.WARNING}✗ {_folder}/{_name}: {type(_e).__name__}: {_e}{ConsoleColours.ENDC}")
+            _results.append((_folder, _name, "error"))
             plt.close("all")
-    reporter.log(f"  Extended analysis: {_ok}/{len(_XN_EXT_ROUTES)} figures written to the thematic folders")
+
+    reporter.log(SEPARATOR_DASH)
+    reporter.log("  Panels written to the thematic folders:")
+    _ok = 0
+    for _folder, _name, _status in sorted(_results):
+        if _status == "ok":
+            reporter.log(f"    {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} {_folder}/{_name}.png")
+            _ok += 1
+        elif _status == "empty":
+            reporter.log(f"    {ConsoleColours.WARNING}·{ConsoleColours.ENDC} {_folder}/{_name}.png  — panel drew nothing (inputs missing)")
+        else:
+            reporter.log(f"    {ConsoleColours.WARNING}✗{ConsoleColours.ENDC} {_folder}/{_name}  — skipped (see above)")
+    reporter.log(SEPARATOR_DASH)
+    _tally = f"{_ok}/{len(_XN_EXT_ROUTES)}"
+    _colour = ConsoleColours.OKGREEN if _ok == len(_XN_EXT_ROUTES) else ConsoleColours.WARNING
+    reporter.log(f"  {ConsoleColours.BOLD}Extended analysis complete{ConsoleColours.ENDC}  ·  "
+                 f"{_colour}{_tally} panels{ConsoleColours.ENDC} rendered")
 
 
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
@@ -10334,9 +10352,9 @@ def main():
         df = perform_advanced_ranking(df, features, out_dir, reporter)
         df = analyse_conflicts(df, out_dir, reporter)
 
-        final_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
-        df.to_csv(final_csv, index=False)
-        reporter.log(f"Final Validated Dataset Saved: {final_csv.resolve()}")
+        enriched_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
+        df.to_csv(enriched_csv, index=False)
+        reporter.log(f"Figure-Enriched Dataset Saved: {enriched_csv.resolve()}")
 
         # Figures are generated folder-by-folder in narrative order (01 → 07).
         # 01_Ramachandran — control backbone-geometry validation.

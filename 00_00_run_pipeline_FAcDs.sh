@@ -59,7 +59,7 @@ RUN_ID=""
 # Exit code a step may return to mean "completed, but a complementary part was
 # deferred/failed" (e.g. 06 when MM-GBSA is skipped or a Prime job fails). The
 # runner renders this as WARN and continues rather than a false PASS or a hard
-# abort. Keep in sync with EXIT_WARN in 06_SID_Prime-MMGBSA_FAcDs.py.
+# abort. Keep in sync with EXIT_WARN in 06_Physics_Validation_FAcDs.py.
 readonly WARN_EXIT_CODE=3
 
 # Terminal colours for the interactive prelude (mode/sudo prompts). Only emitted
@@ -136,10 +136,9 @@ else
         read -r -p "  Your choice [F/R, default=R]: " _mode_choice </dev/tty
         _mode_choice="${_mode_choice:-R}"
     else
-        echo "  No existing Boltz-2 run directories found."
-        echo "  A fresh run is required."
+        echo "  ${_C_RED}${_C_BOLD}No Boltz-2 run directory found — switching to FRESH mode (Step 02 will create one).${_C_RESET}"
         echo ""
-        _mode_choice="F"
+        _mode_choice="F"   # auto-fresh: do NOT prompt for Fresh/Resume, fall through to the next question
     fi
 
     case "${_mode_choice^^}" in
@@ -232,13 +231,13 @@ fi
 # long unattended runs); press Enter to skip and run in NORMAL mode (no sudo).
 #
 # Scripts/operations that use sudo (only when enabled):
-#   06_SID_Prime-MMGBSA_FAcDs.py              → systemctl stop / mask systemd-oomd
+#   06_Physics_Validation_FAcDs.py              → systemctl stop / mask systemd-oomd
 #   07_MD_QMMM_Defluorination_FAcDs.py → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
 echo ""
 echo "  ── Optional sudo: systemd-oomd masking for Steps 06-07 ──"
-echo "    Sudo is used only by: 06_SID_Prime-MMGBSA_FAcDs.py and 07_MD_QMMM_Defluorination_FAcDs.py"
+echo "    Sudo is used only by: 06_Physics_Validation_FAcDs.py and 07_MD_QMMM_Defluorination_FAcDs.py"
 echo "    (systemctl stop/mask/unmask/start systemd-oomd around the OOM-prone phase)."
 echo ""
 # Pressing Enter (empty) skips silently → NORMAL mode. A NON-EMPTY entry is treated as a
@@ -575,7 +574,7 @@ if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
 fi
 
 run_step "06  SID + Prime MM-GBSA post-processing (*_SID-out.eaf + MM-GBSA)" \
-    python 06_SID_Prime-MMGBSA_FAcDs.py "$RUN_ID" --pipeline-mode
+    python 06_Physics_Validation_FAcDs.py "$RUN_ID" --pipeline-mode
 
 run_step "07  MD thermodynamics + QM/MM engine" \
     python 07_MD_QMMM_Defluorination_FAcDs.py "$RUN_ID"
