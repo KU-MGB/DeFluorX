@@ -734,6 +734,38 @@ def _median_ci95(vals, n_boot: int = 1000, seed: int = 99):
     return float(np.percentile(meds, 2.5)), float(np.percentile(meds, 97.5))
 
 
+def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
+    """Step 1 (01_Analysis_Data): per active-site residue, list the query proteins whose alignment
+    failed to map it → 01_Active_Site_Residue_Mapping_Missed.csv. Written here so the whole
+    01_Analysis_Data set is finalised before the figure steps; the Step-3 coverage figure recomputes
+    its own bar counts from the same alignment table and no longer writes this CSV."""
+    import json as _json
+    _aln_csv = (out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data"
+                / "Active_Site_Alignments" / CFG.FILE_ALIGNMENT_STATS)
+    if not _aln_csv.exists():
+        return
+    _aa3 = {"ASP": "Asp", "ARG": "Arg", "HIS": "His", "TRP": "Trp", "TYR": "Tyr"}
+    _ref = CFG.REF_ACTIVE_SITE_MAP
+    _keys = [k for k in CFG.ACTIVE_SITE_ROLE_ORDER if k in _ref]
+    _adf = pd.read_csv(_aln_csv)
+    if "protein" in _adf.columns:   # controls (…_Control) are excluded — coverage reflects the query set
+        _adf = _adf[~_adf["protein"].astype(str).str.endswith("_Control")].drop_duplicates("protein")
+    _missed = {k: [] for k in _keys}
+    for _prot, _s in zip(_adf.get("protein", range(len(_adf))), _adf["active_site_mapping"].fillna("")):
+        try:
+            _m = _json.loads(_s)
+        except Exception:
+            continue
+        for k in _keys:
+            if _m.get(k) is None:
+                _missed[k].append(str(_prot))
+    _col = {k: f"{_aa3.get(_ref[k]['res'], _ref[k]['res'].title())}{_ref[k]['id']}_{k}" for k in _keys}
+    _maxlen = max((len(v) for v in _missed.values()), default=0)
+    pd.DataFrame({_col[k]: _missed[k] + [""] * (_maxlen - len(_missed[k])) for k in _keys}).to_csv(
+        _aux_dir(out_dir) / "01_Active_Site_Residue_Mapping_Missed.csv", index=False)
+    reporter.log("  ✔ Saved: 01_Analysis_Data/01_Active_Site_Residue_Mapping_Missed.csv")
+
+
 def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
     """Multi-objective ranking of complexes.
 
@@ -1557,12 +1589,8 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
 
         _counts01 = [_cnt01[k] for k in _keys]
         _pcts01 = [100.0 * c / _n01 if _n01 else 0.0 for c in _counts01]
-
-        _col_labels01 = {k: f"{_aa3.get(_ref[k]['res'], _ref[k]['res'].title())}{_ref[k]['id']}_{k}" for k in _keys}
-        _maxlen01 = max((len(v) for v in _missed01.values()), default=0)
-        pd.DataFrame({
-            _col_labels01[k]: _missed01[k] + [""] * (_maxlen01 - len(_missed01[k])) for k in _keys
-        }).to_csv(_aux_dir(out_dir) / "01_Active_Site_Residue_Mapping_Missed.csv", index=False)
+        # The companion 01_Active_Site_Residue_Mapping_Missed.csv is written up front in Step 1
+        # (write_residue_mapping_missed_csv); this figure only draws the coverage bars.
 
         fig, ax = plt.subplots(figsize=(11, 6))
         # Colour each bar by its functional role group (CFG single source) so residues
@@ -10387,6 +10415,13 @@ def main():
                 _xn__ensure_multimodel_variance_csv(prod_dir, out_dir, reporter)
             except Exception as _e:                               # noqa: BLE001
                 reporter.log(f"  ! Multi-model variance skipped: {type(_e).__name__}: {_e}")
+
+        reporter.log("")
+        reporter.log("  Active-Site Residue Mapping QC")
+        try:
+            write_residue_mapping_missed_csv(out_dir, reporter)
+        except Exception as _e:                                   # noqa: BLE001
+            reporter.log(f"  ! Residue-mapping QC skipped: {type(_e).__name__}: {_e}")
 
         # Figures are generated folder-by-folder in narrative order (02 → 08).
         # 02_Ramachandran — control backbone-geometry validation.

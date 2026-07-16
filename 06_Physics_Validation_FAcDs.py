@@ -1227,6 +1227,26 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     return merged
 
 
+def _await_mmgbsa_jobserver(job_prefix: str, poll: int = 30, max_wait: int = 172800) -> None:
+    """Block until no active job-server job whose name contains `job_prefix` remains (master + subjobs).
+
+    Belt-and-braces after the thermal_mmgbsa driver returns: it should already have waited, but if a
+    Schrödinger build submits the Prime batch to jobserverd and returns early, this keeps the caller
+    blocked so the strictly-sequential MD → SID → MM-GBSA order holds and two Prime batches never share
+    the scratch disk. Silent no-op if jsc is unavailable; bounded by max_wait so it can never hang forever.
+    """
+    _t0 = time.time()
+    while time.time() - _t0 < max_wait:
+        try:
+            out = subprocess.run([f"{SCHRO}/jsc", "list", "-j"], capture_output=True,
+                                 text=True, timeout=30).stdout
+        except Exception:
+            return
+        if not any(job_prefix in ln for ln in out.splitlines()):
+            return
+        time.sleep(poll)
+
+
 def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     """Run thermal_mmgbsa.py on <job>-out.cms inside its MD folder. Idempotent:
     returns the existing CSV when already computed. Returns the results CSV path
@@ -1351,6 +1371,10 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
                                 return None
                 else:
                     proc.wait()
+        # thermal_mmgbsa -NJOBS should block until its Prime subjobs finish; if a build submits them
+        # async and returns early, wait for the job server to drain this rank's batch before returning,
+        # so the next rank's MD never shares the scratch disk with a still-running Prime batch.
+        _await_mmgbsa_jobserver(f"{job_name}_mmgbsa")
         if proc.returncode != 0:
             _echo(f"  [Rank {rank}] MM-GBSA exited rc={proc.returncode} — see {log.name}.")
             _diag = _diagnose_mmgbsa_failure(job_dir, job_name)
