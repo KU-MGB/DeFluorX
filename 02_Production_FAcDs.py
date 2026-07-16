@@ -4760,7 +4760,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             hold elite only through its single most crystal-perfect pose, not every pose,
             without any substrate-class label. geometric_tier keeps the raw call.
             """
-            if data.get(CFG.COL_TIER) == "Tier_1A":
+            if data.get(CFG.COL_TIER) == CFG.TIER_ORDER[0]:
                 _mech_e = float(data.get("mechanistic_score_effective",
                                         data.get(CFG.COL_MECH_S, 0.0)) or 0.0)
                 _B_e    = float(data.get("catalytic_constellation_score", 0.0) or 0.0)
@@ -4769,7 +4769,8 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 _elite_ok = (_mech_e >= CFG.MECH_ELITE_HI) or \
                             (_mech_e >= CFG.MECH_ELITE_LO and _B_e >= CFG.MECH_ELITE_CONSTELLATION)
                 if not _elite_ok:
-                    data[CFG.COL_TIER] = "Tier_1B"
+                    _demoted_to = CFG.TIER_ORDER[1]
+                    data[CFG.COL_TIER] = _demoted_to
                     _fail = []
                     if _mech_e < CFG.MECH_ELITE_HI:
                         _fail.append(f"mech {_mech_e:.2f}<{CFG.MECH_ELITE_HI:g}")
@@ -4780,6 +4781,19 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     _etag = f"incomplete_machinery({'; '.join(_fail)})"
                     _eprev = data.get("elite_demotion", "none")
                     data["elite_demotion"] = _etag if _eprev in ("", "none") else f"{_eprev}+{_etag}"
+                    # Regenerate the verdict so a row demoted here does not still ship the Tier_1A
+                    # "Elite-Grade …" meaning and "| Tier: Tier_1A" Justification (the constellation and
+                    # pLDDT demotions already do this; this branch did not).
+                    _meaning = (f"Elite machinery incomplete ({'; '.join(_fail)}); the near-ideal SN2 pose "
+                                f"is not backed by complete catalytic machinery or a crystal-exact "
+                                f"constellation — demoted to {_demoted_to}.")
+                    data["scientific_meaning"] = _meaning
+                    data["Justification"] = generate_rich_justification(
+                        tier=_demoted_to, meaning=_meaning,
+                        constraint=data.get("constraint_check", "Pass"),
+                        aligned_ok=data.get("alignment_reliable", False),
+                        identity=data.get(CFG.COL_ID_PCT, 0.0)
+                    ) + f" | Tier: {_demoted_to} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
             """
             The tier ladder is size-agnostic: ligand_max_extent is computed and

@@ -2782,6 +2782,8 @@ class CFG:
         "r3u_Active_Site_RMSD", "sn2_backside_occlusion", "chem_penalty", "SN2_Trajectory_Deviation_A",
         "cross_interface_pae_mean", "catalytic_dist_A", "dist_nuc_base", "dist_base_acid",
         "dist_nuc_base_internal", "ligand_reach", "scissile_cf_bde",
+        # Also higher=worse — a missing value must fill to the SENTINEL (worst), not 0.0 (best):
+        "containment_penalty", "beta_f_count", "mainchain_clash_ratio", "mainchain_clash_count",
     )
     CONTROL_JOB_PREFIX: str = "0000000"
     COL_TIER:     str = "degrader_tier"

@@ -1149,9 +1149,19 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     def _shard_csv(i: int) -> Path:
         return shard_dir / f"{job_name}_mmgbsa_shard{i:03d}-prime-out.csv"
 
+    def _shard_complete(csv: Path, a: int, b: int) -> bool:
+        """Accept a resumed shard only if it parses AND has EXACTLY the row count _stamp_frames expects
+        for its frame range. thermal_mmgbsa writes non-atomically, so a kill mid-write leaves a truncated
+        shard that is size>0 but short; concatenating it stamps NaN frames (invisible in plots, dropped
+        wrongly by dg.drop on a NaN label). A short shard is re-run instead."""
+        try:
+            return len(pd.read_csv(csv)) == len(range(int(a), int(b), max(1, int(step))))
+        except Exception:
+            return False
+
     def _run_shard(i: int, a: int, b: int) -> None:
         csv = _shard_csv(i)
-        if _csv_nonempty(csv):                             # resume: shard already scored
+        if _csv_nonempty(csv) and _shard_complete(csv, a, b):   # resume: already scored AND complete
             with _lock:
                 done[i] = csv
             return
@@ -2050,7 +2060,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
-def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> str:
+def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> str:
     """Run + plot MM-GBSA for every completed MD job (idempotent).
 
     Returns a status the caller maps to the pipeline step result:
@@ -2089,7 +2099,9 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path) -> str:
         _echo(f"  {_RULE}")
         _echo(f"  Rank {rank}  ·  {job_name}   ({_i} of {len(job_dirs)})")
         _echo(f"  {_RULE}")
-        csv = run_mmgbsa(d, job_name, rank)
+        # plots_only (the Finalise pass) must NEVER re-run Prime: a rank whose MM-GBSA failed or timed
+        # out has no CSV, and run_mmgbsa would restart the multi-hour batch. Read the existing CSV only.
+        csv = _mmgbsa_csv(d, job_name) if plots_only else run_mmgbsa(d, job_name, rank)
         if csv is None:
             _failed += 1
             _echo(f"    ✘ MM-GBSA did not complete for Rank {rank} — see the messages above.")
@@ -3016,7 +3028,7 @@ def main() -> int:
                                if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
                               key=_natural_rank)
             if job_dirs:
-                _st = run_mmgbsa_phase(md_dir, run_root)               # idempotent: CSVs exist → plots only
+                _st = run_mmgbsa_phase(md_dir, run_root, plots_only=True)   # read existing CSVs → plots only, never re-run
                 if _st != "ok":
                     _mmgbsa_status = _st
 
