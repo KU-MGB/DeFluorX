@@ -12,7 +12,7 @@ Restricting both phases to the ~10 MD-ready complexes keeps this step cheap
 instead of converting/preparing the entire predicted library.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <────────────────────────────────────────────────────────
+Date   : 16 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 05_TopN_and_PDB_Preparation_FAcDs.py
@@ -1819,7 +1819,7 @@ def extract_chain_l_mol(pdb_path: Path):
 
 
 # =============================================================================
-# SECTION 6: MAIN EXECUTION
+# SECTION 6: FIGURE GENERATION ENGINE (PyMOL / PLIP / InteractionMap)
 # =============================================================================
 
 
@@ -4037,16 +4037,8 @@ def topn_extraction_phase(args):
 
 
 # =============================================================================
-# SECTION 7: PHASE 2 — FIGURE GENERATION (PyMOL / PLIP)
+# SECTION 7: MAIN EXECUTION
 # =============================================================================
-
-# -------------------------------------------------------------------------------
-# --- Figure engine: constants (sourced from CFG) ---
-# -------------------------------------------------------------------------------
-"""
-These are resolved lazily (inside run_figure_generation) so that CFG is
-available; they are module-level names for clarity.
-"""
 
 
 def main():

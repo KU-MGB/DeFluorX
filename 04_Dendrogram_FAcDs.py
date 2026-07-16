@@ -21,7 +21,7 @@ build an MSA (MAFFT / Clustal-Ω) and a maximum-likelihood or Bayesian tree
 tier classification produced here.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <─────────────────────────────────────────────────────────
+Date   : 16 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_FAcDs.py
@@ -462,9 +462,9 @@ def main():
     logger = _setup_logging(out_dir / "00_Dendrogram.log", "04_Dendrogram")
 
     # Locate the figure-enriched dataset produced by 03_Validation_Figures_FAcDs.py
-    # (written under 00_Analysis_Data; the root and rglob lookups cover a non-default out_dir layout).
+    # (written under 01_Analysis_Data; the root and rglob lookups cover a non-default out_dir layout).
     csv_candidates = (
-        sorted(val_dir.glob(f"00_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
+        sorted(val_dir.glob(f"01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
         sorted(val_dir.glob(CFG.FILE_VALIDATED_MASTER)) or
         sorted(val_dir.rglob(CFG.FILE_VALIDATED_MASTER))
     )

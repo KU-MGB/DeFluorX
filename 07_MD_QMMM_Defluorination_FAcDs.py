@@ -24,7 +24,7 @@ It combines four evidence streams into the master ranking + figures:
 All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <────────────────────────────────────────────────────────
+Date   : 16 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_MD_QMMM_Defluorination_FAcDs.py
@@ -47,14 +47,14 @@ Date   : 15 July 2026 <───────────────────
                     - <Name>_QSite_Reaction_Profile.png   (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
                     - <Name>_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
                     - <Name>_Machinery_Engagement.png     (per-residue distance to the warhead C + contact occupancy)
-                  <Run>/7_MD_Thermodynamics_Results/08_MD_Master_Ranking.csv
+                  <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
                      the Defluor_Propensity / Is_Defluorinating verdict)
-                  <Run>/7_MD_Thermodynamics_Results/12_Defluorination_Landscape.png
+                  <Run>/7_MD_Thermodynamics_Results/05_Defluorination_Landscape.png
                     (whole-story figure: persistence × QM/MM barrier × binding)
-                  <Run>/7_MD_Thermodynamics_Results/13_MMGBSA_Decomposition_AllRanks.png
-                  <Run>/7_MD_Thermodynamics_Results/14_Machinery_Engagement_AllRanks.png
+                  <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.png
+                  <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.png
                     (the same two reactive-pose figures, merged across candidates)
   Upstream      : 06_Physics_Validation_FAcDs.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
                                                     produces the MD trajectories, WaterMap CSVs,
@@ -119,7 +119,7 @@ Arguments:
      into ΔE‡ (min/mean/σ) and ΔE_rxn.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
- 11. Master aggregation: 08_MD_Master_Ranking.csv.
+ 11. Master aggregation: 01_MD_Master_Ranking.csv.
  12. NAC persistence: longest/mean continuous strict-NAC dwell converted to ns
      (real "time in position", not a frame-count fraction).
  13. NAC-conditioned MM-GBSA: ΔG_bind over the strict-NAC frames vs the global
@@ -1521,7 +1521,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "09_MD_Comparative_Analysis.png"
+    out_path = out_dir / "02_MD_Comparative_Analysis.png"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Comparative Dashboard Saved : {out_path.resolve()}")
@@ -1586,7 +1586,7 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     ax.tick_params(axis="y", labelrotation=0)
     plt.setp(ax.get_yticklabels(), fontsize=8)
 
-    out_path = out_dir / "11_Comparative_Residue_Engagement.png"
+    out_path = out_dir / "04_Comparative_Residue_Engagement.png"
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
@@ -1764,7 +1764,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "10_MD_Viability_Summary.png"
+    out_path = out_dir / "03_MD_Viability_Summary.png"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Viability Bar Chart Saved   : {out_path.resolve()}")
@@ -1839,7 +1839,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         ax.set_xlabel("Catalytic persistence — longest continuous strict-NAC dwell (ns)")
         ax.set_ylabel(ylab)
         clean_spines(ax)
-        out_path = out_dir / "12_Defluorination_Landscape.png"
+        out_path = out_dir / "05_Defluorination_Landscape.png"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
@@ -2096,7 +2096,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
                   borderpad=0.4, labelspacing=0.32, handlelength=1.4, handletextpad=0.5,
                   borderaxespad=0.4)
 
-        out_path = (out_dir / "13_MMGBSA_Decomposition_AllRanks.png" if merged
+        out_path = (out_dir / "06_MMGBSA_Decomposition_AllRanks.png" if merged
                     else rr[0]["dir"] / f"{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -2271,7 +2271,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                   borderpad=0.4, labelspacing=0.3, handlelength=1.5, handletextpad=0.5,
                   borderaxespad=0.4)
 
-        out_path = (out_dir / "14_Machinery_Engagement_AllRanks.png" if merged
+        out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
                     else rr[0]["dir"] / f"{rr[0]['job']}_Machinery_Engagement.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -5014,7 +5014,7 @@ def main():
                      f"dwell≥{CFG.DEFLUOR_DWELL_MIN_NS} ns, ΔE‡≤{CFG.DEFLUOR_BARRIER_MAX_KCAL}, "
                      f"ΔE_rxn≤{CFG.DEFLUOR_DERXN_MAX_KCAL} kcal/mol)")
 
-        master_csv_path = master_out_dir / "08_MD_Master_Ranking.csv"
+        master_csv_path = master_out_dir / "01_MD_Master_Ranking.csv"
         _utils_mod.atomic_write_csv(df_master, master_csv_path)
         console_info(f"Total Simulations Validated : {len(df_master)}")
         console_info(f"Master Ranking Sheet Saved  : {master_csv_path.resolve()}")

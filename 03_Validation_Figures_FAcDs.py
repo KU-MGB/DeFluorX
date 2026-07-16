@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, and pocket-fit / multi-mo
 diagnostics).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 15 July 2026 <────────────────────────────────────────────────────────
+Date   : 16 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py
@@ -24,13 +24,13 @@ Date   : 15 July 2026 <───────────────────
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
                   (Master CSV written by 02_Production_FAcDs.py; latest file selected)
   Writes        : <Run>/3_Validation_Figures/  (figures grouped folder-by-folder)
-                    01_Ramachandran/                        Ramachandran_*.png
-                    02_Dataset_and_Alignment_Overview/      01_*.png … 04_*.png
-                    03_AI_Confidence_Quality/               01_*.png … 03_*.png
-                    04_Catalytic_Geometry_and_Mechanism/    01_*.png … 10_*.png
-                    05_Ligand_Interactions_and_Chemical_Space/ 01_*.png … 08_*.png
-                    06_PFAS_Scope_and_Synthesis/            01_*.png … 13_*.png
-                    07_Diagnostic_and_MultiModel_Trends/    01_*.png … 09_*.png  (pocket-fit + consensus + competence)
+                    02_Ramachandran/                        Ramachandran_*.png
+                    03_Dataset_and_Alignment_Overview/      01_*.png … 04_*.png
+                    04_AI_Confidence_Quality/               01_*.png … 03_*.png
+                    05_Catalytic_Geometry_and_Mechanism/    01_*.png … 10_*.png
+                    06_Ligand_Interactions_and_Chemical_Space/ 01_*.png … 08_*.png
+                    07_PFAS_Scope_and_Synthesis/            01_*.png … 13_*.png
+                    08_Diagnostic_and_MultiModel_Trends/    01_*.png … 09_*.png  (pocket-fit + consensus + competence)
                   <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
                   <Run>/3_Validation_Figures/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/05_Figure_Descriptions.txt
@@ -84,21 +84,21 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 00_Validation_Figures.log             <-- Detailed Execution Log
 
     [Figures — grouped folder-by-folder; each folder numbered in narrative order]
-    ── 01_Ramachandran/ ── backbone-geometry validation of the controls
+    ── 02_Ramachandran/ ── backbone-geometry validation of the controls
     • Ramachandran_3R3U_Crystal.png · Ramachandran_{DeHa4,3R3U}_Control.png (+ _vs_Crystal)
 
-    ── 02_Dataset_and_Alignment_Overview/ ── dataset + sequence-alignment overview
+    ── 03_Dataset_and_Alignment_Overview/ ── dataset + sequence-alignment overview
     • 01_Active_Site_Residue_Mapping_Coverage.png  <-- Per-residue alignment coverage (+ MISSED.csv)
     • 02_Tier_Distribution.png                     <-- Catalytic tier counts + model-selection pie
     • 03_Alignment_Grades.png                      <-- Sequence-identity grades + KDE by tier
     • 04_Tier_Grade_Distribution.png               <-- Tier × alignment-grade cross-tabulation
 
-    ── 03_AI_Confidence_Quality/ ── Boltz-2 confidence metrics
+    ── 04_AI_Confidence_Quality/ ── Boltz-2 confidence metrics
     • 01_AI_Quality_Assessment.png                 <-- Boltz confidence boxes + pTM/ipTM panel
     • 02_AI_Quality_Space.png                      <-- {CFG.TIER_TOP} pTM/ipTM density + thumbnails
     • 03_pTM_vs_ipTM_by_Tier.png                   <-- pTM vs ipTM 2-D scatter by tier
 
-    ── 04_Catalytic_Geometry_and_Mechanism/ ── structural + mechanistic geometry
+    ── 05_Catalytic_Geometry_and_Mechanism/ ── structural + mechanistic geometry
     • 01_ActiveSite_RMSD_by_Tier.png               <-- Active-site RMSD vs reference control (median bar)
     • 02_Mech_State_CrossTab.png                   <-- Halide stabilisation × carboxylate clamp heatmap
     • 03_Mechanistic_Score_by_Tier.png             <-- Mechanistic score mean ± CI (median annotated)
@@ -112,7 +112,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 11_Criterion_B_ECDF_by_Tier.png             <-- the constellation score separates the tiers (ECDF)
     • 12_SN2_DeadEnd_Gate.png                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
 
-    ── 05_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
+    ── 06_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
     • 01_Molecular_Interaction_Profile.png         <-- Bond-type profile + fluorine engagement
     • 02_Interaction_Quality_Space.png             <-- {CFG.TIER_TOP} interaction density + thumbnails
     • 03_Fluorine_Engagement_by_Tier.png           <-- Fluorine engagement ratio box + trend line
@@ -122,7 +122,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 07_Chemical_Space_Landscape.png              <-- {CFG.TIER_TOP} KDE density + structure thumbnails
     • 08_Binding_Energetics.png                    <-- Binding-probability violin by tier
 
-    ── 06_PFAS_Scope_and_Synthesis/ ── multi-metric synthesis + publication assembly
+    ── 07_PFAS_Scope_and_Synthesis/ ── multi-metric synthesis + publication assembly
     • 01_Radar_TopHits.png                         <-- Radar: top-5 hits vs worst-tier baseline
     • 02_Radar_TierReps.png                        <-- Radar: one representative per tier
     • 03_Tier_Success_Rates.png                    <-- Tier % success: substrate vs inhibitor geometry
@@ -137,7 +137,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 12_PFAS_Size_Composition_Merged.png          <-- Per bin: outcome + degrader-tier stacked bars
     • 13_PFAS_Carbon_Confidence.png             <-- Catalytic competence vs MW per carbon group
 
-    ── 07_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
+    ── 08_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
     • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
     • 02_Pocket_Occupancy_by_Carbon_Number.png     <-- Whole-cavity coverage (violin) + 8-residue active-site coverage (box) per PFAS carbon number, both means trended
     • 03_MultiModel_Consensus_by_Tier.png          <-- Multi-model degrader consensus, mean ± CI by tier
@@ -307,7 +307,7 @@ Every hypothesis test drawn on a panel is registered here, and the family is cor
 end of the run, by Benjamini-Hochberg. Several tests are run across the same candidate set (one per
 panel), so an uncorrected p-value overstates significance: with a handful of tests at alpha = 0.05 a
 false positive is expected by chance alone. The panel keeps the RAW p (it is what that test
-measured); the corrected q-value for the whole family goes to 00_Analysis_Data/06_Statistical_Tests.csv,
+measured); the corrected q-value for the whole family goes to 01_Analysis_Data/06_Statistical_Tests.csv,
 which is the value to quote.
 """
 _PVALUES: list = []
@@ -576,7 +576,7 @@ def console_info(msg: str) -> None:
 def _aux_dir(out_dir: Path) -> Path:
     """Subfolder for the non-figure data deliverables (CSV/TXT), keeping the
     3_Validation_Figures root clutter-free — only figure folders + this one."""
-    d = out_dir / "00_Analysis_Data"
+    d = out_dir / "01_Analysis_Data"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -743,7 +743,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
     """
-    reporter.section("Step 1/6 — Multi-Objective Ranking (PCA & Pareto)  [analysis, no figure folder]")
+    reporter.section("Step 1/8 — 01_Analysis_Data · Multi-Objective Ranking (PCA & Pareto)")
 
     x = df[features].dropna()
     '''
@@ -871,7 +871,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     low confidence; decoys = high confidence but poor mechanism), logs the
     per-class counts, and saves the final validated master table to out_dir.
     """
-    reporter.section("Step 2/6 — Conflict & Opportunity Analysis  [analysis, no figure folder]")
+    reporter.section("Step 1/8 — 01_Analysis_Data · Conflict & Opportunity Analysis")
 
     """
     The classification is four mutually exclusive tests on two columns, so it is expressed as vector
@@ -1386,53 +1386,53 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
 
 
 _FIG_MAPPING = {
-        # ── 02_Dataset_and_Alignment_Overview ──
-        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "02_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
-        "Figure_02_Tier_Distribution.png": "02_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
-        "Figure_03_Alignment_Grades.png": "02_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
-        "Figure_04_Tier_Grade_Distribution.png": "02_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
-        # ── 03_AI_Confidence_Quality ──
-        "Figure_05a_AI_Quality_Assessment.png": "03_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
-        "Figure_05b_TT_AI_Quality_Space.png": "03_AI_Confidence_Quality/02_AI_Quality_Space.png",
-        "Figure_06_pTM_vs_ipTM_by_Tier.png": "03_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
-        # ── 04_Catalytic_Geometry_and_Mechanism ──
-        "Figure_07_ActiveSite_RMSD_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_11b_Mechanistic_Fingerprint.png": "04_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
-        "Figure_08_Feature_Correlations.png": "04_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "04_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "04_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "04_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "04_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
-        # ── 05_Ligand_Interactions_and_Chemical_Space ──
-        "Figure_14a_Molecular_Interaction_Profile.png": "05_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
-        "Figure_17b_Binding_Energetics.png": "05_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
-        "Figure_14b_TT_Interaction_Quality_Space.png": "05_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
-        "Figure_15_Fluorine_Engagement_by_Tier.png": "05_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
-        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "05_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
-        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "05_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "05_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "05_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
-        # ── 06_PFAS_Scope_and_Synthesis ──
-        "Figure_19a_Radar_TopHits.png": "06_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
-        "Figure_19b_Radar_TierReps.png": "06_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
-        "Figure_20a_Tier_Success_Rates.png": "06_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
-        "Figure_20b_Conf_SN2_Landscape.png": "06_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
-        "Figure_21_Conflict_Composition.png": "06_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
-        "Figure_22_Hidden_Gems_DeepDive.png": "06_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
-        "Figure_23_Category_Overlap_Euler.png": "06_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
-        "Figure_24a_Top25_Multitarget_Proteins.png": "06_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
-        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "06_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
-        "Figure_25_Sankey_Workflow.png": "06_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
-        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "06_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
-        "Figure_26b_PFAS_Size_Composition_Merged.png": "06_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
+        # ── 03_Dataset_and_Alignment_Overview ──
+        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
+        "Figure_02_Tier_Distribution.png": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
+        "Figure_03_Alignment_Grades.png": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
+        "Figure_04_Tier_Grade_Distribution.png": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
+        # ── 04_AI_Confidence_Quality ──
+        "Figure_05a_AI_Quality_Assessment.png": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
+        "Figure_05b_TT_AI_Quality_Space.png": "04_AI_Confidence_Quality/02_AI_Quality_Space.png",
+        "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
+        # ── 05_Catalytic_Geometry_and_Mechanism ──
+        "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
+        "Figure_11b_Mechanistic_Fingerprint.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
+        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
+        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
+        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
+        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
+        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
+        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
+        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
+        # ── 06_Ligand_Interactions_and_Chemical_Space ──
+        "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
+        "Figure_17b_Binding_Energetics.png": "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
+        "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
+        "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
+        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
+        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
+        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
+        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
+        # ── 07_PFAS_Scope_and_Synthesis ──
+        "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
+        "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
+        "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
+        "Figure_20b_Conf_SN2_Landscape.png": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
+        "Figure_21_Conflict_Composition.png": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
+        "Figure_22_Hidden_Gems_DeepDive.png": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
+        "Figure_23_Category_Overlap_Euler.png": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
+        "Figure_24a_Top25_Multitarget_Proteins.png": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
+        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
+        "Figure_25_Sankey_Workflow.png": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
+        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
+        "Figure_26b_PFAS_Size_Composition_Merged.png": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
+        "Figure_26c_PFAS_Carbon_Confidence.png": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
         # ── Two-criteria tier logic + dead-end feasibility (single 3-panel figure,
         #    filed in the catalytic folder) ──
-        "Figure_30a_Criterion_A_Gates_B.png": "04_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
-        "Figure_30b_Criterion_B_ECDF_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
-        "Figure_30c_SN2_DeadEnd_Gate.png": "04_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
+        "Figure_30a_Criterion_A_Gates_B.png": "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
+        "Figure_30b_Criterion_B_ECDF_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
+        "Figure_30c_SN2_DeadEnd_Gate.png": "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
 }
 
 
@@ -1473,27 +1473,21 @@ def generate_comprehensive_figures(df: pd.DataFrame, features: list[str], out_di
         return _generate_comprehensive_figures_impl(df, features, out_dir, reporter)
 
 
-def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
-    """Render the full publication figure suite (folders 02–07).
 
-    Builds the dataset/confidence/geometry/interaction/scope figures (02–06), the
-    diagnostic trends (07) and the two-criteria active-site/feasibility figures
-    (08). Each "Figure_NN_*.png" save is routed to its numbered folder by the
-    _redirect_savefig context manager wrapping this call (see
-    generate_comprehensive_figures). Side-effecting (writes PNGs); returns None.
-    """
-    reporter.section("Step 4/6 — Main Validation Figure Suite (Publication Quality)  [writes folders 02–06]")
+# ---------------------------------------------------------------------------
+# Shared helper hoisted from the figure suite (auto-contrast label colour).
+# ---------------------------------------------------------------------------
+def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
+    """Auto-contrast label colour for hex_bg (delegates to _auto_label_colour)."""
+    return _auto_label_colour(hex_bg, threshold)
 
-    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
 
-    # Typography and canvas: the pipeline's one definition (CFG → utils.apply_figure_style).
-    _utils_mod.apply_figure_style(CFG)
-
-    def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
-        """Auto-contrast label colour for hex_bg (delegates to _auto_label_colour)."""
-        return _auto_label_colour(hex_bg, threshold)
-
-    reporter.section("  Folder 02_Dataset_and_Alignment_Overview — coverage, tiers, alignment grades")
+# =============================================================================
+# STEP 3/8 — 03_Dataset_and_Alignment_Overview
+# =============================================================================
+def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
+    """Folder 03_Dataset_and_Alignment_Overview — coverage, tiers, alignment grades."""
+    reporter.section("Step 3/8 — 03_Dataset_and_Alignment_Overview · coverage, tiers, alignment grades")
     # --- Figure 01: Active-site residue mapping coverage across all variants ---
     """
     For each of the 8 canonical FAcD catalytic residues, the number of protein variants
@@ -2154,37 +2148,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             reporter.log(f"  ! Figure 04 skipped: {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
-    # ── Companion thumbnail setup (shared by Figs 04b, 12b, 13b, 17b) ─────────
-    # Source the PyMOL structure thumbnails from the MD-ready cohort (MD_Selected,
-    # SECTION 18) so only the ~9-10 complexes actually taken to MD are rendered —
-    # not all Tier_1A. Falls back to the top tier if the flag is absent (older CSV).
-    _md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
-    if _md_col in df.columns:
-        _sel = df[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])
-        _pa = df[_sel].reset_index(drop=True)
-    elif CFG.COL_TIER in df.columns:
-        _pa = df[df[CFG.COL_TIER] == CFG.TIER_TOP].reset_index(drop=True)
-    else:
-        _pa = pd.DataFrame()
-    # Rank-sort so the capped thumbnail set (CFG.VIS_MAX_THUMBNAILS) takes the best
-    # entries; Scientific_Rank ascending = best first, else Boltz confidence.
-    if not _pa.empty:
-        if "Scientific_Rank" in _pa.columns:
-            _pa = _pa.sort_values("Scientific_Rank", ascending=True).reset_index(drop=True)
-        elif CFG.COL_CONF in _pa.columns:
-            _pa = _pa.sort_values(CFG.COL_CONF, ascending=False).reset_index(drop=True)
-    _imgs = []
-    try:
-        if not _pa.empty:
-            _pred_jobs = out_dir.parent / "1_Boltz2_Production" / "4_Prediction_Jobs"
-            _thumb_dir = out_dir / "_tt_thumbnails"
-            _thumb_dir.mkdir(parents=True, exist_ok=True)
-            _imgs = _tt_render_all(_pa, _pred_jobs, _thumb_dir, reporter)
-    except Exception:
-        pass
-    _tt_has_imgs = not _pa.empty and sum(i is not None for i in _imgs) > 0
 
-    reporter.section("  Folder 03_AI_Confidence_Quality — Boltz-2 confidence + pTM/ipTM")
+
+# =============================================================================
+# STEP 4/8 — 04_AI_Confidence_Quality
+# =============================================================================
+def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs):
+    """Folder 04_AI_Confidence_Quality — Boltz-2 confidence + pTM/ipTM."""
+    reporter.section("Step 4/8 — 04_AI_Confidence_Quality · Boltz-2 confidence + pTM/ipTM")
     # --- Figure 05: AI Quality — Boltz Confidence (boxes) + pTM & ipTM (lines) overlaid ---
     """
     Single chart: box plots show per-tier distribution of Boltz Model Confidence (primary
@@ -2620,7 +2591,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             reporter.log(f"  ! Figure 06 skipped: {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
-    reporter.section("  Folder 04_Catalytic_Geometry_and_Mechanism — structural + mechanistic geometry")
+
+
+# =============================================================================
+# STEP 5/8 — 05_Catalytic_Geometry_and_Mechanism
+# =============================================================================
+def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs):
+    """Folder 05_Catalytic_Geometry_and_Mechanism — structural + mechanistic geometry."""
+    reporter.section("Step 5/8 — 05_Catalytic_Geometry_and_Mechanism · structural + mechanistic geometry")
     # --- Figure 07: Active Site RMSD vs. Reference Control by Tier ---
     # Column alias detection: try multiple plausible names before skipping
     _rmsd17_aliases = [
@@ -3872,29 +3850,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     if _tt_has_imgs:
         _fig_13b_tt_mechanistic(df, _pa, _imgs, out_dir, reporter)
 
-    # --- Shared Data Prep: Interaction Bond Columns (used by Fig 13 + 14) ---
-    int_cols_raw = {
-        "hydrogen_bond":      ("count_hydrogen_bond",      "counts_hydrogen_bond"),
-        "salt_bridge":        ("count_salt_bridge",        "counts_salt_bridge"),
-        "halogen_contact":    ("count_halogen_contact",    "counts_halogen_contact"),
-        "fluorine_polar":     ("count_fluorine_polar",     "counts_fluorine_polar"),
-        "fluorous_hydrophobic": ("count_fluorous_hydrophobic", "counts_fluorous_hydrophobic"),
-        "hydrophobic":        ("count_hydrophobic",        "counts_hydrophobic"),
-    }
-    int_label_map = {
-        "hydrogen_bond": "H-Bond",
-        "salt_bridge": "Salt Bridge",
-        "halogen_contact": "Halogen",
-        "fluorine_polar": "F-Polar",
-        "fluorous_hydrophobic": "F-Hydrophobic",
-        "hydrophobic": "Hydrophobic",
-    }
-    present_int_cols = {}
-    for key, (alias1, alias2) in int_cols_raw.items():
-        if alias1 in df.columns:
-            present_int_cols[key] = alias1
-        elif alias2 in df.columns:
-            present_int_cols[key] = alias2
 
     # ===========================================================================
     # Two-criteria tier logic + dead-end feasibility — one 3-panel figure written
@@ -4087,7 +4042,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
         reporter.log(f"  ! Two-criteria figure skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    reporter.section("  Folder 05_Ligand_Interactions_and_Chemical_Space — interaction profile + chemical space")
+
+
+# =============================================================================
+# STEP 6/8 — 06_Ligand_Interactions_and_Chemical_Space
+# =============================================================================
+def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs, int_label_map, present_int_cols):
+    """Folder 06_Ligand_Interactions_and_Chemical_Space — interaction profile + chemical space."""
+    reporter.section("Step 6/8 — 06_Ligand_Interactions_and_Chemical_Space · interaction profile + chemical space")
     # --- Figure 14: Molecular Interaction Profile — Stacked bars (bond types) + F-engagement line ---
     """
     Single chart, dual y-axis: stacked bars per tier show the total interaction count and
@@ -4815,7 +4777,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     if _tt_has_imgs:
         _fig_18b_tt_landscape(df, _pa, _imgs, out_dir, reporter)
 
-    reporter.section("  Folder 06_PFAS_Scope_and_Synthesis — synthesis + publication assembly")
+
+
+# =============================================================================
+# STEP 7/8 — 07_PFAS_Scope_and_Synthesis
+# =============================================================================
+def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
+    """Folder 07_PFAS_Scope_and_Synthesis — synthesis + publication assembly."""
+    reporter.section("Step 7/8 — 07_PFAS_Scope_and_Synthesis · synthesis + publication assembly")
     # --- Figure 19: Candidate Radar: 18a (top-5 hits) + 18b (one per tier) ---
     _radar_labels = {
         CFG.COL_CONF:   "AI Conf.",
@@ -5775,17 +5744,85 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _fig25_pfas_size(df, out_dir, reporter)
 
     '''
-    07_Diagnostic_and_MultiModel_Trends is the last on-disk folder, generated here
+    08_Diagnostic_and_MultiModel_Trends is the last on-disk folder, generated here
     after folder 06 so the folders are written in ascending order (01 → 07) and the
     run log reads folder-by-folder. Its filenames are not in the rename map, so the
     active savefig redirect passes them straight through to the diagnostic folder.
     '''
-    _diag_dir = out_dir / "07_Diagnostic_and_MultiModel_Trends"
+    _diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
     _diag_dir.mkdir(parents=True, exist_ok=True)
     generate_additional_figures(df, _diag_dir, reporter)
 
     # The extended-analysis panels are filed into the thematic subfolders (see _XN_EXT_ROUTES).
     generate_extended_figures(df, out_dir, reporter)
+
+
+def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
+    """Orchestrate the publication figure suite (folders 03-07): build the shared prologue
+    (tier order, companion thumbnails, interaction-column maps) once, then render each folder.
+    Runs inside the _redirect_savefig context opened by generate_comprehensive_figures."""
+    _utils_mod.apply_figure_style(CFG)
+    existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
+    # ── Companion thumbnail setup (shared by Figs 04b, 12b, 13b, 17b) ─────────
+    # Source the PyMOL structure thumbnails from the MD-ready cohort (MD_Selected,
+    # SECTION 18) so only the ~9-10 complexes actually taken to MD are rendered —
+    # not all Tier_1A. Falls back to the top tier if the flag is absent (older CSV).
+    _md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
+    if _md_col in df.columns:
+        _sel = df[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])
+        _pa = df[_sel].reset_index(drop=True)
+    elif CFG.COL_TIER in df.columns:
+        _pa = df[df[CFG.COL_TIER] == CFG.TIER_TOP].reset_index(drop=True)
+    else:
+        _pa = pd.DataFrame()
+    # Rank-sort so the capped thumbnail set (CFG.VIS_MAX_THUMBNAILS) takes the best
+    # entries; Scientific_Rank ascending = best first, else Boltz confidence.
+    if not _pa.empty:
+        if "Scientific_Rank" in _pa.columns:
+            _pa = _pa.sort_values("Scientific_Rank", ascending=True).reset_index(drop=True)
+        elif CFG.COL_CONF in _pa.columns:
+            _pa = _pa.sort_values(CFG.COL_CONF, ascending=False).reset_index(drop=True)
+    _imgs = []
+    try:
+        if not _pa.empty:
+            _pred_jobs = out_dir.parent / "1_Boltz2_Production" / "4_Prediction_Jobs"
+            _thumb_dir = out_dir / "_tt_thumbnails"
+            _thumb_dir.mkdir(parents=True, exist_ok=True)
+            _imgs = _tt_render_all(_pa, _pred_jobs, _thumb_dir, reporter)
+    except Exception:
+        pass
+    _tt_has_imgs = not _pa.empty and sum(i is not None for i in _imgs) > 0
+    # --- Shared Data Prep: Interaction Bond Columns (used by Fig 13 + 14) ---
+    int_cols_raw = {
+        "hydrogen_bond":      ("count_hydrogen_bond",      "counts_hydrogen_bond"),
+        "salt_bridge":        ("count_salt_bridge",        "counts_salt_bridge"),
+        "halogen_contact":    ("count_halogen_contact",    "counts_halogen_contact"),
+        "fluorine_polar":     ("count_fluorine_polar",     "counts_fluorine_polar"),
+        "fluorous_hydrophobic": ("count_fluorous_hydrophobic", "counts_fluorous_hydrophobic"),
+        "hydrophobic":        ("count_hydrophobic",        "counts_hydrophobic"),
+    }
+    int_label_map = {
+        "hydrogen_bond": "H-Bond",
+        "salt_bridge": "Salt Bridge",
+        "halogen_contact": "Halogen",
+        "fluorine_polar": "F-Polar",
+        "fluorous_hydrophobic": "F-Hydrophobic",
+        "hydrophobic": "Hydrophobic",
+    }
+    present_int_cols = {}
+    for key, (alias1, alias2) in int_cols_raw.items():
+        if alias1 in df.columns:
+            present_int_cols[key] = alias1
+        elif alias2 in df.columns:
+            present_int_cols[key] = alias2
+    _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers)
+    _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs)
+    _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs)
+    _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs, int_label_map, present_int_cols)
+    _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers)
+
+
+
 
 
     # savefig routing is installed/restored by the _redirect_savefig context
@@ -6908,7 +6945,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                 reporter: ReportManager) -> None:
     """
     Pocket-fit and multi-model diagnostic figures written to
-    <Run>/3_Validation_Figures/07_Diagnostic_and_MultiModel_Trends.
+    <Run>/3_Validation_Figures/08_Diagnostic_and_MultiModel_Trends.
 
     These panels expose the steric and consensus signals that the main publication
     suite does not surface directly: whether each ligand physically fits its pocket
@@ -6923,7 +6960,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     skips only that figure, never the whole folder.
     """
     from scipy import stats as _sc_stats
-    reporter.section("Step 5/6 — Diagnostic & Multi-Model Trend Figures  [writes folder 07]")
+    reporter.section("Step 8/8 — 08_Diagnostic_and_MultiModel_Trends · diagnostic + multi-model trends")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # CFG-sourced colours (single source of truth — config §8).
@@ -7772,7 +7809,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # ===============================================================================
-# SECTION 4B: EXTENDED ANALYSIS FIGURES
+# SECTION 4E: EXTENDED ANALYSIS FIGURES
 # ===============================================================================
 """
 Eight panels merged in from the two more_Plots prototypes, each taken from whichever prototype drew
@@ -8369,7 +8406,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     """Return the per-model variance CSV, computing it if absent.
 
     It READS the model CIFs from the production folder (02's output) and WRITES the CSV into 03's own
-    00_Analysis_Data. A step writes its artefacts into its own folder: 1_Boltz2_Production is 02's
+    01_Analysis_Data. A step writes its artefacts into its own folder: 1_Boltz2_Production is 02's
     record of what it produced, and 03 dropping a derived table into it would leave an analysis
     product filed as though the production run had made it.
 
@@ -9389,18 +9426,18 @@ Each extended panel is filed with the figures it belongs with, not in a holding 
 the phylogeny sits with the cohort overview, the two size panels with the PFAS scope, and so on. The
 number continues the destination folder's existing sequence, so nothing already numbered moves.
 
-The numbering is APPENDED rather than gap-filled. 06_PFAS_Scope_and_Synthesis is missing a 06 — a
+The numbering is APPENDED rather than gap-filled. 07_PFAS_Scope_and_Synthesis is missing a 06 — a
 retired figure — and reusing that slot would silently point an old citation at a new figure.
 """
 _XN_EXT_ROUTES = [
     # (destination subfolder,                     filename written by the panel,          panel)
-    ("04_Catalytic_Geometry_and_Mechanism",       "13_Geometry_and_Uncertainty",          _xn__fig_01C_geometry_and_uncertainty),
-    ("05_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics",           _xo__fig_02A_binding_affinity_metrics),
-    ("02_Dataset_and_Alignment_Overview",         "05_Evolutionary_Phylogeny",             _xo__fig_04A_evolutionary_phylogeny),
-    ("07_Diagnostic_and_MultiModel_Trends",       "09_Pillar_Divergence_by_Tier",          _xn__fig_05a_pillar_divergence_modified),
-    ("04_Catalytic_Geometry_and_Mechanism",       "14_Mechanistic_Breakdown_by_Tier",      _xo__fig_05b_mechanistic_size_modified),
-    ("06_PFAS_Scope_and_Synthesis",               "14_Chain_Length_by_Tier",               _xo__fig_05c_size_by_tier_modified),
-    ("06_PFAS_Scope_and_Synthesis",               "15_Tier1A_Cross_Ligand_Heatmap",        _xn_figure_06a),
+    ("05_Catalytic_Geometry_and_Mechanism",       "13_Geometry_and_Uncertainty",          _xn__fig_01C_geometry_and_uncertainty),
+    ("06_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics",           _xo__fig_02A_binding_affinity_metrics),
+    ("03_Dataset_and_Alignment_Overview",         "05_Evolutionary_Phylogeny",             _xo__fig_04A_evolutionary_phylogeny),
+    ("08_Diagnostic_and_MultiModel_Trends",       "09_Pillar_Divergence_by_Tier",          _xn__fig_05a_pillar_divergence_modified),
+    ("05_Catalytic_Geometry_and_Mechanism",       "14_Mechanistic_Breakdown_by_Tier",      _xo__fig_05b_mechanistic_size_modified),
+    ("07_PFAS_Scope_and_Synthesis",               "14_Chain_Length_by_Tier",               _xo__fig_05c_size_by_tier_modified),
+    ("07_PFAS_Scope_and_Synthesis",               "15_Tier1A_Cross_Ligand_Heatmap",        _xn_figure_06a),
 ]
 
 
@@ -9410,7 +9447,7 @@ def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None
     A failure in one panel is logged and the rest still render: losing six figures because the
     seventh hit a missing column would be a poor trade.
     """
-    reporter.section("Step 6/6 — Extended Analysis Figures  [merged into folders 02, 04, 05, 06, 07]")
+    reporter.section("Supplementary — Extended Analysis Figures  [routed into folders 03, 05, 06, 07, 08]")
 
     global _xn__PROD_DIR
     _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"
@@ -9458,12 +9495,12 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
     Backbone-geometry validation of the control predictions against the 3R3U crystal.
     Renders the crystal Ramachandran plot plus, for each Boltz-2 control (DeHa4 and 3R3U
     sequences), a standalone plot and a crystal-overlay comparison. All plots are written
-    to <Run>/3_Validation_Figures/01_Ramachandran. The 3R3U crystal PDB is read from the
+    to <Run>/3_Validation_Figures/02_Ramachandran. The 3R3U crystal PDB is read from the
     input folder produced by 02_Production; nothing is downloaded here.
     """
     import gemmi
-    reporter.section("Step 3/6 — Ramachandran Backbone-Geometry Validation  [writes folder 01]")
-    # `out_dir` is already the 01_Ramachandran folder (created in main); use it directly.
+    reporter.section("Step 2/8 — 02_Ramachandran · Backbone-Geometry Validation")
+    # `out_dir` is already the 02_Ramachandran folder (created in main); use it directly.
     rama_dir = out_dir
     rama_dir.mkdir(parents=True, exist_ok=True)
 
@@ -9536,13 +9573,13 @@ def write_figure_descriptions(out_dir: Path):
     Writes a human-readable log file describing every figure produced by this pipeline.
 
     Entries follow the on-disk folder-by-folder layout:
-      01_Ramachandran/                          backbone-geometry validation of controls
-      02_Dataset_and_Alignment_Overview/        dataset + sequence-alignment overview
-      03_AI_Confidence_Quality/                 Boltz-2 confidence metrics
-      04_Catalytic_Geometry_and_Mechanism/      structural + mechanistic geometry
-      05_Ligand_Interactions_and_Chemical_Space/ interaction profile + chemical space
-      06_PFAS_Scope_and_Synthesis/              multi-metric synthesis + publication assembly
-      07_Diagnostic_and_MultiModel_Trends/      pocket-fit + multi-model consensus
+      02_Ramachandran/                          backbone-geometry validation of controls
+      03_Dataset_and_Alignment_Overview/        dataset + sequence-alignment overview
+      04_AI_Confidence_Quality/                 Boltz-2 confidence metrics
+      05_Catalytic_Geometry_and_Mechanism/      structural + mechanistic geometry
+      06_Ligand_Interactions_and_Chemical_Space/ interaction profile + chemical space
+      07_PFAS_Scope_and_Synthesis/              multi-metric synthesis + publication assembly
+      08_Diagnostic_and_MultiModel_Trends/      pocket-fit + multi-model consensus
     """
     lines = [
         "=" * 80,
@@ -9996,7 +10033,7 @@ def write_figure_descriptions(out_dir: Path):
         "            confirming the predictions reproduce native secondary structure.",
         "",
         "=" * 80,
-        "DIAGNOSTIC & MULTI-MODEL TRENDS (subfolder: 07_Diagnostic_and_MultiModel_Trends/)",
+        "DIAGNOSTIC & MULTI-MODEL TRENDS (subfolder: 08_Diagnostic_and_MultiModel_Trends/)",
         "=" * 80,
         "",
         "-" * 80,
@@ -10089,46 +10126,46 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "04_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
+        "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
         "  Title   : Reaction geometry with multi-model uncertainty",
         "  Look for: nucleophile distance and SN2 angle per tier, with the spread across the",
         "            diffusion samples — a tight tier is a reproducible one.",
         "",
         "-" * 80,
-        "05_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
         "  Title   : Binding affinity by tier",
         "  Look for: affinity does NOT order the tiers — a high-affinity binder that presents the",
         "            wrong face to Asp110 is not a degrader. This figure is the evidence.",
         "",
         "-" * 80,
-        "02_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
+        "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
         "  Title   : Evolutionary phylogeny of the cohort",
         "  Look for: whether the degrader tiers cluster phylogenetically or are scattered across",
         "            the tree. Scattered = catalytic competence is not a clade property.",
         "",
         "-" * 80,
-        "07_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
+        "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
         "  Title   : Divergence of the scoring pillars across tiers",
         "  Look for: which pillar actually separates the tiers, and which merely follows.",
         "",
         "-" * 80,
-        "04_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
+        "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
         "  Title   : Mechanistic components per tier",
         "  Look for: the component that collapses first as the tier falls.",
         "",
         "-" * 80,
-        "06_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
+        "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
         "  Title   : PFAS chain length by tier",
         "  Look for: the elite tiers are short-chain. FAcD is a small-substrate hydrolase.",
         "",
         "-" * 80,
-        "06_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
+        "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
         "  Title   : Tier_1A proteins x ligands",
         "  Look for: whether an elite protein is elite for ONE ligand or several — a protein that",
         "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
         "",
         "-" * 80,
-        "04_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
+        "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
         "  Title   : Mechanistic fingerprint — per-tier catalytic feature profile",
         "  Type    : Radar / spider chart; one feature spoke per axis,",
         "            one tier-coloured filled polygon across them",
@@ -10142,7 +10179,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Complements the scalar Figure 11 (mech-score mean ± CI).",
         "",
         "-" * 80,
-        "05_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
         "  Title   : Binding energetics — binding probability by tier",
         "  Type    : Binding-probability violin per tier (red median bar)",
         "  Look for: how binding probability (sigmoid of interaction density, cross-PAE and",
@@ -10153,9 +10190,9 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "04_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
-        "04_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
-        "04_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
+        "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
+        "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
+        "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
         "  Title   : Two-criteria tier logic + dead-end feasibility (single 3-panel figure)",
         "  Panel a : Criterion A (active-site integrity, fraction of the 8 catalytic residues correctly",
         "            placed) vs Criterion B (catalytic constellation score) violins per A-bin, with the",
@@ -10175,41 +10212,41 @@ def write_figure_descriptions(out_dir: Path):
     # path so the description log matches the on-disk 7-folder layout. Entries stay
     # in thematic reading order; each now carries its folder path.
     _fig_paths = {
-        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "02_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
-        "Figure_02_Tier_Distribution.png": "02_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
-        "Figure_03_Alignment_Grades.png": "02_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
-        "Figure_04_Tier_Grade_Distribution.png": "02_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
-        "Figure_05a_AI_Quality_Assessment.png": "03_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
-        "Figure_05b_TT_AI_Quality_Space.png": "03_AI_Confidence_Quality/02_AI_Quality_Space.png",
-        "Figure_06_pTM_vs_ipTM_by_Tier.png": "03_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
-        "Figure_07_ActiveSite_RMSD_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_08_Feature_Correlations.png": "04_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "04_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "04_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "04_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "04_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "04_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
-        "Figure_14a_Molecular_Interaction_Profile.png": "05_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
-        "Figure_14b_TT_Interaction_Quality_Space.png": "05_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
-        "Figure_15_Fluorine_Engagement_by_Tier.png": "05_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
-        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "05_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
-        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "05_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "05_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "05_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
-        "Figure_19a_Radar_TopHits.png": "06_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
-        "Figure_19b_Radar_TierReps.png": "06_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
-        "Figure_20a_Tier_Success_Rates.png": "06_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
-        "Figure_20b_Conf_SN2_Landscape.png": "06_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
-        "Figure_21_Conflict_Composition.png": "06_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
-        "Figure_22_Hidden_Gems_DeepDive.png": "06_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
-        "Figure_23_Category_Overlap_Euler.png": "06_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
-        "Figure_24a_Top25_Multitarget_Proteins.png": "06_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
-        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "06_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
-        "Figure_25_Sankey_Workflow.png": "06_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
-        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "06_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
-        "Figure_26b_PFAS_Size_Composition_Merged.png": "06_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence.png": "06_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
+        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
+        "Figure_02_Tier_Distribution.png": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
+        "Figure_03_Alignment_Grades.png": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
+        "Figure_04_Tier_Grade_Distribution.png": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
+        "Figure_05a_AI_Quality_Assessment.png": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
+        "Figure_05b_TT_AI_Quality_Space.png": "04_AI_Confidence_Quality/02_AI_Quality_Space.png",
+        "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
+        "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
+        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
+        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
+        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
+        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
+        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
+        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
+        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
+        "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
+        "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
+        "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
+        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
+        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
+        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
+        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
+        "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
+        "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
+        "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
+        "Figure_20b_Conf_SN2_Landscape.png": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
+        "Figure_21_Conflict_Composition.png": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
+        "Figure_22_Hidden_Gems_DeepDive.png": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
+        "Figure_23_Category_Overlap_Euler.png": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
+        "Figure_24a_Top25_Multitarget_Proteins.png": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
+        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
+        "Figure_25_Sankey_Workflow.png": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
+        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
+        "Figure_26b_PFAS_Size_Composition_Merged.png": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
+        "Figure_26c_PFAS_Carbon_Confidence.png": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
         "02_Pocket_Occupancy_by_Ligand.png": "02_Pocket_Occupancy_by_Carbon_Number.png",
     }
     _txt = "\n".join(lines)
@@ -10224,25 +10261,25 @@ def write_figure_descriptions(out_dir: Path):
     """
     _txt += "\n" + "\n".join([
         "=" * 80,
-        "BACKBONE GEOMETRY VALIDATION (subfolder: 01_Ramachandran/)",
+        "BACKBONE GEOMETRY VALIDATION (subfolder: 02_Ramachandran/)",
         "=" * 80,
         "",
         "-" * 80,
-        "01_Ramachandran/Ramachandran_3R3U_Crystal.png",
+        "02_Ramachandran/Ramachandran_3R3U_Crystal.png",
         "  Title   : Ramachandran plot — 3R3U crystal structure",
         "  Type    : phi/psi scatter over the favoured/allowed contour map",
         "  Look for: the reference. Every Boltz-2 prediction is judged against this distribution.",
         "",
         "-" * 80,
-        "01_Ramachandran/Ramachandran_DeHa4_Control.png",
-        "01_Ramachandran/Ramachandran_3R3U_Control.png",
+        "02_Ramachandran/Ramachandran_DeHa4_Control.png",
+        "02_Ramachandran/Ramachandran_3R3U_Control.png",
         "  Title   : Ramachandran plot — Boltz-2 control prediction (DeHa4 / 3R3U sequence)",
         "  Look for: outliers in the disallowed regions. A prediction with good ipTM but a strained",
         "            backbone has bought its confidence with geometry the protein cannot hold.",
         "",
         "-" * 80,
-        "01_Ramachandran/Ramachandran_DeHa4_vs_Crystal.png",
-        "01_Ramachandran/Ramachandran_3R3U_vs_Crystal.png",
+        "02_Ramachandran/Ramachandran_DeHa4_vs_Crystal.png",
+        "02_Ramachandran/Ramachandran_3R3U_vs_Crystal.png",
         "  Title   : Prediction overlaid on the crystal",
         "  Look for: whether the predicted backbone occupies the SAME basins as the crystal, not",
         "            merely allowed ones. This is the check that Boltz-2 folded the enzyme rather",
@@ -10304,14 +10341,14 @@ def main():
     parser.add_argument("--no-variance", action="store_true",
                         help="Skip building the per-model variance CSV. By default it is built once "
                              "(re-parsing the 5 model CIFs per complex) and cached in "
-                             "00_Analysis_Data; later runs reuse it. Skipping it costs the geometry "
+                             "01_Analysis_Data; later runs reuse it. Skipping it costs the geometry "
                              "figure its two inter-model uncertainty panels.")
     args = parser.parse_args()
 
     """
     The variance CSV is BUILT BY DEFAULT, once. It is the only artefact behind the uncertainty panels,
     and a figure that quietly omits half of itself on every run is worse than a run that pays the cost
-    once: the build re-parses five CIFs per complex, but the result is cached in 00_Analysis_Data, so
+    once: the build re-parses five CIFs per complex, but the result is cached in 01_Analysis_Data, so
     only the first run after a fresh production pays for it.
     """
     global _ALLOW_VARIANCE_COMPUTE
@@ -10333,8 +10370,8 @@ def main():
     out_dir = run_ttth / "3_Validation_Figures"
 
     # Create subdirectories (seven-folder structure, 01–07)
-    rama_dir = out_dir / "01_Ramachandran"
-    diag_dir = out_dir / "07_Diagnostic_and_MultiModel_Trends"
+    rama_dir = out_dir / "02_Ramachandran"
+    diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     rama_dir.mkdir(parents=True, exist_ok=True)
@@ -10357,7 +10394,7 @@ def main():
         reporter.log(f"Figure-Enriched Dataset Saved: {enriched_csv.resolve()}")
 
         # Figures are generated folder-by-folder in narrative order (01 → 07).
-        # 01_Ramachandran — control backbone-geometry validation.
+        # 02_Ramachandran — control backbone-geometry validation.
         generate_ramachandran_figures(prod_dir, rama_dir, reporter)
 
         # 02–06 main validation suite, then 07 diagnostics; the two-criteria figure

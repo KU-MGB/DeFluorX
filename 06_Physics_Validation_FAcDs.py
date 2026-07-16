@@ -32,7 +32,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) — in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 16 July 2026
+Date   : 16 July 2026 <─────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_FAcDs.py [Boltz-2_Run_Directory] [options]
@@ -64,7 +64,7 @@ Dependency Map
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
                   <out>/05_MD_Simulations/Prime_MMGBSA/{00_MMGBSA_Summary.csv, combined + per-rank PNGs}
-                  <out>/00_SID_MMGBSA.log  (single merged, colour-preserving log; `tail -f` it)
+                  <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
 -------------------------------------------------------------------------------
@@ -212,11 +212,11 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _open_step_log(physics_dir: Path) -> None:
-    """Open 6_Physics_Validation/00_SID_MMGBSA.log for this run (fresh each run)."""
+    """Open 6_Physics_Validation/00_Physics_Validation.log for this run (fresh each run)."""
     global _LOG_FH
     try:
         physics_dir.mkdir(parents=True, exist_ok=True)
-        _LOG_FH = open(physics_dir / "00_SID_MMGBSA.log", "w", encoding="utf-8")
+        _LOG_FH = open(physics_dir / "00_Physics_Validation.log", "w", encoding="utf-8")
         import atexit
         atexit.register(lambda: _LOG_FH and not _LOG_FH.closed and _LOG_FH.close())
     except Exception:
@@ -2767,7 +2767,7 @@ def main() -> int:
     for d in (dirs["prot"], dirs["esp_cx"], dirs["wm"], dirs["sb"], dirs["md"]):
         d.mkdir(parents=True, exist_ok=True)
 
-    _open_step_log(out_root)   # 6_Physics_Validation/00_SID_MMGBSA.log (colour-preserving, fresh)
+    _open_step_log(out_root)   # 6_Physics_Validation/00_Physics_Validation.log (colour-preserving, fresh)
     print_script_banner("06_Physics_Validation_FAcDs.py",
                         "ESP Physics — WaterMap → System Builder → MD → SID → MM-GBSA")
 
