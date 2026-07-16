@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 ```mermaid
 flowchart TD
     subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~3,164 lines &nbsp; "]
+        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~3,189 lines &nbsp; "]
         UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,117 lines &nbsp; "]
         ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
         CFG --- UTL --- ENV
@@ -200,8 +200,8 @@ flowchart TD
     M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~700 lines &nbsp; "] --> M2
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
-        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~7,271 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,451 lines &nbsp; "]
+        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~7,285 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 59 panels + Ramachandran · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,468 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,659 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -210,15 +210,15 @@ flowchart TD
     M2 --> M5
 
     subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard (0.15 Å) &nbsp; \n &nbsp; Pose-drift + 8-residue machinery figures · ESP charges (default) · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~4,071 lines &nbsp; "]
+        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard (0.15 Å) &nbsp; \n &nbsp; Pose-drift + 8-residue machinery figures · ESP charges (default) · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~4,087 lines &nbsp; "]
     end
 
     M5 --> EXT_MD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; ESP Physics: WaterMap · Build · MD · SID · MM-GBSA &nbsp; \n &nbsp; ESP merge → WaterMap → System Builder → Desmond MD &nbsp; \n &nbsp; Sequential per rank: MD → SID → MM-GBSA, one rank fully done before the next &nbsp; \n &nbsp; All physics from CFG §17b · disk-aware subjob cap · phase-aware heartbeat &nbsp; \n &nbsp; 📄 ~2,974 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~5,108 lines &nbsp; "]
+        M6["06 · &nbsp; ESP Physics: WaterMap · Build · MD · SID · MM-GBSA &nbsp; \n &nbsp; ESP merge → WaterMap → System Builder → Desmond MD &nbsp; \n &nbsp; Sequential per rank: MD → SID → MM-GBSA, one rank fully done before the next &nbsp; \n &nbsp; All physics from CFG §17b · disk-aware subjob cap · phase-aware heartbeat &nbsp; \n &nbsp; 📄 ~3,045 lines &nbsp; "]
+        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~5,078 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end
 
@@ -346,7 +346,7 @@ FAcDs_PFAS-27_Defluorination/
 │   │   ├── 02_ESP_Charged_Complexes/   ← merged complexes carrying the ligand ESP charges (R_N_<stem>_ESP_Complex.mae)
 │   │   ├── 03_WaterMaps/               ← WaterMap hydration-site results (watermap_R_N/*_wm.maegz + watermap_R_N.csv)
 │   │   ├── 04_System_Builder/          ← Desmond system build files (minimise-volume, TIP3P, OPLS4, ESP in the force field)
-│   │   └── 05_MD_Simulations/          ← Desmond MD topology + trajectory (*-out.cms, *_trj/, *.ene) + SID *.eaf + *-prime-mmgbsa.csv
+│   │   └── 05_MD_Simulations/          ← Desmond MD topology + trajectory (*-out.cms, *_trj/, *.ene) + SID *.eaf + *_mmgbsa-prime-out.csv
 │   │       └── Prime_MMGBSA/           ← Prime MM-GBSA plots: 01_MMGBSA_Combined_AllRanks.png + per-job Rank_NN_MMGBSA_Profile_*.png
 │   │
 │   └── 7_MD_Thermodynamics_Results/     ← MD + NAC analysis + QM/MM engine outputs (generated by 07_MD_QMMM_Defluorination_FAcDs.py)
@@ -378,7 +378,7 @@ FAcDs_PFAS-27_Defluorination/
 | [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 51 figure panels + 5 Ramachandran controls in 8 content-matched folders — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics/two-criteria+feasibility | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
 | [`04_Dendrogram_FAcDs.py`](./04_Dendrogram_FAcDs.py) | Interactive phylogenetic D3 tree | merged FASTA + `03_Figure_Enriched_Dataset.csv` | `03_Global_Master_Interactive_App.html` (+ per-tier apps) |
 | [`05_TopN_and_PDB_Preparation_FAcDs.py`](./05_TopN_and_PDB_Preparation_FAcDs.py) | MD-ready gate → Gemmi CIF→PDB + PrepWizard + Top-N extraction + PyMOL/PLIP figures | ranked CSV + CIF files | prepared `.pdb` files, tier CSV, interaction figures |
-| [`06_Physics_Validation_FAcDs.py`](./06_Physics_Validation_FAcDs.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD → SID → MM-GBSA, strictly sequential; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*-prime-mmgbsa.csv`, MM-GBSA/WaterMap plots, merged log |
+| [`06_Physics_Validation_FAcDs.py`](./06_Physics_Validation_FAcDs.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD → SID → MM-GBSA, strictly sequential; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*_mmgbsa-prime-out.csv`, MM-GBSA/WaterMap plots, merged log |
 | [`07_MD_QMMM_Defluorination_FAcDs.py`](./07_MD_QMMM_Defluorination_FAcDs.py) | **Step 07** MD + NAC analysis + QM/MM extraction & QSite auto-run (consumes `*_SID-out.eaf`) | Step-06 MD trajectories + WaterMaps + ranked CSV | PBC-corrected frame, QSite `.in`/`.mae`, per-candidate QSite output folder |
 | [`C_INP_Merged_for_Boltz-2.fasta`](./C_INP_Merged_for_Boltz-2.fasta) | Merged, deduplicated input protein sequences for Boltz-2 (generated by 01_Merge_FAcDs.py) | — | — |
 | [`D_INP_PFAS-27_Ligands.smi`](./D_INP_PFAS-27_Ligands.smi) | 27 PFAS ligand SMILES panel | — | — |
@@ -1072,7 +1072,7 @@ Crash prevention (`systemd-oomd` masking) and heartbeat logging wrap the whole r
 
 **Config (CFG §17b PHYS_* + §17 MM-GBSA):** all physical settings — solvent/force field, box buffer, salt, ion exclusion, MD length/timestep/thermostat, WaterMap length/site radius, `--test` overrides — live in CFG. MM-GBSA controls: `MMGBSA_RUN`, `MMGBSA_STEP_SIZE` (stride for 100k-frame trajectories), `MMGBSA_OUTPUT_SUBDIR`. MM-GBSA scores **binding**, not the QSite reaction barrier; GB implicit solvent overstabilises anionic PFAS, so treat ΔG_bind as a **relative** ranking only.
 
-**Outputs:** `*_wm.maegz` + `watermap_R_N.csv` (WaterMap), `-out.cms` + `*_trj/` + `*.ene` (MD), `*_SID-out.eaf` (SID), `<job>-prime-mmgbsa.csv` + `Prime_MMGBSA/` plots (MM-GBSA), and the merged colour log `00_Physics_Validation.log`.
+**Outputs:** `*_wm.maegz` + `watermap_R_N.csv` (WaterMap), `-out.cms` + `*_trj/` + `*.ene` (MD), `*_SID-out.eaf` (SID), `<job>_mmgbsa-prime-out.csv` + `Prime_MMGBSA/` plots (MM-GBSA), and the merged colour log `00_Physics_Validation.log`.
 
 </details>
 
@@ -1122,7 +1122,7 @@ the naming is a contract, not a convention.
 │   │   ├── desmond_md_job_R_1_trj/      ← trajectory
 │   │   ├── desmond_md_job_R_1-out.ene   ← energy stream (equilibration check)
 │   │   └── desmond_md_job_R_1_SID-out.eaf  ← SID output
-│   └── Prime_MMGBSA/                    ← MM-GBSA plots + per-job *-prime-mmgbsa.csv
+│   └── Prime_MMGBSA/                    ← MM-GBSA plots + per-job *_mmgbsa-prime-out.csv
 └── 00_Physics_Validation.log                    ← merged colour log for the whole step
 ```
 
@@ -1231,11 +1231,11 @@ As the final computational analysis step, the following design architectures are
     # Generate the QSite .in/.mae inputs only — do not launch QSite
     python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --no-run-qsite
 
-    # Run QSite but cap CPUs per job (qsite -PARALLEL; default CFG.QSITE_PROCS = 4)
+    # Run QSite but cap CPUs per job (qsite -PARALLEL; default CFG.QSITE_PROCS = 10)
     python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --qsite-procs 8
     ```
     Because launches are idempotent (skip if the `<job>_QSite_SN2/` folder exists), an interrupted pipeline can be re-run safely — only candidates without an output folder are submitted.
-*   **Automatic `systemd-oomd` masking:** The pipeline wrapper script automatically masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 07 and 08 to prevent termination by the system daemon, and unmasks it upon completion.
+*   **Automatic `systemd-oomd` masking:** The pipeline wrapper script automatically masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 06 and 07 to prevent termination by the system daemon, and unmasks it upon completion.
 
 **Configuration (CFG §7, §9, §10):** Smart-Lock biases (§7), WaterMap radii + frame scoring weights + Desmond MD parameters (§9), QSite region/level-of-theory definitions and execution policy (`QSITE_RUN`, `QSITE_PROCS`) (§10).
 
@@ -2013,6 +2013,6 @@ University of Copenhagen, Denmark
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
-<sub>Last updated: 15 July 2026</sub>
+<sub>Last updated: 20 July 2026</sub>
 
 </div>
