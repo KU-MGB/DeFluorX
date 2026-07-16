@@ -9096,7 +9096,7 @@ def _xo__annotate(ax, text: str, loc: str='upper right') -> None:
     xy = {'upper right': (0.98, 0.97, 'right', 'top'), 'upper left': (0.02, 0.97, 'left', 'top'), 'lower right': (0.98, 0.03, 'right', 'bottom'), 'lower left': (0.02, 0.03, 'left', 'bottom')}.get(loc, (0.98, 0.97, 'right', 'top'))
     ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=8.5, family='monospace', bbox=dict(boxstyle='round,pad=0.4', fc='white', ec=CFG.VIS_INK["paler"], alpha=0.9))
 
-def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, ncol=1):
+def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, ncol=1, framealpha=0.9):
     """One combined box: the legend entries, then the statistics lines as blank-handle rows,
     so the legend and the stats annotation read as a single unit rather than two boxes.
 
@@ -9108,7 +9108,7 @@ def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, nco
     h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
     l = list(labels) + [''] + list(stat_lines)
     # A tuple loc is an axes-fraction anchor; matplotlib takes it via bbox_to_anchor, not loc.
-    _kw = dict(framealpha=0.95, fancybox=True, ncol=max(1, int(ncol)), columnspacing=1.0,
+    _kw = dict(framealpha=framealpha, fancybox=True, ncol=max(1, int(ncol)), columnspacing=1.0,
                handletextpad=0.5, borderaxespad=0.3, prop={'family': 'monospace', 'size': fontsize})
     if isinstance(loc, (tuple, list)):
         ax.legend(h, l, loc='upper left', bbox_to_anchor=tuple(loc), **_kw)
@@ -9160,7 +9160,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     _means2 = [float(pd.to_numeric(df.loc[df[CFG.COL_TIER] == _t, ba_col],
                                    errors='coerce').mean()) for _t in tiers]
     ax.plot(range(len(tiers)), _means2, color=CFG.VIS_ACCENT["bad"], lw=2.2, marker='D', ms=6,
-            mec='white', mew=0.8, zorder=8, label='Mean affinity (trend)')
+            mec='white', mew=0.8, zorder=8, label='Mean affinity')
 
     for _coll in ax.collections:
         _coll.set_alpha(0.6)
@@ -9174,7 +9174,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         sem = float(np.std(v, ddof=1) / np.sqrt(len(v)))
         ci = float(sem * _t_dist.ppf(0.975, len(v) - 1))
         return (mean, ci)
-    trend_specs = [(aff_col, CFG.VIS_ACCENT["blue"], 'Affinity  (norm., mean ± 95% CI)', 'o'), (pocket_col, CFG.VIS_ACCENT["amber"], 'Pocket ratio  (norm., mean ± 95% CI)', 's'), (dens_col, CFG.VIS_TREND_SERIES[2], 'Interaction density  (norm., mean ± 95% CI)', '^')]
+    trend_specs = [(aff_col, CFG.VIS_ACCENT["blue"], 'Affinity (95% CI)', 'o'), (pocket_col, CFG.VIS_ACCENT["amber"], 'Pocket ratio (95% CI)', 's'), (dens_col, CFG.VIS_TREND_SERIES[2], 'Int. density (95% CI)', '^')]
     df_norm = df.copy()
     for tcol, colour, tlabel, mk in trend_specs:
         if tcol is None:
@@ -9215,7 +9215,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
                     "09_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
-    stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv;  r > 0 = Degraders higher)']
+    stat_lines = ['Degraders vs Non-Degraders (Mann–Whitney U; q_BH in CSV; r>0 = Degr. higher)']
     metric_map = [('BA_Score', ba_col), ('Affinity', aff_col), ('Pocket', pocket_col), ('IntDens', dens_col)]
     for label, mcol in metric_map:
         res = _mw_signed(mcol, label)
@@ -9233,11 +9233,12 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch as _PatchA
     handles, labels = ax.get_legend_handles_labels()
-    handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='Binding_Affinity_Score (violin)')] + handles
-    labels = ['Binding_Affinity_Score (violin)'] + labels
+    handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='BA_Score (violin)')] + handles
+    labels = ['BA_Score (violin)'] + labels
     # Anchored inside the top-left corner: the default 'upper left' placement drifts out to the
-    # frame and reads as a separate object floating beside the panel.
-    _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), 7.5, ncol=2)
+    # frame and reads as a separate object floating beside the panel. Semi-transparent box so the
+    # violins behind it stay visible.
+    _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), 7.5, ncol=2, framealpha=0.6)
     _xo__save(fig, out_dir, '09_Binding_Affinity_Metrics.png', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
