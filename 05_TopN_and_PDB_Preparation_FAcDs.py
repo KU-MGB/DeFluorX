@@ -2450,11 +2450,10 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
     ax.legend(handles=_leg, loc="upper center", ncol=4,
               bbox_to_anchor=(_cx_data, _y_legend_top),
               bbox_transform=ax.transData,
-              fontsize=8.5, frameon=True, framealpha=0.95,
+               frameon=True,
               edgecolor="#CCCCCC",
               title=f'{"PLIP interactions" if mode=="plip" else "Interactions"}  |  Residue type  |  Ligand atoms',
-              title_fontsize=8.5, columnspacing=0.8, handlelength=1.1,
-              borderpad=0.6)
+              title_fontsize=8.5)
 
     try:
         canvas.print_figure(str(out_png), dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight",

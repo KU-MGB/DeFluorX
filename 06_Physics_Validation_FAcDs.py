@@ -1687,8 +1687,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     ax1.set_xlim(0, _xmax)
     # Compact 3-column legend inside the panel: tight column/handle spacing keeps it narrow
     # enough to sit in the sparse lower-left corner without covering the data.
-    ax1.legend(frameon=True, fontsize=8, ncol=3, loc="lower left", framealpha=0.92,
-               columnspacing=0.9, handlelength=1.6, handletextpad=0.5, borderpad=0.4)
+    ax1.legend(frameon=True,  ncol=3, loc="lower left")
     ax1.grid(alpha=0.25, linewidth=0.5)
 
     # ── Panel 2: distribution of the core ensemble (shares the y-axis) ────────────────────
@@ -1813,8 +1812,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list, tiers: dict,
         Line2D([], [], color=_INK["warn"], marker="D", linestyle="--", linewidth=1.6, markersize=7,
                label="mean (outlier-dragged)"),
     ]
-    ax1.legend(handles=_hdlA, loc="lower right", frameon=True, fontsize=8.2, framealpha=0.93,
-               ncol=1, borderpad=0.6, labelspacing=0.5, handlelength=1.8, handletextpad=0.6)
+    ax1.legend(handles=_hdlA, loc="lower right", frameon=True,
+               ncol=1)
     ax1.grid(alpha=0.25, linewidth=0.5, axis="y")
 
     # ── Panel 3: the ranking, with an honest interval and an effect size ─────────────────
@@ -2036,9 +2035,9 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
     ]
     # Column count derived from the entry count, so the legend stays balanced as candidates change.
     _rows = max(1, int(getattr(CFG, "MMGBSA_LEGEND_MAX_ROWS", 3)))
-    axT.legend(handles=hdl, loc="lower right", frameon=True, fontsize=8.5, borderpad=0.7,
-               ncol=max(1, math.ceil(len(hdl) / _rows)), columnspacing=1.1, handlelength=1.8,
-               handletextpad=0.5, labelspacing=0.5, framealpha=0.93,
+    axT.legend(handles=hdl, loc="lower right", frameon=True,
+               ncol=max(1, math.ceil(len(hdl) / _rows)),
+
                title="Relative ranking only — GB overstabilises anionic PFAS: compare candidates, "
                      "never absolute values",
                title_fontsize=8.5)

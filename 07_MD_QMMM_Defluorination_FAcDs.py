@@ -1385,7 +1385,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                    label=f'Relaxed Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
             Patch(facecolor=_C['zone_relaxed'], alpha=0.3, label='Relaxed S_N2 Zone'),
             Patch(facecolor=_C['zone_strict'], alpha=0.4, label='Strict S_N2 Zone'),
-        ], loc='lower right', frameon=True, framealpha=0.95,
+        ], loc='lower right', frameon=True,
            edgecolor=_C['legend_edge'], fancybox=True, fontsize=CFG.VIS_FONT_LEGEND)
            
         cbar = plt.colorbar(sc, ax=ax1, pad=0.02)
@@ -1414,7 +1414,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax2.set_ylim(1.5, max(12.0, data_max * 1.4))
         ax2.set_xlabel("Simulation frame")
         ax2.set_ylabel("Active-site anchoring — interaction distance (Å)")
-        ax2.legend(loc='upper right', frameon=True, framealpha=1.0,
+        ax2.legend(loc='upper right', frameon=True,
                    edgecolor=_C['legend_edge'], fancybox=True, fontsize=CFG.VIS_FONT_LEGEND)
         clean_spines(ax2)
 
@@ -1551,7 +1551,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
                label=f'Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
         Patch(facecolor=_C['zone_relaxed'], alpha=0.3, label='Relaxed S_N2 Zone'),
         Patch(facecolor=_C['zone_strict'], alpha=0.4, label='Strict S_N2 Zone'),
-    ], loc='lower left', frameon=True, framealpha=0.95,
+    ], loc='lower left', frameon=True,
        edgecolor='#E2E8F0', fancybox=True)
     clean_spines(ax3)
 
@@ -1796,7 +1796,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         Patch(facecolor='#10B981', edgecolor='none', label='Strict Catalysis (Total)'),
     ]
     ax.legend(handles=legend_handles, loc='lower left', bbox_to_anchor=(0.0, 1.02),
-              frameon=True, framealpha=0.95, edgecolor='#94A3B8', fontsize=7.5, ncol=4, columnspacing=0.8)
+              frameon=True,  edgecolor='#94A3B8',  ncol=4)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -2129,9 +2129,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.grid(alpha=CFG.VIS_GRID_ALPHA * 0.5, linewidth=CFG.VIS_GRID_LINEWIDTH * 0.7,
                 axis="y", which="minor")
         ax.set_axisbelow(True)
-        ax.legend(handles=hdl, loc="upper right", fontsize=_f_leg, frameon=True,
-                  borderpad=0.4, labelspacing=0.32, handlelength=1.4, handletextpad=0.5,
-                  borderaxespad=0.4)
+        ax.legend(handles=hdl, loc="upper right", fontsize=_f_leg, frameon=True)
 
         out_path = (out_dir / "06_MMGBSA_Decomposition_AllRanks.png" if merged
                     else rr[0]["dir"] / f"{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
@@ -2304,9 +2302,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                  Patch(facecolor="none", edgecolor="none", label="Å above bar = median distance"),
                  Patch(facecolor="none", edgecolor="none",
                        label=f"% in bar = frames within {_occ_cut:g} Å")] + band_hdl
-        ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True,
-                  borderpad=0.4, labelspacing=0.3, handlelength=1.5, handletextpad=0.5,
-                  borderaxespad=0.4)
+        ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
                     else rr[0]["dir"] / f"{rr[0]['job']}_Machinery_Engagement.png")
@@ -3263,7 +3259,7 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                             transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
                             color=_C["ts"],
                             bbox=dict(boxstyle="round,pad=0.3", fc=_C["intact_bg"], ec=_C["ts"], alpha=0.95))
-                ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+                ax.legend(loc="upper left")
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
                     fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")

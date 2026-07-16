@@ -1223,10 +1223,9 @@ def _tt_legend_handles(df):
 def _tt_add_legend(fig, handles):
     fig.legend(handles=handles, loc="lower center",
                bbox_to_anchor=(0.5, 0.02), ncol=4,
-               fontsize=8.5, framealpha=0.95,
+
                title=f"Degrader tier  (★ = {CFG.TIER_TOP} highlighted; ● = scatter background)",
-               title_fontsize=9.0,
-               borderpad=0.8, labelspacing=0.6, handletextpad=0.5)
+               title_fontsize=9.0)
 
 
 def _tt_new_fig():
@@ -1663,7 +1662,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                                edgecolor="white", label=g) for g in _seen01]
         _handles01.append(Line2D([0], [0], color="grey", linestyle="--", label=f"All variants (n={_n01:,})"))
         ax.legend(handles=_handles01, loc="upper left", ncol=len(_handles01),
-                  fontsize=8, frameon=True, columnspacing=1.0, handletextpad=0.5)
+                   frameon=True)
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_01_Active_Site_Residue_Mapping_Coverage.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
@@ -2008,16 +2007,16 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                     _pair_labels.append(f"MD-selected (n={len(_mdx7)})")
 
             _leg7 = ax.legend(_pair_handles, _pair_labels,
-                              loc="upper left", ncol=3, fontsize=8.5,
-                              framealpha=0.92, fancybox=True,
+                              loc="upper left", ncol=3,
+                               fancybox=True,
                               handler_map={tuple: _HT02(ndivide=None, pad=0.2)},
                               title="Tier (bars = counts, KDE lines ● median)",
                               title_fontsize=8.0,
                               bbox_to_anchor=(0.01, 0.93))
         except Exception:
             _leg7 = ax.legend(_bar_hdls_02, _bar_lbls_02,
-                              loc="upper left", ncol=3, fontsize=8.5,
-                              framealpha=0.92, fancybox=True,
+                              loc="upper left", ncol=3,
+                               fancybox=True,
                               title="Tier (bars = counts, KDE lines ● median)",
                               title_fontsize=8.0,
                               bbox_to_anchor=(0.01, 0.93))
@@ -2193,7 +2192,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                                       markerfacecolor=CFG.VIS_ACCENT["star"], markeredgecolor="black")],
                               [f"MD-selected (n={_star_seen11})  ·  one star per complex"],
                               loc="lower left", bbox_to_anchor=(0.005, 0.005),
-                              fontsize=8.0, framealpha=0.92, fancybox=True).set_zorder(11)
+                                fancybox=True).set_zorder(11)
 
             if _chi2_str:
                 ax.text(0.99, 0.01, _chi2_str, transform=ax.transAxes,
@@ -2389,8 +2388,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             _all_h10 = [conf_patch] + handles_f10
             _all_l10 = ["Boltz Confidence  (box)"] + labels_f10
             _leg10 = ax.legend(_all_h10, _all_l10,
-                               loc="upper right", fontsize=8,
-                               framealpha=0.92, fancybox=True,
+                               loc="upper right",
+                                fancybox=True,
                                ncol=len(_all_h10))   # all in one row
             _leg10.set_zorder(20)
 
@@ -2639,8 +2638,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax.tick_params(axis="both", labelsize=9)
             ax.grid(True, color=CFG.VIS_INK["grid"], linewidth=0.5, alpha=0.6, zorder=1)
             # Legend: placed in the top KDE marginal (left side) to keep scatter uncluttered
-            ax_top.legend(handles=_leg18, loc="upper left", ncol=3, fontsize=7.0,
-                          framealpha=0.92, fancybox=True,
+            ax_top.legend(handles=_leg18, loc="upper left", ncol=3,
+                           fancybox=True,
                           title="Tier  (◆ = median pTM, ipTM)", title_fontsize=7.0,
                           bbox_to_anchor=(0.0, 1.0))
             plt.tight_layout()
@@ -2855,7 +2854,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _combined_handles = _combined_handles + [_mdh17]
                 _combined_labels  = _combined_labels + [_mdh17.get_label()]
             ax.legend(_combined_handles, _combined_labels,
-                      loc="upper left", fontsize=8, framealpha=0.92)
+                      loc="upper left")
             plt.tight_layout()
             plt.savefig(out_dir / "Figure_07_ActiveSite_RMSD_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
@@ -3333,7 +3332,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 axes_f08[0].legend(handles=_leg08, loc="upper left",
                                    bbox_to_anchor=(0.0, 1.0),
                                    ncol=max(1, (len(_leg08) + 1) // 2),
-                                   fontsize=7.5, framealpha=0.92, fancybox=True)
+                                     fancybox=True)
                 plt.tight_layout()
                 plt.savefig(out_dir / "Figure_09_Tier_Quality_DotPlot.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
@@ -3562,8 +3561,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _mdh10 = _md_ready_stars_cat(ax, df, existing_tiers, CFG.COL_MECH_S)
         if _mdh10 is not None:
             _lh10.append(_mdh10)
-        ax.legend(handles=_lh10, loc="lower left", fontsize=8.5,
-                  framealpha=0.92, fancybox=True,
+        ax.legend(handles=_lh10, loc="lower left",
+                   fancybox=True,
                   ncol=4).set_zorder(20)
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -3664,8 +3663,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             ax.yaxis.grid(False)
             ax.xaxis.grid(True, color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.7)
             _leg11b = ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.18),
-                                ncol=min(3, len(_fp_tiers)), fontsize=8,
-                                framealpha=0.88, fancybox=True)
+                                ncol=min(3, len(_fp_tiers)),
+                                 fancybox=True)
             _leg11b.set_zorder(20)
             for _lt, _t in zip(_leg11b.get_texts(), _fp_tiers):
                 _lt.set_color(TIER_PALETTE.get(_t, "black"))
@@ -3767,7 +3766,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _h11, _l11 = ax.get_legend_handles_labels()
         _leg14 = ax.legend(handles=[_hdr11] + _h11, labels=["Tier (●=median)"] + _l11,
                            loc="upper left", bbox_to_anchor=(0.01, 0.99),
-                           fontsize=7.0, framealpha=0.92, fancybox=True,
+                             fancybox=True,
                            ncol=max(2, (len(_h11) + 1) // 2))
         _leg14.set_zorder(20)
         # Thin horizontal grid lines at every 10% ECDF level for easy reading
@@ -3896,9 +3895,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         # the tier threshold labels below 180°, without pushing the axis any taller.
         ax.legend(clean_handles12, clean_labels12,
                   loc="upper left", bbox_to_anchor=(0.008, 0.995),
-                  fontsize=7, framealpha=0.92, fancybox=True,
-                  ncol=max(2, (len(clean_handles12) + 1) // 2),
-                  handlelength=1.2, handletextpad=0.4)
+                    fancybox=True,
+                  ncol=max(2, (len(clean_handles12) + 1) // 2))
         ax.set_axisbelow(True)
         ax.grid(color=CFG.VIS_INK["wash"], linewidth=0.5, alpha=0.7)
         plt.tight_layout()
@@ -3963,7 +3961,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axa.set_ylim(0, 1.18)
             _axa.set_xlabel("Active-site integrity  (fraction of the 8 catalytic residues placed)", fontsize=11)
             _axa.set_ylabel(f"Catalytic constellation score  (0–1 vs {CFG.REFERENCE_PDB_ID} crystal)", fontsize=11)
-            _axa.legend(loc="upper right", fontsize=7, ncol=2, framealpha=0.95, columnspacing=0.9, handletextpad=0.4)
+            _axa.legend(loc="upper right",  ncol=2)
             _axa.grid(True, color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.75, zorder=0); _axa.set_axisbelow(True)
 
             # ── panel b : Criterion-B ECDF by tier + arrowed per-tier mean values ──
@@ -4013,8 +4011,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             legibility and still collide. The criterion floor carries its own label rather than
             being an unexplained red line.
             """
-            _axb.legend(loc="upper left", ncol=1, fontsize=8.5, handlelength=1.5,
-                        handletextpad=0.5, framealpha=0.93, borderpad=0.5, labelspacing=0.35)
+            _axb.legend(loc="upper left", ncol=1)
             _axb.grid(True, color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.75, zorder=0); _axb.set_axisbelow(True)
 
             """
@@ -4085,8 +4082,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axc.legend(handles=[_L2Dtc([], [], marker="o", ls="", color=_DEAD, label="SN2 dead-end (flagged)"),
                                  _L2Dtc([], [], marker="o", ls="", color=_FEAS, label="feasible α-attack (control)"),
                                  _L2Dtc([], [], ls="--", color=_DEAD, label="gate (shaded = fails it)")],
-                        loc="lower right", fontsize=9, framealpha=0.95, handlelength=1.4,
-                        handletextpad=0.5, borderpad=0.5)
+                        loc="lower right")
             for _a in (_axc, _axc2):
                 _a.grid(True, axis="x", color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.75, zorder=0)
                 _a.set_axisbelow(True)
@@ -4286,10 +4282,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             _ncol15 = len(_all_h15) if len(_all_h15) <= 8 else _math15.ceil(len(_all_h15) / 2)
             _leg15 = ax.legend(_all_h15, _all_l15,
                                loc="upper left", ncol=_ncol15,
-                               fontsize=7.5, framealpha=0.93, fancybox=True,
-                               borderpad=0.4, labelspacing=0.3,
-                               handlelength=1.0, handletextpad=0.4,
-                               columnspacing=0.8)
+                                 fancybox=True)
             _leg15.set_zorder(20)
 
             # Heatmap: tier × bond-type proportion (%) — only when interaction data exist
@@ -4458,8 +4451,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 _leg16_h.append(_mdh16)
             _leg16 = ax.legend(handles=_leg16_h,
                                loc="lower left", bbox_to_anchor=(0.01, 0.01),
-                               fontsize=7.0, framealpha=0.92, fancybox=True, ncol=4,
-                               labelspacing=0.2, handlelength=0.8, handletextpad=0.3)
+                                 fancybox=True, ncol=4)
             _leg16.set_zorder(20)
 
             if _skipped14:
@@ -4582,7 +4574,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                       marker="D", markersize=8,
                                       label="Active-site contact density  (mean ± 95% CI)")
                 _leg12 = ax_r.legend(handles=[_pip_handle], loc="lower left",
-                                     fontsize=8.5, framealpha=0.92, fancybox=True)
+                                       fancybox=True)
                 _leg12.set_zorder(20)
 
             plt.tight_layout()
@@ -4673,7 +4665,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                             f"{_n_hidden20:,} complexes > {_d_max:.1f} hidden (axis clamped at p99)",
                             transform=ax.transAxes, ha="left", va="bottom",
                             fontsize=7, color=CFG.VIS_INK["grey"], style="italic")
-                ax.legend(loc="upper right", fontsize=7.5, framealpha=0.9)
+                ax.legend(loc="upper right")
 
                 # Kruskal-Wallis significance note
                 try:
@@ -4774,8 +4766,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             ]
             # Single row, anchored top-left above the axes (keeps it off the violins).
             ax.legend(handles=_lh17b, loc="lower left", bbox_to_anchor=(0.0, 1.01),
-                      ncol=len(_lh17b), fontsize=8, framealpha=0.92, fancybox=True,
-                      columnspacing=1.2, handletextpad=0.5, borderaxespad=0.0).set_zorder(20)
+                      ncol=len(_lh17b),   fancybox=True).set_zorder(20)
             plt.tight_layout()
             _stat_box(ax, _kruskal_by_tier(_bedata, _be_bind, tiers=existing_tiers), "lower left")
             plt.savefig(out_dir / "Figure_17b_Binding_Energetics.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4827,7 +4818,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", fontsize=10)
         ax.set_ylabel("UMAP Dimension 2", fontsize=10)
         ax.grid(False)
-        ax.legend(loc="lower left", fontsize=8, framealpha=0.92)
+        ax.legend(loc="lower left")
         plt.tight_layout()
         _stat_box(ax, _umap_tier_separation(_u), "lower left")
         plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4945,7 +4936,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         n_lines = len(rows_df) + (0 if baseline_df.empty else 1)
         ax_r.legend(loc="lower center", bbox_to_anchor=(0.5, -0.18),
                     ncol=min(3, n_lines), fontsize=_radar_fs,
-                    framealpha=0.88, fancybox=True)
+                     fancybox=True)
         plt.tight_layout(rect=[0, 0.15, 1, 1])
         plt.savefig(fig_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
@@ -5104,9 +5095,8 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             ax19L.set_xlabel("Percentage of complexes (%)", fontsize=9)
             ax19L.tick_params(axis="x", labelsize=8)
             # Legend: single row, 70% font (7.5→5.25), inside bottom-right
-            ax19L.legend(loc="lower right", ncol=3, fontsize=7.0,
-                         framealpha=0.92, fancybox=True, borderpad=0.4,
-                         handlelength=1.0, handletextpad=0.3, columnspacing=0.7)
+            ax19L.legend(loc="lower right", ncol=3,
+                          fancybox=True)
             ax19L.invert_yaxis()
 
             # ── Right panel: scatter of tier medians in Conf × SN2 space ─────
@@ -5179,9 +5169,8 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
 
             # Legend: 3 columns, shrunk icons, fixed outside above the top-left corner
             ax19R.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
-                         ncol=3, fontsize=7.0, framealpha=0.90, fancybox=True,
-                         markerscale=0.45, handlelength=1.0, handletextpad=0.3,
-                         columnspacing=0.8, labelspacing=0.3, borderpad=0.3)
+                         ncol=3,   fancybox=True,
+                         markerscale=0.45)
 
             fig19a.savefig(out_dir / "Figure_20a_Tier_Success_Rates.png",
                            dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -5413,7 +5402,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         _leg02_obj = ax_f2.legend(handles=_leg02,
                                   loc="upper center", bbox_to_anchor=(0.5, -0.10),
                                   ncol=len(present_cats_f2),
-                                  fontsize=8.5, framealpha=0.92, fancybox=True,
+                                    fancybox=True,
                                   title="Conflict Category", title_fontsize=8)
         _leg02_obj.set_zorder(20)
 
@@ -5576,8 +5565,8 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 _lh21 += [_L21([0],[0], color=TIER_PALETTE.get(t,CFG.VIS_INK["faint"]), linewidth=3,
                                 label=f'{t}  (n={len(gems[gems[CFG.COL_TIER]==t]):,})')
                           for t in _tier_in_gems]
-                ax21.legend(handles=_lh21, loc="lower right", fontsize=8,
-                            framealpha=0.92, fancybox=True, ncol=2,
+                ax21.legend(handles=_lh21, loc="lower right",
+                             fancybox=True, ncol=2,
                             title="Marker type  |  Tier (line colour)",
                             title_fontsize=7.5)
 
@@ -5786,8 +5775,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             # Legend pulled close under the diagram (footnote clutter removed)
             ax22.legend(handles=_leg22,
                         loc="upper center", bbox_to_anchor=(0.5, 0.02),
-                        ncol=3, fontsize=8, framealpha=0.90, fancybox=True,
-                        borderpad=0.5, columnspacing=1.2, handletextpad=0.5)
+                        ncol=3,   fancybox=True)
 
             plt.tight_layout()
             plt.savefig(out_dir / "Figure_23_Category_Overlap_Euler.png",
@@ -6013,7 +6001,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             f"  (★×N = {CFG.TIER_TOP.replace('_', ' ')} count per protein)"
             if _any_top23 > 0 else "")
         fig23a.legend(handles=legend_h23, loc="lower center",
-                      ncol=len(legend_h23), frameon=False, fontsize=9.5,
+                      ncol=len(legend_h23), frameon=False,
                       title=_title23, title_fontsize=9)
         # Figure title removed per request.
         plt.tight_layout(rect=[0, 0.07, 1, 1])
@@ -6134,7 +6122,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
                  if l in set(deg[deg["prot"].isin(prots)]["lig"])]
         leg = [_mp.Patch(color=lig_colour[l], label=l) for l in shown]
         ax.legend(handles=leg, loc="center left", bbox_to_anchor=(1.01, 0.5),
-                  fontsize=7, frameon=False, title="PFAS ligand", title_fontsize=8)
+                   frameon=False, title="PFAS ligand", title_fontsize=8)
         plt.tight_layout()
         out = out_dir / "Figure_24b_TopTier_Protein_PFAS_Breakdown.png"
         plt.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -6700,8 +6688,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         # 55,000-point field, which is the wrong size for a legend swatch.
         _nleg25 = len(axA.get_legend_handles_labels()[0])
         axA.legend(loc="upper left", bbox_to_anchor=(0.0, 1.05),
-                   ncol=max(_nleg25, 1), fontsize=7, markerscale=0.55,
-                   framealpha=0.92, fancybox=True, handlelength=0.8, borderpad=0.3)
+                   ncol=max(_nleg25, 1),  markerscale=0.55,
+                    fancybox=True)
         plt.tight_layout()
         _out25a = out_dir / "Figure_26a_PFAS_Size_Hexbin_Landscape.png"
         fig25a.savefig(_out25a, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -6820,18 +6808,16 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _leg_oc25 = axB.legend(
             handles=_oc_h25, labels=[h.get_label() for h in _oc_h25],
             loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=len(_oc_h25),
-            fontsize=8, title="Left bar — mechanistic outcome", title_fontsize=8,
-            framealpha=0.92, fancybox=True, handlelength=0.9,
-            handletextpad=0.35, columnspacing=0.7, borderpad=0.35)
+             title="Left bar — mechanistic outcome", title_fontsize=8,
+             fancybox=True)
         _leg_oc25.get_title().set_fontweight("bold")
         _leg_oc25._legend_box.align = "left"
         axB.add_artist(_leg_oc25)
         _leg_ti25 = axB.legend(
             handles=_ti_h25, labels=[h.get_label() for h in _ti_h25],
             loc="lower right", bbox_to_anchor=(1.0, 1.01), ncol=len(_ti_h25),
-            fontsize=8, title="Right bar — degrader tier", title_fontsize=8,
-            framealpha=0.92, fancybox=True, handlelength=0.9,
-            handletextpad=0.35, columnspacing=0.7, borderpad=0.35)
+             title="Right bar — degrader tier", title_fontsize=8,
+             fancybox=True)
         _leg_ti25.get_title().set_fontweight("bold")
         _leg_ti25._legend_box.align = "right"
         plt.tight_layout()
@@ -7002,8 +6988,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             axL.xaxis.grid(True, color=CFG.VIS_INK["smoke"], linewidth=0.5, zorder=0)
             axL.set_axisbelow(True)
             axL.legend(handles=_handles25, loc="lower left", bbox_to_anchor=(0.0, 1.01),
-                       ncol=len(_handles25), fontsize=7.5, framealpha=0.95,
-                       columnspacing=1.0, handletextpad=0.5, borderaxespad=0.0)
+                       ncol=len(_handles25))
             plt.tight_layout()
             _out25c = out_dir / "Figure_26c_PFAS_Carbon_Confidence.png"
             fig25c.savefig(_out25c, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -7178,8 +7163,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             # Two-row legend above the axes (tiers + fit boundary); the Spearman ρ/p/n
             # rides in the legend title so it sits with the key, not as a floating box.
             _ss01 = _spear_str(sub["asv"], sub["lv"], "XN-01 pocket volume vs ligand volume")
-            ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=5, fontsize=7.5,
-                      framealpha=0.92, columnspacing=0.9, handletextpad=0.4, borderaxespad=0.0,
+            ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=5,
+
                       title=_ss01, title_fontsize=8)
             plt.tight_layout()
             _o = out_dir / "01_Pocket_vs_Ligand_Volume.png"
@@ -7287,7 +7272,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 _P02(facecolor=_S802, alpha=0.55, edgecolor=CFG.VIS_RAMP["orange"][4],
                      label="8-residue active-site coverage (box — median · IQR)"),
                 *ax.get_legend_handles_labels()[0],
-            ], loc="lower left", fontsize=8, framealpha=0.93, ncol=2)
+            ], loc="lower left",   ncol=2)
 
             ax.set_ylim(0, 1.12)
             ax.set_yticks(np.arange(0, 1.01, 0.2))
@@ -7346,7 +7331,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.set_xticks(range(len(groups))); ax.set_xticklabels(labels, fontsize=8)
             ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)", fontsize=10)
             ax.set_ylabel("Pocket occupancy  (ligand vol / cavity vol)", fontsize=11)
-            ax.legend(loc="upper left", fontsize=8, framealpha=0.92, ncol=1)
+            ax.legend(loc="upper left",   ncol=1)
             plt.tight_layout()
             _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7399,8 +7384,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 _lh.append(_mdhc)
             # Legend above the axes (single row) so it never sits on the top data band.
             ax.legend(handles=_lh, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=4,
-                      fontsize=8.5, framealpha=0.92, fancybox=True,
-                      columnspacing=1.2, handletextpad=0.5, borderaxespad=0.0)
+                        fancybox=True)
             plt.tight_layout()
             _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7450,7 +7434,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.set_xlabel("Multi-model degrader consensus  (fraction of 5 models)", fontsize=11)
             ax.set_ylabel("Boltz-2 model confidence", fontsize=11)
             _ss06 = _spear_str(sub["cons"], sub["conf"], "XN-06 pose consensus vs confidence")
-            ax.legend(loc="lower right", fontsize=8.5, framealpha=0.92,
+            ax.legend(loc="lower right",
                       title=_ss06, title_fontsize=8.5)
             plt.tight_layout()
             _o = out_dir / "04_Confidence_vs_Consensus.png"
@@ -7534,8 +7518,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             # Single-row legend spanning the top of the figure (above both panels).
             _h07, _l07 = axes[0][0].get_legend_handles_labels()
             fig.legend(_h07, _l07, loc="lower left", bbox_to_anchor=(0.02, 0.99),
-                       ncol=12, fontsize=7.5, framealpha=0.92, columnspacing=1.0,
-                       handletextpad=0.4)
+                       ncol=12)
             plt.tight_layout()
             _o = out_dir / "05_Quality_and_Competence_Diagnostics.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -7635,8 +7618,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                           _L2D08([0], [0], color=_SOFT_C, lw=1.7, label="Median (box centre line)"),
                           _mln08, _hln08, _cln08]
             axL.legend(handles=_handles08, loc="lower left", bbox_to_anchor=(0.0, 1.01),
-                       ncol=5, fontsize=7.5, framealpha=0.95, columnspacing=1.0,
-                       handletextpad=0.4)
+                       ncol=5)
             plt.tight_layout()
             _o = out_dir / "06_Size_Preference_Containment.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -7787,8 +7769,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                           _mbl09,
                           _P09(facecolor=_BAND09, alpha=0.22, label="8-residue spread (IQR)"),
                           _rln09, _rcl09, _mln09, _hln09]
-                axL.legend(handles=_leg09, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=8,
-                           fontsize=7.0, framealpha=0.95, columnspacing=0.8, handletextpad=0.35)
+                axL.legend(handles=_leg09, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=8)
                 plt.tight_layout()
                 _o = out_dir / "07_Reactive_Engagement.png"
                 fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
@@ -8778,8 +8759,8 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
                            color=TIER_PALETTE.get(_tier_name, CFG.VIS_INK["grey"])))
             _l.append(f'({_tag}) gate: ≤{_dist_gate}  ·  ≥{_ang_gate}')
         axd.legend(_h, _l, loc='upper left', bbox_to_anchor=(0.012, 0.985), ncol=2,
-                   fontsize=7.5, framealpha=0.93, fancybox=True,
-                   handlelength=1.4, handletextpad=0.5, columnspacing=1.0,
+                     fancybox=True,
+
                    title='Degrader tier   ·   gate tags (A/B/C on the rules)',
                    title_fontsize=7.5)
         _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
@@ -9096,20 +9077,22 @@ def _xo__annotate(ax, text: str, loc: str='upper right') -> None:
     xy = {'upper right': (0.98, 0.97, 'right', 'top'), 'upper left': (0.02, 0.97, 'left', 'top'), 'lower right': (0.98, 0.03, 'right', 'bottom'), 'lower left': (0.02, 0.03, 'left', 'bottom')}.get(loc, (0.98, 0.97, 'right', 'top'))
     ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=8.5, family='monospace', bbox=dict(boxstyle='round,pad=0.4', fc='white', ec=CFG.VIS_INK["paler"], alpha=0.9))
 
-def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=8, ncol=1, framealpha=0.9):
+def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=None, ncol=1):
     """One combined box: the legend entries, then the statistics lines as blank-handle rows,
     so the legend and the stats annotation read as a single unit rather than two boxes.
 
     ncol lays the entries out in columns. Stacked in a single column they grow into a tall strip
     down the side of the panel and start covering the data they describe; two or three columns give
-    the same information in a fraction of the height."""
+    the same information in a fraction of the height. Box transparency and spacing inherit
+    apply_figure_style's rcParams; only the monospace family (which aligns the stats columns) is set
+    here, at CFG.VIS_FONT_ANNOT unless a caller needs a different size."""
     from matplotlib.lines import Line2D as _L2D
     _blank = lambda: _L2D([], [], linestyle='', marker='', color='none')
     h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
     l = list(labels) + [''] + list(stat_lines)
+    _sz = CFG.VIS_FONT_ANNOT if fontsize is None else fontsize
     # A tuple loc is an axes-fraction anchor; matplotlib takes it via bbox_to_anchor, not loc.
-    _kw = dict(framealpha=framealpha, fancybox=True, ncol=max(1, int(ncol)), columnspacing=1.0,
-               handletextpad=0.5, borderaxespad=0.3, prop={'family': 'monospace', 'size': fontsize})
+    _kw = dict(ncol=max(1, int(ncol)), prop={'family': 'monospace', 'size': _sz})
     if isinstance(loc, (tuple, list)):
         ax.legend(h, l, loc='upper left', bbox_to_anchor=tuple(loc), **_kw)
     else:
@@ -9238,7 +9221,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     # Anchored inside the top-left corner: the default 'upper left' placement drifts out to the
     # frame and reads as a separate object floating beside the panel. Semi-transparent box so the
     # violins behind it stay visible.
-    _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), 7.5, ncol=2, framealpha=0.6)
+    _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), ncol=2)
     _xo__save(fig, out_dir, '09_Binding_Affinity_Metrics.png', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
@@ -9368,7 +9351,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         handles, labels = ax2.get_legend_handles_labels()
         handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='Evolutionary_Fingerprint_Score (violin)')] + handles
         labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
-        _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left', 7.5)
+        _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left')
     plt.tight_layout()
     _xo__save(fig, out_dir, '05_Evolutionary_Phylogeny.png', reporter)
 
@@ -9470,7 +9453,7 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     _xs7 = list(range(len(tiers)))
     ax.plot(_xs7, _means7, color=CFG.VIS_ACCENT["bad"], lw=2.2, marker='D', ms=6,
             mec='white', mew=0.8, zorder=8, label='Mean (trend)')
-    ax.legend(loc='upper right', fontsize=8, framealpha=0.92)
+    ax.legend(loc='upper right')
 
     ax.set_xlabel('Catalytic degrader tier')
     ax.set_ylabel('Total fluorine count')

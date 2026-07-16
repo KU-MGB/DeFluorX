@@ -2093,12 +2093,20 @@ class CFG:
     VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
     VIS_FONT_AXIS_LABEL: float  = 11.0   # x/y axis labels — plain weight
     VIS_FONT_TICK: float        = 9.0    # tick labels
-    VIS_FONT_LEGEND: float      = 8.5    # legend entries
+    VIS_FONT_LEGEND: float      = 8.0    # legend entries (one size for every figure, every step)
     VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
     VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
-    VIS_LEGEND_FRAME_ALPHA: float = 0.92
+    VIS_LEGEND_FRAME_ALPHA: float = 0.65   # semi-transparent legend box — the data behind it stays visible
+    # Legend spacing, in font-size units, applied via apply_figure_style so every figure in every step
+    # shares one legend layout. Set here, never at the call site (see [[cfg-single-source-of-truth]]).
+    VIS_LEGEND_LABELSPACING: float   = 0.4
+    VIS_LEGEND_HANDLETEXTPAD: float  = 0.5
+    VIS_LEGEND_COLUMNSPACING: float  = 1.0
+    VIS_LEGEND_BORDERPAD: float      = 0.4
+    VIS_LEGEND_HANDLELENGTH: float   = 1.6
+    VIS_LEGEND_BORDERAXESPAD: float  = 0.4
     """
     ── Step 03 ink: every mark colour in the validation figures that is not a tier, grade, conflict or
     role colour (those have their own dicts above). The candidate/tier colours say WHAT a mark is; the
