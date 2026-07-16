@@ -743,7 +743,8 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
     """
-    reporter.section("Step 1/8 — 01_Analysis_Data · Multi-Objective Ranking (PCA & Pareto)")
+    reporter.section("Step 1/8 — 01_Analysis_Data")
+    reporter.log("  Multi-Objective Ranking (PCA & Pareto)")
 
     x = df[features].dropna()
     '''
@@ -861,6 +862,7 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
 
     if len(x) >= 2:
         pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=features).to_csv(_aux_dir(out_dir) / "02_PCA_Loadings.csv", index=True)
+        reporter.log("  ✔ Saved: 01_Analysis_Data/02_PCA_Loadings.csv")
 
     return df
 
@@ -871,7 +873,8 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     low confidence; decoys = high confidence but poor mechanism), logs the
     per-class counts, and saves the final validated master table to out_dir.
     """
-    reporter.section("Step 1/8 — 01_Analysis_Data · Conflict & Opportunity Analysis")
+    reporter.log("")
+    reporter.log("  Conflict & Opportunity Analysis")
 
     """
     The classification is four mutually exclusive tests on two columns, so it is expressed as vector
@@ -902,6 +905,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
 
     gems = df[df["Conflict_Category"] == "Hidden Gem"].sort_values("Pareto_Rank")
     gems.to_csv(_aux_dir(out_dir) / "04_ACTION_Rescue_Hidden_Gems.csv", index=False)
+    reporter.log("  ✔ Saved: 01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv")
 
     reporter.log(f"Hidden Gems (Rescue Target) : {len(gems)}")
     reporter.log(f"Decoys (Potential Artifacts): {len(df[df['Conflict_Category'] == 'Decoy'])}")
@@ -1210,11 +1214,11 @@ def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
         # dropna can empty the frame outright; .min()/.max() on it return NaN, which then
         # becomes an axis limit and takes the figure down with no usable error.
         if dv.empty:
-            reporter.log("  ! Figure 18b skipped: no rows with UMAP coordinates")
+            reporter.log(f"  ! Skipped: {_fig_path('18b')} — no rows with UMAP coordinates")
             return
         if len(dv) < 3:
             # a 2-D KDE needs ≥ 3 non-collinear points; fewer gives a singular covariance (LinAlgError)
-            reporter.log(f"  ! Figure 18b skipped: only {len(dv)} UMAP row(s), too few for a density estimate")
+            reporter.log(f"  ! Skipped: {_fig_path('18b')} — only {len(dv)} UMAP row(s), too few for a density estimate")
             return
         dv["_X"] = dv["UMAP_X"]; dv["_Y"] = dv["UMAP_Y"]
         pax = pa.copy(); pax["_X"] = pa["UMAP_X"]; pax["_Y"] = pa["UMAP_Y"]
@@ -1253,7 +1257,7 @@ def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Figure 18b skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('18b')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -1265,7 +1269,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         dv["_Y"] = pd.to_numeric(dv[CFG.COL_CONF], errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
         if dv.empty:
-            reporter.log("  ! Figure 13b skipped: no rows with both axes present")
+            reporter.log(f"  ! Skipped: {_fig_path('13b')} — no rows with both axes present")
             return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa[CFG.COL_SN2],      errors="coerce")
@@ -1302,7 +1306,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Figure 13b skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('13b')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -1311,7 +1315,7 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=[CFG.COL_CONF,"iptm"]).copy()
         if dv.empty:
-            reporter.log("  ! Figure 05b skipped: no rows with both confidence and ipTM")
+            reporter.log(f"  ! Skipped: {_fig_path('05b')} — no rows with both confidence and ipTM")
             return
         dv["_X"] = dv[CFG.COL_CONF]; dv["_Y"] = dv["iptm"]
         pax = pa.copy()
@@ -1338,7 +1342,7 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Figure 05b skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('05b')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -1350,7 +1354,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         dv["_Y"] = pd.to_numeric(dv["num_interactions"],          errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
         if dv.empty:
-            reporter.log("  ! Figure 14b skipped: no rows with both interaction metrics")
+            reporter.log(f"  ! Skipped: {_fig_path('14b')} — no rows with both interaction metrics")
             return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa["Interaction_Density_Norm"], errors="coerce")
@@ -1381,7 +1385,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Figure 14b skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('14b')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -1397,23 +1401,23 @@ _FIG_MAPPING = {
         "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
         # ── 05_Catalytic_Geometry_and_Mechanism ──
         "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_11b_Mechanistic_Fingerprint.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
-        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
+        "Figure_11b_Mechanistic_Fingerprint.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.png",
+        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.png",
+        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.png",
+        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
+        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
+        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
+        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
+        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
         # ── 06_Ligand_Interactions_and_Chemical_Space ──
         "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
-        "Figure_17b_Binding_Energetics.png": "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
+        "Figure_17b_Binding_Energetics.png": "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.png",
         "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
         "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
         "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
         "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
+        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
+        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/08_Chemical_Space_Landscape.png",
         # ── 07_PFAS_Scope_and_Synthesis ──
         "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
         "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
@@ -1436,6 +1440,27 @@ _FIG_MAPPING = {
 }
 
 
+# Folded per-folder analysis panels are routed by _panel (not _FIG_MAPPING); their skip logs map here.
+_PANEL_FIG_PATHS = {
+    "01C": "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
+    "05b": "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
+    "02A": "06_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
+    "04A": "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
+    "05c": "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
+    "06A": "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
+    "05a": "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
+}
+
+
+def _fig_path(fig_key: str) -> str:
+    """Map a figure key (e.g. '22', '18b', '01C') to its folder/NN_name.png for skip logs — the folded
+    panels via _PANEL_FIG_PATHS, the main suite via _FIG_MAPPING. Falls back to 'Figure <key>'."""
+    if fig_key in _PANEL_FIG_PATHS:
+        return _PANEL_FIG_PATHS[fig_key]
+    m = next((v for k, v in _FIG_MAPPING.items() if k.startswith(f"Figure_{fig_key}_")), None)
+    return m if m else f"Figure {fig_key}"
+
+
 @contextlib.contextmanager
 def _redirect_savefig(out_dir: Path, reporter):
     """Route each Figure_NN_*.png save to its numbered folder (per _FIG_MAPPING)
@@ -1451,7 +1476,7 @@ def _redirect_savefig(out_dir: Path, reporter):
     def _redirect(fname):
         name = fname.name if isinstance(fname, Path) else Path(fname).name
         if name in _FIG_MAPPING:
-            reporter.log(f'  \u2714 Saved: {_FIG_MAPPING[name]}')
+            reporter.log(f'  ✔ Saved: {_FIG_MAPPING[name]}')
             return out_dir / _FIG_MAPPING[name]
         return fname
     plt.savefig = lambda fname, *a, **k: _orig_plt(_redirect(fname), *a, **k)
@@ -2145,7 +2170,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             plt.savefig(out_dir / "Figure_04_Tier_Grade_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 04 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('04')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -2339,7 +2364,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 05 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('05')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # Figure 05b: PA companion (Confidence × ipTM landscape)
@@ -2588,7 +2613,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.savefig(out_dir / "Figure_06_pTM_vs_ipTM_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 06 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('06')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -2615,7 +2640,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _rmsd17_col = next((c for c in df.columns if "rmsd" in c.lower()), None)
     if _rmsd17_col is None:
         _rmsd_candidates = [c for c in df.columns if "rmsd" in c.lower() or "active_site" in c.lower()]
-        reporter.log(f"  ! Figure 07 skipped: no RMSD column found. "
+        reporter.log(f"  ! Skipped: {_fig_path('07')} — no RMSD column found. "
                      f"All column names tried: {_rmsd17_aliases}. "
                      f"Partial matches in CSV (containing 'rmsd'/'active_site'): {_rmsd_candidates}. "
                      f"Full column list: {list(df.columns)}")
@@ -2800,7 +2825,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.savefig(out_dir / "Figure_07_ActiveSite_RMSD_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 07 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('07')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 08: Feature Correlation Matrix (Spearman ρ) ---
@@ -3278,7 +3303,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 plt.savefig(out_dir / "Figure_09_Tier_Quality_DotPlot.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 09 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('09')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 10: Mechanistic State Cross-Tab (Halide Stabilisation × Carboxylate Clamp) ---
@@ -3322,7 +3347,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _mech_missing.append("Carboxylate_Clamp")
         _mech_candidates = [c for c in df.columns
                             if any(k in c.lower() for k in ("halide", "clamp", "carboxyl", "stabil"))]
-        reporter.log(f"  ! Figure 10 skipped: columns not found: {_mech_missing}. "
+        reporter.log(f"  ! Skipped: {_fig_path('10')} — columns not found: {_mech_missing}. "
                      f"Partial matches in CSV: {_mech_candidates}. "
                      f"Full column list: {list(df.columns)}")
     if "Halide_Stabilisation" in df.columns and "Carboxylate_Clamp" in df.columns and CFG.COL_TIER in df.columns:
@@ -3384,7 +3409,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.savefig(out_dir / "Figure_10_Mech_State_CrossTab.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 10 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('10')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 11: Mechanistic Score — Mean±CI dot plot ---
@@ -3612,7 +3637,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.tight_layout(rect=[0, 0.15, 1, 1])
             plt.savefig(out_dir / "Figure_11b_Mechanistic_Fingerprint.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
-            reporter.log(f"  ! Figure 11b skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('11b')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
         finally:
             if fig is not None:
@@ -4254,7 +4279,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 14 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('14')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # Figure 14b: PA companion (interaction profile overlay)
@@ -4412,7 +4437,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             plt.savefig(out_dir / "Figure_15_Fluorine_Engagement_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 15 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('15')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 16: Catalytic quality vs active-site contact density per tier ---
@@ -4529,7 +4554,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             plt.savefig(out_dir / "Figure_16_Catalytic_Quality_vs_Inhibition.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Figure 16 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('16')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 17: Active-site contact density by tier ---
@@ -4647,12 +4672,12 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 plt.savefig(out_dir / "Figure_17_ActiveSite_Contact_Density_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
             else:
-                reporter.log("  ! Figure 17 skipped: no valid tier groups for Interaction_Density_Norm.")
+                reporter.log(f"  ! Skipped: {_fig_path('17')} — no valid tier groups for Interaction_Density_Norm.")
         except Exception as e:
-            reporter.log(f"  ! Figure 17 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('17')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
     else:
-        reporter.log("  ! Figure 17 skipped: column 'Interaction_Density_Norm' or 'degrader_tier' absent.")
+        reporter.log(f"  ! Skipped: {_fig_path('17')} — column 'Interaction_Density_Norm' or 'degrader_tier' absent.")
 
     # --- Figure 17b: Binding Energetics — Binding Probability (violin) per tier ---
     """
@@ -4720,7 +4745,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             _stat_box(ax, _kruskal_by_tier(_bedata, _be_bind, tiers=existing_tiers), "lower left")
             plt.savefig(out_dir / "Figure_17b_Binding_Energetics.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
-            reporter.log(f"  ! Figure 17b skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('17b')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
         finally:
             if fig is not None:
@@ -5130,7 +5155,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             plt.close(fig19a)
             plt.close(fig19b)
         except Exception as e:
-            reporter.log(f"  ! Figure 20 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('20')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 21: Conflict Composition — 100% Stacked Horizontal Bar per Tier ---
@@ -5537,9 +5562,9 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                             dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close(fig21)
             else:
-                reporter.log("  ! Figure 22 skipped: No Hidden Gems found in dataset.")
+                reporter.log(f"  ! Skipped: {_fig_path('22')} — No Hidden Gems found in dataset.")
         except Exception as e:
-            reporter.log(f"  ! Figure 22 skipped: {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('22')} — {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 23: Category Overlap — Euler / Venn Diagram ---
@@ -5734,33 +5759,23 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         else:
-            reporter.log("  ! Figure 23 skipped: requires a catalytic-geometry column (soft_catalytic_score/mechanistic_score/SN2_Attack_Angle), a confidence column, and degrader_tier")
+            reporter.log(f"  ! Skipped: {_fig_path('23')} — requires a catalytic-geometry column (soft_catalytic_score/mechanistic_score/SN2_Attack_Angle), a confidence column, and degrader_tier")
     except Exception as e:
-        reporter.log(f"  ! Figure 23 skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('23')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
     _fig23_multitarget(df, out_dir, reporter)
     _fig24_sankey(df, out_dir, reporter)
     _fig25_pfas_size(df, out_dir, reporter)
 
-    '''
-    08_Diagnostic_and_MultiModel_Trends is the last on-disk folder, generated here
-    after folder 06 so the folders are written in ascending order (01 → 07) and the
-    run log reads folder-by-folder. Its filenames are not in the rename map, so the
-    active savefig redirect passes them straight through to the diagnostic folder.
-    '''
-    _diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
-    _diag_dir.mkdir(parents=True, exist_ok=True)
-    generate_additional_figures(df, _diag_dir, reporter)
-
-    # The extended-analysis panels are filed into the thematic subfolders (see _XN_EXT_ROUTES).
-    generate_extended_figures(df, out_dir, reporter)
 
 
 def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
     """Orchestrate the publication figure suite (folders 03-07): build the shared prologue
     (tier order, companion thumbnails, interaction-column maps) once, then render each folder.
     Runs inside the _redirect_savefig context opened by generate_comprehensive_figures."""
+    global _xn__PROD_DIR
+    _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"   # per-folder analysis panels read the model CIFs from here
     _utils_mod.apply_figure_style(CFG)
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
     # ── Companion thumbnail setup (shared by Figs 04b, 12b, 13b, 17b) ─────────
@@ -5815,11 +5830,38 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             present_int_cols[key] = alias1
         elif alias2 in df.columns:
             present_int_cols[key] = alias2
+    def _panel(fn, folder, name):
+        """Render one folded per-folder analysis panel into its folder and buffer the save; a failure is
+        logged and the rest still run. The save is flushed (in numeric order) with the folder's block."""
+        try:
+            fn(df, out_dir / folder, reporter)
+            if (out_dir / folder / f"{name}.png").exists():
+                reporter.log(f"  ✔ Saved: {folder}/{name}.png")
+        except Exception as _e:                                  # noqa: BLE001
+            reporter.log(f"  ! Skipped: {folder}/{name}.png — {type(_e).__name__}: {_e}")
+            plt.close("all")
+
     _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers)
+    _panel(_xo__fig_04A_evolutionary_phylogeny, "03_Dataset_and_Alignment_Overview", "05_Evolutionary_Phylogeny")
+
     _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs)
+
     _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs)
+    _panel(_xn__fig_01C_geometry_and_uncertainty, "05_Catalytic_Geometry_and_Mechanism", "13_Geometry_and_Uncertainty")
+    _panel(_xo__fig_05b_mechanistic_size_modified, "05_Catalytic_Geometry_and_Mechanism", "14_Mechanistic_Breakdown_by_Tier")
+
     _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs, int_label_map, present_int_cols)
+    _panel(_xo__fig_02A_binding_affinity_metrics, "06_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics")
+
     _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers)
+    _panel(_xo__fig_05c_size_by_tier_modified, "07_PFAS_Scope_and_Synthesis", "14_Chain_Length_by_Tier")
+    _panel(_xn_figure_06a, "07_PFAS_Scope_and_Synthesis", "15_Tier1A_Cross_Ligand_Heatmap")
+
+    # Step 8/8 — 08_Diagnostic_and_MultiModel_Trends (its own step, last folder on disk)
+    _diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
+    _diag_dir.mkdir(parents=True, exist_ok=True)
+    generate_additional_figures(df, _diag_dir, reporter)
+    _panel(_xn__fig_05a_pillar_divergence_modified, "08_Diagnostic_and_MultiModel_Trends", "09_Pillar_Divergence_by_Tier")
 
 
 
@@ -5947,7 +5989,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, reporter)
 
     except Exception as e:
-        reporter.log(f"  ! Figure 24 skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('24')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -5967,7 +6009,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
 
         top_prots = bp.loc[bp["tier"] == top_tier, "prot"].unique()
         if len(top_prots) == 0:
-            reporter.log(f"  ! Figure 24b skipped: no proteins reached {top_tier}")
+            reporter.log(f"  ! Skipped: {_fig_path('24b')} — no proteins reached {top_tier}")
             return
 
         # Degrader pairs (drop decoy) for the top-tier proteins
@@ -6063,7 +6105,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
         plt.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Figure 24b skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('24b')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -6495,7 +6537,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close(fig24)
 
     except Exception as e:
-        reporter.log(f"  ! Figure 25 skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('25')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -6505,7 +6547,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _req25 = ["total_fluorine_count", CFG.COL_SN2, CFG.COL_CONF, CFG.COL_TIER]
         _miss25 = [c for c in _req25 if c not in df.columns]
         if _miss25:
-            reporter.log(f"  ! Figure 26 skipped: missing columns {_miss25}")
+            reporter.log(f"  ! Skipped: {_fig_path('26')} — missing columns {_miss25}")
             return
 
         # MD_Selected is carried through: subsetting to _req25 alone drops it, and the MD stars then
@@ -6517,7 +6559,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _d25 = _d25.dropna(subset=_req25)
         _d25 = _d25[_d25[CFG.COL_TIER].isin(TIER_ORDER_LOGIC)]
         if len(_d25) < 30:
-            reporter.log("  ! Figure 26 skipped: insufficient data after filtering")
+            reporter.log(f"  ! Skipped: {_fig_path('26')} — insufficient data after filtering")
             return
 
         # PFAS chain-length bins (F-count as proxy: C4≈9F, C6≈13F, C8≈17F, C10≈21F) — from CFG (SSOT)
@@ -6785,12 +6827,12 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _smi25 = Path.cwd() / CFG.INPUT_SMILES
         _LP25  = _utils_mod.compute_ligand_properties(_smi25)
         if not _LP25:
-            reporter.log(f"  ! Figure 26c skipped: ligand SMILES not found ({_smi25})")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} — ligand SMILES not found ({_smi25})")
             raise RuntimeError("ligand properties unavailable")
         _lcol25 = next((c for c in [CFG.COL_LIG, CFG.COL_LIG, "ligand"]
                         if c in df.columns), None)
         if _lcol25 is None:
-            reporter.log("  ! Figure 26c skipped: ligand column not found in data")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} — ligand column not found in data")
             raise RuntimeError("ligand column unavailable")
         """
         Catalytic-competence columns: the continuous soft_catalytic_score (0–1) and the
@@ -6802,7 +6844,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _conf_c25 = CFG.COL_CONF if CFG.COL_CONF in df.columns else None
         _deg_c25  = "is_degrader" if "is_degrader" in df.columns else None
         if _soft_c25 is None and _deg_c25 is None:
-            reporter.log("  ! Figure 26c skipped: no catalytic-competence column (soft_catalytic_score / is_degrader)")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} — no catalytic-competence column (soft_catalytic_score / is_degrader)")
             raise RuntimeError("competence column unavailable")
         """
         _d25 was column-subset to numeric requirements (no ligand/score columns);
@@ -6821,7 +6863,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                              .isin(["true", "1", "1.0", "yes"]))
         _d25c = _d25c.dropna(subset=["_nC", "_mw"])
         if _d25c.empty:
-            reporter.log("  ! Figure 26c skipped: no ligand property matches in data")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} — no ligand property matches in data")
         else:
             _groups25 = sorted(_d25c["_nC"].unique())
             _present25 = set(_d25c[_lcol25].astype(str))
@@ -6933,7 +6975,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             plt.close(fig25c)
 
     except Exception as e:
-        reporter.log(f"  ! Figure 26 skipped: {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('26')} — {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -7809,7 +7851,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # ===============================================================================
-# SECTION 4E: EXTENDED ANALYSIS FIGURES
+# SECTION 4E: PER-FOLDER ANALYSIS PANELS  (folded into their folder steps by the orchestrator)
 # ===============================================================================
 """
 Eight panels merged in from the two more_Plots prototypes, each taken from whichever prototype drew
@@ -8238,7 +8280,7 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order) -> str:
     return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
 
 # The extended panels are filed in the thematic subfolders alongside the figures they belong with,
-# numbered to continue each destination folder's own sequence (see _XN_EXT_ROUTES).
+# numbered to continue each destination folder's own sequence.
 _xn_FIG_NAMES = {
     'geometry':   '13_Geometry_and_Uncertainty',
     'binding':    '09_Binding_Affinity_Metrics',
@@ -8461,9 +8503,8 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             _prior = _prior[_prior['complex_id'].isin(_done_ids)]
             if _done_ids >= _all_ids:
                 _geo = _prior['sn2_distance_A'].notna().mean()
-                reporter.log(f'  ✔ Variance CSV already complete for all {n_jobs:,} complexes '
-                             f'(geometry {_geo:.1%}) — reusing, nothing recomputed.')
-                reporter.log(f'      {target.resolve()}')
+                reporter.log(f'  ✔ Found: 01_Analysis_Data/{target.name}  '
+                             f'(complete for all {n_jobs:,} complexes · geometry {_geo:.1%}) — reusing, nothing recomputed.')
                 return target
             reporter.log(f'  ⧗ Variance CSV covers {len(_done_ids):,}/{n_jobs:,} complexes — '
                          f'resuming; only the {n_jobs - len(_done_ids):,} missing will be parsed.')
@@ -8586,9 +8627,9 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     """
     _n_rows = len(var_df)
     _n_geo = int(var_df['sn2_distance_A'].notna().sum()) if _n_rows else 0
-    reporter.log(f"  ✔ Multi-model variance: {var_df['complex_id'].nunique():,} complexes, "
-                 f"{_n_rows:,} model rows, geometry resolved for {_n_geo:,} ({_n_geo / max(1, _n_rows):.1%})"
-                 f" → {target.resolve()}")
+    reporter.log(f"  ✔ Saved: 01_Analysis_Data/{target.name}  "
+                 f"({var_df['complex_id'].nunique():,} complexes · {_n_rows:,} model rows · "
+                 f"geometry resolved {_n_geo:,} = {_n_geo / max(1, _n_rows):.1%})")
     if _n_geo == 0:
         reporter.log('  ! Multi-model variance: NO geometry resolved on any model — the uncertainty '
                      'panels would be empty. Treat this CSV as unusable.')
@@ -8633,16 +8674,14 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     without the flag, an absent CSV falls through to the two absolute-geometry panels, which
     carry the same tier claim and are drawn from the ranked CSV in seconds.
     """
+    # The variance CSV is built up front in Step 1 (01_Analysis_Data); here we only READ the cache.
     _fig_root = out_dir if out_dir.name.startswith('3_') else out_dir.parent
-    if globals().get('_ALLOW_VARIANCE_COMPUTE', False):
-        var_path = _xn__ensure_multimodel_variance_csv(_prod, _fig_root, reporter)
-    else:
-        var_path = next((p for p in (_aux_dir(_fig_root) / '07_Boltz2_MultiModel_QC_Variance.csv',
-                                     _prod / '4_Prediction_Jobs' / '07_Boltz2_MultiModel_QC_Variance.csv')
-                         if p.exists()), None)
-        if var_path is None:
-            reporter.log('  · Figure 1: no per-model variance CSV; drawing the two geometry panels. '
-                         'Pass --variance to build it from the CIFs (slow) and get the uncertainty panels too.')
+    var_path = next((p for p in (_aux_dir(_fig_root) / '07_Boltz2_MultiModel_QC_Variance.csv',
+                                 _prod / '4_Prediction_Jobs' / '07_Boltz2_MultiModel_QC_Variance.csv')
+                     if p.exists()), None)
+    if var_path is None and not globals().get('_ALLOW_VARIANCE_COMPUTE', False):
+        reporter.log('  · no per-model variance CSV; drawing the two geometry panels. '
+                     'Pass --variance to build it from the CIFs (slow) and get the uncertainty panels too.')
     if var_path is None or not Path(var_path).exists():
         # FAcDs has no per-model variance CSV (needs the 02b reanalysis engine), so the two
         # inter-model uncertainty panels cannot be drawn. Plot the two absolute-geometry panels
@@ -8652,11 +8691,11 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         _ang = _xn__num(df, _xn__col(df, CFG.COL_SN2))
         _tcol = _xn__col(df, CFG.COL_TIER)
         if _tcol is None or _dist.empty or _ang.empty:
-            reporter.log('  ! Figure 01C skipped: geometry columns unavailable.')
+            reporter.log(f"  ! Skipped: {_fig_path('01C')} — geometry columns unavailable.")
             return
         gdf = pd.DataFrame({'tier': df[_tcol].values, 'dist': _dist.values, 'ang': _ang.values}).dropna(subset=['dist', 'ang'])
         if gdf.empty:
-            reporter.log('  ! Figure 01C skipped: no geometry rows.')
+            reporter.log(f"  ! Skipped: {_fig_path('01C')} — no geometry rows.")
             return
         _tiers = [t for t in TIER_ORDER_LOGIC if t in set(gdf['tier'])]
         fig, (axd, axa) = plt.subplots(1, 2, figsize=(_xn_COL_DOUBLE_IN, 0.45 * _xn_COL_DOUBLE_IN))
@@ -8713,11 +8752,11 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     try:
         vdf = pd.read_csv(var_path)
     except FileNotFoundError:
-        reporter.log(f'  ! Figure 01C skipped: could not open {var_path}.')
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} — could not open {var_path}.")
         return
     id_col = next((c for c in ('complex_id', 'job_name') if c in vdf.columns), None)
     if id_col is None or 'sn2_angle_deg' not in vdf.columns or 'sn2_distance_A' not in vdf.columns:
-        reporter.log("  ! Figure 01C skipped: variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} — variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
         return
     """
     The tier is a property of the COMPLEX, not of a diffusion sample, so it belongs to the ranked sheet
@@ -8734,13 +8773,13 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
                                         usecols=["job_name", CFG.COL_TIER])
                 vdf = vdf.merge(_tier_map, how="left", left_on=id_col, right_on="job_name")
                 _n_tier = int(vdf[CFG.COL_TIER].notna().sum())
-                reporter.log(f'  · Figure 1: tier joined from the ranked sheet for {_n_tier:,} of '
+                reporter.log(f'  · tier joined from the ranked sheet for {_n_tier:,} of '
                              f'{len(vdf):,} model rows.')
             except Exception as _e:                              # noqa: BLE001
                 reporter.log(f"  ! Figure 01C: could not join the tier ({type(_e).__name__}: {_e}).")
     if CFG.COL_TIER not in vdf.columns or vdf[CFG.COL_TIER].notna().sum() == 0:
-        reporter.log("  ! Figure 01C skipped: no degrader_tier available (not in the variance CSV, and "
-                     "the ranked sheet could not supply it).")
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} — no degrader_tier available (not in the variance "
+                     "CSV, and the ranked sheet could not supply it).")
         return
     vdf['sn2_distance_A'] = pd.to_numeric(vdf['sn2_distance_A'], errors='coerce')
     vdf['sn2_angle_deg'] = pd.to_numeric(vdf['sn2_angle_deg'], errors='coerce')
@@ -8753,7 +8792,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         per_complex.append({'complex_id': cid, 'best_geo_tier': g[CFG.COL_TIER].iloc[0], 'abs_distance': float(best_row['sn2_distance_A']), 'abs_angle': float(best_row['sn2_angle_deg']), 'distance_std': float(g['sn2_distance_A'].std(ddof=1)), 'angle_std': float(g['sn2_angle_deg'].std(ddof=1))})
     cdf = pd.DataFrame(per_complex)
     if cdf.empty:
-        reporter.log('  ! Figure 01C skipped: no complexes after geometric tiering.')
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} — no complexes after geometric tiering.")
         return
     tiers = [t for t in TIER_ORDER_LOGIC if t in set(cdf['best_geo_tier'])]
     fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.82 * _xn_COL_DOUBLE_IN))
@@ -8839,7 +8878,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     tier_col = CFG.COL_TIER if CFG.COL_TIER in df.columns else None
     if not enzyme_col or not ligand_col or (not tier_col):
         if reporter:
-            reporter.log('  ! Figure 06A skipped: required columns missing')
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} — required columns missing")
         return
     df = df[df[ligand_col] != 'Fluoroacetate_Ref']
     df_hm = df[[enzyme_col, ligand_col, tier_col]].copy()
@@ -8849,7 +8888,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     tier1a_enzymes = df_hm.loc[df_hm[tier_col] == CFG.TIER_TOP, enzyme_col].unique()
     if len(tier1a_enzymes) == 0:
         if reporter:
-            reporter.log('  ! Figure 06A skipped: no Tier_1A enzymes found')
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} — no Tier_1A enzymes found")
         return
     tier_rank_map = CFG.TIER_RANK
     df_hm['tier_rank'] = df_hm[tier_col].map(tier_rank_map).fillna(max(tier_rank_map.values()) + 1).astype(int)
@@ -8874,7 +8913,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     ligands = sorted(df_best[ligand_col].unique(), key=_extract_number)
     if not ligands:
         if reporter:
-            reporter.log('  ! Figure 06A skipped: no ligands found')
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} — no ligands found")
         return
 
     def _canonical_ligand_name(raw_name: object) -> str:
@@ -9063,14 +9102,14 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     controls = controls or {}
     ba_col = _xo__pillar_col(df, 'Binding_Affinity_Score')
     if ba_col is None:
-        reporter.log('  ! Figure 02A skipped: Binding_Affinity_Score column missing.')
+        reporter.log(f"  ! Skipped: {_fig_path('02A')} — Binding_Affinity_Score column missing.")
         return
     aff_col = _xo__col(df, 'custom_affinity_score', 'Chemical_Affinity_Score', 'custom_affinity_calc')
     pocket_col = _xo__col(df, 'Pocket_Tightness_Score', 'pocket_enclosure_ratio')
     dens_col = _xo__col(df, CFG.COL_IDENS, 'Interaction_Density_Norm', 'interaction_density_calc')
     tiers = _xo__tiers_present(df)
     if not tiers:
-        reporter.log('  ! Figure 02A skipped: no tiers present.')
+        reporter.log(f"  ! Skipped: {_fig_path('02A')} — no tiers present.")
         return
     xpos = {t: i for i, t in enumerate(tiers)}
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -9173,7 +9212,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     rmsd = _xo__col(df, 'Active_Site_RMSD_to_Control')
     tiers = _xo__tiers_present(df)
     if not tiers or (idc is None and evo is None):
-        reporter.log('  ! Figure 04A skipped: necessary columns or tiers missing.')
+        reporter.log(f"  ! Skipped: {_fig_path('04A')} — necessary columns or tiers missing.")
         return
     xpos = {t: i for i, t in enumerate(tiers)}
     deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
@@ -9429,65 +9468,6 @@ number continues the destination folder's existing sequence, so nothing already 
 The numbering is APPENDED rather than gap-filled. 07_PFAS_Scope_and_Synthesis is missing a 06 — a
 retired figure — and reusing that slot would silently point an old citation at a new figure.
 """
-_XN_EXT_ROUTES = [
-    # (destination subfolder,                     filename written by the panel,          panel)
-    ("05_Catalytic_Geometry_and_Mechanism",       "13_Geometry_and_Uncertainty",          _xn__fig_01C_geometry_and_uncertainty),
-    ("06_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics",           _xo__fig_02A_binding_affinity_metrics),
-    ("03_Dataset_and_Alignment_Overview",         "05_Evolutionary_Phylogeny",             _xo__fig_04A_evolutionary_phylogeny),
-    ("08_Diagnostic_and_MultiModel_Trends",       "09_Pillar_Divergence_by_Tier",          _xn__fig_05a_pillar_divergence_modified),
-    ("05_Catalytic_Geometry_and_Mechanism",       "14_Mechanistic_Breakdown_by_Tier",      _xo__fig_05b_mechanistic_size_modified),
-    ("07_PFAS_Scope_and_Synthesis",               "14_Chain_Length_by_Tier",               _xo__fig_05c_size_by_tier_modified),
-    ("07_PFAS_Scope_and_Synthesis",               "15_Tier1A_Cross_Ligand_Heatmap",        _xn_figure_06a),
-]
-
-
-def generate_extended_figures(df: pd.DataFrame, out_dir: Path, reporter) -> None:
-    """The extended-analysis panels, merged into the thematic subfolders (see _XN_EXT_ROUTES).
-
-    A failure in one panel is logged and the rest still render: losing six figures because the
-    seventh hit a missing column would be a poor trade.
-    """
-    reporter.section("Supplementary — Extended Analysis Figures  [routed into folders 03, 05, 06, 07, 08]")
-
-    global _xn__PROD_DIR
-    _xn__PROD_DIR = out_dir.parent / "1_Boltz2_Production"
-
-    """
-    Render each panel, then report. The status line is collected (not printed inside the loop) so the
-    per-panel results can be shown together, sorted by destination folder — otherwise they print in
-    route order, interleaved with the variance-engine progress a panel emits while drawing, and read as
-    a random ladder. A panel can return WITHOUT drawing (Figure 1 does when its inputs are missing), so
-    success is judged by the PNG on disk, never by the absence of an exception — a count that cannot
-    fail is not a count.
-    """
-    _results = []                                                # (folder, name, status) — status: ok | empty | error
-    for _folder, _name, _fn in _XN_EXT_ROUTES:
-        _dest = out_dir / _folder
-        _dest.mkdir(parents=True, exist_ok=True)
-        try:
-            _fn(df, _dest, reporter)
-            _results.append((_folder, _name, "ok" if (_dest / f"{_name}.png").exists() else "empty"))
-        except Exception as _e:                                  # noqa: BLE001
-            reporter.log(f"    {ConsoleColours.WARNING}✗ {_folder}/{_name}: {type(_e).__name__}: {_e}{ConsoleColours.ENDC}")
-            _results.append((_folder, _name, "error"))
-            plt.close("all")
-
-    reporter.log(SEPARATOR_DASH)
-    reporter.log("  Panels written to the thematic folders:")
-    _ok = 0
-    for _folder, _name, _status in sorted(_results):
-        if _status == "ok":
-            reporter.log(f"    {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} {_folder}/{_name}.png")
-            _ok += 1
-        elif _status == "empty":
-            reporter.log(f"    {ConsoleColours.WARNING}·{ConsoleColours.ENDC} {_folder}/{_name}.png  — panel drew nothing (inputs missing)")
-        else:
-            reporter.log(f"    {ConsoleColours.WARNING}✗{ConsoleColours.ENDC} {_folder}/{_name}  — skipped (see above)")
-    reporter.log(SEPARATOR_DASH)
-    _tally = f"{_ok}/{len(_XN_EXT_ROUTES)}"
-    _colour = ConsoleColours.OKGREEN if _ok == len(_XN_EXT_ROUTES) else ConsoleColours.WARNING
-    reporter.log(f"  {ConsoleColours.BOLD}Extended analysis complete{ConsoleColours.ENDC}  ·  "
-                 f"{_colour}{_tally} panels{ConsoleColours.ENDC} rendered")
 
 
 def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: ReportManager):
@@ -9531,21 +9511,25 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
 
     rama_ref = _utils_mod.compute_ramachandran_angles(_load(crystal))
     _utils_mod.save_ramachandran_plot(rama_ref, "3R3U Crystal Structure",
-                                      rama_dir / "Ramachandran_3R3U_Crystal.png", dpi=dpi)
-    reporter.log("  ✔ Saved: Ramachandran_3R3U_Crystal.png")
+                                      rama_dir / "01_Ramachandran_3R3U_Crystal.png", dpi=dpi)
+    reporter.log("  ✔ Saved: 02_Ramachandran/01_Ramachandran_3R3U_Crystal.png")
 
+    _rn = 1   # running plot number within 02_Ramachandran (crystal was 01)
     for label, token in [("DeHa4", "DeHa4_Control"), ("3R3U", "3R3U_Control")]:
         cif = _control_cif(token)
         if not cif:
             reporter.log(f"  ! Ramachandran: no {label} control CIF found")
             continue
         rama_con = _utils_mod.compute_ramachandran_angles(_load(cif))
+        _rn += 1; _c_con = f"{_rn:02d}_Ramachandran_{label}_Control.png"
         _utils_mod.save_ramachandran_plot(rama_con, f"{label} Control (Boltz-2)",
-                                          rama_dir / f"Ramachandran_{label}_Control.png", dpi=dpi)
+                                          rama_dir / _c_con, dpi=dpi)
+        _rn += 1; _c_cmp = f"{_rn:02d}_Ramachandran_{label}_vs_Crystal.png"
         _utils_mod.save_ramachandran_comparison(rama_ref, rama_con,
                                                 "3R3U (Crystal)", f"{label} (Boltz-2)",
-                                                rama_dir / f"Ramachandran_{label}_vs_Crystal.png", dpi=dpi)
-        reporter.log(f"  ✔ Saved: Ramachandran_{label}_Control.png + comparison")
+                                                rama_dir / _c_cmp, dpi=dpi)
+        reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_con}")
+        reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_cmp}")
 
 
 # =============================================================================
@@ -10122,7 +10106,7 @@ def write_figure_descriptions(out_dir: Path):
         "            not a reproducible property of the complex.",
         "",
         "=" * 80,
-        "EXTENDED ANALYSIS (merged into the thematic subfolders — no folder of its own)",
+        "PER-FOLDER ANALYSIS PANELS (rendered within each folder's step)",
         "=" * 80,
         "",
         "-" * 80,
@@ -10165,7 +10149,7 @@ def write_figure_descriptions(out_dir: Path):
         "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
         "",
         "-" * 80,
-        "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Fingerprint.png",
+        "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.png",
         "  Title   : Mechanistic fingerprint — per-tier catalytic feature profile",
         "  Type    : Radar / spider chart; one feature spoke per axis,",
         "            one tier-coloured filled polygon across them",
@@ -10179,7 +10163,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Complements the scalar Figure 11 (mech-score mean ± CI).",
         "",
         "-" * 80,
-        "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Energetics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.png",
         "  Title   : Binding energetics — binding probability by tier",
         "  Type    : Binding-probability violin per tier (red median bar)",
         "  Look for: how binding probability (sigmoid of interaction density, cross-PAE and",
@@ -10220,20 +10204,20 @@ def write_figure_descriptions(out_dir: Path):
         "Figure_05b_TT_AI_Quality_Space.png": "04_AI_Confidence_Quality/02_AI_Quality_Space.png",
         "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
         "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/07_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/08_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/02_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/03_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/04_SN2_Angle_by_Tier.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Quality_Space.png",
+        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.png",
+        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.png",
+        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
+        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
+        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
+        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
+        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
         "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
         "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
         "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
         "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
         "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/06_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Landscape.png",
+        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
+        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/08_Chemical_Space_Landscape.png",
         "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
         "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
         "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
@@ -10321,7 +10305,7 @@ def write_figure_descriptions(out_dir: Path):
     desc_path.write_text(_txt, encoding="utf-8")
     _stats_path = _write_statistical_tests(out_dir)
     if _stats_path is not None:
-        print(f"  Statistical Tests (BH-corrected) Saved: {_stats_path}", flush=True)
+        print(f"  ✔ Saved: 01_Analysis_Data/{_stats_path.name}", flush=True)
     return desc_path
 
 
@@ -10391,9 +10375,20 @@ def main():
 
         enriched_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
         df.to_csv(enriched_csv, index=False)
-        reporter.log(f"Figure-Enriched Dataset Saved: {enriched_csv.resolve()}")
+        reporter.log(f"  ✔ Saved: 01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")
 
-        # Figures are generated folder-by-folder in narrative order (01 → 07).
+        # Finalise 01_Analysis_Data before the figure steps: build the multi-model variance CSV here
+        # (parse the 5 model CIFs per complex) so the whole 01_Analysis_Data set is complete before
+        # Step 2. The geometry panel in Step 5 then only READS this cache — it never rebuilds.
+        if _ALLOW_VARIANCE_COMPUTE:
+            reporter.log("")
+            reporter.log("  Multi-Model Variance QC")
+            try:
+                _xn__ensure_multimodel_variance_csv(prod_dir, out_dir, reporter)
+            except Exception as _e:                               # noqa: BLE001
+                reporter.log(f"  ! Multi-model variance skipped: {type(_e).__name__}: {_e}")
+
+        # Figures are generated folder-by-folder in narrative order (02 → 08).
         # 02_Ramachandran — control backbone-geometry validation.
         generate_ramachandran_figures(prod_dir, rama_dir, reporter)
 
@@ -10415,7 +10410,7 @@ def main():
             reporter.log(f"  ! Statistical battery skipped: {type(_e).__name__}: {_e}")
 
         desc_path = write_figure_descriptions(out_dir)
-        reporter.log(f"Figure Descriptions Log Saved: {desc_path.resolve()}")
+        reporter.log(f"  ✔ Saved: 01_Analysis_Data/{desc_path.name}")
 
     except Exception as e:
         print(f"\n[CRITICAL ERROR] Pipeline Failed: {e}")

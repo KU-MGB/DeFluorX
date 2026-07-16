@@ -422,6 +422,43 @@ def console_info(msg: str) -> None:
         _console_info(msg, logger)
 
 
+def _mask_oomd_at_start():
+    """Prompt for the (optional) sudo password up front and mask systemd-oomd, so the memory-heavy
+    QSite QM/MM phase near the end of the run is not OOM-killed. Prompting at the START lets the user
+    walk away — the run stays unattended. Returns a restore callable (registered with atexit). If sudo
+    is unavailable or skipped, the run proceeds unprotected (NORMAL mode). No-op when not on a TTY."""
+    if not sys.stdin.isatty():
+        return lambda: None
+    console_info("OPTIONAL — protect this run from the Linux out-of-memory killer.")
+    console_info("  QSite QM/MM holds large systems in memory for hours; systemd-oomd can kill it. "
+                 "Masking needs root.")
+    console_info("  Enter your sudo password to mask systemd-oomd, or press Enter / Ctrl-D to skip.")
+    try:
+        with open("/dev/tty") as _tty:
+            _ok = _sp.run(["sudo", "-v"], stdin=_tty).returncode == 0
+    except Exception:
+        _ok = _sp.run(["sudo", "-v"]).returncode == 0 if True else False
+    if not _ok:
+        console_info("  [NORMAL MODE] sudo unavailable/skipped — systemd-oomd NOT masked.")
+        return lambda: None
+    _stop = threading.Event()
+
+    def _keepalive():
+        while not _stop.wait(60):
+            _sp.run(["sudo", "-vn"], capture_output=True)
+    threading.Thread(target=_keepalive, daemon=True).start()
+    console_info("  Masking systemd-oomd — restored automatically when Step 07 exits.")
+    _sp.run(["sudo", "systemctl", "stop", "systemd-oomd"], capture_output=True)
+    _sp.run(["sudo", "systemctl", "mask", "systemd-oomd.socket"], capture_output=True)
+
+    def _restore():
+        _stop.set()
+        console_info("Restoring systemd-oomd services...")
+        _sp.run(["sudo", "systemctl", "unmask", "systemd-oomd.socket"], capture_output=True)
+        _sp.run(["sudo", "systemctl", "start", "systemd-oomd"], capture_output=True)
+    return _restore
+
+
 def console_separator(heavy: bool = True) -> None:
     if hasattr(thread_logger, 'lines'):
         sep = SEPARATOR_HEAVY if heavy else SEPARATOR_LIGHT
@@ -4598,6 +4635,10 @@ def main():
     global _QSITE_RUN, _QSITE_PROCS
     _QSITE_RUN = CFG.QSITE_RUN and not args.no_run_qsite
     _QSITE_PROCS = args.qsite_procs
+
+    # Optional sudo up front so the run is fully unattended (systemd-oomd masked for the QSite phase).
+    import atexit as _atexit
+    _atexit.register(_mask_oomd_at_start())
 
     raw_dir  = args.run_dir or args.dir or "."
     work_dir = _resolve_work_dir(raw_dir)

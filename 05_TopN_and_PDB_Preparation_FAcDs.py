@@ -1368,18 +1368,18 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
 """
 WHY THIS IS HERE, AND NOT IN 07.
 
-The ligand's charges reach the physics through exactly one door: the Desmond SYSTEM BUILD, which is done
-by hand in Maestro between this step and Step 06. So the charge set has to exist BEFORE that build. Put
-this in Step 07 and it would fire after the trajectory it was meant to influence had already been run.
+The ligand's charges reach the physics through exactly one door: the Desmond SYSTEM BUILD, which Step 06
+runs. So the charge set has to exist BEFORE that build. Put this in Step 07 and it would fire after the
+trajectory it was meant to influence had already been run.
 
 It is also irrelevant to Step 07 on its own terms: QSite puts the ligand INSIDE the QM region, where DFT
 computes its electron density directly and never consults a point charge. ESP charges matter only for
 the CLASSICAL regions — the Desmond trajectory and Prime MM-GBSA.
 
-WHAT IT DOES NOT DO. It does not build a system, and it does not touch MD or WaterMap: those are the
-user's, in Schrödinger. It writes <ligand>_ESP.mae and stops. The charges are applied deliberately, by a
-person, in System Builder ('Use custom charges' -> 'Partial charges from structure') — never injected
-behind their back. A charge set that silently changed the force field would be worse than none.
+WHAT IT DOES NOT DO. It does not build a system, and it does not run MD or WaterMap: that is Step 06's
+work. It writes <ligand>_ESP.mae and stops. Step 06 name-matches each complex's own _ESP.mae by stem,
+writes those charges into the built .cms force field, and re-reads them through msys to prove they
+reached the MD engine — a charge set that silently failed to apply would be worse than none.
 """
 
 _ESP_BUILD = r"""
@@ -1526,11 +1526,10 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
             console_info(f"  Removed {_n} Jaguar scratch file(s); the .in/.out/.mae/.csv are kept for audit.")
 
     console_info(f"  \u2714 {_ok}/{len(_pdbs)} ligand(s) charged  \u2192  {_sum_path.name}")
-    console_info("  NEXT (by hand in Maestro \u2014 deliberately not automated):")
-    console_info(f"    1. In {out_dir.name}/ there is one *_ESP.mae per prepared complex ({_ok} total);")
-    console_info("       for each MD system, load that complex's own name-matched _ESP.mae into the workspace.")
-    console_info("    2. System Builder \u2192 Solvation tab \u2192 tick 'Use custom charges'.")
-    console_info("    3. Select 'Partial charges from structure', then 'Apply to' \u2192 the ligand.")
+    console_info("  NEXT (Step 06 \u2014 applied automatically, no Maestro step):")
+    console_info(f"    1. In {out_dir.name}/ there is one *_ESP.mae per prepared complex ({_ok} total).")
+    console_info("    2. Step 06 name-matches each complex's own _ESP.mae by stem and merges the charges.")
+    console_info("    3. They are written into the built .cms force field and verified against the MD engine.")
     try:
         _f = plot_esp_alpha_carbon(_summary, out_dir)
         if _f:
@@ -3501,8 +3500,8 @@ def prep_and_convert_phase(args):
             console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 
     """
-    QM ligand charges — only when asked for. The step is minutes of DFT per ligand, and its product is
-    useless unless the .mae is loaded by hand in System Builder, so it must never run by surprise.
+    QM ligand charges — only when asked for. The step is minutes of DFT per ligand, so it must never run
+    by surprise. Step 06 consumes the resulting .mae when it builds and charges the MD system.
     """
     if bool(getattr(CFG, "ESP_CHARGES_ENABLE", False)) or bool(globals().get("_ESP_REQUESTED", False)):
         console_separator()
@@ -4053,10 +4052,9 @@ def main():
     parser.add_argument("--top", type=int, default=None, help="Fallback top-N when no MD_Selected column")
     parser.add_argument("--esp", action="store_true",
                         help="Compute QM (Jaguar ESP) partial charges for the prepared MD ligands and "
-                             "write <ligand>_ESP.mae. Load it BY HAND in Maestro System Builder "
-                             "('Use custom charges' → 'Partial charges from structure'); this step "
-                             "never touches the MD or WaterMap setup. Also settable as "
-                             "CFG.ESP_CHARGES_ENABLE.")
+                             "write <ligand>_ESP.mae. Step 06 applies them to the built system "
+                             "automatically; this step never touches the MD or WaterMap setup. Also "
+                             "settable as CFG.ESP_CHARGES_ENABLE.")
     args = parser.parse_args()
 
     # --esp turns the QM charge step on for this run; CFG.ESP_CHARGES_ENABLE turns it on permanently.

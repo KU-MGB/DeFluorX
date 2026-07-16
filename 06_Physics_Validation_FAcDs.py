@@ -42,7 +42,7 @@ Usage:
   --md-frames N     MD trajectory frames               [default 100000]
   --wm-ns   N       WaterMap production length (ns)     [default 5]
   --lig-dist N      WaterMap active-site radius (Å)     [default 10]
-  --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (SID+MM-GBSA pipelined with md)
+  --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (SID+MM-GBSA run after each MD)
   --out     DIR     output root                         [default <run>/6_Physics_Validation]
   --pipeline-mode   called from 00_00_run_pipeline_FAcDs.sh (delegates oomd masking to the runner)
 
@@ -70,9 +70,10 @@ Dependency Map
 -------------------------------------------------------------------------------
 The Critic's Corner: Known Limitations & Failure Points
 -------------------------------------------------------------------------------
-  1. GPU serialisation: build/MD/WaterMap use the single GPU, run one at a time. The
-     SID+MM-GBSA of a finished MD run on the CPU (one at a time) overlapping the next
-     MD on the GPU — the pipelining that saves wall-clock.
+  1. Strictly sequential per rank: MD → SID → MM-GBSA, each blocking to completion before
+     the next rank's MD starts. Nothing overlaps, so two Prime batches never share the scratch
+     disk and a running SID/MM-GBSA is never pre-empted by the next MD (slower than a GPU/CPU
+     pipeline, but robust — no killed jobs, no disk contention).
   2. WaterMap ligand is NOT ESP-charged: WaterMap rebuilds ligand charges with its own
      S-OPLS/TIP4P (its GCMC μ_excess is calibrated only for TIP4P). Correct for water
      thermodynamics; ESP lives in the MD/QSite branch where C–F electrophilicity matters.
@@ -398,10 +399,14 @@ class OomdGuard:
     def __init__(self, active: bool):
         self.active = active
         self._restored = False
+        self._entered = False
         self._keepalive_stop = threading.Event()
         self._keepalive_thread: threading.Thread | None = None
 
     def __enter__(self):
+        if self._entered:          # idempotent: primed once at start, reused by the MD-phase `with`
+            return self
+        self._entered = True
         if not self.active:
             _echo("  [PIPELINE-MODE] oomd management delegated to pipeline runner.")
             return self
@@ -720,7 +725,9 @@ def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
     """Classify every desmond_md_job_R_* directory and return the subset
     that still needs SID analysis (READY or INCOMPLETE).
     """
-    _echo("Scanning MD job directories to see which ones still need SID analysis...")
+    _multi = len(job_dirs) > 1            # the full scan header/summary is noise for a single-rank scan
+    if _multi:
+        _echo("Scanning MD job directories to see which ones still need SID analysis...")
     to_run: list[Path] = []
     completed = running = pending = 0
 
@@ -762,14 +769,15 @@ def scan_jobs(job_dirs: list[Path], md_dir: Path) -> list[Path]:
             to_run.append(d)
             _echo(f"  - Rank {rank}: MD finished but SID has never been run — queued.")
 
-    _echo("")
-    _echo("Scan summary:")
-    _echo(f"  MD jobs found                  : {len(job_dirs)}")
-    _echo(f"  SID already complete           : {completed}")
-    _echo(f"  MD simulation still running    : {running}")
-    _echo(f"  MD simulation not started yet  : {pending}")
-    _echo(f"  SID analysis to run now        : {len(to_run)}")
-    _echo(_SEP)
+    if _multi:
+        _echo("")
+        _echo("Scan summary:")
+        _echo(f"  MD jobs found                  : {len(job_dirs)}")
+        _echo(f"  SID already complete           : {completed}")
+        _echo(f"  MD simulation still running    : {running}")
+        _echo(f"  MD simulation not started yet  : {pending}")
+        _echo(f"  SID analysis to run now        : {len(to_run)}")
+        _echo(_SEP)
     return to_run
 
 
@@ -799,7 +807,7 @@ def run_analyze_simulation(job_dir: Path, job_name: str, cms_file: Path,
     trajectory frame total used as the completion denominator.
     """
     total_frames = traj_frame_count(trj_dir) or _DEFAULT_FRAME_TOTAL
-    _echo(f"  Running analyze_simulation.py (long step, ~10-15h; {total_frames} frames)...")
+    _echo(f"  Running analyze_simulation.py (SID over {total_frames:,} frames; live progress below)…")
     log = job_dir / f"{job_name}_analyze_simulation.log"
     with Heartbeat(log, label, total_frames):
         with open(log, "w") as fh:
@@ -1151,7 +1159,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
             return
         sname = f"{job_name}_mmgbsa_shard{i:03d}"
         cmd = [SCHROD_RUN, "thermal_mmgbsa.py", cms_file.name,
-               "-j", sname, "-HOST", f"localhost:{njobs}",
+               "-j", sname, "-NJOBS", str(njobs),
                "-start_frame", str(a), "-end_frame", str(b)]
         if lig_asl:
             cmd += ["-lig_asl", lig_asl]
@@ -1291,7 +1299,7 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
                                   _step_cfg, _total, _ncpu, _interval)
 
     cmd = [SCHROD_RUN, "thermal_mmgbsa.py", cms_file.name,
-           "-j", f"{job_name}_mmgbsa", "-HOST", f"localhost:{_ncpu}"]
+           "-j", f"{job_name}_mmgbsa", "-NJOBS", str(_ncpu)]
     # Pin the ligand explicitly (ASL from CFG, via thermal_mmgbsa's -lig_asl flag) so
     # Prime scores the PFAS molecule; a small/heavily-fluorinated ligand can otherwise
     # be misassigned as solvent by auto-detection. Empty CFG value → auto-detect.
@@ -2449,7 +2457,25 @@ def _unpack_md_production(wd: Path, jobname: str) -> None:
         m = re.search(r"_(\d+)-out\.tgz$", p.name)
         return int(m.group(1)) if m else -1
 
+    cms = wd / f"{jobname}-out.cms"
+
+    def _repoint_cms() -> None:
+        """Repoint the cms's s_chorus_trajectory_file from the staged name ({job}_N_trj) to the
+        renamed {job}_trj. multisim writes the production-stage trajectory name into the cms; after we
+        rename the trajectory, thermal_mmgbsa (Prime MM-GBSA) and 07 both resolve the trajectory from
+        this reference, so a stale name aborts MM-GBSA with 'No trajectory found associated with CMS'."""
+        if not cms.exists():
+            return
+        try:
+            b = cms.read_bytes()
+            m = re.search(re.escape(jobname.encode()) + rb"_\d+_trj", b)
+            if m and not (wd / m.group(0).decode()).exists():
+                cms.write_bytes(b.replace(m.group(0), f"{jobname}_trj".encode()))
+        except Exception:
+            pass
+
     if (wd / f"{jobname}_trj").exists() and (wd / f"{jobname}.ene").exists():
+        _repoint_cms()          # trajectory already extracted (e.g. re-run) — ensure the cms points at it
         return
     tgzs = sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_seg)
     if not tgzs:
@@ -2467,6 +2493,7 @@ def _unpack_md_production(wd: Path, jobname: str) -> None:
             shutil.move(str(src), str(dst))
     shutil.rmtree(stage, ignore_errors=True)
     prod.unlink(missing_ok=True)                          # trajectory now lives extracted at the root
+    _repoint_cms()                                         # repoint the cms so Prime MM-GBSA finds it
 
 
 def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int) -> Path:
@@ -2783,6 +2810,11 @@ def main() -> int:
 
     ok, failed = [], []
 
+    # Prompt for the (optional) sudo password NOW, up front, so the run is fully unattended
+    # afterwards — the user can walk away and SID / MM-GBSA stay protected from systemd-oomd.
+    _guard = OomdGuard(active=not a.pipeline_mode)
+    _guard.__enter__()
+
     if "merge" in stages:
         _section(f"Step 1/4 — Import + ESP merge  ({len(entries)} complex)")
         for e in entries:
@@ -2812,56 +2844,50 @@ def main() -> int:
 
     _mmgbsa_status = "ok"
     if "md" in stages:
-        _section(f"Step 4/4 — MD  ({a.md_ns:g} ns)  +  pipelined SID / MM-GBSA (CPU)")
-        import queue as _queue
-        q: "_queue.Queue" = _queue.Queue()
-        worker_fail: list = []
-
-        def _worker() -> None:
-            # One SID+MM-GBSA at a time (CPU) while MD runs on the GPU; both idempotent.
-            while True:
-                jd = q.get()
-                if jd is None:
-                    q.task_done(); break
-                try:
-                    process_jobs(scan_jobs([jd], dirs["md"]))
-                    run_mmgbsa(jd, jd.name, _rank_of(jd.name))
-                except Exception as exc:
-                    worker_fail.append((jd.name, str(exc).splitlines()[0]))
-                q.task_done()
-
+        _section(f"Step 4/4 — MD → SID → MM-GBSA  ({a.md_ns:g} ns · one rank fully done before the next)")
         run_root = run
-        with OomdGuard(active=not a.pipeline_mode):
-            wt = threading.Thread(target=_worker, name="sid_mmgbsa", daemon=True); wt.start()
+        md_dir = dirs["md"]
+        with _guard:                                     # reuse the guard primed at start (idempotent)
+            # Strictly sequential per rank: MD (GPU) → SID (CPU) → MM-GBSA (CPU), each blocking to
+            # completion. Nothing overlaps, so no two Prime batches ever share the scratch disk and a
+            # running SID/MM-GBSA is never pre-empted by the next rank's MD.
             for e in entries:
                 if e.get("_skip"):
                     continue
+                rank = e["rank"]
                 try:
-                    jd = _phase_md(e, dirs, a)
-                    if jd is not None:
-                        q.put(jd)                       # queue SID+MM-GBSA (background CPU)
-                        ok.append(_complex_label(e, ranked_map))
+                    jd = _phase_md(e, dirs, a)                          # 1) MD  (blocking)
                 except Exception as exc:
-                    _fail(f"[md] R_{e['rank']} FAILED — {str(exc).splitlines()[0]}")
+                    _fail(f"[md] R_{rank} FAILED — {str(exc).splitlines()[0]}")
                     failed.append((_complex_label(e, ranked_map), f"md: {str(exc).splitlines()[0]}"))
-            q.put(None); wt.join()                       # drain the SID+MM-GBSA queue
+                    continue
+                if jd is None:
+                    continue
+                try:
+                    process_jobs(scan_jobs([jd], md_dir))              # 2) SID  (blocking)
+                    if run_mmgbsa(jd, jd.name, _rank_of(jd.name)) is None:
+                        _mmgbsa_status = "warn"                         # 3) MM-GBSA (blocking)
+                except Exception as exc:
+                    _warn(f"[sid/mmgbsa] R_{rank}: {str(exc).splitlines()[0]}")
+                    _mmgbsa_status = "warn"
+                ok.append(_complex_label(e, ranked_map))               # MD done; SID/MM-GBSA issues are WARN
 
-            _section("Finalise — SID scan + MM-GBSA plots")
-            md_dir = dirs["md"]
+            # Finalise: read the per-rank MM-GBSA CSVs and draw the combined cross-rank plots (no re-run).
+            _section("Finalise — MM-GBSA combined plots")
             job_dirs = sorted((d for d in md_dir.iterdir()
                                if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
                               key=_natural_rank)
             if job_dirs:
-                process_jobs(scan_jobs(job_dirs, md_dir))       # any SID not yet done (idempotent)
-                _mmgbsa_status = run_mmgbsa_phase(md_dir, run_root)   # plots + combined (reads pre-computed CSVs)
-        for jn, why in worker_fail:
-            _warn(f"[sid/mmgbsa] {jn}: {why}")
+                _st = run_mmgbsa_phase(md_dir, run_root)               # idempotent: CSVs exist → plots only
+                if _st != "ok":
+                    _mmgbsa_status = _st
 
     _section(f"Summary — {len(ok)} ok, {len(failed)} failed  (stages {sorted(stages)})")
     for t in ok:
         _echo(f"  {_C.OKGREEN}✔{_C.ENDC} {t}")
     for t, why in failed:
         _echo(f"  {_C.FAIL}✗{_C.ENDC} {t}  →  {why}")
+    _guard.__exit__(None, None, None)                    # restore systemd-oomd (idempotent if Step 4 already did)
     print_elapsed(t0, "06_Physics_Validation_FAcDs.py")
     return EXIT_WARN if (failed or _mmgbsa_status == "warn") else 0
 

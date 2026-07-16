@@ -128,13 +128,48 @@ else
         for i in "${!_available_runs[@]}"; do
             printf "    [%d]  %s\n" "$((i+1))" "${_available_runs[$i]}"
         done
+
+        # ── Ask which step to start from FIRST ────────────────────────────────
+        # Fresh vs Resume is only meaningful for the early steps (01 merge / 02
+        # prediction) or a full run; starting at 03+ can only mean resuming an
+        # existing run, so the Fresh/Resume prompt below is skipped for those.
+        if [[ "${RESUME_FROM:-0}" -eq 0 && -t 0 ]]; then
+            echo ""
+            echo "  ${_C_BOLD}── Start from which step? ──${_C_RESET}"
+            echo "    [1] 01  Merge sequences"
+            echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
+            echo "    [3] 03  Validation figures"
+            echo "    [4] 04  Dendrogram"
+            echo "    [5] 05  Top-N selection + PDB preparation"
+            echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
+            echo "    [7] 07  MD thermodynamics + QM/MM engine"
+            read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step </dev/tty || _from_step=""
+            _STEP_ASKED=1
+            if [[ "$_from_step" =~ ^[1-7]$ ]]; then
+                RESUME_FROM="$_from_step"
+                printf "  ${_C_GREEN}→ Starting from Step %02d; earlier steps will be skipped.${_C_RESET}\n" "$_from_step"
+            elif [[ -n "$_from_step" ]]; then
+                echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' — running the full pipeline.${_C_RESET}"
+            else
+                echo "  ${_C_GREEN}→ Running the full pipeline (all steps).${_C_RESET}"
+            fi
+        fi
+
+        # ── Fresh or Resume — asked only when it can matter (step 1/2 or a full run) ──
+        # Fresh vs Resume is a Step-02 concept: only Step 02 creates or continues a Boltz-2 run.
+        # Starting at 03+ just processes an existing run's data, so that prompt is skipped there.
         echo ""
-        echo "  Select mode:"
-        echo "    [F]  Fresh   — start a new prediction run from scratch"
-        echo "    [R]  Resume  — continue from an existing run (default: latest)"
-        echo ""
-        read -r -p "  Your choice [F/R, default=R]: " _mode_choice </dev/tty
-        _mode_choice="${_mode_choice:-R}"
+        if [[ "${RESUME_FROM:-0}" -ge 3 ]]; then
+            _mode_choice="R"
+            _DOWNSTREAM_START=1
+        else
+            echo "  Select mode:"
+            echo "    [F]  Fresh   — start a new prediction run from scratch"
+            echo "    [R]  Resume  — continue from an existing run (default: latest)"
+            echo ""
+            read -r -p "  Your choice [F/R, default=R]: " _mode_choice </dev/tty
+            _mode_choice="${_mode_choice:-R}"
+        fi
     else
         echo "  ${_C_RED}${_C_BOLD}No Boltz-2 run directory found — switching to FRESH mode (Step 02 will create one).${_C_RESET}"
         echo ""
@@ -154,7 +189,11 @@ else
                 exit 1
             elif [[ ${#_available_runs[@]} -eq 1 ]]; then
                 RUN_ID="${_available_runs[0]}"
-                echo "  Mode: RESUME — auto-selected: ${RUN_ID}"
+                if [[ "${_DOWNSTREAM_START:-0}" == "1" ]]; then
+                    printf "  ${_C_GREEN}Using run: %s${_C_RESET}\n" "$RUN_ID"
+                else
+                    echo "  Mode: RESUME — auto-selected: ${RUN_ID}"
+                fi
             else
                 echo ""
                 echo "  Enter the number of the run to resume"
@@ -170,7 +209,11 @@ else
                     echo "  Invalid selection — defaulting to latest."
                     RUN_ID="${_available_runs[-1]}"
                 fi
-                echo "  Mode: RESUME — selected: ${RUN_ID}"
+                if [[ "${_DOWNSTREAM_START:-0}" == "1" ]]; then
+                    printf "  ${_C_GREEN}Using run: %s${_C_RESET}\n" "$RUN_ID"
+                else
+                    echo "  Mode: RESUME — selected: ${RUN_ID}"
+                fi
             fi
             ;;
         *)
@@ -202,7 +245,7 @@ fi
 # without re-running the hours-long Step 02). Steps below the chosen number are
 # marked SKIP. Prompted only when resuming interactively and --resume-from was not
 # already given on the command line; Enter (default) runs the whole pipeline.
-if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && -t 0 ]]; then
+if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && -t 0 && "${_STEP_ASKED:-0}" != "1" ]]; then
     echo ""
     echo "  ${_C_BOLD}── Resume from which step? ──${_C_RESET}"
     echo "    [1] 01  Merge sequences"
@@ -210,7 +253,7 @@ if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && -t 0 ]]; then
     echo "    [3] 03  Validation figures"
     echo "    [4] 04  Dendrogram"
     echo "    [5] 05  Top-N selection + PDB preparation"
-    echo "    [6] 06  SID + Prime MM-GBSA"
+    echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
     echo "    [7] 07  MD thermodynamics + QM/MM engine"
     read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step </dev/tty || _from_step=""
     if [[ -z "$_from_step" ]]; then
@@ -342,7 +385,7 @@ run_step() {
 
     _tee ""
     _tee "$_sep"
-    _tee "  STEP : ${name}"
+    _tee "  NEXT STEP : ${name}"
 
     # --dry-run: print what would run, skip execution.
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -360,7 +403,6 @@ run_step() {
     fi
 
     _tee "  CMD  : $*"
-    _tee "  START: $(date '+%Y-%m-%d %H:%M:%S')"
     _tee "$_sep"
 
     local t0=$SECONDS
