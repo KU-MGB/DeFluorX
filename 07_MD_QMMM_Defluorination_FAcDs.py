@@ -3417,30 +3417,17 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # ── Load trajectory ────────────────────────────────────────────────────────
     # First try flat lookup (single-stage jobs: *-out.cms and *_trj at folder root).
-    # Multi-stage restart jobs store each stage in a *_N-out.tgz archive; extract
-    # on demand, then scan recursively for the final stage CMS and all trj segments.
-    import tarfile as _tarfile
-
-    def _auto_extract_tgz(folder: Path) -> None:
-        """Extract *.tgz archives in folder only when their content is absent."""
-        for _tgz in sorted(folder.glob("*-out.tgz")):
-            try:
-                with _tarfile.open(str(_tgz)) as _tf:
-                    _first_entry = _tf.getnames()[0] if _tf.getnames() else ""
-                    _first_path  = folder / _first_entry.split('/')[0]
-                    if _first_path.exists():
-                        continue
-                    print(f"  [Rank {rank}] Extracting compressed files from: {_tgz.name} ...", flush=True)
-                    console_info(f"      [+] Extracting {_tgz.name} ...")
-                    _tf.extractall(path=str(folder))
-            except Exception as _te:
-                console_info(f"      [!] TGZ extract failed ({_tgz.name}): {_te}")
-
     """
-    Both the flat and the recursive search are ordered by SEGMENT NUMBER, because cms_path is taken as
-    _cms_flat[-1] — the final stage of the run. Filesystem order is arbitrary on Linux, so an unsorted
-    flat glob would hand '[-1]' whichever segment the directory happened to list last and call it the
-    final one, silently analysing a mid-run stage.
+    The flat globs are ordered by SEGMENT NUMBER because cms_path is taken as _cms_flat[-1] — the final
+    stage of the run. Filesystem order is arbitrary on Linux, so an unsorted flat glob would hand '[-1]'
+    whichever segment the directory happened to list last and call it the final one.
+
+    No tgz-extract / recursive fallback: multisim leaves the PRODUCTION stage flat at the job-dir root
+    ({job}_trj + {job}-out.cms) and archives ONLY the earlier equilibration stages as *_N-out.tgz.
+    Extracting those and concatenating them as production (as an earlier version did) analyses a
+    Brownie/NVT/NPT relax as if it were production, with no root .ene so every relax frame counts as
+    post-equilibration. Step 06 now refuses that on the build side; 07 mirrors it — a missing flat
+    {job}_trj means the MD did not finish, so skip the rank.
     """
     def _seg_key(p: Path, suffix: str) -> int:
         _m = re.search(r'_(\d+)' + re.escape(suffix), p.name)
@@ -3450,15 +3437,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _trj_flat = sorted(job_folder.glob("*_trj"), key=lambda p: _seg_key(p, '_trj'))
 
     if not _cms_flat or not _trj_flat:
-        _auto_extract_tgz(job_folder)
-        # Recursively collect all *-out.cms / *_trj from extracted stage subdirs
-        _cms_flat = sorted(job_folder.glob("**/*-out.cms"),
-                           key=lambda p: _seg_key(p, '-out.cms'))
-        _trj_flat = sorted(job_folder.glob("**/*_trj"),
-                           key=lambda p: _seg_key(p, '_trj'))
-
-    if not _cms_flat or not _trj_flat:
-        console_info(f"    {ConsoleColours.FAIL}[!] Missing .cms or _trj in {job_folder.name}{ConsoleColours.ENDC}")
+        console_info(f"    {ConsoleColours.FAIL}[!] No flat {job_folder.name}/*_trj — the production MD "
+                     f"did not finish (only equilibration stages are archived); skipping rank.{ConsoleColours.ENDC}")
         return None
 
     cms_path = _cms_flat[-1]   # final stage CMS (highest segment number)
@@ -3466,9 +3446,6 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     tr = LazyTrajectory(_trj_flat)
     print(f"  [Rank {rank}] Loading trajectory: {len(_trj_flat)} segment(s) | {len(tr):,} total frames...", flush=True)
-    if len(_trj_flat) > 1:
-        console_info(f"      [+] Multi-segment trajectory: {len(_trj_flat)} segments → "
-                     f"{len(tr):,} total frames (lazy)")
 
     # ── WaterMap spatial sites (maegz) — flexible naming discovery ───────────
     _wm_root = work_dir / "03_WaterMaps"

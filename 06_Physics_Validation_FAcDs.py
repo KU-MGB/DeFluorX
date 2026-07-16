@@ -2816,15 +2816,26 @@ def _phase_build(entry: dict, dirs: dict) -> None:
     if not entry["complex_mae"].exists():
         raise RuntimeError(f"no ESP complex {entry['complex_mae'].name} — merge first")
     if setup_cms.exists():
-        q = reapply_esp_to_cms(setup_cms, entry["esp"])
-        _ok(f"[build] R_{rank} ✔ already built — ESP re-verified (sum {q:+.3f} e)")
-    else:
-        _log(f"[build] R_{rank} System Builder (minimize-volume, {CFG.PHYS_SOLVENT_MODEL}, "
-             f"{CFG.PHYS_FORCEFIELD}, {CFG.PHYS_SALT_CONC_M} M {CFG.PHYS_SALT_POS_ION}{CFG.PHYS_SALT_NEG_ION})…")
-        setup_cms = run_build(entry["complex_mae"], f"desmond_setup_R_{rank}", sb_dir)
-        entry["setup_cms"] = setup_cms
-        q = reapply_esp_to_cms(setup_cms, entry["esp"])
-        _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
+        # Resume over an existing build. reapply_esp_to_cms now REFUSES a collapsed/corrupt build
+        # (the comp_ct invariant), so a resume must not treat that refusal as a permanent failure —
+        # reapply is the only path here and run_build lives in the rebuild branch below. Quarantine the
+        # bad file and fall through to a fresh build, rather than bricking the rank on every re-run
+        # (R_1's on-disk setup_cms is comp_ct=1 right now). A genuine ESP name-mismatch will still fail
+        # on the fresh build's own reapply, which is correct.
+        try:
+            q = reapply_esp_to_cms(setup_cms, entry["esp"])
+            _ok(f"[build] R_{rank} ✔ already built — ESP re-verified (sum {q:+.3f} e)")
+            return
+        except RuntimeError as _e:
+            _bad = setup_cms.with_suffix(setup_cms.suffix + f".corrupt.{time.strftime('%Y%m%d_%H%M%S')}")
+            setup_cms.rename(_bad)
+            _log(f"[build] R_{rank} ⚠ existing build unusable — {_e}; moved to {_bad.name}, rebuilding.")
+    _log(f"[build] R_{rank} System Builder (minimize-volume, {CFG.PHYS_SOLVENT_MODEL}, "
+         f"{CFG.PHYS_FORCEFIELD}, {CFG.PHYS_SALT_CONC_M} M {CFG.PHYS_SALT_POS_ION}{CFG.PHYS_SALT_NEG_ION})…")
+    setup_cms = run_build(entry["complex_mae"], f"desmond_setup_R_{rank}", sb_dir)
+    entry["setup_cms"] = setup_cms
+    q = reapply_esp_to_cms(setup_cms, entry["esp"])
+    _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
 
 
 def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
