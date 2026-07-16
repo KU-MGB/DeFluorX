@@ -434,7 +434,9 @@ def _write_statistical_tests(out_dir):
     # A metric can be registered by both the central battery and a figure helper (e.g. the confidence
     # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once — a
     # duplicate would inflate the family denominator and write a repeated row to the CSV.
-    _df = _df.drop_duplicates(subset=["test", "panel"], keep="first").reset_index(drop=True)
+    # keep="last": on a (test, panel) collision the battery registers AFTER the figure helpers, and its
+    # row carries the effect size and the stricter min-group (≥3) — so the battery's row must win.
+    _df = _df.drop_duplicates(subset=["test", "panel"], keep="last").reset_index(drop=True)
     # A non-finite p (a Kruskal-Wallis on all-identical groups, a zero-variance Spearman) would poison the
     # q-values for the WHOLE family — false_discovery_control propagates the NaN. Set those aside (recorded
     # with q_BH = NaN) so the finite tests are corrected among themselves.
@@ -466,7 +468,8 @@ def _kruskal_by_tier(df, value_col, tier_col=CFG.COL_TIER, tiers=None):
         return ""
     N = sum(len(g) for g in groups); k = len(groups)
     eps2 = max(0.0, (H - k + 1) / (N - k)) if N > k else float("nan")
-    _register_p("Kruskal-Wallis across tiers", value_col, float(H), int(N), float(p))
+    _register_p("Kruskal-Wallis across tiers", value_col, float(H), int(N), float(p),
+                effect_size=(round(float(eps2), 4) if np.isfinite(eps2) else None), effect_type="epsilon^2")
     p_str = "p < 1e-4" if p < 1e-4 else f"p = {p:.3g}"
     return f"Kruskal-Wallis across tiers: {p_str} | eps^2 = {eps2:.2f}"
 
@@ -8273,8 +8276,8 @@ def _xn__stat_header(ax, text: str) -> None:
     if not text:
         return
     ax.text(0.015, 0.015, text, transform=ax.transAxes, ha='left', va='bottom',
-            fontsize=CFG.VIS_FONT_ANNOT - 0.5, family='monospace', color=CFG.VIS_INK["soft"],
-            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.85,
+            fontsize=CFG.VIS_FONT_ANNOT - 0.5, color=CFG.VIS_INK["soft"],
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=CFG.VIS_LEGEND_FRAME_ALPHA,
                       edgecolor=CFG.VIS_INK["palest"], linewidth=0.6), zorder=9)
 
 def _xn__thin(sub: pd.DataFrame, group_col: str, cap: int = _xn_STRIP_MAX_PER_GROUP) -> pd.DataFrame:
@@ -9014,10 +9017,12 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 
-# One definition of "Degraders" for the whole script: the statistical battery uses CFG.TIER_HIGH_QUALITY
-# (TIER_ORDER[:4] = Tier_1A/1B/2A/2B), and these panels emit rows under the SAME "Degraders vs
-# non-degraders" label, so they must split on the same set or the CSV carries two contradictory contrasts.
-_xo_ELITE_TIERS = list(getattr(CFG, "TIER_HIGH_QUALITY", ["Tier_1A", "Tier_1B", "Tier_2A", "Tier_2B"]))
+# The ELITE catalytic tiers (Tier_1A/1B), split OUT from the rest. This panel family contrasts elite vs
+# rest — a different, deliberately narrower question than the battery's degrader/non-degrader split
+# (CFG.TIER_HIGH_QUALITY, 4 tiers) — and is labelled "Elite vs rest" so the two never collide under one
+# name. Keeping it at the elite pair preserves the affinity≠catalysis reading: the elite catalytic tiers
+# (the FA/DFA-like near-attack poses) are LOW binding affinity, the high-affinity binders are not elite.
+_xo_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
 
 
 def _xo__minmax(s):
@@ -9088,24 +9093,23 @@ def _xo__fmt_p(p: float) -> str:
 def _xo__annotate(ax, text: str, loc: str='upper right') -> None:
     """Place a boxed statistics annotation on an axis."""
     xy = {'upper right': (0.98, 0.97, 'right', 'top'), 'upper left': (0.02, 0.97, 'left', 'top'), 'lower right': (0.98, 0.03, 'right', 'bottom'), 'lower left': (0.02, 0.03, 'left', 'bottom')}.get(loc, (0.98, 0.97, 'right', 'top'))
-    ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=8.5, family='monospace', bbox=dict(boxstyle='round,pad=0.4', fc='white', ec=CFG.VIS_INK["paler"], alpha=0.9))
+    ax.text(xy[0], xy[1], text, transform=ax.transAxes, ha=xy[2], va=xy[3], fontsize=CFG.VIS_FONT_ANNOT,
+            bbox=dict(boxstyle='round,pad=0.4', fc='white', ec=CFG.VIS_INK["paler"], alpha=CFG.VIS_LEGEND_FRAME_ALPHA))
 
-def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, fontsize=None, ncol=1):
+def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, ncol=1):
     """One combined box: the legend entries, then the statistics lines as blank-handle rows,
     so the legend and the stats annotation read as a single unit rather than two boxes.
 
     ncol lays the entries out in columns. Stacked in a single column they grow into a tall strip
     down the side of the panel and start covering the data they describe; two or three columns give
-    the same information in a fraction of the height. Box transparency and spacing inherit
-    apply_figure_style's rcParams; only the monospace family (which aligns the stats columns) is set
-    here, at CFG.VIS_FONT_ANNOT unless a caller needs a different size."""
+    the same information in a fraction of the height. Font, size, box transparency and spacing all
+    inherit apply_figure_style's rcParams, so this legend matches every other legend in the set."""
     from matplotlib.lines import Line2D as _L2D
     _blank = lambda: _L2D([], [], linestyle='', marker='', color='none')
     h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
     l = list(labels) + [''] + list(stat_lines)
-    _sz = CFG.VIS_FONT_ANNOT if fontsize is None else fontsize
     # A tuple loc is an axes-fraction anchor; matplotlib takes it via bbox_to_anchor, not loc.
-    _kw = dict(ncol=max(1, int(ncol)), prop={'family': 'monospace', 'size': _sz})
+    _kw = dict(ncol=max(1, int(ncol)))
     if isinstance(loc, (tuple, list)):
         ax.legend(h, l, loc='upper left', bbox_to_anchor=tuple(loc), **_kw)
     else:
@@ -9207,11 +9211,11 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         # The panel prints the raw p; register it so its q_BH is paid in the same family.
-        _register_p(f"Mann-Whitney U — {label} — Degraders vs non-degraders",
+        _register_p(f"Mann-Whitney U — {label} — Elite (Tier_1A/1B) vs rest",
                     "09_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
-    stat_lines = ['Degraders vs Non-Degraders (Mann–Whitney U; q_BH in CSV; r>0 = Degr. higher)']
+    stat_lines = ['Elite (Tier_1A/1B) vs rest (Mann–Whitney U; q_BH in CSV; r>0 = Elite higher)']
     metric_map = [('BA_Score', ba_col), ('Affinity', aff_col), ('Pocket', pocket_col), ('IntDens', dens_col)]
     for label, mcol in metric_map:
         res = _mw_signed(mcol, label)
@@ -9263,7 +9267,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         # The panel prints the raw p; register it so its q_BH is paid in the same family.
-        _register_p(f"Mann-Whitney U — {label} — Degraders vs non-degraders",
+        _register_p(f"Mann-Whitney U — {label} — Elite (Tier_1A/1B) vs rest",
                     "05_Evolutionary_Phylogeny", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
@@ -9277,7 +9281,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         ax1.set_ylabel('Sequence identity to control (%)')
         # panel title removed (user request)
         res = _mw_signed_p1(idc, 'Sequence Identity')
-        stat_text = 'Degraders vs Non-Degraders (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv)\n'
+        stat_text = 'Elite (Tier_1A/1B) vs rest (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv)\n'
         if res:
             p, r = res
             stat_text += f'Sequence Identity: {_xo__fmt_p(p)} | r = {r:+.2f}'
@@ -9343,7 +9347,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
                 ax2r.errorbar(xs, means, yerr=cis, color=colour, marker=mk, markersize=6, lw=2.0,
                               capsize=3, markeredgecolor='black', markeredgewidth=0.6, label=tlabel,
                               zorder=6)
-        stat_lines = ['Degraders vs Non-Degraders  (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv;  r > 0 = Degraders higher)']
+        stat_lines = ['Elite (Tier_1A/1B) vs rest  (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv;  r > 0 = Elite higher)']
         metric_map = [('Evo_Score', evo), ('Mech_Fpt', mech), ('Active_RMDA', rmsd)]
         for label, mcol in metric_map:
             res = _mw_signed_p1(mcol, label)

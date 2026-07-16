@@ -1431,8 +1431,8 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
             f"WM Mean dG          : {stats.get('WM_Mean_dG', float('nan')):.2f} kcal/mol"
         )
         ax2.text(0.03, 0.96, summary_text, transform=ax2.transAxes,
-                 fontsize=9, fontfamily='monospace', va='top', ha='left', zorder=10,
-                 bbox=dict(facecolor='white', edgecolor='#CBD5E1',
+                 fontsize=CFG.VIS_FONT_ANNOT, va='top', ha='left', zorder=10,
+                 bbox=dict(facecolor='white', edgecolor=CFG.VIS_MD_PALETTE["border"],
                            boxstyle='round,pad=0.6', alpha=1.0))
 
         # No on-figure title; the descriptive metadata is written to the log instead
@@ -1489,8 +1489,8 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     ax1 = fig.add_subplot(gs[0])
     sns.violinplot(data=combined_df, y="Job", x="NAC_Distance_A_Transformed", ax=ax1,
                    order=sorted_labels, palette=job_colour_map, inner="quartile", linewidth=1.2)
-    ax1.axvspan(0, transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#009E73', alpha=0.15, zorder=0)
-    ax1.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#D55E00', linestyle='--', linewidth=2)
+    ax1.axvspan(0, transform_distance(THRESHOLD_RELAXED_NAC_DIST), color=CFG.VIS_ACCENT["green"], alpha=0.15, zorder=0)
+    ax1.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color=CFG.VIS_ACCENT["vermillion"], linestyle='--', linewidth=2)
     ax1.set_xlabel("Nucleophile–ligand distance (Å) over MD frames [non-linear scale]"); ax1.set_ylabel("")
     
     dist_ticks = [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 40, 50]
@@ -1500,7 +1500,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     
     fig.canvas.draw()
     for lbl in ax1.get_yticklabels():
-        lbl.set_color(job_colour_map.get(lbl.get_text(), '#333333'))
+        lbl.set_color(job_colour_map.get(lbl.get_text(), CFG.VIS_MD_PALETTE["text_default"]))
         lbl.set_fontweight('bold'); lbl.set_fontsize(11)
     clean_spines(ax1)
 
@@ -1508,8 +1508,8 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     ax2 = fig.add_subplot(gs[1], sharey=ax1)
     sns.violinplot(data=combined_df, y="Job", x="NAC_Angle_Deg", ax=ax2,
                    order=sorted_labels, palette=job_colour_map, inner="quartile", linewidth=1.2)
-    ax2.axvspan(THRESHOLD_RELAXED_NAC_ANGLE, 180, color='#009E73', alpha=0.15, zorder=0)
-    ax2.axvline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2)
+    ax2.axvspan(THRESHOLD_RELAXED_NAC_ANGLE, 180, color=CFG.VIS_ACCENT["green"], alpha=0.15, zorder=0)
+    ax2.axvline(THRESHOLD_RELAXED_NAC_ANGLE, color=CFG.VIS_ACCENT["blue"], linestyle='--', linewidth=2)
     ax2.set_xlabel("S$_N$2 attack angle (°) over MD frames"); ax2.set_ylabel("")
     ax2.set_xlim(0, 180) # strictly physical bounds
     ax2.tick_params(labelleft=False)
@@ -1533,8 +1533,8 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
         (0, THRESHOLD_STRICT_NAC_ANGLE), strict_w,
         180 - THRESHOLD_STRICT_NAC_ANGLE, color=_C['zone_strict'], alpha=0.4, zorder=0))
         
-    ax3.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color='#D55E00', linestyle='--', linewidth=2)
-    ax3.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color='#0072B2', linestyle='--', linewidth=2)
+    ax3.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color=CFG.VIS_ACCENT["vermillion"], linestyle='--', linewidth=2)
+    ax3.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color=CFG.VIS_ACCENT["blue"], linestyle='--', linewidth=2)
     ax3.set_xlabel("Nucleophile–ligand distance (Å) [non-linear scale]  ·  global catalytic landscape (point colour = job)")
     ax3.set_ylabel("S$_N$2 attack angle O–C–F (°)")
     
@@ -1545,14 +1545,14 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     
     # Legend at bottom left containing both lines and zones
     ax3.legend(handles=[
-        Line2D([0], [0], color='#D55E00', linestyle='--', lw=2,
+        Line2D([0], [0], color=CFG.VIS_ACCENT["vermillion"], linestyle='--', lw=2,
                label=f'Distance < {THRESHOLD_RELAXED_NAC_DIST}Å'),
-        Line2D([0], [0], color='#0072B2', linestyle='--', lw=2,
+        Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], linestyle='--', lw=2,
                label=f'Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
         Patch(facecolor=_C['zone_relaxed'], alpha=0.3, label='Relaxed S_N2 Zone'),
         Patch(facecolor=_C['zone_strict'], alpha=0.4, label='Strict S_N2 Zone'),
     ], loc='lower left', frameon=True,
-       edgecolor='#E2E8F0', fancybox=True)
+       edgecolor=CFG.VIS_MD_PALETTE["border_light"], fancybox=True)
     clean_spines(ax3)
 
     with warnings.catch_warnings():
@@ -1666,7 +1666,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y = y_positions[i]
         job_label = format_job_label(row['Job_Name'], row['Scientific_Rank'])
-        rank_color = job_colour_map.get(job_label, '#475569')
+        rank_color = job_colour_map.get(job_label, CFG.VIS_MD_PALETTE["rank_default"])
 
         pocket = float(row.get('Pocket_Retention_Pct', 0.0) or 0.0)
         triad_o  = float(row.get('Triad_Integrity_Pct',     0.0) or 0.0)
@@ -1685,10 +1685,10 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 
         # Plot the 4 parallel sub-bars with distinct functional colours
         sub_bars = [
-            (pocket,        '#94A3B8', -0.21),
-            (triad_total,   '#FBBF24', -0.07),
-            (relaxed_total, '#60A5FA',  0.07),
-            (strict_total,  '#10B981',   0.21)
+            (pocket,        CFG.VIS_MD_PALETTE["slate"], -0.21),
+            (triad_total,   CFG.VIS_MD_PALETTE["triad"], -0.07),
+            (relaxed_total, CFG.VIS_MD_PALETTE["relaxed"],  0.07),
+            (strict_total,  CFG.VIS_MD_PALETTE["strict"],   0.21)
         ]
         
         sub_bar_h = 0.13
@@ -1718,13 +1718,13 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     ax.set_ylim(-0.65, n_rows - 0.35)
     ax.invert_yaxis()
     ax.set_xlabel("Percentage of Simulation Time (%)")
-    ax.axvline(100, color='#94A3B8', linestyle=':', linewidth=1.0, alpha=0.6, zorder=1)
+    ax.axvline(100, color=CFG.VIS_MD_PALETTE["slate"], linestyle=':', linewidth=1.0, alpha=0.6, zorder=1)
     clean_spines(ax)
 
     # Set y-axis tick label colours to match job colours
     fig.canvas.draw()
     for lbl in ax.get_yticklabels():
-        lbl.set_color(job_colour_map.get(lbl.get_text(), '#333333'))
+        lbl.set_color(job_colour_map.get(lbl.get_text(), CFG.VIS_MD_PALETTE["text_default"]))
 
     # ── Annotation panel ──────────────────────────────────────────────────────
     ax_ann.set_xlim(0, 1)
@@ -1734,19 +1734,19 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     ax_ann.set_xticks([])
     for sp in ax_ann.spines.values():
         sp.set_visible(False)
-    ax_ann.axvline(0.0, color='#CBD5E1', linewidth=0.8)
+    ax_ann.axvline(0.0, color=CFG.VIS_MD_PALETTE["border"], linewidth=0.8)
 
     hdr_y = -0.45
     ax_ann.text(0.10, hdr_y, 'WM ΔG\n(kcal/mol)', ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color='#334155')
+                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.30, hdr_y, 'WM_N\n(stable)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color='#334155')
+                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.50, hdr_y, 'min d_NAC\n(Å)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color='#334155')
+                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.72, hdr_y, 'avg a_NAC\n(°)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color='#334155')
+                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.92, hdr_y, 'DT\n(n)',            ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color='#334155')
+                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y    = y_positions[i]
@@ -1767,36 +1767,36 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         try:    dt_str   = str(int(float(dt or 0)))
         except (ValueError, TypeError): dt_str   = '–'
 
-        dist_col = ('#15803D' if (dist_str != 'N/A' and float(dist) < CFG.NAC_DIST_RELAXED)
-                    else ('#EA580C' if (dist_str != 'N/A' and float(dist) < 5.0)
-                    else '#DC2626'))
+        dist_col = (CFG.VIS_MD_PALETTE["good"] if (dist_str != 'N/A' and float(dist) < CFG.NAC_DIST_RELAXED)
+                    else (CFG.VIS_MD_PALETTE["marginal"] if (dist_str != 'N/A' and float(dist) < CFG.NAC_DIST_MARGINAL_MAX)
+                    else CFG.VIS_MD_PALETTE["fail"]))
 
-        ang_col = ('#15803D' if (ang_str != 'N/A' and float(ang) > CFG.NAC_ANGLE_RELAXED)
-                   else ('#EA580C' if (ang_str != 'N/A' and float(ang) > CFG.SN2_ANGLE_MARGINAL_MIN)
-                   else '#DC2626'))
+        ang_col = (CFG.VIS_MD_PALETTE["good"] if (ang_str != 'N/A' and float(ang) > CFG.NAC_ANGLE_RELAXED)
+                   else (CFG.VIS_MD_PALETTE["marginal"] if (ang_str != 'N/A' and float(ang) > CFG.SN2_ANGLE_MARGINAL_MIN)
+                   else CFG.VIS_MD_PALETTE["fail"]))
 
         ax_ann.text(0.10, y, wm_str,   ha='center', va='center', fontsize=8,
-                    color='#334155', fontweight='bold')
+                    color=CFG.VIS_MD_PALETTE["text_dark"], fontweight='bold')
         ax_ann.text(0.30, y, wmn_str,  ha='center', va='center', fontsize=8,
-                    color='#0284C7', fontweight='bold')
+                    color=CFG.VIS_MD_PALETTE["accent_blue"], fontweight='bold')
         ax_ann.text(0.50, y, dist_str, ha='center', va='center', fontsize=8,
                     color=dist_col,  fontweight='bold')
         ax_ann.text(0.72, y, ang_str,  ha='center', va='center', fontsize=8,
                     color=ang_col,   fontweight='bold')
         ax_ann.text(0.92, y, dt_str,   ha='center', va='center', fontsize=8,
-                    color='#6D28D9', fontweight='bold')
+                    color=CFG.VIS_MD_PALETTE["accent_purple"], fontweight='bold')
 
 
     # ── Legend ────────────────────────────────────────────────────────────────
     from matplotlib.patches import Patch
     legend_handles = [
-        Patch(facecolor='#94A3B8', edgecolor='none', label='Pocket Retention'),
-        Patch(facecolor='#FBBF24', edgecolor='none', label='Triad Integrity (Total)'),
-        Patch(facecolor='#60A5FA', edgecolor='none', label='Relaxed Catalysis (Total)'),
-        Patch(facecolor='#10B981', edgecolor='none', label='Strict Catalysis (Total)'),
+        Patch(facecolor=CFG.VIS_MD_PALETTE["slate"], edgecolor='none', label='Pocket Retention'),
+        Patch(facecolor=CFG.VIS_MD_PALETTE["triad"], edgecolor='none', label='Triad Integrity (Total)'),
+        Patch(facecolor=CFG.VIS_MD_PALETTE["relaxed"], edgecolor='none', label='Relaxed Catalysis (Total)'),
+        Patch(facecolor=CFG.VIS_MD_PALETTE["strict"], edgecolor='none', label='Strict Catalysis (Total)'),
     ]
     ax.legend(handles=legend_handles, loc='lower left', bbox_to_anchor=(0.0, 1.02),
-              frameon=True,  edgecolor='#94A3B8',  ncol=4)
+              frameon=True,  edgecolor=CFG.VIS_MD_PALETTE["slate"],  ncol=4)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -1969,8 +1969,10 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
             continue
         rank = int(m.group(1))
         nac_csv = next(iter(sorted(d.glob(f"*{CFG.SUFFIX_NAC_DATA}"))), None)
-        mg_csv = (md / f"desmond_md_job_R_{rank}" /
-                  f"desmond_md_job_R_{rank}_mmgbsa-prime-out.csv")
+        _mgdir = md / f"desmond_md_job_R_{rank}"
+        mg_csv = _mgdir / f"desmond_md_job_R_{rank}{CFG.SUFFIX_MMGBSA_CSV}"
+        if not mg_csv.is_file():        # tolerant fallback, same as the engine's discovery ladder
+            mg_csv = next(iter(sorted(_mgdir.glob("*mmgbsa*.csv"))), mg_csv)
         if nac_csv is None:
             continue
         job = nac_csv.name.replace(CFG.SUFFIX_NAC_DATA, "")

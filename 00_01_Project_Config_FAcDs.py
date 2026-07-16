@@ -2350,6 +2350,28 @@ class CFG:
         "orange_deepest": "#6E2C00",   # the no-fit / potential-inhibitor mark
         "gold_muted":     "#C9A227",   # edge of an amber annotation box
     })
+    # Step-07 MD/QM-MM figure palette. Every colour the reaction-profile, NAC and dwell figures draw
+    # lives here (07 had no hex literal SSOT while 03 does); a restyle is one edit. Semantic keys, not
+    # raw hex, at the 07 call sites.
+    # (pass-zone / distance-gate / angle-gate reuse VIS_ACCENT green/vermillion/blue at the 07 call sites,
+    # not re-literalled here — one Okabe-Ito definition.)
+    VIS_MD_PALETTE: dict = field(default_factory=lambda: {
+        "good":            "#15803D",   # within the relaxed gate (green)
+        "marginal":        "#EA580C",   # between the relaxed gate and the marginal cut (orange)
+        "fail":            "#DC2626",   # outside the marginal cut (red)
+        "text_dark":       "#334155",   # bold annotation text
+        "slate":           "#94A3B8",   # pocket band / neutral guide line
+        "triad":           "#FBBF24",   # triad-integrity series
+        "relaxed":         "#60A5FA",   # relaxed-catalysis series
+        "strict":          "#10B981",   # strict-catalysis series
+        "border":          "#CBD5E1",   # annotation-box edge
+        "border_light":    "#E2E8F0",   # legend frame edge
+        "text_default":    "#333333",   # default tick/label colour
+        "accent_blue":     "#0284C7",   # secondary accent
+        "accent_purple":   "#6D28D9",   # secondary accent
+        "rank_default":    "#475569",   # a rank with no assigned colour
+    })
+    NAC_DIST_MARGINAL_MAX: float = 5.0   # Å — above the relaxed NAC gate but still 'marginal' (07 colour bands)
     VIS_PFAS_FCOUNT_BINS: list = field(default_factory=lambda: [0, 8, 13, 18, 24, float("inf")])  # total-fluorine-count bin edges for the PFAS chain-length size figure (Step 03)
     # Bin labels paired with VIS_PFAS_FCOUNT_BINS (must have len(bins)-1 entries; kept beside the
     # edges so they never drift apart). Multi-line for legend, short for axis ticks.
