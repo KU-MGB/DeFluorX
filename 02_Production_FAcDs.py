@@ -3854,7 +3854,11 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             _occl_pen = 0.0            # backside occlusion never measured
         else:
             _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
-        _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle)
+        # Fade on the SAME angle the tier ladder and mech_score gate on — the Šidák-deflated
+        # angle_effective, not the raw best-of-N angle. Using the raw angle would waive the occlusion
+        # penalty on precisely the inflated trajectory the multiplicity correction removes, so an α-CF3
+        # presenting one fluorine anti-periplanar by chance would escape its backside-crowding penalty.
+        _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle_effective)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
         _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
         # No `or`: compute_pocket_fit deliberately fails an unmeasured/solvent-exposed pose to 0.0 so it
