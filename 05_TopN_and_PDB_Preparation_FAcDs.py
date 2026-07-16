@@ -1455,7 +1455,13 @@ if st is None:
     print('EMPTY_STRUCTURE %s' % lig_mae); sys.exit(5)
 if len(st.atom) != len(vals):
     print('ATOM_COUNT_MISMATCH %d vs %d' % (len(st.atom), len(vals))); sys.exit(4)
-for a, q in zip(st.atom, vals):
+# The count check is permutation-invariant, so it cannot catch a Jaguar atom reorder relative to the
+# .mae; the parsed labels (C1/F5/O6 …) are the only reorder-sensitive evidence. Assert the element of
+# each label matches st.atom[i] before binding the charge, so a reorder fails loudly instead of silently
+# assigning every atom the wrong charge (PFAS ligands are C/F/O/H/N — single-character element symbols).
+for i, (a, q) in enumerate(zip(st.atom, vals)):
+    if labels[i][0].upper() != a.element.upper():
+        print('ESP_LABEL_MISMATCH idx=%d label=%s elem=%s' % (i, labels[i], a.element)); sys.exit(6)
     a.partial_charge = float(q)
 st.write(str(out_dir / (stem + '_ESP.mae')))
 print('OK atoms=%d sum=%+.4f' % (len(vals), sum(vals)))
@@ -1549,8 +1555,10 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     atom type, so in the classical trajectory those three carbons look much alike. The figure exists to
     put that gap where it cannot be missed, because it is buried in a per-atom CSV otherwise.
 
-    The α-carbon is identified structurally, not by label: it is the carbon bonded to fluorine — the one
-    the leaving F departs from. Reading it off an atom NAME would break the moment Jaguar renumbered.
+    The α-carbon is taken as the most positive carbon AFTER the carboxylate carbon (which is always the
+    most positive of all, ~+0.6 e, and is not attacked). This assumes exactly two carbons — the
+    carboxylate and the α — which holds for FA/DFA/TFA; a ligand with a third carbon is skipped rather
+    than mislabelled, because the second-most-positive carbon is then not guaranteed to be the α.
     """
     if not summary_rows:
         return None
@@ -1560,19 +1568,25 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     df = pd.DataFrame(summary_rows)
     _rows = []
     for _st, _g in df.groupby("structure"):
-        # the alpha carbon: a C whose ESP charge is the most positive among carbons that are NOT the
-        # carboxylate carbon (which is always the most positive of all, ~+0.6, and is not attacked)
         _c = _g[_g["atom_label"].str.match(r"^C\d+$")].sort_values("esp_charge", ascending=False)
-        if len(_c) < 2:
+        if len(_c) != 2:                          # carboxylate C + α-C only; see docstring
+            if logger:
+                logger.warning(f"ESP α-carbon figure: {_st} has {len(_c)} carbons (expected 2); "
+                               f"skipping — the most-positive-after-carboxylate rule assumes n_C=2.")
             continue
-        _alpha = _c.iloc[1]                       # 0 = carboxylate C, 1 = the alpha carbon
+        _alpha = _c.iloc[1]                        # 0 = carboxylate C, 1 = the α-carbon
         _lig = ("TFA" if "TFA" in _st else "DFA" if "Difluoro" in _st
                 else "FA" if "Fluoro" in _st else _st.split("_")[-1])
-        _rows.append({"ligand": _lig, "q_alpha": float(_alpha["esp_charge"]),
+        _rows.append({"ligand": _lig, "structure": str(_st), "q_alpha": float(_alpha["esp_charge"]),
                       "n_F": int(_g["atom_label"].str.match(r"^F\d+$").sum())})
     if not _rows:
         return None
-    d = pd.DataFrame(_rows).drop_duplicates("ligand").sort_values("q_alpha")
+    # Dedup per ligand BEFORE sorting for display, preferring a ranked hit over the 0000000_* control
+    # (input order is lexicographic groupby order, so a plain dedup would always keep the control).
+    d = pd.DataFrame(_rows)
+    d["_ctrl"] = d["structure"].str.startswith("0000000")
+    d = (d.sort_values(["ligand", "_ctrl"]).drop_duplicates("ligand", keep="first")
+           .sort_values("q_alpha"))
 
     fig, ax = plt.subplots(figsize=(8.6, 4.8))
     _cols = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"]]
@@ -1584,7 +1598,10 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
         ax.text(_lx, _r.get_y() + _r.get_height() / 2, f"{_v:+.3f}   ({_nf} F)",
                 va="center", ha="left", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["dark"], zorder=4)
     ax.set_xlabel("QM (Jaguar ESP) charge on the α-carbon — the atom the nucleophile attacks  (e)")
-    ax.set_xlim(0, max(d["q_alpha"]) * 1.32)
+    # Include negatives: FA's α-carbon is slightly negative, so an axis starting at 0 renders its bar
+    # entirely off-plot (only the floating label survives).
+    _qmin, _qmax = float(d["q_alpha"].min()), float(d["q_alpha"].max())
+    ax.set_xlim(min(0.0, _qmin * 1.32), max(_qmax * 1.32, 0.01))
     ax.grid(True, axis="x", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
     with warnings.catch_warnings():
