@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAcDs — Code Knowledge Graph</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --edge:#2b3444;
+    --ink:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --border:#30363d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #app{display:flex;height:100vh;width:100vw}
+  #canvasWrap{position:relative;flex:1;min-width:0}
+  canvas{display:block;width:100%;height:100%;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  /* left control rail */
+  #rail{width:250px;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:14px;gap:12px;overflow-y:auto;flex-shrink:0}
+  #rail h1{font-size:14px;margin:0 0 3px;letter-spacing:.3px;line-height:1.3}
+  #rail .sub{font-size:11px;color:var(--muted);margin:0;line-height:1.35}
+  .stat{display:flex;gap:8px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+  .stat b{color:var(--ink);font-weight:600}
+  input[type=search]{width:100%;background:var(--panel2);border:1px solid var(--border);
+    color:var(--ink);border-radius:8px;padding:8px 10px;font-size:12px;outline:none}
+  input[type=search]:focus{border-color:var(--accent)}
+  .legend{display:flex;flex-direction:column;gap:2px}
+  .legend .row{display:flex;align-items:center;gap:8px;font-size:11px;padding:4px 6px;border-radius:6px;
+    cursor:pointer;user-select:none;transition:background .12s}
+  .legend .row:hover{background:var(--panel2)}
+  .legend .row.off{opacity:.35}
+  .legend .sw{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+  .legend .n{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+  .hint{font-size:10.5px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:10px}
+  .btn{background:var(--panel2);border:1px solid var(--border);color:var(--ink);border-radius:7px;
+    padding:6px 8px;font-size:11px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btnrow{display:flex;gap:6px}
+  /* details panel */
+  #details{position:absolute;top:14px;right:14px;width:300px;max-height:calc(100% - 28px);
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;
+    font-size:12px;overflow-y:auto;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+  #details.show{display:block}
+  #details .x{float:right;cursor:pointer;color:var(--muted);font-size:16px;line-height:1}
+  #details h2{font-size:13px;margin:0 0 8px;word-break:break-word;padding-right:16px}
+  #details .kv{display:flex;gap:8px;margin:3px 0;color:var(--muted)}
+  #details .kv b{color:var(--ink);font-weight:600}
+  #details .conns{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+  #details .conn{padding:4px 6px;border-radius:6px;cursor:pointer;font-size:11px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #details .conn:hover{background:var(--panel2)}
+  #details .conn .rel{color:var(--muted);font-size:10px}
+  /* tooltip */
+  #tip{position:absolute;pointer-events:none;background:#000c;border:1px solid var(--border);
+    border-radius:6px;padding:4px 8px;font-size:11px;display:none;max-width:280px;z-index:10}
+  .badge{display:inline-block;padding:1px 6px;border-radius:20px;font-size:10px;background:var(--panel2);
+    color:var(--muted);border:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="rail">
+    <div>
+      <h1>FAcDs Knowledge Graph</h1>
+      <div class="sub">PFAS-defluorination pipeline · code + docs</div>
+    </div>
+    <div class="stat"><span><b id="sN">0</b> nodes</span><span><b id="sE">0</b> edges</span><span><b id="sC">0</b> files</span></div>
+    <input id="q" type="search" placeholder="Search nodes…  (/ to focus)">
+    <div class="btnrow">
+      <button class="btn" id="reheat">Re-layout</button>
+      <button class="btn" id="fit">Fit view</button>
+      <button class="btn" id="labelsBtn">Labels: hover</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="hint">
+      <b>Drag</b> node to pin · <b>scroll</b> to zoom · <b>drag bg</b> to pan<br>
+      <b>click</b> node for details · <b>click legend</b> to toggle a file
+    </div>
+  </div>
+  <div id="canvasWrap">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div id="details"></div>
+  </div>
+</div>
+<script>
+const DATA = /*__DATA__*/;
+// ---- file → colour palette (Okabe-Ito + extensions) ----
+const FILE_ORDER = [...new Set(DATA.nodes.map(n=>n.f))].sort((a,b)=>a.localeCompare(b));
+// Maximally-distinct qualitative palette (bright on dark bg): Okabe-Ito + Tol-bright extensions.
+const PALETTE = ["#56B4E9","#E69F00","#33cc66","#F0E442","#4C9AFF","#D55E00","#CC79A7",
+  "#e5534b","#b388ff","#17c3d4","#c2d61a","#ff8fb3","#8c9eff","#ffab40","#26a69a","#8d6e63"];
+const fileColour = {}; FILE_ORDER.forEach((f,i)=>fileColour[f]=PALETTE[i%PALETTE.length]);
+const prettyFile = f => f || "(concept)";
+// darken a hex toward black by fraction f (0..1)
+function darken(hex,f){ const n=parseInt(hex.slice(1),16); let r=n>>16,g=(n>>8)&255,b=n&255;
+  r=Math.round(r*(1-f)); g=Math.round(g*(1-f)); b=Math.round(b*(1-f));
+  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }
+
+// ---- state ----
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+let cam={x:0,y:0,k:0.13}; // pan + zoom
+const N=DATA.nodes, L=DATA.links;
+const off=new Set(); // hidden files
+let hoverNode=null, selNode=null, showLabels='hover';
+
+// per-file max degree → the biggest node of each file is that file's "hub"
+const fileMax={}; N.forEach(n=>{ fileMax[n.f]=Math.max(fileMax[n.f]||1,n.d); });
+const globalMax=Math.max(...N.map(n=>n.d),1);
+// per-file cluster centre on a big ring, so each script's nodes gather together with clear space
+// between scripts instead of one dense blob.
+const NF=FILE_ORDER.length, RING=NF>1?2800:0, fcx={}, fcy={};
+FILE_ORDER.forEach((f,i)=>{ const a=i/NF*Math.PI*2 - Math.PI/2; fcx[f]=Math.cos(a)*RING; fcy[f]=Math.sin(a)*RING; });
+// init each node near its own file's centre + degree-scaled radius + hub shade
+N.forEach((n,i)=>{
+  n.x=fcx[n.f]+(Math.random()-.5)*520; n.y=fcy[n.f]+(Math.random()-.5)*520; n.vx=0; n.vy=0;
+  const frac=n.d/fileMax[n.f];                       // 0..1 within its file
+  // The script/module node (label === its own filename, or a *_FAcDs.py / *.sh name). Only these are
+  // the "main" nodes: biggest, darkest shade of the file colour, always labelled. Everything else
+  // (functions, classes, imports like CFG/Path/DataFrame) is sized by degree but labelled on hover only.
+  n.script = (n.label===n.f) || /_FAcDs\.py$|\.sh$/.test(n.label);
+  n.rad = n.script ? (17+Math.sqrt(n.d)*1.5) : (3.5+Math.sqrt(n.d)*2.1);
+  n.fill = darken(fileColour[n.f]||'#8d99ae', n.script ? 0.5 : 0.3*frac*frac);  // script = darkest
+  n.pin=false; });
+// adjacency for details
+const adj=new Map(); N.forEach(n=>adj.set(n,[]));
+L.forEach(e=>{ const s=N[e.s],t=N[e.t]; if(!s||!t)return; adj.get(s).push([t,e.r,'→']); adj.get(t).push([s,e.r,'←']); });
+
+function resize(){ const r=cv.parentElement.getBoundingClientRect(); W=r.width;H=r.height;
+  cv.width=W*DPR;cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+window.addEventListener('resize',resize); resize();
+
+// ---- force simulation (spatial-grid repulsion → O(n)) ----
+let alpha=1;
+function step(){
+  if(alpha<0.005) return;
+  const active=N.filter(n=>!off.has(n.f));
+  const CELL=90; const grid=new Map();
+  const key=(x,y)=>((x/CELL)|0)+','+((y/CELL)|0);
+  active.forEach(n=>{ const k=key(n.x,n.y); (grid.get(k)||grid.set(k,[]).get(k)).push(n); });
+  // repulsion within neighbouring cells
+  for(const n of active){
+    const cx=(n.x/CELL)|0, cy=(n.y/CELL)|0;
+    for(let gx=cx-1;gx<=cx+1;gx++)for(let gy=cy-1;gy<=cy+1;gy++){
+      const cell=grid.get(gx+','+gy); if(!cell)continue;
+      for(const m of cell){ if(m===n)continue;
+        let dx=n.x-m.x, dy=n.y-m.y, d2=dx*dx+dy*dy+0.01;
+        if(d2<CELL*CELL*4){ const f=1200/d2; n.vx+=dx*f*alpha; n.vy+=dy*f*alpha; }
+      }
+    }
+    // gentle pull toward this node's FILE centre → loose per-script grouping, but weak enough that
+    // cross-file edges (config/utils/orchestrator → scripts) still draw related files together.
+    n.vx+=(fcx[n.f]-n.x)*0.0032*alpha; n.vy+=(fcy[n.f]-n.y)*0.0032*alpha;
+  }
+  // spring along edges
+  for(const e of L){ const s=N[e.s],t=N[e.t]; if(off.has(s.f)||off.has(t.f))continue;
+    let dx=t.x-s.x, dy=t.y-s.y, d=Math.sqrt(dx*dx+dy*dy)+.01, f=(d-70)*0.02*alpha;
+    dx/=d;dy/=d; s.vx+=dx*f;s.vy+=dy*f;t.vx-=dx*f;t.vy-=dy*f; }
+  // integrate + a hard boundary so stray / low-degree nodes can't fly off the canvas
+  const MAXR=RING*1.65+950;
+  for(const n of active){ if(n.pin)continue; n.x+=n.vx*=0.82; n.y+=n.vy*=0.82;
+    const rr=Math.hypot(n.x,n.y); if(rr>MAXR){ const s=MAXR/rr; n.x*=s; n.y*=s; n.vx*=.4; n.vy*=.4; } }
+  alpha*=0.985;
+}
+function reheat(){ alpha=1; }
+
+// ---- render ----
+function W2S(x,y){ return [ (x-cam.x)*cam.k + W/2, (y-cam.y)*cam.k + H/2 ]; }
+function S2W(sx,sy){ return [ (sx-W/2)/cam.k + cam.x, (sy-H/2)/cam.k + cam.y ]; }
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // edges
+  ctx.lineWidth=Math.max(.4,cam.k*0.9); ctx.strokeStyle='rgba(120,140,170,.13)';
+  ctx.beginPath();
+  for(const e of L){ const s=N[e.s],t=N[e.t]; if(off.has(s.f)||off.has(t.f))continue;
+    if(selNode && s!==selNode && t!==selNode) continue; // when selected, only its edges
+    const a=W2S(s.x,s.y), b=W2S(t.x,t.y); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); }
+  ctx.stroke();
+  if(selNode){ // highlight selected edges brighter
+    ctx.strokeStyle='rgba(88,166,255,.55)'; ctx.lineWidth=Math.max(.8,cam.k*1.4); ctx.beginPath();
+    for(const [m] of adj.get(selNode)){ if(off.has(m.f))continue; const a=W2S(selNode.x,selNode.y),b=W2S(m.x,m.y);
+      ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]); } ctx.stroke();
+  }
+  // nodes
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  for(const n of N){ if(off.has(n.f))continue;
+    const [sx,sy]=W2S(n.x,n.y); const r=Math.max(1.5,n.rad*cam.k);
+    if(sx<-30||sx>W+30||sy<-30||sy>H+30)continue;
+    const match=q && n.label.toLowerCase().includes(q);
+    ctx.beginPath(); ctx.arc(sx,sy,r,0,7);
+    ctx.fillStyle=n.fill||fileColour[n.f]||'#6e7681';
+    ctx.globalAlpha = (q && !match)?0.15 : (selNode&&n!==selNode&&!adj.get(selNode).some(a=>a[0]===n))?0.25:1;
+    ctx.fill();
+    // script/module nodes get a bright ring in the file's pure colour so the big dark node pops
+    if(n.script){ ctx.globalAlpha=Math.min(1,ctx.globalAlpha+0.2); ctx.lineWidth=Math.max(2,r*0.16);
+      ctx.strokeStyle=fileColour[n.f]||'#8d99ae'; ctx.stroke(); }
+    if(n===hoverNode||n===selNode||match){ ctx.globalAlpha=1; ctx.lineWidth=2.4; ctx.strokeStyle='#fff'; ctx.stroke(); }
+    ctx.globalAlpha=1;
+    // labels: ONLY script/module names by default (keeps the map readable); everything else on hover/select/search
+    if(n.script || n===hoverNode || n===selNode || match){
+      const emph = n.script || n===hoverNode || n===selNode || match;
+      ctx.globalAlpha = emph?1:.75;
+      const nm = n.script ? n.label.replace(/_FAcDs\.py$/,'').replace(/\.py$|\.sh$/,'') : n.label;
+      ctx.font=(n.script?'700 ':'')+(n.script?13:11)+'px -apple-system,Segoe UI,sans-serif';
+      ctx.lineWidth=3.5; ctx.strokeStyle='rgba(13,17,23,.9)';
+      ctx.strokeText(nm, sx+r+4, sy+4.5);      // halo for readability over edges
+      ctx.fillStyle=n.script?'#ffffff':'#c9d4e0';
+      ctx.fillText(nm, sx+r+4, sy+4.5); ctx.globalAlpha=1;
+    }
+  }
+}
+function loop(){ step(); draw(); requestAnimationFrame(loop); }
+loop();
+
+// ---- picking ----
+function pick(sx,sy){ let best=null,bd=1e9;
+  for(const n of N){ if(off.has(n.f))continue; const [x,y]=W2S(n.x,n.y);
+    const r=Math.max(4,n.rad*cam.k)+3, d=(x-sx)**2+(y-sy)**2; if(d<r*r&&d<bd){bd=d;best=n;} }
+  return best; }
+
+// ---- interaction ----
+let drag=null, panning=false, last=null, moved=false;
+cv.addEventListener('mousedown',e=>{ const n=pick(e.offsetX,e.offsetY); moved=false;
+  if(n){ drag=n; n.pin=true; } else { panning=true; cv.classList.add('dragging'); } last=[e.offsetX,e.offsetY]; });
+window.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect(); const ox=e.clientX-rect.left, oy=e.clientY-rect.top;
+  if(drag){ const w=S2W(ox,oy); drag.x=w[0];drag.y=w[1];drag.vx=drag.vy=0; alpha=Math.max(alpha,.3); moved=true; }
+  else if(panning){ cam.x-=(ox-last[0])/cam.k; cam.y-=(oy-last[1])/cam.k; last=[ox,oy]; moved=true; }
+  else { const n=pick(ox,oy); hoverNode=n; const tip=document.getElementById('tip');
+    if(n){ tip.style.display='block'; tip.style.left=(ox+14)+'px'; tip.style.top=(oy+12)+'px';
+      tip.innerHTML='<b>'+esc(n.label)+'</b><br><span class="badge">'+esc(prettyFile(n.f))+'</span> '+n.d+' links'; }
+    else tip.style.display='none'; }
+});
+window.addEventListener('mouseup',e=>{ if(drag&&!moved){ select(drag); }
+  else if(!drag&&!panning){}
+  if(panning&&!moved){ select(null); }
+  drag=null; panning=false; cv.classList.remove('dragging'); });
+cv.addEventListener('wheel',e=>{ e.preventDefault(); const rect=cv.getBoundingClientRect();
+  const ox=e.clientX-rect.left, oy=e.clientY-rect.top; const before=S2W(ox,oy);
+  cam.k*=Math.exp(-e.deltaY*0.0011); cam.k=Math.max(0.02,Math.min(3,cam.k));
+  const after=S2W(ox,oy); cam.x+=before[0]-after[0]; cam.y+=before[1]-after[1]; },{passive:false});
+
+function esc(s){ return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function select(n){ selNode=n; const d=document.getElementById('details');
+  if(!n){ d.classList.remove('show'); return; }
+  const conns=adj.get(n).slice().sort((a,b)=>b[0].d-a[0].d);
+  d.classList.add('show');
+  d.innerHTML='<span class="x" onclick="select(null)">✕</span>'
+    +'<h2>'+esc(n.label)+'</h2>'
+    +'<div class="kv"><span>file</span><b style="color:'+(fileColour[n.f]||'#8b949e')+'">'+esc(prettyFile(n.f))+'</b></div>'
+    +(n.t?'<div class="kv"><span>type</span><b>'+esc(n.t)+'</b></div>':'')
+    +'<div class="kv"><span>connections</span><b>'+n.d+'</b></div>'
+    +'<div class="conns">'+conns.map(([m,r,dir])=>'<div class="conn" data-id="'+esc(m.id)+'">'
+        +'<span style="color:'+(fileColour[m.f]||'#8b949e')+'">●</span> '+esc(m.label)
+        +' <span class="rel">'+dir+' '+esc(r)+'</span></div>').join('')+'</div>';
+  d.querySelectorAll('.conn').forEach(el=>el.onclick=()=>{ const m=N.find(x=>x.id===el.dataset.id);
+    if(m){ select(m); cam.x=m.x;cam.y=m.y; } });
+  cam.x=n.x; cam.y=n.y;
+}
+window.select=select;
+
+// ---- legend ----
+const legend=document.getElementById('legend');
+const counts={}; N.forEach(n=>counts[n.f]=(counts[n.f]||0)+1);
+FILE_ORDER.forEach(f=>{ const row=document.createElement('div'); row.className='row';
+  row.innerHTML='<span class="sw" style="background:'+fileColour[f]+'"></span><span>'+esc(prettyFile(f))+'</span><span class="n">'+counts[f]+'</span>';
+  row.onclick=()=>{ if(off.has(f))off.delete(f); else off.add(f); row.classList.toggle('off'); reheat(); };
+  legend.appendChild(row); });
+
+// ---- controls ----
+document.getElementById('sN').textContent=N.length;
+document.getElementById('sE').textContent=L.length;
+document.getElementById('sC').textContent=FILE_ORDER.filter(f=>f).length;
+document.getElementById('reheat').onclick=reheat;
+document.getElementById('q').addEventListener('input',()=>{});
+document.getElementById('labelsBtn').onclick=e=>{ showLabels=showLabels==='hover'?'all':'hover';
+  e.target.textContent='Labels: '+showLabels; };
+document.getElementById('fit').onclick=fit;
+function fit(){ const a=N.filter(n=>!off.has(n.f)); if(!a.length)return;
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9; a.forEach(n=>{minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);maxx=Math.max(maxx,n.x);maxy=Math.max(maxy,n.y);});
+  cam.x=(minx+maxx)/2; cam.y=(miny+maxy)/2; cam.k=Math.min(W/(maxx-minx+200),H/(maxy-miny+200),1.2); }
+window.addEventListener('keydown',e=>{ if(e.key==='/'){e.preventDefault();document.getElementById('q').focus();}
+  if(e.key==='Escape')select(null); });
+setTimeout(fit,1200);
+</script>
+</body>
+</html>
