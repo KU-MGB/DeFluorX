@@ -190,70 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 ## 🔄 Pipeline architecture (~38K lines)
 
-```mermaid
-flowchart TD
-    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~694 lines"}}:::orch
-
-    subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration — imported / provisioned for every step &nbsp;"]
-        direction LR
-        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>degrader tiers · geometry cutoffs<br/>scoring weights · ESP / MD / WaterMap params<br/>figure-style tokens · CSV name stems<br/>📄 ~3,202 lines"]:::found
-        UTL["🔧 &nbsp;<b>00_02 · Project Utils</b><br/>geometry · MIC vectors · Kabsch<br/>ConsoleColours · logging<br/>atomic CSV / JSON · latest_by_mtime<br/>figure-style SSOT (apply_figure_style)<br/>📄 ~1,137 lines"]:::found
-        ENV["🛠 &nbsp;<b>00_03 · Environment</b><br/>conda + pip version pinning<br/>reproducibility spec (--export)<br/>📄 ~312 lines"]:::found
-    end
-
-    START(["🧬 Input<br/>FASTA + SMILES"]):::io
-    M1["<b>01 · Merge &amp; QC</b><br/>merge sequence DBs · deduplicate<br/>→ merged FASTA + 00_Merge.log<br/>📄 ~695 lines"]:::hts
-
-    subgraph PHASE1["🟢 &nbsp; Phase 1 — High-Throughput Screening &nbsp;"]
-        M2["<b>02 · Production Engine</b><br/>Boltz-2 GPU co-folding<br/>NAC / SN2 scoring · 6-tier ladder<br/>→ ranked + master CSV<br/>📄 ~7,289 lines"]:::hts
-        M3["<b>03 · Validation Figures</b><br/>54 panels · 7 folders<br/>BH stats · Ramachandran controls<br/>→ Figure_Enriched_Dataset.csv<br/>📄 ~10,487 lines"]:::hts
-        M4["<b>04 · Dendrogram</b><br/>UPGMA + D3.js tree<br/>per-tier trees · tier overlay<br/>📄 ~1,674 lines"]:::hts
-        M2 --> M3 --> M4
-    end
-
-    subgraph PHASE2["🟠 &nbsp; Phase 2 — Top-N Selection &amp; Preparation &nbsp;"]
-        M5["<b>05 · Top-N + PDB Preparation</b><br/>MD-ready gate · Gemmi CIF→PDB<br/>PrepWizard 0.15 Å · Jaguar ESP<br/>PyMOL · PLIP · pose-drift figures<br/>📄 ~4,089 lines"]:::prep
-    end
-
-    subgraph PHASE3["🔵 &nbsp; Phase 3 — Dynamics &amp; Quantum Mechanics &nbsp;"]
-        M6["<b>06 · ESP Physics</b><br/>WaterMap → System Builder → MD<br/>SID → Prime MM-GBSA (per rank)<br/>→ 06_Analysis/<br/>📄 ~3,663 lines"]:::dyn
-        M7["<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell · NAC-conditioned MM-GBSA<br/>QSite ΔE‡ + departing-F charge<br/>Defluor_Propensity + verdict<br/>📄 ~5,080 lines"]:::dyn
-        M6 --> M7
-    end
-
-    %% keep orchestrator above foundation above the steps
-    ORCH ~~~ FOUNDATION
-    FOUNDATION ~~~ START
-
-    %% data flow (solid white)
-    START --> M1 --> M2
-    M2 --> M5 --> M6
-
-    %% orchestrator runs each step (fan, routed to the sides)
-    ORCH -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-
-    %% foundation: one fan from each of config / utils / env to every step
-    CFG -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-    UTL -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-    ENV -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-
-    classDef io    fill:#14532d,stroke:#4ade80,color:#f0fdf4,stroke-width:2px
-    classDef orch  fill:#3b0764,stroke:#c084fc,color:#faf5ff,stroke-width:2px
-    classDef found fill:#1e293b,stroke:#94a3b8,color:#f1f5f9
-    classDef hts   fill:#065f46,stroke:#34d399,color:#ecfdf5
-    classDef prep  fill:#7c2d12,stroke:#fb923c,color:#fff7ed
-    classDef dyn   fill:#1e3a8a,stroke:#60a5fa,color:#eff6ff
-
-    style FOUNDATION fill:#0f172a,stroke:#64748b,color:#cbd5e1,stroke-width:1px,stroke-dasharray:5 4
-    style PHASE1 fill:#052e2b,stroke:#34d399,color:#6ee7b7,stroke-width:2px,stroke-dasharray:6 4
-    style PHASE2 fill:#3b160a,stroke:#fb923c,color:#fdba74,stroke-width:2px,stroke-dasharray:6 4
-    style PHASE3 fill:#0c1f4a,stroke:#60a5fa,color:#93c5fd,stroke-width:2px,stroke-dasharray:6 4
-
-    linkStyle 0,1,2,5,6,7,8 stroke:#e2e8f0,stroke-width:2.5px
-    linkStyle 3,4 stroke-width:0px,stroke:none
-    linkStyle 9,10,11,12,13,14,15 stroke:#a855f7,stroke-width:1.1px
-    linkStyle 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36 stroke:#64748b,stroke-width:0.9px,stroke-dasharray:3 3
-```
+![FAcDs pipeline architecture — 00_00 orchestrator on top, 00_01/00_02/00_03 foundation below, phases 1–3 with red-numbered steps 01–07](assets/pipeline_architecture.png)
 
 **Diagram key:** the diagram reads top-down. **Violet dashed** (top) = **orchestration** — `00_00` (bash) sits at the top and runs each step 01–07 in sequence (a separate run per step, resume-aware). **Grey dotted** = the shared **foundation** directly below it — `00_01 CFG` and `00_02 utils` are imported by every step, and `00_03` provisions the conda environment each step runs in; one fan from each of the three reaches every step. **Thick white arrows** = **data flow** (`04` reads `03`'s enriched dataset, not `02`'s directly; within Phase 1, `02 → 03 → 04` is a data chain).
 
