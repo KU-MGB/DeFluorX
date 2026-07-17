@@ -1,0 +1,92 @@
+{
+  "/mnt/wdpassport/FAcDs/.write_dir.json": {
+    "mtime": 1784032472.1533747,
+    "ast_hash": "c0b7195428c0d179f2b92e04df2911fb",
+    "semantic_hash": "c0b7195428c0d179f2b92e04df2911fb"
+  },
+  "/mnt/wdpassport/FAcDs/00_00_run_pipeline_FAcDs.sh": {
+    "mtime": 1784234692.0734718,
+    "ast_hash": "e8702253015312c9d417aaf421a4e78c",
+    "semantic_hash": "e8702253015312c9d417aaf421a4e78c"
+  },
+  "/mnt/wdpassport/FAcDs/00_01_Project_Config_FAcDs.py": {
+    "mtime": 1784234708.1720831,
+    "ast_hash": "5d6a092deeed81fd38649445dbc5c729",
+    "semantic_hash": "5d6a092deeed81fd38649445dbc5c729"
+  },
+  "/mnt/wdpassport/FAcDs/00_02_Project_Utils_FAcDs.py": {
+    "mtime": 1784233397.9235513,
+    "ast_hash": "4b59783b26b3e6a84f812f2a2e383291",
+    "semantic_hash": "4b59783b26b3e6a84f812f2a2e383291"
+  },
+  "/mnt/wdpassport/FAcDs/00_03_Environment_FAcDs.py": {
+    "mtime": 1784234671.8729775,
+    "ast_hash": "768d88b7fd8b58417ebd66b18aa54df3",
+    "semantic_hash": "768d88b7fd8b58417ebd66b18aa54df3"
+  },
+  "/mnt/wdpassport/FAcDs/01_Merge_FAcDs.py": {
+    "mtime": 1784233397.8529403,
+    "ast_hash": "c952e5ae93085932c65294043a18d1d9",
+    "semantic_hash": "c952e5ae93085932c65294043a18d1d9"
+  },
+  "/mnt/wdpassport/FAcDs/02_Production_FAcDs.py": {
+    "mtime": 1784234766.4442954,
+    "ast_hash": "ae881ab945502425581d6b7e3d5e118f",
+    "semantic_hash": "ae881ab945502425581d6b7e3d5e118f"
+  },
+  "/mnt/wdpassport/FAcDs/03_Validation_Figures_FAcDs.py": {
+    "mtime": 1784234619.279707,
+    "ast_hash": "609eb4880040eb1101ac770041ffb7fc",
+    "semantic_hash": "609eb4880040eb1101ac770041ffb7fc"
+  },
+  "/mnt/wdpassport/FAcDs/04_Dendrogram_FAcDs.py": {
+    "mtime": 1784235091.7109208,
+    "ast_hash": "f281e45d082037372790f07c8b7f4f87",
+    "semantic_hash": "f281e45d082037372790f07c8b7f4f87"
+  },
+  "/mnt/wdpassport/FAcDs/05_TopN_and_PDB_Preparation_FAcDs.py": {
+    "mtime": 1784233397.9134367,
+    "ast_hash": "6aa45c79bbd01e6a0b297aa7b987b290",
+    "semantic_hash": "6aa45c79bbd01e6a0b297aa7b987b290"
+  },
+  "/mnt/wdpassport/FAcDs/07_MD_QMMM_Defluorination_FAcDs.py": {
+    "mtime": 1784234721.3235826,
+    "ast_hash": "846d8c108564c1d96aa23e88745fe7dd",
+    "semantic_hash": "846d8c108564c1d96aa23e88745fe7dd"
+  },
+  "/mnt/wdpassport/FAcDs/PFAS.yml": {
+    "mtime": 1784235199.1065686,
+    "ast_hash": "5d3f201fb6f24e11dcd8d968283b8f2b",
+    "semantic_hash": "5d3f201fb6f24e11dcd8d968283b8f2b"
+  },
+  "/mnt/wdpassport/FAcDs/README.md": {
+    "mtime": 1784235063.9379528,
+    "ast_hash": "e0c832e48029bf0ca6cda38354f1eca1",
+    "semantic_hash": "e0c832e48029bf0ca6cda38354f1eca1"
+  },
+  "/mnt/wdpassport/FAcDs/docs/code_graph.html": {
+    "mtime": 1784115613.1666913,
+    "ast_hash": "62632bfffdf08d5b903db13fd20683ab",
+    "semantic_hash": "62632bfffdf08d5b903db13fd20683ab"
+  },
+  "/mnt/wdpassport/FAcDs/docs/code_graph_report.md": {
+    "mtime": 1784115613.1695518,
+    "ast_hash": "04b097c51db40f4adb31465e27aebd89",
+    "semantic_hash": "04b097c51db40f4adb31465e27aebd89"
+  },
+  "/mnt/wdpassport/FAcDs/requirements.txt": {
+    "mtime": 1784235199.451094,
+    "ast_hash": "4fced42f7725beaca4b881b4e8b6a26f",
+    "semantic_hash": "4fced42f7725beaca4b881b4e8b6a26f"
+  },
+  "/mnt/wdpassport/FAcDs/docs/code_graph.png": {
+    "mtime": 1784116019.6499965,
+    "ast_hash": "0fd67f35f3531cedcb59396bf5bb0516",
+    "semantic_hash": "0fd67f35f3531cedcb59396bf5bb0516"
+  },
+  "/mnt/wdpassport/FAcDs/06_Physics_Validation_FAcDs.py": {
+    "mtime": 1784233501.8531635,
+    "ast_hash": "83e155363209c24f840290e48e4b8244",
+    "semantic_hash": "83e155363209c24f840290e48e4b8244"
+  }
+}

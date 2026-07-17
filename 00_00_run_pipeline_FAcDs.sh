@@ -504,6 +504,22 @@ fi
 
 fi   # end conda activation (bypassed when PFAS already active)
 
+# Cancel every still-active Schrödinger job this pipeline launched (Desmond MD, WaterMap, System
+# Builder, MM-GBSA). Those jobs run under jobserverd — a separate session — so a `kill -- -PGID` of the
+# pipeline's own process group never reaches them; they outlive a Ctrl-C / kill unless cancelled through
+# jsc. Names are the pipeline's own tools (desmond*/watermap*/mmgbsa*); this fires only on interrupt.
+_cancel_schrodinger_jobs() {
+    local jsc="${SCHRODINGER:-/opt/schrodinger}/jsc"
+    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null)"
+    [[ -n "$jsc" && -x "$jsc" ]] || return 0
+    local ids
+    ids=$("$jsc" list -j 2>/dev/null | awk '$2 ~ /desmond|watermap|mmgbsa/ {print $1}')
+    if [[ -n "$ids" ]]; then
+        _tee "  [cleanup] pipeline interrupted — cancelling background Schrödinger job(s): $(echo $ids | tr '\n' ' ')"
+        "$jsc" cancel $ids 2>/dev/null || true
+    fi
+}
+
 # ── Pipeline body ─────────────────────────────────────────────────────────────
 # Wrapped in a function so it can run either in the foreground (output tee'd to
 # terminal + log) or detached in the background (output to log only). The trap is
@@ -516,6 +532,12 @@ trap '_sync_staging_log
         sudo systemctl start systemd-oomd 2>/dev/null || true
       fi
       true' EXIT
+
+# A Ctrl-C on the terminal (foreground) or a `kill -- -PGID` of a detached run (background) must take
+# the detached job-server jobs down with it. Cancel them FIRST, then exit — the exit runs the EXIT trap
+# above, which restores systemd-oomd and the sudo keepalive. Without this, an interrupted run leaves a
+# Desmond/WaterMap job burning the GPU/CPU under jobserverd.
+trap '_cancel_schrodinger_jobs; exit 130' INT TERM HUP
 
 # ── Header ────────────────────────────────────────────────────────────────────
 

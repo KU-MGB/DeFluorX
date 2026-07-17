@@ -403,7 +403,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     if tier_col:
         df = _utils_mod.standardise_dataframe_tiers(df, CFG)
         with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 2: Generating Isolated Tier Phylogenies\n")
-        _raw_tiers = [t for t in df[tier_col].dropna().unique() if t not in (CFG.TIER_DECOY, "Unknown")]
+        # Every classified tier gets its own phylogeny, the decoy bucket included (it is the largest and
+        # its clustering shows what was rejected); only genuinely unclassified rows ("Unknown") are dropped.
+        _raw_tiers = [t for t in df[tier_col].dropna().unique() if t != "Unknown"]
         def _tier_key(t):
             try: return _TIER_RANK_ORDER.index(t)
             except ValueError: return len(_TIER_RANK_ORDER)

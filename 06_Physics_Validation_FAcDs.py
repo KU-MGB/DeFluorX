@@ -124,6 +124,7 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 # Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter. The ESP/build/
@@ -261,6 +262,85 @@ def _section(title: str) -> None:
     """House-style section header — bold title + light rule (matches ReportManager.section in 00_02)."""
     _echo(f"\n{_C.BOLD}{title}{_C.ENDC}")
     _echo(_RULE)
+
+
+# ── Per-phase / per-job wall-clock timing ─────────────────────────────────────────────────────────
+"""
+Every heavy sub-job (one WaterMap, one System Builder, one MD, one SID, one MM-GBSA) records its
+own wall-clock here via _timed(). The Summary then prints the individual job times, the per-phase
+totals (all WaterMaps, all builds, …) and a grand total, and writes them to 00_Phase_Timings.csv.
+"""
+_TIMINGS: list = []
+
+
+def _fmt_dur(sec: float) -> str:
+    """Seconds → compact H/M/S (2h07m03s · 8m12s · 41s)."""
+    sec = int(round(sec))
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+
+@contextmanager
+def _timed(phase: str, rank):
+    """Time one sub-job, log its wall-clock, and register it for the phase totals + timings CSV."""
+    _t = time.perf_counter()
+    try:
+        yield
+    finally:
+        dt = time.perf_counter() - _t
+        _TIMINGS.append({"phase": phase, "rank": rank, "seconds": round(dt, 1)})
+        _log(f"       ⏱ {phase} R_{rank} took {_fmt_dur(dt)}")
+
+
+def _emit_timings(out_root: Path) -> None:
+    """Print per-phase job times + totals and write 00_Phase_Timings.csv (atomic). No-op if nothing ran."""
+    if not _TIMINGS:
+        return
+    order = ["watermap", "build", "md", "sid", "mmgbsa"]
+    label = {"watermap": "WaterMap", "build": "System Builder", "md": "MD Simulation",
+             "sid": "SID Analysis", "mmgbsa": "MM-GBSA"}
+    by: dict = {}
+    for t in _TIMINGS:
+        by.setdefault(t["phase"], []).append(t)
+
+    _section("Timing — per job (individual) + per-phase totals")
+    grand = 0.0
+    for ph in order:
+        rows = by.get(ph)
+        if not rows:
+            continue
+        tot = sum(r["seconds"] for r in rows)
+        grand += tot
+        per = " · ".join(f"R_{r['rank']} {_fmt_dur(r['seconds'])}" for r in rows)
+        _echo(f"  {label[ph]:<15} {_fmt_dur(tot):>10}   ({len(rows)} job{'s' if len(rows) != 1 else ''}: {per})")
+    _echo(_RULE)
+    _echo(f"  {'TOTAL (jobs)':<15} {_fmt_dur(grand):>10}")
+
+    # CSV: one row per job, then a per-phase TOTAL row (rank=ALL) and a grand-TOTAL row.
+    csv_path = out_root / "00_Phase_Timings.csv"
+    try:
+        tmp = csv_path.with_suffix(".csv.tmp")
+        with tmp.open("w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["phase", "rank", "seconds", "hms"])
+            for ph in order:
+                for r in by.get(ph, []):
+                    w.writerow([label[ph], f"R_{r['rank']}", f"{r['seconds']:.1f}", _fmt_dur(r["seconds"])])
+            for ph in order:
+                rows = by.get(ph)
+                if rows:
+                    tot = sum(r["seconds"] for r in rows)
+                    w.writerow([label[ph], "ALL", f"{tot:.1f}", _fmt_dur(tot)])
+            w.writerow(["TOTAL", "ALL", f"{grand:.1f}", _fmt_dur(grand)])
+        os.replace(tmp, csv_path)                          # atomic — a kill never leaves a half-written CSV
+        _echo(f"  {_C.OKGREEN}✔{_C.ENDC} timings CSV  → {csv_path.name}")
+    except Exception as exc:
+        _warn(f"[timing] could not write {csv_path.name}: {str(exc).splitlines()[0]}")
 
 
 def out_eaf_frames(eaf_path: Path) -> int:
@@ -678,6 +758,135 @@ class ShardHeartbeat:
                 f"Prime · {mins}m elapsed\033[K")
             sys.stdout.flush()
             self._line_open = True
+
+    def __enter__(self):
+        self._start = time.time()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+        if self._line_open:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        return False
+
+
+class MDHeartbeat:
+    """One in-place progress line for a running Desmond MD, driven by the live ``.ene``.
+
+    Desmond appends one row per recorded step to ``<stage>.ene`` whose first column is the chemical
+    (simulated) time in ps; the actively-growing .ene (newest mtime) is the stage running right now.
+    Its last time, against the known production length, gives current ns / total ns and a percentage;
+    successive samples give the throughput (ns/day) and an ETA. Before production starts (the short
+    relaxation stages), it reports which relaxation stage multisim is on instead of a percentage.
+    Mirrors Heartbeat's single-``\\r``-line contract — nothing else runs concurrently to interleave.
+    """
+
+    _HDR_PROD = re.compile(r"stage\s+(\d+)\s*-\s*.*Production", re.IGNORECASE)
+    _HDR_ANY  = re.compile(r"stage\s+(\d+)\s*-", re.IGNORECASE)
+    _STAGE_RUN = re.compile(r"Stage\s+(\d+)\s*-\s*(?:simulate|task)", re.IGNORECASE)
+    _STAGE_DONE = re.compile(r"Stage\s+(\d+)\s+completed", re.IGNORECASE)
+
+    def __init__(self, wd: Path, multisim_log: Path, label: str, total_ns: float, interval: int = 30):
+        self.wd = Path(wd)
+        self.multisim_log = Path(multisim_log)
+        self.label = label
+        self.total_ns = max(float(total_ns), 1e-6)
+        self.total_ps = self.total_ns * 1000.0
+        self.interval = max(5, int(interval))
+        self._stop = threading.Event()
+        self._thread: "threading.Thread | None" = None
+        self._start = 0.0
+        self._line_open = False
+        self._last: "tuple[float, float] | None" = None   # (wall_s, t_ps) of the previous sample, for the rate
+
+    def _newest_ene_time(self) -> "float | None":
+        """Last chemical time (ps) in the most-recently-written .ene under the job dir, or None."""
+        enes = [p for p in self.wd.rglob("*.ene") if p.is_file()]
+        if not enes:
+            return None
+        newest = max(enes, key=lambda p: p.stat().st_mtime)
+        try:
+            tail = newest.read_bytes()[-4096:].decode(errors="ignore").splitlines()
+        except Exception:
+            return None
+        for ln in reversed(tail):
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                try:
+                    return float(ln.split()[0])
+                except (ValueError, IndexError):
+                    continue
+        return None
+
+    def _in_production(self) -> bool:
+        """True once multisim has entered the Production stage (and not yet completed it)."""
+        try:
+            text = self.multisim_log.read_text(errors="ignore")
+        except Exception:
+            return False
+        prod = self._HDR_PROD.search(text)
+        stages = [int(m) for m in self._HDR_ANY.findall(text)]
+        prod_stage = int(prod.group(1)) if prod else (max(stages) if stages else None)
+        if prod_stage is None:
+            return False
+        started = prod_stage in {int(m) for m in self._STAGE_RUN.findall(text)}
+        done = prod_stage in {int(m) for m in self._STAGE_DONE.findall(text)}
+        return started and not done
+
+    def _relax_stage(self) -> "tuple[int, int] | None":
+        """(current relaxation stage, production stage number) for the pre-production phase."""
+        try:
+            text = self.multisim_log.read_text(errors="ignore")
+        except Exception:
+            return None
+        stages = [int(m) for m in self._HDR_ANY.findall(text)]
+        prod = self._HDR_PROD.search(text)
+        prod_stage = int(prod.group(1)) if prod else (max(stages) if stages else 7)
+        run = [int(m) for m in self._STAGE_RUN.findall(text)]
+        return (max(run) if run else 1), prod_stage
+
+    def _progress(self, msg: str) -> None:
+        sys.stdout.write(f"\r    [PROGRESS] {msg}\033[K")
+        sys.stdout.flush()
+        self._line_open = True
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            mins = int((time.time() - self._start) // 60)
+            if not self._in_production():
+                rs = self._relax_stage()
+                if rs is not None:
+                    st, prod = rs
+                    self._progress(f"{self.label}: equilibrating — relaxation stage {st}/{prod} "
+                                   f"({mins}m elapsed)")
+                else:
+                    self._progress(f"{self.label}: starting up ({mins}m elapsed)")
+                continue
+            t_ps = self._newest_ene_time()
+            if t_ps is None:
+                self._progress(f"{self.label}: production starting ({mins}m elapsed)")
+                continue
+            now = time.time()
+            ns_done = min(t_ps, self.total_ps) / 1000.0
+            pct = min(100.0, 100.0 * t_ps / self.total_ps)
+            rate = ""      # ns/day between the last two samples
+            eta = ""
+            if self._last is not None:
+                dw, dpt = now - self._last[0], t_ps - self._last[1]
+                if dw > 0 and dpt > 0:
+                    ns_per_day = (dpt / 1000.0) / (dw / 86400.0)
+                    rate = f" · {ns_per_day:,.0f} ns/day"
+                    remain_ns = max(0.0, self.total_ns - ns_done)
+                    eta_s = remain_ns / max(ns_per_day, 1e-9) * 86400.0
+                    eta = f" · ETA {_fmt_dur(eta_s)}"
+            self._last = (now, t_ps)
+            self._progress(f"{self.label}: {ns_done:.2f}/{self.total_ns:.2f} ns ({pct:.1f}%)"
+                           f"{rate}{eta} · {mins}m elapsed")
 
     def __enter__(self):
         self._start = time.time()
@@ -2084,8 +2293,10 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     _echo(_SEP)
     _echo(f"Prime MM-GBSA — rescoring binding free energy for {len(job_dirs)} completed MD job(s)")
     _echo(_SEP)
-    # Figures folder derived from the resolved MD dir (not a hardcoded path).
+    # MM-GBSA data (the summary CSV) stays in its own compute subdir; the FIGURES go to the single
+    # 06_Analysis folder alongside every other Step-06 figure. md_dir.parent is 6_Physics_Validation.
     out_dir = md_dir / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
+    fig_dir = _analysis_dir(md_dir.parent)
     tiers = _lookup_tiers(run_root)
     ligands = _lookup_ligands(run_root)
     nspf: dict = {}   # rank → ns per trajectory frame, for the time-resolved panel
@@ -2145,7 +2356,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
             _echo(f"    Interpretation : GB implicit solvent overstabilises anionic PFAS — compare "
                   f"ΔG_bind BETWEEN ranks, never as an absolute affinity.")
         try:
-            plot_mmgbsa_individual(out_dir, job_name, rank, dg, ns_per_frame=_nspf)
+            plot_mmgbsa_individual(fig_dir, job_name, rank, dg, ns_per_frame=_nspf)
         except Exception as e:
             _echo(f"    ✘ per-job plot failed ({e}) — skipped.")
         per_job.append((rank, dg))
@@ -2176,7 +2387,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
         _utils_mod.atomic_write_csv(_sdf, _csv_out)
         _echo(f"  MM-GBSA summary table saved : {_csv_out.resolve()}")
     try:
-        plot_mmgbsa_combined(out_dir, per_job, ligands, nspf)
+        plot_mmgbsa_combined(fig_dir, per_job, ligands, nspf)
     except Exception as e:
         _echo(f"  [!] MM-GBSA combined plot failed ({e}) — skipped.")
     if _failed:
@@ -2597,9 +2808,12 @@ def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int
     msj.write_text(_md_msj(time_ps, interval_ps))
     out_cms = wd / f"{jobname}-out.cms"
     _LAUNCHED_JOBS.add(jobname)                           # cancelled on Ctrl-C/kill if it does not finish
-    subprocess.run([f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
-                    "-SUBHOST", "localhost", "-maxjob", "1", "-m", str(msj), "-o", str(out_cms),
-                    str(system_cms), "-WAIT"], cwd=str(wd), check=True)
+    # multisim blocks on -WAIT; the heartbeat thread tails the live .ene alongside it and refreshes a
+    # single \r line — current ns / total ns, %, ns/day and ETA — so a 1000 ns run reads as live progress.
+    with MDHeartbeat(wd, wd / f"{jobname}_multisim.log", f"MD {jobname}", time_ns):
+        subprocess.run([f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
+                        "-SUBHOST", "localhost", "-maxjob", "1", "-m", str(msj), "-o", str(out_cms),
+                        str(system_cms), "-WAIT"], cwd=str(wd), check=True)
     _LAUNCHED_JOBS.discard(jobname)
     _unpack_md_production(wd, jobname)                    # {job}_trj/ + {job}.ene at the job-dir root
     return out_cms
@@ -2804,6 +3018,358 @@ def _hydrate(entry: dict, ranked_map: dict, dirs: dict) -> None:
     entry.setdefault("complex_mae", dirs["esp_cx"] / f"R_{rank}_{stem}_ESP_Complex.mae")
 
 
+def _read_physics_qc(entry: dict, dirs: dict) -> "dict | None":
+    """Read the built .cms + WaterMap .maegz for one rank into the numbers the QC figure plots.
+
+    Two reads of the same built system: schrodinger.structure/Cms for composition, box and geometry
+    (comp_ct, water/ion counts, per-atom coordinates), and topo.read_cms for the msys partial charges
+    the MD engine actually integrates (the ESP charges written into the ffio force field). The α-carbon
+    is the ligand carbon bonded to fluorine — the reactive centre — and the 'crucial' hydration site is
+    the WaterMap site nearest that α-carbon. Returns None (never raises) if a file is missing/unreadable.
+    """
+    import math as _math
+    from schrodinger import structure
+    from schrodinger.application.desmond import cms as _cmsmod
+    from schrodinger.application.desmond.packages import topo
+
+    rank = entry["rank"]
+    cms_path = entry.get("setup_cms") or (dirs["sb"] / f"desmond_setup_R_{rank}" / f"desmond_setup_R_{rank}-out.cms")
+    maegz = dirs["wm"] / f"watermap_R_{rank}" / f"watermap_R_{rank}_wm.maegz"
+    if not Path(cms_path).exists():
+        return None
+
+    m = _cmsmod.Cms(str(cms_path))
+    d: dict = {"rank": rank}
+    titles = [ct.title for ct in m.comp_ct]
+    d["comp_ct"] = len(m.comp_ct)
+    d["atoms_total"] = m.atom_total
+    d["n_water"] = sum(ct.atom_total for ct, t in zip(m.comp_ct, titles) if "water" in (t or "").lower()) // 3
+    d["n_na"] = sum(1 for t in titles if t == "Na+")
+    d["n_cl"] = sum(1 for t in titles if t == "Cl-")
+    try:
+        d["box_A"] = [round(m.box[i], 1) for i in (0, 4, 8)]
+    except Exception:
+        d["box_A"] = None
+
+    # Ligand geometry (for the α-C coordinate) from the structure-level atoms.
+    ligC_xyz, F_xyz = [], []
+    for ct in m.comp_ct:
+        for a in ct.atom:
+            if a.pdbres.strip() == "LIG":
+                if a.element == "C":
+                    ligC_xyz.append((a.x, a.y, a.z))
+                elif a.element == "F":
+                    F_xyz.append((a.x, a.y, a.z))
+    aC_xyz = (min(ligC_xyz, key=lambda cc: min(_math.dist(cc, f) for f in F_xyz))
+              if (F_xyz and ligC_xyz) else None)
+
+    # Partial charges the engine integrates (msys), per ligand atom.
+    msys, cms = topo.read_cms(str(cms_path))
+    lig_at = [(a.element, msys.atom(i).charge) for i, a in enumerate(cms.atom) if a.pdbres.strip() == "LIG"]
+    d["lig_sumq"] = round(sum(q for _, q in lig_at), 4)
+    d["lig_natoms"] = len(lig_at)
+    Cs = sorted([q for e, q in lig_at if e == "C"], reverse=True)
+    d["carboxyl_C"] = round(Cs[0], 4) if Cs else None       # most positive C = the carboxylate carbon
+    d["alpha_C"] = round(Cs[1], 4) if len(Cs) > 1 else None  # next = the reactive α-carbon (bears the F)
+    d["F_charges"] = [round(q, 4) for e, q in lig_at if e == "F"]
+    d["O_charges"] = [round(q, 4) for e, q in lig_at if e == "O"]
+
+    # WaterMap hydration sites (ΔG per site) + the crucial water nearest the α-carbon.
+    d["dG_list"], d["n_sites"], d["n_unstable"] = [], 0, 0
+    d["crucial_dG"], d["crucial_dist_A"] = None, None
+    if maegz.exists():
+        sites = []
+        for st in structure.StructureReader(str(maegz)):
+            for a in st.atom:
+                dg = a.property.get("r_watermap_deltaG", a.property.get("r_watermap_free_energy"))
+                if dg is not None:
+                    sites.append((round(float(dg), 2), (a.x, a.y, a.z)))
+        d["dG_list"] = [s[0] for s in sites]
+        d["n_sites"] = len(sites)
+        d["n_unstable"] = sum(1 for g, _ in sites if g > 0)
+        if aC_xyz and sites:
+            near = min(sites, key=lambda s: _math.dist(s[1], aC_xyz))
+            d["crucial_dG"] = near[0]
+            d["crucial_dist_A"] = round(_math.dist(near[1], aC_xyz), 2)
+    return d
+
+
+def _analysis_dir(physics_root: Path) -> Path:
+    """The one folder every Step-06 figure is written to — build/solvation QC, MD trajectory QC, and the
+    MM-GBSA plots — so all analysis figures for the run sit together rather than scattered across subdirs."""
+    d = physics_root / "06_Analysis"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: dict) -> None:
+    """Draw the build/solvation QC figure — ESP charge gradient, per-atom charges, WaterMap ΔG, box size.
+
+    One 4-panel snapshot of what the physics build produced for every MD-selected rank, from the numbers
+    the MD engine integrates (ESP charges in the ffio force field) and the WaterMap thermodynamics.
+    Best-effort: any missing/unreadable system is dropped, and the whole figure is skipped rather than
+    failing the run. Written to 6_Physics_Validation/06_Analysis/.
+    """
+    recs = []
+    for e in entries:
+        if e.get("_skip"):
+            continue
+        try:
+            r = _read_physics_qc(e, dirs)
+        except Exception as exc:
+            _warn(f"[qc] R_{e['rank']} physics read failed — {str(exc).splitlines()[0]}")
+            r = None
+        if r:
+            recs.append(r)
+    if not recs:
+        _warn("[qc] no built systems readable — physics QC figure skipped.")
+        return
+
+    recs.sort(key=lambda r: r["rank"])
+    ranks = [r["rank"] for r in recs]
+    labs = [_short_ligand(ligands.get(rk, "")) or f"R_{rk}" for rk in ranks]
+    _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
+    palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
+    cols = [palette[i % len(palette)] for i in range(len(recs))]
+    xp = np.arange(len(recs))
+    fa = CFG.VIS_FONT_ANNOT
+
+    def _colour_xticks(axobj):
+        for t, c in zip(axobj.get_xticklabels(), cols):
+            t.set_color(c); t.set_fontweight("bold")
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 8.6))
+
+    # A — α-carbon ESP charge gradient (the reactive centre, as the MD force field sees it).
+    a = ax[0, 0]
+    aC = [r["alpha_C"] for r in recs]
+    if all(v is not None for v in aC):
+        a.bar(xp, aC, color=cols, edgecolor=_INK["dark"], linewidth=0.9, width=0.6, zorder=3)
+        for xi, v in zip(xp, aC):
+            a.text(xi, v + 0.006, f"{v:+.3f}", ha="center", fontsize=fa, fontweight="bold")
+        a.set_ylim(-0.02, max(aC) * 1.28)
+    a.axhline(0, color=_INK["soft"], lw=0.8)
+    a.set_xticks(xp); a.tick_params(labelbottom=False)
+    a.set_ylabel("α-carbon ESP charge (e)\nreactive centre, in the MD force field")
+
+    # B — ligand per-atom ESP charges (α-C, carboxyl-C, F, O); Σq = −1.000.
+    bx = ax[0, 1]
+    for i, r in enumerate(recs):
+        pts = [v for v in (r["alpha_C"], r["carboxyl_C"]) if v is not None] + r["F_charges"] + r["O_charges"]
+        xs = [i + (_j - len(pts) / 2 + 0.5) * 0.12 for _j in range(len(pts))]
+        bx.scatter(xs, pts, color=cols[i], s=48, edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
+    bx.set_xticks(xp); bx.tick_params(labelbottom=False)
+    bx.axhline(0, color=_INK["soft"], lw=0.8)
+    bx.set_ylabel("Ligand per-atom ESP charge (e)\nα-C · carboxyl-C (+) · F · O (−);  Σq = −1.000")
+
+    # C — WaterMap hydration-site ΔG (>0 = displaceable water); ★ = the water nearest the α-carbon.
+    cx = ax[1, 0]
+    data = [r["dG_list"] for r in recs]
+    if any(data):
+        vp = cx.violinplot(data, positions=xp, showmedians=True, widths=0.72)
+        for i, pc in enumerate(vp["bodies"]):
+            pc.set_facecolor(cols[i]); pc.set_alpha(0.5); pc.set_edgecolor(_INK["dark"])
+        for k in ("cbars", "cmins", "cmaxes", "cmedians"):
+            if k in vp:
+                vp[k].set_color(_INK["dark"]); vp[k].set_linewidth(1)
+        ymax = max((max(dl) for dl in data if dl), default=1.0)
+        ymin = min((min(dl) for dl in data if dl), default=-1.0)
+        for i, r in enumerate(recs):
+            cx.text(i, ymax + 1.3, f"{r['n_sites']} sites\n{r['n_unstable']} displaceable",
+                    ha="center", va="bottom", fontsize=fa - 0.5, fontweight="bold", color=cols[i])
+            cw = r.get("crucial_dG")
+            if cw is not None:
+                cx.scatter([i], [cw], marker="*", s=240, color=_A["star"],
+                           edgecolor=_INK["dark"], linewidth=1.1, zorder=6)
+                cx.annotate(f"crucial H₂O\n{cw:+.1f}, {r['crucial_dist_A']} Å", (i, cw),
+                            xytext=(i + 0.28, cw + 0.4), fontsize=fa - 1.5, color=_INK["dark"])
+        cx.set_ylim(ymin - 1.2, ymax + 3)
+        cx.axhline(0, color=_INK["dark"], lw=1.0, ls="--")
+        cx.text(len(recs) - 0.52, 0.15, "ΔG = 0", ha="right", va="bottom",
+                fontsize=fa - 1, color=_INK["soft"])
+        cx.text(len(recs) - 0.52, -0.15, "stable ↓ · displaceable ↑", ha="right", va="top",
+                fontsize=fa - 1.5, color=_INK["soft"])
+        cx.text(0.015, 0.985, "★ crucial H₂O (nearest reactive α-C)", transform=cx.transAxes,
+                ha="left", va="top", fontsize=fa - 1.5, color=_INK["soft"])
+    cx.set_xticks(xp); cx.set_xticklabels(labs); _colour_xticks(cx)
+    cx.set_ylabel("WaterMap hydration-site ΔG (kcal/mol)")
+
+    # D — solvated-system size: water count vs total atoms, box dims annotated.
+    dx = ax[1, 1]
+    w = 0.36
+    dx.bar(xp - w / 2, [r["n_water"] for r in recs], w, label="water molecules",
+           color=_A["blue"], edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
+    dx.bar(xp + w / 2, [r["atoms_total"] for r in recs], w, label="total system atoms",
+           color=_INK["soft"], edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
+    for i, r in enumerate(recs):
+        dx.text(i - w / 2, r["n_water"] + 400, f"{r['n_water']:,}", ha="center", fontsize=fa - 1)
+        _box = (f"\n{r['box_A'][0]:.0f}×{r['box_A'][1]:.0f}×{r['box_A'][2]:.0f} Å" if r["box_A"] else "")
+        dx.text(i + w / 2, r["atoms_total"] + 400, f"{r['atoms_total']:,}{_box}",
+                ha="center", fontsize=fa - 1.5)
+    dx.set_xticks(xp); dx.set_xticklabels(labs); _colour_xticks(dx)
+    dx.set_ylim(0, max(r["atoms_total"] for r in recs) * 1.18)
+    dx.set_ylabel("Solvated-system size (atom / water count)\ncomp_ct = 5 · 2 Na⁺ · 1 Cl⁻ (all)")
+    dx.legend(loc="upper left", fontsize=CFG.VIS_FONT_LEGEND)
+
+    fig.tight_layout()
+    qc_dir = _analysis_dir(out_root)
+    out_path = qc_dir / "Physics_Build_Solvation_QC.png"
+    plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+    _ok(f"[qc] ✔ physics build/solvation QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
+
+
+def _read_md_qc(job_dir: Path, jobname: str) -> "dict | None":
+    """Read one finished MD job's SID .eaf + Desmond .ene into the trajectory-QC arrays.
+
+    From the SID event-analysis file: protein Cα-RMSD and ligand RMSD (fit on protein) per frame, and
+    per-residue Cα-RMSF. From the .ene: system temperature per step. Returns None (never raises) if the
+    SID .eaf is absent (SID not yet run) — the .ene panel degrades gracefully to empty.
+    """
+    from schrodinger.utils import sea
+
+    eaf = job_dir / f"{jobname}{CFG.SUFFIX_SID_EAF}"
+    ene = job_dir / f"{jobname}.ene"
+    if not eaf.exists():
+        return None
+
+    m = sea.Map(eaf.read_text(errors="ignore"))
+    dt_ns = float(m["TrajectoryInterval_ps"].val) / 1000.0        # ns per SID frame
+
+    def _sel(name: str, seltype: str):
+        for e in m["Keywords"]:
+            k = list(e.keys())[0]
+            if k != name:
+                continue
+            b = e[k]
+            try:
+                if b["SelectionType"].val == seltype:
+                    return b
+            except Exception:
+                continue
+        return None
+
+    def _arr(blk) -> list:
+        return [float(x.val) for x in blk["Result"]] if blk is not None else []
+
+    ca = _sel("RMSD", "C-Alpha")
+    lg = _sel("RMSD", "Ligand_wrt_protein")
+    rf = _sel("RMSF", "C-Alpha")
+    d: dict = {"jobname": jobname}
+    d["ca"] = _arr(ca)
+    d["lg"] = _arr(lg)
+    d["rf"] = _arr(rf)
+    d["t"] = [i * dt_ns for i in range(len(d["ca"]))]
+    # Residue numbers for the RMSF x-axis: 'A:MET_1' → 1; fall back to a 1..N ordinal if unparsable.
+    resids = []
+    if rf is not None and "ProteinResidues" in rf:
+        for x in rf["ProteinResidues"]:
+            mm = re.search(r"(\d+)\s*$", str(x.val))
+            resids.append(int(mm.group(1)) if mm else None)
+    if not resids or any(v is None for v in resids):
+        resids = list(range(1, len(d["rf"]) + 1))
+    d["res"] = resids
+
+    # Temperature trace (col 9 of the .ene; col 0 = time ps). Drop the leading ramp point.
+    te, T = [], []
+    if ene.exists():
+        for ln in ene.read_text(errors="ignore").splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            c = ln.split()
+            if len(c) >= 10:
+                try:
+                    te.append(float(c[0]) / 1000.0); T.append(float(c[9]))
+                except ValueError:
+                    continue
+    d["te"], d["T"] = te[1:], T[1:]
+    return d
+
+
+def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
+    """Draw the MD trajectory-QC figure — Cα-RMSD, ligand RMSD, temperature, Cα-RMSF — across the ranks.
+
+    A single stability snapshot proving the production runs are trustworthy before their MM-GBSA / Step-07
+    numbers are believed: did the protein equilibrate (Cα-RMSD), did the ligand stay in the pocket (ligand
+    RMSD, fit on protein), was the thermostat stable (T), and which regions stayed rigid (Cα-RMSF). Reads
+    the SID .eaf + .ene already on disk; best-effort — a rank without SID output is dropped, and the whole
+    figure is skipped rather than failing the run. Written to 6_Physics_Validation/06_Analysis/.
+    """
+    job_dirs = sorted((d for d in md_dir.iterdir()
+                       if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
+                      key=_natural_rank)
+    recs = []
+    for jd in job_dirs:
+        try:
+            r = _read_md_qc(jd, jd.name)
+        except Exception as exc:
+            _warn(f"[qc] {jd.name} MD read failed — {str(exc).splitlines()[0]}")
+            r = None
+        if r and r["ca"]:
+            _rk = _rank_of(jd.name)
+            r["rank"] = int(_rk) if str(_rk).isdigit() else _rk   # int keys the ligand-name map (_lookup_ligands)
+            recs.append(r)
+    if not recs:
+        _warn("[qc] no SID .eaf found — MD trajectory-QC figure skipped.")
+        return
+
+    labs = [_short_ligand(ligands.get(r["rank"], "")) or f"R_{r['rank']}" for r in recs]
+    _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
+    palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
+    cols = [palette[i % len(palette)] for i in range(len(recs))]
+    fl = CFG.VIS_FONT_LEGEND
+    fig, ax = plt.subplots(2, 2, figsize=(12, 8.6))
+
+    # A — protein Cα-RMSD vs time (equilibration / drift).
+    a = ax[0, 0]
+    for i, r in enumerate(recs):
+        a.plot(r["t"], r["ca"], color=cols[i], lw=1.3, label=labs[i])
+    a.set_xlabel("time (ns)")
+    a.set_ylabel("Protein Cα-RMSD (Å)\nvs the minimised start — lower = more stable")
+    a.legend(loc="upper left", fontsize=fl, title="MD-selected")
+
+    # B — ligand RMSD after fitting on the protein (did the PFAS stay in the pocket).
+    b = ax[0, 1]
+    for i, r in enumerate(recs):
+        b.plot(r["t"], r["lg"], color=cols[i], lw=1.3, label=labs[i])
+    b.set_xlabel("time (ns)")
+    b.set_ylabel("Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
+    b.legend(loc="upper left", fontsize=fl)
+
+    # C — system temperature vs the target (thermostat stability), zoomed to a tight band.
+    c = ax[1, 0]
+    has_T = False
+    for i, r in enumerate(recs):
+        if r["te"]:
+            c.plot(r["te"], r["T"], color=cols[i], lw=0.7, alpha=0.85, label=labs[i])
+            has_T = True
+    tgt = CFG.MD_EQUIL_TARGET_T
+    c.axhline(tgt, color=_INK["dark"], lw=1.0, ls="--")
+    c.text(0.99, 0.53, f"{tgt:g} K target", transform=c.transAxes, ha="right", va="bottom",
+           fontsize=CFG.VIS_FONT_ANNOT - 1, color=_INK["soft"])
+    if has_T:
+        c.set_ylim(tgt - 12, tgt + 10)
+        c.legend(loc="lower left", fontsize=fl)
+    c.set_xlabel("time (ns)")
+    c.set_ylabel("System temperature (K)\nthermostat stability around the target")
+
+    # D — per-residue Cα-RMSF (which regions stayed rigid; termini are expectedly mobile).
+    dd = ax[1, 1]
+    for i, r in enumerate(recs):
+        dd.plot(r["res"], r["rf"], color=cols[i], lw=1.0, label=labs[i])
+    dd.set_xlabel("residue number")
+    dd.set_ylabel("Protein Cα-RMSF (Å)\nper-residue flexibility over the run")
+    dd.legend(loc="upper right", fontsize=fl)
+
+    fig.tight_layout()
+    qc_dir = _analysis_dir(out_root)
+    out_path = qc_dir / "MD_Trajectory_QC.png"
+    plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+    _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
+
+
 def _phase_merge(entry: dict, ranked_map: dict, dirs: dict) -> None:
     """Import the prepared complex + write the ESP charges → 01_Prepared_Proteins / 02_ESP_Charged_Complexes."""
     rank, stem, prepared = entry["rank"], entry["stem"], entry["prepared"]
@@ -2837,7 +3403,8 @@ def _phase_watermap(entry: dict, dirs: dict, a) -> None:
     _log(f"[watermap] R_{rank} {a.wm_ns} ns (holo, {a.lig_dist} Å active site, S-OPLS/TIP4P), "
          f"up to {CFG.PHYS_WM_MAX_TRIES} tries…")
     try:
-        wmout = run_watermap(entry["complex_mae"], f"watermap_R_{rank}", wm_dir, a.wm_ns, a.lig_dist)
+        with _timed("watermap", rank):
+            wmout = run_watermap(entry["complex_mae"], f"watermap_R_{rank}", wm_dir, a.wm_ns, a.lig_dist)
         n = export_watermap_csv(wmout, csv_out)
         if n <= 0:
             # export writes NO csv when the maegz carries no dG site, so claiming ✔ here would print a
@@ -2876,7 +3443,8 @@ def _phase_build(entry: dict, dirs: dict) -> None:
             _log(f"[build] R_{rank} ⚠ existing build unusable — {_e}; moved to {_bad.name}, rebuilding.")
     _log(f"[build] R_{rank} System Builder (minimize-volume, {CFG.PHYS_SOLVENT_MODEL}, "
          f"{CFG.PHYS_FORCEFIELD}, {CFG.PHYS_SALT_CONC_M} M {CFG.PHYS_SALT_POS_ION}{CFG.PHYS_SALT_NEG_ION})…")
-    setup_cms = run_build(entry["complex_mae"], f"desmond_setup_R_{rank}", sb_dir)
+    with _timed("build", rank):
+        setup_cms = run_build(entry["complex_mae"], f"desmond_setup_R_{rank}", sb_dir)
     entry["setup_cms"] = setup_cms
     q = reapply_esp_to_cms(setup_cms, entry["esp"])
     _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
@@ -2899,7 +3467,8 @@ def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
     reapply_esp_to_cms(setup_cms, entry["esp"])          # re-verify ESP reached the FF before integrating
     _log(f"[md] R_{rank} {a.md_ns} ns production ({a.md_frames} frames, "
          f"NPT {CFG.MD_EQUIL_TARGET_T:g} K, relax + production)…")
-    run_md(setup_cms, f"desmond_md_job_R_{rank}", md_dir, a.md_ns, a.md_frames)
+    with _timed("md", rank):
+        run_md(setup_cms, f"desmond_md_job_R_{rank}", md_dir, a.md_ns, a.md_frames)
     _ok(f"[md] R_{rank} ✔ {md_cms.name} — SID + MM-GBSA next (CPU, sequential)")
     return md_dir
 
@@ -2991,6 +3560,15 @@ def main() -> int:
                 _fail(f"[build] R_{e['rank']} FAILED — {str(exc).splitlines()[0]}")
                 e["_skip"] = True; failed.append((_complex_label(e, ranked_map), f"build: {str(exc).splitlines()[0]}"))
 
+    # Build + WaterMap are both done for every rank by here → draw the physics build/solvation QC figure
+    # (ESP charge gradient, per-atom charges, WaterMap ΔG, box size). Best-effort; never fails the run.
+    if {"build", "watermap"} & stages:
+        _section("Physics QC — build & solvation snapshot")
+        try:
+            make_physics_qc_figure(entries, dirs, out_root, _lookup_ligands(run))
+        except Exception as exc:
+            _warn(f"[qc] physics QC figure skipped — {str(exc).splitlines()[0]}")
+
     _mmgbsa_status = "ok"
     if "md" in stages:
         _section(f"Step 4/4 — MD → SID → MM-GBSA  ({a.md_ns:g} ns · one rank fully done before the next)")
@@ -3013,9 +3591,12 @@ def main() -> int:
                 if jd is None:
                     continue
                 try:
-                    process_jobs(scan_jobs([jd]))              # 2) SID  (blocking)
-                    if run_mmgbsa(jd, jd.name, _rank_of(jd.name)) is None:
-                        _mmgbsa_status = "warn"                         # 3) MM-GBSA (blocking)
+                    with _timed("sid", rank):
+                        process_jobs(scan_jobs([jd]))          # 2) SID  (blocking)
+                    with _timed("mmgbsa", rank):
+                        _mg = run_mmgbsa(jd, jd.name, _rank_of(jd.name))   # 3) MM-GBSA (blocking)
+                    if _mg is None:
+                        _mmgbsa_status = "warn"
                 except Exception as exc:
                     _warn(f"[sid/mmgbsa] R_{rank}: {str(exc).splitlines()[0]}")
                     _mmgbsa_status = "warn"
@@ -3030,12 +3611,18 @@ def main() -> int:
                 _st = run_mmgbsa_phase(md_dir, run_root, plots_only=True)   # read existing CSVs → plots only, never re-run
                 if _st != "ok":
                     _mmgbsa_status = _st
+                # MD trajectory QC (Cα-RMSD · ligand RMSD · temperature · Cα-RMSF) from the SID .eaf + .ene.
+                try:
+                    make_md_qc_figure(md_dir, out_root, _lookup_ligands(run_root))
+                except Exception as exc:
+                    _warn(f"[qc] MD trajectory-QC figure skipped — {str(exc).splitlines()[0]}")
 
     _section(f"Summary — {len(ok)} ok, {len(failed)} failed  (stages {sorted(stages)})")
     for t in ok:
         _echo(f"  {_C.OKGREEN}✔{_C.ENDC} {t}")
     for t, why in failed:
         _echo(f"  {_C.FAIL}✗{_C.ENDC} {t}  →  {why}")
+    _emit_timings(out_root)                               # per-job + per-phase wall-clock → log + 00_Phase_Timings.csv
     _guard.__exit__(None, None, None)                    # restore systemd-oomd (idempotent if Step 4 already did)
     print_elapsed(t0, "06_Physics_Validation_FAcDs.py")
     return EXIT_WARN if (failed or _mmgbsa_status == "warn") else 0

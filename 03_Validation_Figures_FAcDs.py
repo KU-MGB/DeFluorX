@@ -118,8 +118,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 03_Fluorine_Engagement_by_Tier.png           <-- Fluorine engagement ratio box + trend line
     • 04_Catalytic_Quality_vs_Inhibition.png       <-- Soft-catalytic-score violin + active-site contact density
     • 05_ActiveSite_Contact_Density_by_Tier.png    <-- Active-site contact density box + strip
-    • 06_Chemical_Space_Map.png                    <-- UMAP chemical-space manifold by tier
-    • 07_Chemical_Space_Landscape.png              <-- {CFG.TIER_TOP} KDE density + structure thumbnails
+    • 07_Chemical_Space_Map.png                    <-- UMAP chemical-space manifold, competence hexbin + {CFG.TIER_TOP} structure thumbnails
     • 08_Binding_Energetics.png                    <-- Binding-probability violin by tier
 
     ── 07_PFAS_Scope_and_Synthesis/ ── multi-metric synthesis + publication assembly
@@ -956,7 +955,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
 
 # =============================================================================
 # SECTION 4B: Tier_1A Landscape Companion Figures (the *b variants: 05b, 11b, 13b,
-#             14b, 17b, 18b, 19b, 20b, 24b, 26b)
+#             14b, 17b, 19b, 20b, 24b, 26b)
 # =============================================================================
 
 """
@@ -1248,60 +1247,6 @@ def _tt_style(ax, xlabel, ylabel, title=None):
     ax.grid(True, alpha=0.18, color=CFG.VIS_INK["pale"], linewidth=0.5)
 
 
-# ── Figure 18b — UMAP Chemical Space + PA Landscape ──────────────────────────
-def _fig_18b_tt_landscape(df, pa, imgs, out_dir: Path, reporter):
-    try:
-        dv = df.dropna(subset=["UMAP_X","UMAP_Y"]).copy()
-        # dropna can empty the frame outright; .min()/.max() on it return NaN, which then
-        # becomes an axis limit and takes the figure down with no usable error.
-        if dv.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('18b')} — no rows with UMAP coordinates")
-            return
-        if len(dv) < 3:
-            # a 2-D KDE needs ≥ 3 non-collinear points; fewer gives a singular covariance (LinAlgError)
-            reporter.log(f"  ! Skipped: {_fig_path('18b')} — only {len(dv)} UMAP row(s), too few for a density estimate")
-            return
-        dv["_X"] = dv["UMAP_X"]; dv["_Y"] = dv["UMAP_Y"]
-        pax = pa.copy(); pax["_X"] = pa["UMAP_X"]; pax["_Y"] = pa["UMAP_Y"]
-        xy  = np.vstack([dv["_X"].values, dv["_Y"].values])
-        kde = gaussian_kde(xy, bw_method=0.18)
-        x0,x1 = dv["_X"].min()-1, dv["_X"].max()+1
-        y0,y1 = dv["_Y"].min()-1, dv["_Y"].max()+1
-        xi,yi = np.linspace(x0,x1,220), np.linspace(y0,y1,220)
-        Xi,Yi = np.meshgrid(xi,yi)
-        Zi = kde(np.vstack([Xi.ravel(),Yi.ravel()])).reshape(Xi.shape)
-        """
-        THIS IS A POPULATION DENSITY. IT IS NOT A FREE-ENERGY SURFACE.
-
-        -RT·ln(ρ) is a potential of mean force only when ρ is a Boltzmann density over a METRIC
-        coordinate. Here ρ is a Gaussian KDE of how many library members the screen happens to contain,
-        on UMAP axes — a designed sample, on non-metric, non-volume-preserving coordinates. Nothing about
-        it is thermodynamic, and an energy axis on it invites exactly the reading it cannot support.
-
-        So the density is plotted as a density: no log transform, no kcal/mol scale, and a colourbar that
-        says what the colour means. Where the library clusters is the only thing this figure can show.
-        """
-        _dens = Zi / Zi.max() if Zi.max() > 0 else Zi
-        fig, ax = _tt_new_fig()
-        cf = ax.contourf(Xi, Yi, _dens, levels=45, cmap="Blues", vmin=0, vmax=1.0, alpha=0.90)
-        ax.contour(Xi, Yi, _dens, levels=18, colors="white", linewidths=0.30, alpha=0.38)
-        cb = fig.colorbar(cf, ax=ax, fraction=0.025, pad=0.01)
-        cb.set_label("Library density  (KDE, normalised — darker = more complexes)",
-                     fontsize=CFG.VIS_FONT_LEGEND)
-        cb.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
-        _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
-        _tt_draw_thumbnails(fig, ax, pax, imgs)
-        _tt_style(ax, "UMAP 1", "UMAP 2", "")
-        _tt_add_legend(fig, _tt_legend_handles(dv))
-        ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
-        out = out_dir / "Figure_18b_TT_Chemical_Space_Landscape.png"
-        fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
-        plt.close(fig)
-    except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('18b')} — {e}")
-        plt.close("all")   # release the figure left open by the failed savefig
-
-
 # ── Figure 13b — SN2 Angle × Confidence + PA Landscape ───────────────────────
 def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
     try:
@@ -1458,7 +1403,6 @@ _FIG_MAPPING = {
         "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
         "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
         "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/08_Chemical_Space_Landscape.png",
         # ── 07_PFAS_Scope_and_Synthesis ──
         "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
         "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
@@ -1485,7 +1429,7 @@ _FIG_MAPPING = {
 _PANEL_FIG_PATHS = {
     "01C": "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
     "05b": "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
-    "02A": "06_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
+    "02A": "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.png",
     "04A": "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
     "05c": "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
     "06A": "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
@@ -3882,8 +3826,10 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         # minimum both need: any more and the panel opens a band of empty white above the data.
         ax.set_ylim(0, 200)
         ax.set_yticks(range(0, 181, 20))
-        _nuc_lbl = CFG.REF_ACTIVE_SITE_MAP["Nuc"]
-        ax.set_xlabel(f'{_nuc_lbl["res"]}{_nuc_lbl["id"]} Nucleophile → Carbon Distance (Å)  — shorter = closer to reaction geometry',
+        # The distance is measured to EACH variant's own mapped catalytic aspartate (Mapped_Nucleophile:
+        # Asp109 / Asp110 / Asp112 / Asp104 …), never a fixed residue number — a FAcD variant's nucleophile
+        # can sit a little before or after the reference Asp110. So the axis names the ROLE, not one number.
+        ax.set_xlabel('Mapped catalytic Asp (nucleophile) → Carbon Distance (Å)  — shorter = closer to reaction geometry',
                       )
         ax.set_ylabel("SN2 Attack Angle (°)  — 180° = perfect linear back-attack", )
         ax.text(0.01, 0.01,
@@ -4790,7 +4736,11 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         # the MEAN competence per bin, so chemical regions enriched for good degraders
         # light up. The MD-ready / elite hits are overlaid as labelled stars. This
         # replaces the former 58k-point tier scatter, which was an unreadable hairball.
+        # Margin scaffold shared with the thumbnail figures: the main axes sit in the middle band and the
+        # right margin holds the PyMOL structure thumbnails (moved here from the former Figure 18b, which
+        # was the same UMAP without the competence colouring). No tight_layout — it would fight the margins.
         fig, ax = plt.subplots(figsize=(11, 7.5))
+        fig.subplots_adjust(**_TT_MARGINS)
         _u = df.dropna(subset=["UMAP_X", "UMAP_Y"]).copy()
         _ux, _uy = _u["UMAP_X"].values, _u["UMAP_Y"].values
         _cmetric = next((c for c in ("competence_score", CFG.COL_MECH_S,
@@ -4799,7 +4749,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             _cvals = pd.to_numeric(_u[_cmetric], errors="coerce").fillna(0.0).values
             hb = ax.hexbin(_ux, _uy, C=_cvals, reduce_C_function=np.mean,
                            gridsize=45, cmap="viridis", mincnt=1, linewidths=0.15)
-            cb = fig.colorbar(hb, ax=ax, fraction=0.035, pad=0.01)
+            cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
             cb.set_label(f"Mean {_cmetric.replace('_', ' ')} per bin  (brighter = more degradable)",
                          fontsize=9)
         else:
@@ -4812,28 +4762,43 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         else:
             _elite = _u[_u[CFG.COL_TIER] == CFG.TIER_TOP]
             _elite_lbl = f"{CFG.TIER_TOP} hits (n={len(_elite)})"
+        # Build the thumbnail cohort ONCE (same order _tt_draw_thumbnails uses) and map each entry to its
+        # box/arrow colour, so a star can be tinted to match its OWN thumbnail rather than every star being
+        # an indistinguishable gold. Matched by (protein, ligand) identity.
+        _pax = None
+        _thumb_colour = {}
+        if _tt_has_imgs and _imgs and _pa is not None and not _pa.empty:
+            _pax = _pa.dropna(subset=["UMAP_X", "UMAP_Y"]).copy()
+            if not _pax.empty:
+                _pax["_X"] = _pax["UMAP_X"]; _pax["_Y"] = _pax["UMAP_Y"]
+                _n_thumb = min(len(_pax), len(_imgs), CFG.VIS_MAX_THUMBNAILS)
+                for _ti, (_, _tr) in enumerate(_pax.head(_n_thumb).iterrows()):
+                    _tk = (str(_tr.get(CFG.COL_PROT, "")), str(_tr.get(CFG.COL_LIG, "")))
+                    _thumb_colour[_tk] = _TT_ENTRY_COLS[_ti % len(_TT_ENTRY_COLS)]
+
         if not _elite.empty:
-            ax.scatter(_elite["UMAP_X"], _elite["UMAP_Y"], marker="*", s=185,
-                       color=CFG.VIS_ACCENT["star"], edgecolors="black", linewidths=0.9,
-                       zorder=8, label=_elite_lbl)
-            if CFG.COL_LIG in _elite.columns:
-                _lig = _elite[CFG.COL_LIG].astype(str).str.replace(r"^\d+_", "", regex=True)
-                for _xx, _yy, _lg in zip(_elite["UMAP_X"], _elite["UMAP_Y"], _lig):
-                    ax.annotate(_lg, (_xx, _yy), textcoords="offset points", xytext=(5, 4),
-                                fontsize=7.0, fontweight="bold", color=CFG.VIS_INK["ink_pure"], zorder=9)
+            # Each star takes its thumbnail's colour (fill); an elite hit with no thumbnail stays gold.
+            # No ligand labels on the map — the thumbnail box already names protein + ligand.
+            for _, _er in _elite.iterrows():
+                _ek = (str(_er.get(CFG.COL_PROT, "")), str(_er.get(CFG.COL_LIG, "")))
+                _sc = _thumb_colour.get(_ek, CFG.VIS_ACCENT["star"])
+                ax.scatter(_er["UMAP_X"], _er["UMAP_Y"], marker="*", s=185,
+                           color=_sc, edgecolors="black", linewidths=0.9, zorder=8)
+            ax.scatter([], [], marker="*", s=185, color=CFG.VIS_ACCENT["star"],
+                       edgecolors="black", linewidths=0.9, label=_elite_lbl)   # single neutral legend key
 
         ax.set_xlabel("UMAP Dimension 1  (distances reflect chemical similarity)", )
         ax.set_ylabel("UMAP Dimension 2", )
         ax.grid(False)
         ax.legend(loc="lower left")
-        plt.tight_layout()
-        _stat_box(ax, _umap_tier_separation(_u), "lower left")
+        _stat_box(ax, _umap_tier_separation(_u), "upper left")
+        # PyMOL active-site thumbnails for the Tier_1A representatives (moved here from the removed
+        # Figure 18b, which was this same UMAP without the competence colouring): each thumbnail's arrow
+        # and box share the colour of the star it points to.
+        if _pax is not None and not _pax.empty:
+            _tt_draw_thumbnails(fig, ax, _pax, _imgs)
         plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
-
-    # Figure 18b: PA companion (chemical space landscape)
-    if _tt_has_imgs:
-        _fig_18b_tt_landscape(df, _pa, _imgs, out_dir, reporter)
 
 
 
@@ -5881,7 +5846,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _panel(_xo__fig_05b_mechanistic_size_modified, "05_Catalytic_Geometry_and_Mechanism", "14_Mechanistic_Breakdown_by_Tier")
 
     _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs, int_label_map, present_int_cols)
-    _panel(_xo__fig_02A_binding_affinity_metrics, "06_Ligand_Interactions_and_Chemical_Space", "09_Binding_Affinity_Metrics")
+    _panel(_xo__fig_02A_binding_affinity_metrics, "06_Ligand_Interactions_and_Chemical_Space", "08_Binding_Affinity_Metrics")
 
     _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers)
     _panel(_xo__fig_05c_size_by_tier_modified, "07_PFAS_Scope_and_Synthesis", "14_Chain_Length_by_Tier")
@@ -8180,10 +8145,12 @@ def _ext_match_03_style(fig) -> None:
     _LBL, _TICK, _COL = 11.0, 9.0, CFG.VIS_INK["black"]
     _LEG = float(getattr(CFG, "VIS_FONT_LEGEND", 8.5))
     for _ax in fig.get_axes():
-        for _t in (_ax.xaxis.label, _ax.yaxis.label):
-            _t.set_fontsize(_LBL)
-            _t.set_color(_COL)
-            _t.set_fontweight("normal")
+        # A twin (secondary) axis may be deliberately colour-coded so its quantity cannot be misread as
+        # the other axis's: it carries a `_twin_axis_colour` tag and keeps that colour on its y-label and
+        # y-ticks. The x-axis stays black everywhere (tier ticks are recoloured separately below).
+        _ycol = getattr(_ax, "_twin_axis_colour", None) or _COL
+        _ax.xaxis.label.set_fontsize(_LBL); _ax.xaxis.label.set_color(_COL); _ax.xaxis.label.set_fontweight("normal")
+        _ax.yaxis.label.set_fontsize(_LBL); _ax.yaxis.label.set_color(_ycol); _ax.yaxis.label.set_fontweight("normal")
         """
         A long y-label set at the same size as a short one runs the height of the panel and forces the
         reader to track it vertically. Labels past the threshold step down a point size; short ones are
@@ -8192,10 +8159,11 @@ def _ext_match_03_style(fig) -> None:
         _yl = _ax.yaxis.label.get_text()
         if len(_yl) > 34:
             _ax.yaxis.label.set_fontsize(_LBL - 1.5)
-        _ax.tick_params(axis="both", labelsize=_TICK, labelcolor=_COL)
+        _ax.tick_params(axis="x", labelsize=_TICK, labelcolor=_COL)
+        _ax.tick_params(axis="y", labelsize=_TICK, labelcolor=_ycol)
         for _t in _ax.get_yticklabels():
             _t.set_fontsize(_TICK)
-            _t.set_color(_COL)
+            _t.set_color(_ycol)
 
         """
         A tier tick takes its TIER'S colour, as it does in every other figure in the set. The tick
@@ -8318,7 +8286,7 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order, reg_nam
 # numbered to continue each destination folder's own sequence.
 _xn_FIG_NAMES = {
     'geometry':   '13_Geometry_and_Uncertainty',
-    'binding':    '09_Binding_Affinity_Metrics',
+    'binding':    '08_Binding_Affinity_Metrics',
     'phylogeny':  '05_Evolutionary_Phylogeny',
     'pillars':    '09_Pillar_Divergence_by_Tier',
     'size_mech':  '14_Mechanistic_Breakdown_by_Tier',
@@ -8554,12 +8522,14 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     geometrically real and mechanistically meaningless.
     """
     _nuc_by_job: dict = {}
+    _prot_by_job: dict = {}
     _rank_csv = sorted((prod_dir).glob(CFG.GLOB_RANKED_CSV))
     if _rank_csv:
         try:
             _rk = pd.read_csv(_rank_csv[-1], low_memory=False,
-                              usecols=["job_name", "Mapped_Nucleophile"])
-            for _jn, _mn in zip(_rk["job_name"], _rk["Mapped_Nucleophile"]):
+                              usecols=["job_name", "Mapped_Nucleophile", "Protein_Name"])
+            for _jn, _mn, _pn in zip(_rk["job_name"], _rk["Mapped_Nucleophile"], _rk["Protein_Name"]):
+                _prot_by_job[str(_jn)] = str(_pn)
                 _m = re.search(r"(\d+)\s*$", str(_mn))
                 if _m:
                     _nuc_by_job[str(_jn)] = int(_m.group(1))
@@ -8570,9 +8540,19 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             reporter.log(f'  ! Could not read Mapped_Nucleophile ({type(_e).__name__}); '
                          f'those complexes will be SKIPPED — geometry is measured only at the '
                          f'mapped catalytic aspartate, never by a whole-protein scan.')
-    _missing = sum(1 for p in job_folders if p.name not in _nuc_by_job)
+    _missing_jobs = [p.name for p in job_folders if p.name not in _nuc_by_job]
+    _missing = len(_missing_jobs)
     if _missing:
-        reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile; those fall back to the scan.')
+        # The gap is per-protein, not per-complex: when the alignment cannot place a protein's catalytic
+        # aspartate, ALL of that protein's ligand complexes lack it. State both counts so the number here
+        # reconciles with the per-variant coverage figure (81 complexes = 3 protein variants × 27 ligands),
+        # rather than reading as a contradiction of it.
+        _missing_prots = {_prot_by_job.get(j) for j in _missing_jobs if _prot_by_job.get(j)}
+        _npr = len(_missing_prots) or "?"
+        reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile — these are {_npr} protein '
+                     f'variant(s) (each × its ligands) whose catalytic aspartate the alignment could not '
+                     f'place; see 01_Active_Site_Residue_Mapping_Coverage. SKIPPED — geometry is measured '
+                     f'only at the mapped catalytic aspartate, never by a whole-protein scan.')
     _tasks = [(p, _nuc_by_job.get(p.name)) for p in job_folders]
 
     """
@@ -8669,7 +8649,9 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
         reporter.log('  ! Multi-model variance: NO geometry resolved on any model — the uncertainty '
                      'panels would be empty. Treat this CSV as unusable.')
     elif _n_geom_fail:
-        reporter.log(f'    · {_n_geom_fail:,} model(s) had no resolvable SN2 geometry (no nucleophile in range).')
+        reporter.log(f'    · {_n_geom_fail:,} of {_n_rows:,} model poses ({_n_geom_fail / max(1, _n_rows):.1%}) '
+                     f'had no resolvable SN2 geometry — the mapped aspartate was absent or beyond attack '
+                     f'range in that model (this includes the no-nucleophile complexes above, × 5 models).')
     return target
 
 def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
@@ -8830,7 +8812,10 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         reporter.log(f"  ! Skipped: {_fig_path('01C')} — no complexes after geometric tiering.")
         return
     tiers = [t for t in TIER_ORDER_LOGIC if t in set(cdf['best_geo_tier'])]
-    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.82 * _xn_COL_DOUBLE_IN))
+    # Tight inter-row spacing: the top row carries no x tick labels, so the default gap leaves a wide
+    # empty band between the rows. A small hspace pulls the two rows together, matching the other figures.
+    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.82 * _xn_COL_DOUBLE_IN),
+                             gridspec_kw={'hspace': 0.06})
     (ax_tl, ax_tr), (ax_bl, ax_br) = axes
     _xn__tier_boxstrip(ax_tl, cdf, tiers, 'abs_distance', 'Nucleophile distance  (Å)', group_col='best_geo_tier')
     _xn__gate_lines_distance(ax_tl)
@@ -8839,6 +8824,11 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     _xn__gate_lines_angle(ax_tr)
     ax_tr.set_ylim(0, 185)
     ax_tr.set_yticks([0, 45, 90, 135, 180])
+    # The top and bottom rows share the same tier x-axis; the bottom row already carries the tier names
+    # and their n, so the top row's tick labels only repeat them — suppress them (labels shown once, below).
+    for _axt in (ax_tl, ax_tr):
+        _axt.tick_params(labelbottom=False)
+        _axt.set_xlabel('')
     for _ax, _y, _lab in [(ax_bl, 'distance_std', 'Distance s.d. across 5 models  (Å)'),
                           (ax_br, 'angle_std', 'Angle s.d. across 5 models  (°)')]:
         sns.violinplot(data=cdf, x='best_geo_tier', y=_y, order=tiers, hue='best_geo_tier',
@@ -8854,6 +8844,11 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         _ax.set_axisbelow(True)
         _xn__tidy_tier_ticks(_ax, counts=cdf['best_geo_tier'].value_counts())
         _xn__stat_header(_ax, _xn__kruskal(cdf, 'best_geo_tier', _y, tiers))
+    # The tier names and their n already sit on the bottom tick labels; the figure-level
+    # 'Degrader tier (n below each tier)' caption only restates that, so clear every panel's x-label
+    # (no shared x-label left ⇒ _ext_match_03_style lifts no supxlabel).
+    for _ax in (ax_bl, ax_br):
+        _ax.set_xlabel('')
     for _ax, _l in [(ax_tl, 'a'), (ax_tr, 'b'), (ax_bl, 'c'), (ax_br, 'd')]:
         _xn__panel(_ax, _l)
     _xn__save(fig, out_dir, _xn_FIG_NAMES['geometry'], reporter)
@@ -8873,7 +8868,8 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
     tiers = [t for t in TIER_ORDER_LOGIC if t in set(df[tcol].dropna())]
     if not tiers:
         return
-    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.85 * _xn_COL_DOUBLE_IN))
+    fig, axes = plt.subplots(2, 2, figsize=(_xn_COL_DOUBLE_IN, 0.85 * _xn_COL_DOUBLE_IN),
+                             gridspec_kw={'hspace': 0.06})
     counts = df[tcol].value_counts()
     for ax, letter, (pil, lab) in zip(axes.ravel(), ['a', 'b', 'c', 'd'], pillars):
         pc = _xn__pillar_col(df, pil)
@@ -8902,6 +8898,13 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
         _xn__tidy_tier_ticks(ax, counts=counts)
         _xn__stat_header(ax, _xn__kruskal(sub, 'tier', 'y', tiers, reg_name=pc))
         _xn__panel(ax, letter)
+    # Both rows share the tier x-axis: the top row's tick labels only repeat the bottom row's, and the
+    # tier names + n already sit on the bottom ticks — so suppress the top row's labels and clear every
+    # x-label (no shared x-label left ⇒ no redundant 'Degrader tier (n below each tier)' supxlabel).
+    for _ax in axes[0]:
+        _ax.tick_params(labelbottom=False)
+    for _ax in axes.ravel():
+        _ax.set_xlabel('')
     _xn__save(fig, out_dir, _xn_FIG_NAMES['pillars'], reporter)
 
 def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
@@ -9218,7 +9221,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         # The panel prints the raw p; register it so its q_BH is paid in the same family.
         _register_p(f"Mann-Whitney U — {label} — Elite (Tier_1A/1B) vs rest",
-                    "09_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
+                    "08_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
     stat_lines = ['Elite (Tier_1A/1B) vs rest (Mann–Whitney U; q_BH in CSV; r>0 = Elite higher)']
@@ -9245,7 +9248,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     # frame and reads as a separate object floating beside the panel. Semi-transparent box so the
     # violins behind it stay visible.
     _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), ncol=2)
-    _xo__save(fig, out_dir, '09_Binding_Affinity_Metrics.png', reporter)
+    _xo__save(fig, out_dir, '08_Binding_Affinity_Metrics.png', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     idc = _xo__col(df, CFG.COL_ID_PCT, 'Identity_to_Control')
@@ -9285,6 +9288,9 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         _xn__mean_trend(ax1, df, tiers, idc, group_col=CFG.COL_TIER, label='Mean identity (trend)')
         ax1.set_xlabel('Catalytic degrader tier')
         ax1.set_ylabel('Sequence identity to control (%)')
+        # Both panels share the same tier x-axis; the top panel's tick labels only repeat the bottom's,
+        # so they are suppressed and the coloured tier names are shown once, under the bottom panel.
+        ax1.tick_params(labelbottom=False)
         # panel title removed (user request)
         res = _mw_signed_p1(idc, 'Sequence Identity')
         stat_text = 'Elite (Tier_1A/1B) vs rest (Mann–Whitney U;  uncorrected p, q_BH in 06_Statistical_Tests.csv)\n'
@@ -9322,12 +9328,20 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         so it is dropped before the scaling rather than clipped after it — a clip to 5 A still lets a
         sentinel-derived 5.0 masquerade as a genuinely bad fold.
         """
+        # Twin-axis colour coding: the two y-axes carry different quantities (evolutionary score 0–100 on
+        # the left, normalised traces 0–1 on the right), so each takes its own CFG colour on its label,
+        # ticks, spine and grid — a reader can then never trace a value onto the wrong scale. The right
+        # grid is dashed so, where the two colour grids overlap, they stay tellable apart.
+        _c_left, _c_right = CFG.VIS_ACCENT["axis_left"], CFG.VIS_ACCENT["axis_right"]
         ax2r = ax2.twinx()
         ax2r.set_ylim(0, 1.05)
-        ax2r.set_ylabel('normalised (0–1)   ·   RMSD inverted, 1.0 = best',
-                         color=CFG.VIS_INK["muted"])
-        ax2r.tick_params(axis='y', labelsize=CFG.VIS_FONT_TICK, colors=CFG.VIS_INK["muted"])
-        ax2r.grid(False)
+        ax2r._twin_axis_colour = _c_right          # honoured by _ext_match_03_style (keeps this colour)
+        ax2r.set_ylabel('normalised (0–1)   ·   RMSD inverted, 1.0 = best', color=_c_right)
+        ax2r.tick_params(axis='y', labelsize=CFG.VIS_FONT_TICK, colors=_c_right)
+        ax2r.spines['right'].set_color(_c_right)
+        ax2r.set_axisbelow(True)
+        ax2r.grid(True, axis='y', color=_c_right, alpha=CFG.VIS_GRID_ALPHA,
+                  linewidth=CFG.VIS_GRID_LINEWIDTH, linestyle='--')
 
         df_norm = df.copy()
         for tcol, colour, tlabel, mk in trend_specs:
@@ -9368,6 +9382,14 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         ax2.set_xlabel('Catalytic degrader tier')
         ax2.set_ylabel('Evolutionary fingerprint score')
         ax2.set_ylim(0, y_top)
+        # Left axis (evolutionary score) takes the paired left colour on its label, ticks, spine and grid,
+        # so it reads as the counterpart of the amber right axis. Solid grid vs the right's dashed grid.
+        ax2._twin_axis_colour = _c_left            # honoured by _ext_match_03_style (keeps this colour)
+        ax2.spines['left'].set_color(_c_left)
+        ax2.tick_params(axis='y', colors=_c_left)
+        ax2.set_axisbelow(True)
+        ax2.grid(True, axis='y', color=_c_left, alpha=CFG.VIS_GRID_ALPHA,
+                 linewidth=CFG.VIS_GRID_LINEWIDTH, linestyle='-')
         # panel title removed (user request)
         from matplotlib.lines import Line2D
         from matplotlib.patches import Patch as _PatchA
@@ -9790,7 +9812,7 @@ def write_figure_descriptions(out_dir: Path):
         "Figure 13a — Figure_13a_Mechanism_Geometry_Scatter.png",
         "  Title   : SN2 Attack Angle vs. Nucleophile-Ligand Distance",
         "  Type    : Scatter plot with tier threshold lines and ideal-zone shading",
-        "  X-axis  : ASP110 nucleophile to electrophilic carbon distance (Ang); shorter = reaction-ready",
+        "  X-axis  : mapped catalytic Asp (nucleophile, per-variant) to electrophilic carbon distance (Ang); shorter = reaction-ready",
         "            Clipped to <=5 Ang to remove outliers with no catalytic contact.",
         "  Y-axis  : SN2 attack angle (degrees); 180 = perfect linear back-attack geometry",
         "  Shape   : Circle = halide-stabilised (TRP/TYR aromatic shield present); X = not stabilised",
@@ -9803,7 +9825,7 @@ def write_figure_descriptions(out_dir: Path):
         "Figure 13b — Figure_13b_TT_Mechanistic_Quality_Space.png",
         f"  Title   : {CFG.TIER_TOP} Mechanistic Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter; inset PyMOL protein-ligand structure thumbnails",
-        "  Axes    : X = Dist_ASP110 (Ang); Y = SN2_Attack_Angle (degrees)",
+        "  Axes    : X = SN2_Attack_Angle (degrees, higher = near-ideal); Y = Boltz_Model_Confidence (AI structural quality)",
         f"  Stars   : Highlight {CFG.TIER_TOP} PFAS complexes within the mechanistic space",
         f"  Insets  : PyMOL-rendered active-site views for each {CFG.TIER_TOP} representative protein",
         f"  Look for: {CFG.TIER_TOP} stars clustered in the ideal mechanistic zone (top-left corner).",
@@ -9881,25 +9903,13 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "Figure 18a — Figure_18a_Chemical_Space_Map.png",
-        "  Title   : Chemical Space Map (UMAP Manifold)",
-        "  Type    : 2D scatter (UMAP dimensionality-reduced embedding)",
-        "  Axes    : UMAP dimensions 1 & 2 — arbitrary units, no physical meaning",
-        "  Colour  : Catalytic tier (same palette as all other figures)",
-        "  Markers : Star markers highlight Hidden Gems (physics-good / AI-missed complexes)",
-        "  Look for: Clusters of the same colour = structurally/chemically similar complexes.",
-        "            Tier islands separated in space = distinct mechanistic families.",
-        "            Hidden Gems isolated from their tier cluster may have unusual chemistry.",
-        "",
-        "-" * 80,
-        "Figure 18b — Figure_18b_TT_Chemical_Space_Landscape.png",
-        f"  Title   : {CFG.TIER_TOP} Chemical Space Landscape (KDE density + structure thumbnails)",
-        "  Type    : KDE density contour overlay on UMAP scatter; inset PyMOL structure thumbnails",
-        "  Axes    : UMAP dimensions 1 & 2",
-        f"  Stars   : Gold/green star markers indicate {CFG.TIER_TOP} PFAS positions",
-        f"  Insets  : PyMOL-rendered protein-ligand structures for each {CFG.TIER_TOP} representative",
-        f"  Look for: Density ridgelines isolating {CFG.TIER_TOP} from lower-tier complexes.",
-        "            Structure thumbnails reveal active-site geometry at a glance.",
-        f"            If {CFG.TIER_TOP} forms a tight cluster, they share structural/chemical features.",
+        "  Title   : Chemical Space Map (UMAP manifold, competence hexbin)",
+        f"  Type    : Hexbin over the UMAP embedding coloured by mean competence per bin; {CFG.TIER_TOP} ★ overlaid, with inset PyMOL active-site thumbnails (moved here from the former Landscape figure)",
+        "  Axes    : UMAP dimensions 1 & 2 — distances reflect chemical similarity",
+        "  Colour  : Mean competence score per bin (brighter = more degradable)",
+        f"  Markers : ★ = MD-ready / {CFG.TIER_TOP} hits, labelled by ligand; thumbnails show each one's active-site geometry",
+        f"  Look for: Bright chemical regions enriched for degraders, with the {CFG.TIER_TOP} stars clustering there.",
+        "            Thumbnails reveal the active-site geometry behind each top hit at a glance.",
         "",
         "=" * 80,
         "PART 8 — MULTI-METRIC SYNTHESIS",
@@ -10158,10 +10168,10 @@ def write_figure_descriptions(out_dir: Path):
         "            diffusion samples — a tight tier is a reproducible one.",
         "",
         "-" * 80,
-        "06_Ligand_Interactions_and_Chemical_Space/09_Binding_Affinity_Metrics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.png",
         "  Title   : Binding affinity by tier",
         "  Look for: affinity does NOT order the tiers — a high-affinity binder that presents the",
-        "            wrong face to Asp110 is not a degrader. This figure is the evidence.",
+        "            wrong face to the mapped catalytic aspartate is not a degrader. This figure is the evidence.",
         "",
         "-" * 80,
         "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
@@ -10259,7 +10269,6 @@ def write_figure_descriptions(out_dir: Path):
         "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
         "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
         "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
-        "Figure_18b_TT_Chemical_Space_Landscape.png": "06_Ligand_Interactions_and_Chemical_Space/08_Chemical_Space_Landscape.png",
         "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
         "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
         "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
