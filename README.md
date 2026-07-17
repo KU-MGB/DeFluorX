@@ -189,39 +189,45 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 ```mermaid
 flowchart TD
-    START(["🧬 Input FASTA + SMILES"]):::io
+    START(["🧬 Input<br/>FASTA + SMILES"]):::io
 
-    subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration &nbsp;"]
+    subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration — imported by every step &nbsp;"]
         direction LR
-        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>thresholds · constants · weights<br/>📄 ~3,202 lines"]:::found
-        UTL["🔧 &nbsp;<b>00_02 · Project Utils</b><br/>geometry · ConsoleColours<br/>logging · MIC vectors<br/>📄 ~1,137 lines"]:::found
-        ENV["🛠 &nbsp;<b>00_03 · Environment</b><br/>conda / pip pinning<br/>reproducibility spec<br/>📄 ~312 lines"]:::found
-        CFG --- UTL --- ENV
+        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>degrader tiers · geometry cutoffs<br/>scoring weights · ESP / MD / WaterMap params<br/>figure-style tokens · CSV name stems<br/>📄 ~3,202 lines"]:::found
+        UTL["🔧 &nbsp;<b>00_02 · Project Utils</b><br/>geometry · MIC vectors · Kabsch<br/>ConsoleColours · logging<br/>atomic CSV / JSON · latest_by_mtime<br/>figure-style SSOT (apply_figure_style)<br/>📄 ~1,137 lines"]:::found
+        ENV["🛠 &nbsp;<b>00_03 · Environment</b><br/>conda + pip version pinning<br/>reproducibility spec (--export)<br/>📄 ~312 lines"]:::found
     end
 
-    M1["<b>01 · Merge &amp; QC</b><br/>deduplicate · flag ambiguities<br/>📄 ~695 lines"]:::hts
+    M1["<b>01 · Merge &amp; QC</b><br/>merge sequence DBs · deduplicate<br/>flag ambiguous active-site mappings<br/>→ merged FASTA + 00_Merge.log<br/>📄 ~695 lines"]:::hts
 
     subgraph PHASE1["🟢 &nbsp; Phase 1 — High-Throughput Screening &nbsp;"]
-        M2["<b>02 · Production Engine</b><br/>Boltz-2 GPU co-folding<br/>mechanistic NAC scoring · tiering<br/>📄 ~7,289 lines"]:::hts
-        M3["<b>03 · Validation Figures</b><br/>54 panels · 7 folders<br/>tier · AI-quality · geometry<br/>📄 ~10,487 lines"]:::hts
-        M4["<b>04 · Dendrogram</b><br/>interactive D3.js tree<br/>taxonomic tier overlay<br/>📄 ~1,674 lines"]:::hts
+        M2["<b>02 · Production Engine</b><br/>Boltz-2 GPU protein–ligand co-folding<br/>mechanistic NAC / SN2 scoring<br/>6-tier degrader ladder<br/>→ ranked + master CSV<br/>📄 ~7,289 lines"]:::hts
+        M3["<b>03 · Validation Figures</b><br/>54 panels across 7 folders<br/>tier / AI-quality / geometry / interactions<br/>BH-corrected stats · Ramachandran controls<br/>→ Figure_Enriched_Dataset.csv<br/>📄 ~10,487 lines"]:::hts
+        M4["<b>04 · Dendrogram</b><br/>UPGMA phylogeny + interactive D3.js tree<br/>per-tier trees (incl. decoy)<br/>taxonomic tier overlay<br/>📄 ~1,674 lines"]:::hts
         M2 --> M3
-        M2 --> M4
+        M3 --> M4
     end
 
     subgraph PHASE2["🟠 &nbsp; Phase 2 — Top-N Selection &amp; Preparation &nbsp;"]
-        M5["<b>05 · Top-N + PDB Preparation</b><br/>MD-ready gate · Gemmi CIF→PDB<br/>PrepWizard 0.15 Å · ESP charges<br/>PyMOL · PLIP · pose-drift figures<br/>📄 ~4,089 lines"]:::prep
+        M5["<b>05 · Top-N + PDB Preparation</b><br/>MD-ready gate · Gemmi CIF→PDB<br/>PrepWizard 0.15 Å restrained min<br/>Jaguar ESP charges · PyMOL · PLIP<br/>pose-drift + 8-residue machinery figures<br/>📄 ~4,089 lines"]:::prep
     end
 
     subgraph PHASE3["🔵 &nbsp; Phase 3 — Dynamics &amp; Quantum Mechanics &nbsp;"]
-        M6["<b>06 · ESP Physics</b><br/>WaterMap → System Builder → Desmond MD<br/>SID → Prime MM-GBSA (sequential per rank)<br/>all physics from CFG · phase-aware heartbeat<br/>📄 ~3,663 lines"]:::dyn
+        M6["<b>06 · ESP Physics</b><br/>WaterMap → System Builder → Desmond MD<br/>SID → Prime MM-GBSA (sequential per rank)<br/>live ns/ETA heartbeat · QC figures + timings<br/>→ 06_Analysis/<br/>📄 ~3,663 lines"]:::dyn
         M7["<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell (ns) · NAC-conditioned MM-GBSA<br/>QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge<br/>Defluor_Propensity (ranking proxy, not a rate)<br/>+ Is_Defluorinating verdict<br/>📄 ~5,080 lines"]:::dyn
         M6 --> M7
     end
 
-    START --> M1 --> M2
-    M2 --> M5 --> M6
-    FOUNDATION -.-> M1 & M2 & M5 & M6 & M7
+    %% ── data flow (solid) ──
+    START --> M1
+    M1 --> M2
+    M2 --> M5
+    M5 --> M6
+
+    %% ── shared foundation: 00_01 CFG + 00_02 utils are imported by EVERY step; 00_03 pins the runtime ──
+    CFG -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
+    UTL -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
+    ENV -.->|conda env| START
 
     classDef io    fill:#14532d,stroke:#4ade80,color:#f0fdf4,stroke-width:2px
     classDef found fill:#1e293b,stroke:#94a3b8,color:#f1f5f9
@@ -233,9 +239,14 @@ flowchart TD
     style PHASE1 fill:#052e2b,stroke:#34d399,color:#6ee7b7,stroke-width:2px,stroke-dasharray:6 4
     style PHASE2 fill:#3b160a,stroke:#fb923c,color:#fdba74,stroke-width:2px,stroke-dasharray:6 4
     style PHASE3 fill:#0c1f4a,stroke:#60a5fa,color:#93c5fd,stroke-width:2px,stroke-dasharray:6 4
+
+    %% edges 0–6 = data flow (declared inside subgraphs first: M2→M3, M3→M4, M6→M7, then START→M1, M1→M2, M2→M5, M5→M6)
+    linkStyle 0,1,2,3,4,5,6 stroke:#e2e8f0,stroke-width:2.5px
+    %% edges 7–21 = the 15 dotted foundation-import links (CFG×7, UTL×7, ENV×1)
+    linkStyle 7,8,9,10,11,12,13,14,15,16,17,18,19,20,21 stroke:#64748b,stroke-width:1px
 ```
 
-**Diagram key:** solid arrows = data flow; dashed arrows (`-.->`) = foundation dependencies.
+**Diagram key:** thick solid arrows = **data flow** (`M1` produces the input `02` consumes, and so on; `04` reads `03`'s enriched dataset, not `02`'s directly). Thin dashed arrows = **imports**: `00_01 CFG` and `00_02 utils` are imported by every step (01–07), and `00_03` pins the conda environment the whole run executes in. Within Phase 1, `02 → 03 → 04` is a data chain (03 writes the enriched dataset that 04 reads).
 
 **Three-phase design:**
 
