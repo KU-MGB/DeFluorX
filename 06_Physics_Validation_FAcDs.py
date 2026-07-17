@@ -803,10 +803,40 @@ class MDHeartbeat:
         self._start = 0.0
         self._line_open = False
         self._last: "tuple[float, float] | None" = None   # (wall_s, t_ps) of the previous sample, for the rate
+        # multisim runs the job under jsc, so the LIVE multisim log and the production .ene do not sit in
+        # wd — they live in the job-server scratch, /tmp/<user>/jobs/<jobid>/ (and the production stage is
+        # its own subjob, in a sibling <jobid>/ dir). Search those too, keyed by jobname, newest mtime wins.
+        self._jobname = self.wd.name
+        _user = os.environ.get("USER") or Path.home().name
+        _roots = {os.environ.get("SCHRODINGER_TMPDIR") or "", tempfile.gettempdir(), "/tmp"}
+        self._scratch_bases = [Path(r) / _user / "jobs" for r in _roots if r]
+
+    def _log_text(self) -> str:
+        """Text of the live multisim log: wd if present, else the newest {jobname}_multisim.log in the
+        job-server scratch (where a jsc-controlled run keeps it until the job finishes)."""
+        cands = [self.multisim_log] if self.multisim_log.exists() else []
+        for base in self._scratch_bases:
+            try:
+                cands.extend(p for p in base.glob(f"*/{self._jobname}_multisim.log") if p.is_file())
+            except Exception:
+                pass
+        if not cands:
+            return ""
+        try:
+            return max(cands, key=lambda p: p.stat().st_mtime).read_text(errors="ignore")
+        except Exception:
+            return ""
 
     def _newest_ene_time(self) -> "float | None":
-        """Last chemical time (ps) in the most-recently-written .ene under the job dir, or None."""
-        enes = [p for p in self.wd.rglob("*.ene") if p.is_file()]
+        """Last chemical time (ps) in the most-recently-written .ene for this job — searched in wd AND the
+        job-server scratch (the production stage writes its .ene in a subjob scratch dir, never in wd)."""
+        enes = [p for p in self.wd.rglob(f"{self._jobname}*.ene") if p.is_file()]
+        for base in self._scratch_bases:
+            try:
+                enes.extend(p for p in base.glob(f"*/{self._jobname}*.ene") if p.is_file())          # subjob-root .ene
+                enes.extend(p for p in base.glob(f"*/{self._jobname}_*/{self._jobname}*.ene") if p.is_file())  # stage subdir
+            except Exception:
+                pass
         if not enes:
             return None
         newest = max(enes, key=lambda p: p.stat().st_mtime)
@@ -825,9 +855,8 @@ class MDHeartbeat:
 
     def _in_production(self) -> bool:
         """True once multisim has entered the Production stage (and not yet completed it)."""
-        try:
-            text = self.multisim_log.read_text(errors="ignore")
-        except Exception:
+        text = self._log_text()
+        if not text:
             return False
         prod = self._HDR_PROD.search(text)
         stages = [int(m) for m in self._HDR_ANY.findall(text)]
@@ -840,9 +869,8 @@ class MDHeartbeat:
 
     def _relax_stage(self) -> "tuple[int, int] | None":
         """(current relaxation stage, production stage number) for the pre-production phase."""
-        try:
-            text = self.multisim_log.read_text(errors="ignore")
-        except Exception:
+        text = self._log_text()
+        if not text:
             return None
         stages = [int(m) for m in self._HDR_ANY.findall(text)]
         prod = self._HDR_PROD.search(text)
