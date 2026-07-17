@@ -192,7 +192,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 ```mermaid
 flowchart TD
-    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~694 lines"}}:::orch
+    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>starts the Schrödinger job server before 05<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~757 lines"}}:::orch
 
     subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration — imported / provisioned for every step &nbsp;"]
         direction LR
@@ -388,7 +388,7 @@ FAcDs_PFAS-27_Defluorination/
 
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
-| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | **Entry point** — bash orchestrator; conda-activates then runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; Ctrl-C / kill cancels background Schrödinger jobs. Imports nothing — invokes each script as a subprocess | — | Logs, all outputs |
+| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | **Entry point** — bash orchestrator; conda-activates then runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; starts the Schrödinger local job server before Step 05 (it does not survive a reboot); Ctrl-C / kill cancels background Schrödinger jobs. Imports nothing — invokes each script as a subprocess | — | Logs, all outputs |
 | [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** — all tiers, thresholds, scoring weights, figure-style tokens, and CSV name stems; imported by every step | — | `CFG` dataclass instance |
 | [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: ConsoleColours, geometry / MIC / Kabsch, logging, atomic CSV/JSON, `latest_by_mtime`, `apply_figure_style` | — | `ConsoleColours`, `calculate_angle()`, `latest_by_mtime()`, etc. |
 | [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check + conda/pip export (reproducibility spec) | — | `PFAS.yml`, `requirements.txt` |

@@ -31,6 +31,12 @@
 # Pipeline halts immediately on any step failure.
 # A timing summary table is printed at the end.
 #
+# Schrödinger steps (05-07):
+#   The local job server is started automatically before Step 05; jobserverd does not
+#   survive a reboot, and without it Desmond/WaterMap/MM-GBSA/QSite cannot submit.
+#   An interrupt (Ctrl-C / kill) cancels the detached jobs it launched — those run
+#   outside the pipeline's process group and would otherwise survive.
+#
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
 #   1. Sequential Execution: Steps are strictly ordered; if Step 02 fails,
 #      downstream analysis (03-07) cannot be launched until fixed.
@@ -43,6 +49,8 @@
 #      halts with a diagnostic message.
 #   5. --resume-from with fresh mode: Not supported (no existing run to skip
 #      into). Use --resume-from only together with --run-id.
+#   6. Job server: started if absent, but a jobserverd that dies mid-run is not
+#      re-checked; Steps 06-07 then fail at submission with a jsc diagnostic.
 # ─────────────────────────────────────────────────────────────────────────────
 # =============================================================================
 
@@ -71,6 +79,35 @@ if [[ -t 1 ]]; then
 else
     _C_GREEN=""; _C_RED=""; _C_YELLOW=""; _C_BOLD=""; _C_RESET=""
 fi
+
+# Every interactive prompt reads the controlling terminal rather than stdin, so a run whose
+# stdin is a pipe or /dev/null can still be answered. Open it once on fd 3, recording whether
+# that succeeded; _TTY_OK=0 means every prompt takes its default.
+#
+# The open is probed in a subshell first, for two reasons. `-r /dev/tty` is not a valid test:
+# the node is readable by permission, yet opening it fails with ENXIO when the process has no
+# controlling terminal (cron, setsid, a detached run). And `exec 3</dev/tty 2>/dev/null` must
+# never be used to silence that failure — redirections on a command-less `exec` are PERMANENT,
+# so it would send this shell's stderr to /dev/null for the rest of the run, silently
+# swallowing every `read -p` prompt (they are written to stderr).
+if ( : </dev/tty ) 2>/dev/null; then
+    exec 3</dev/tty
+    _TTY_OK=1
+else
+    _TTY_OK=0
+fi
+
+# The start-step menu is offered by two prompts (fresh/full run, and resume). Single definition
+# so the labels cannot drift apart, and stay in step with the run_step names below.
+_print_step_menu() {
+    echo "    [1] 01  Merge sequences"
+    echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
+    echo "    [3] 03  Validation figures"
+    echo "    [4] 04  Dendrogram"
+    echo "    [5] 05  Top-N selection + PDB preparation"
+    echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
+    echo "    [7] 07  MD thermodynamics + QM/MM engine"
+}
 
 for _arg in "$@"; do
     case "$_arg" in
@@ -129,21 +166,12 @@ else
             printf "    [%d]  %s\n" "$((i+1))" "${_available_runs[$i]}"
         done
 
-        # ── Ask which step to start from FIRST ────────────────────────────────
-        # Fresh vs Resume is only meaningful for the early steps (01 merge / 02
-        # prediction) or a full run; starting at 03+ can only mean resuming an
-        # existing run, so the Fresh/Resume prompt below is skipped for those.
-        if [[ "${RESUME_FROM:-0}" -eq 0 && -t 0 ]]; then
+        # ── Start-step selection ──────────────────────────────────────────────
+        if [[ "${RESUME_FROM:-0}" -eq 0 ]] && (( _TTY_OK )); then
             echo ""
             echo "  ${_C_BOLD}── Start from which step? ──${_C_RESET}"
-            echo "    [1] 01  Merge sequences"
-            echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
-            echo "    [3] 03  Validation figures"
-            echo "    [4] 04  Dendrogram"
-            echo "    [5] 05  Top-N selection + PDB preparation"
-            echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
-            echo "    [7] 07  MD thermodynamics + QM/MM engine"
-            read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step </dev/tty || _from_step=""
+            _print_step_menu
+            read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step <&3 || _from_step=""
             _STEP_ASKED=1
             if [[ "$_from_step" =~ ^[1-7]$ ]]; then
                 RESUME_FROM="$_from_step"
@@ -155,9 +183,9 @@ else
             fi
         fi
 
-        # ── Fresh or Resume — asked only when it can matter (step 1/2 or a full run) ──
-        # Fresh vs Resume is a Step-02 concept: only Step 02 creates or continues a Boltz-2 run.
-        # Starting at 03+ just processes an existing run's data, so that prompt is skipped there.
+        # ── Fresh or Resume ───────────────────────────────────────────────────
+        # A Step-02 concept: only Step 02 creates or continues a Boltz-2 run. Starting at 03+
+        # just processes an existing run's data, so the prompt is skipped for those.
         echo ""
         if [[ "${RESUME_FROM:-0}" -ge 3 ]]; then
             _mode_choice="R"
@@ -167,7 +195,7 @@ else
             echo "    [F]  Fresh   — start a new prediction run from scratch"
             echo "    [R]  Resume  — continue from an existing run (default: latest)"
             echo ""
-            read -r -p "  Your choice [F/R, default=R]: " _mode_choice </dev/tty
+            read -r -p "  Your choice [F/R, default=R]: " _mode_choice <&3
             _mode_choice="${_mode_choice:-R}"
         fi
     else
@@ -199,7 +227,7 @@ else
                 echo "  Enter the number of the run to resume"
                 printf "  [1–%d, default=%d for latest]: " \
                     "${#_available_runs[@]}" "${#_available_runs[@]}"
-                read -r _run_idx </dev/tty
+                read -r _run_idx <&3
                 _run_idx="${_run_idx:-${#_available_runs[@]}}"
                 if [[ "$_run_idx" =~ ^[0-9]+$ \
                    && "$_run_idx" -ge 1 \
@@ -245,17 +273,11 @@ fi
 # without re-running the hours-long Step 02). Steps below the chosen number are
 # marked SKIP. Prompted only when resuming interactively and --resume-from was not
 # already given on the command line; Enter (default) runs the whole pipeline.
-if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && -t 0 && "${_STEP_ASKED:-0}" != "1" ]]; then
+if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && "${_STEP_ASKED:-0}" != "1" ]] && (( _TTY_OK )); then
     echo ""
     echo "  ${_C_BOLD}── Resume from which step? ──${_C_RESET}"
-    echo "    [1] 01  Merge sequences"
-    echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
-    echo "    [3] 03  Validation figures"
-    echo "    [4] 04  Dendrogram"
-    echo "    [5] 05  Top-N selection + PDB preparation"
-    echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
-    echo "    [7] 07  MD thermodynamics + QM/MM engine"
-    read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step </dev/tty || _from_step=""
+    _print_step_menu
+    read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step <&3 || _from_step=""
     if [[ -z "$_from_step" ]]; then
         echo "  ${_C_GREEN}→ Running the full pipeline (all steps).${_C_RESET}"
     elif [[ "$_from_step" =~ ^[1-7]$ ]]; then
@@ -274,22 +296,23 @@ fi
 # long unattended runs); press Enter to skip and run in NORMAL mode (no sudo).
 #
 # Scripts/operations that use sudo (only when enabled):
-#   06_Physics_Validation_FAcDs.py              → systemctl stop / mask systemd-oomd
-#   07_MD_QMMM_Defluorination_FAcDs.py → systemctl mask / unmask / start systemd-oomd
+#   06_Physics_Validation_FAcDs.py      → systemctl stop / mask systemd-oomd
+#   07_MD_QMMM_Defluorination_FAcDs.py  → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
+_SUDO_PROMPT="  ${_C_RED}${_C_BOLD}Sudo is used only by: 06 and 07 scripts, enter the password to continue (hit Enter for default without OOMD mask):${_C_RESET} "
 echo ""
 echo "  ── Optional sudo: systemd-oomd masking for Steps 06-07 ──"
-echo "    Sudo is used only by: 06_Physics_Validation_FAcDs.py and 07_MD_QMMM_Defluorination_FAcDs.py"
-echo "    (systemctl stop/mask/unmask/start systemd-oomd around the OOM-prone phase)."
-echo ""
 # Pressing Enter (empty) skips silently → NORMAL mode. A NON-EMPTY entry is treated as a
 # password attempt: a wrong password is flagged and re-prompted (up to 3 attempts) so a typo
 # does not silently drop a long unattended run into NORMAL mode. Three failures (or no sudo
-# rights) fall back to NORMAL mode.
+# rights) fall back to NORMAL mode. Without a terminal (scripted/cron/detached) there is nobody
+# to prompt, so skip straight to NORMAL mode.
 _sudo_attempt=0
-while true; do
-    read -r -s -p "  Enter sudo password to enable oomd masking, or press Enter to skip (NORMAL mode): " _sudo_pw </dev/tty || _sudo_pw=""
+while (( _TTY_OK )); do
+    # `read -p` writes its prompt to stderr; stderr must stay unredirected here, or the
+    # password prompt is swallowed and the user is left typing at a blank line.
+    read -r -s -p "$_SUDO_PROMPT" _sudo_pw <&3 || _sudo_pw=""
     echo ""
     if [[ -z "$_sudo_pw" ]]; then
         echo "  ${_C_YELLOW}→ No password entered — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
@@ -310,6 +333,9 @@ while true; do
         echo "  ${_C_RED}→ Wrong password. Try again, or press Enter to skip (NORMAL mode).  [attempt ${_sudo_attempt}/3]${_C_RESET}"
     fi
 done
+if (( ! _TTY_OK )); then
+    echo "  ${_C_YELLOW}→ No terminal to prompt on — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
+fi
 unset _sudo_pw
 echo ""
 
@@ -338,8 +364,13 @@ _sync_staging_log() {
 #             terminal can be closed. Steps 06-07 sudo calls rely on the NOPASSWD
 #             sudoers entries, so the detached (tty-less) process still works.
 _BG_MODE=0
+_bg_choice=""
 echo ""
-read -r -p "  Run unattended in background (detach; log only, default = N)? [y/N]: " _bg_choice </dev/tty || _bg_choice=""
+# `read -p` prompts on stderr, so stderr stays unredirected; _TTY_OK guards the read instead,
+# since a scripted/cron/detached run has no terminal to answer it and fd 3 is not open there.
+if (( _TTY_OK )); then
+    read -r -p "  Run unattended in background (detach; log only, default = N)? [y/N]: " _bg_choice <&3 || _bg_choice=""
+fi
 case "${_bg_choice^^}" in
     Y|YES) _BG_MODE=1 ;;
 esac
@@ -370,11 +401,10 @@ _fmt_elapsed() {
 
 # run_step [--optional] "NN  Name" cmd...
 #
-# --optional marks a step whose failure must NOT halt the pipeline. It has to be a flag
-# ON run_step, because `run_step ... || true` at the call site cannot work: the FAIL path
-# below calls `exit`, which terminates the shell from inside the function regardless of
-# the caller's `||` context. The `|| true` was therefore inert, and a step written to be
-# tolerant of failure would halt the whole run — the opposite of what it said.
+# --optional marks a step whose failure must NOT halt the pipeline. It must be a flag ON
+# run_step rather than a `run_step ... || true` at the call site: the FAIL path below calls
+# `exit`, which terminates the shell from inside the function regardless of the caller's
+# `||` context.
 run_step() {
     local optional=0
     if [ "$1" = "--optional" ]; then optional=1; shift; fi
@@ -441,35 +471,53 @@ run_step() {
     fi
 }
 
+# Column widths of the timing table. _TT_W_NAME fits the longest step label verbatim
+# (05, 72 chars); a longer label is truncated with an ellipsis rather than breaking the box.
+readonly _TT_W_NAME=72
+readonly _TT_W_TIME=10
+readonly _TT_W_STAT=8
+
+# Pad to a field width counted in CHARACTERS. `printf '%-Ns'` counts bytes, so a step label
+# holding multi-byte glyphs (the '·' separators in 06, the em dash in 02) pads short and pushes
+# the right-hand border out of alignment. ${#s} is character-aware under a UTF-8 locale.
+_pad_l() {   # $1 text, $2 width — left-aligned
+    local s="$1" w="$2" n
+    n=${#s}
+    (( n > w )) && { s="${s:0:w-1}…"; n=$w; }
+    printf '%s%*s' "$s" $(( w - n )) ""
+}
+_pad_r() {   # $1 text, $2 width — right-aligned
+    local s="$1" w="$2" n
+    n=${#s}
+    (( n > w )) && { s="${s:0:w-1}…"; n=$w; }
+    printf '%*s%s' $(( w - n )) "" "$s"
+}
+
 _print_timing_table() {
     local total=0
-    local line_c1="$(printf '─%.0s' {1..60})"
-    local line_c2="$(printf '─%.0s' {1..12})"
-    local line_c3="$(printf '─%.0s' {1..10})"
+    local line_c1="$(printf '─%.0s' $(seq $(( _TT_W_NAME + 2 ))))"
+    local line_c2="$(printf '─%.0s' $(seq $(( _TT_W_TIME + 2 ))))"
+    local line_c3="$(printf '─%.0s' $(seq $(( _TT_W_STAT + 2 ))))"
 
     _tee ""
     _tee "  TIMING SUMMARY"
     _tee "  ┌${line_c1}┬${line_c2}┬${line_c3}┐"
-    _tee "  │ $(printf '%-58s │ %10s │ %-8s' 'STEP' 'ELAPSED' 'STATUS') │"
+    _tee "  │ $(_pad_l 'STEP' $_TT_W_NAME) │ $(_pad_r 'ELAPSED' $_TT_W_TIME) │ $(_pad_l 'STATUS' $_TT_W_STAT) │"
     _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
     for i in "${!STEP_NAMES[@]}"; do
         local t="${STEP_TIMES[$i]}"
         local st="${STEP_STATUS[$i]}"
         local name="${STEP_NAMES[$i]}"
-        name="${name//—/-}"
-        name="${name//–/-}"
-        # Cap to the column width (58) so a long step label cannot overflow and
-        # push the box borders out of alignment.
-        (( ${#name} > 58 )) && name="${name:0:55}..."
-        _tee "  │ $(printf '%-58s │ %10s │ %-8s' "$name" "$(_fmt_elapsed $t)" "$st") │"
+        _tee "  │ $(_pad_l "$name" $_TT_W_NAME) │ $(_pad_r "$(_fmt_elapsed $t)" $_TT_W_TIME) │ $(_pad_l "$st" $_TT_W_STAT) │"
         total=$(( total + t ))
     done
     _tee "  ├${line_c1}┼${line_c2}┼${line_c3}┤"
-    _tee "  │ $(printf '%-58s │ %10s │ %-8s' 'TOTAL WALL TIME' "$(_fmt_elapsed $total)" "") │"
+    _tee "  │ $(_pad_l 'TOTAL WALL TIME' $_TT_W_NAME) │ $(_pad_r "$(_fmt_elapsed $total)" $_TT_W_TIME) │ $(_pad_l '' $_TT_W_STAT) │"
     _tee "  └${line_c1}┴${line_c2}┴${line_c3}┘"
-    # Legend only when a step is anything other than a plain PASS, so a clean run
-    # stays uncluttered.
-    if printf '%s\n' "${STEP_STATUS[@]}" | grep -qvx 'PASS'; then
+    # Legend only when a step is anything other than a plain PASS, so a clean run stays
+    # uncluttered. The count guard is required: `printf` over an empty array still emits one
+    # blank line, which would match the grep and print the legend under an empty table.
+    if (( ${#STEP_STATUS[@]} > 0 )) && printf '%s\n' "${STEP_STATUS[@]}" | grep -qvx 'PASS'; then
         _tee "    PASS = completed · WARN = completed, a complementary part deferred/failed (e.g. MM-GBSA) · SKIP = --resume-from · FAIL = halted"
     fi
 }
@@ -480,7 +528,7 @@ _print_timing_table() {
 # shell function or lives in a non-standard directory.
 if [[ "${CONDA_DEFAULT_ENV:-}" == "PFAS" ]]; then
     _tee "  PFAS conda environment already active — activation bypassed."
-elif true; then
+else
 
 if [[ -z "${CONDA_BASE:-}" ]]; then
     CONDA_BASE="$(conda info --base 2>/dev/null || true)"
@@ -504,6 +552,11 @@ fi
 
 fi   # end conda activation (bypassed when PFAS already active)
 
+# ── Schrödinger job control ───────────────────────────────────────────────────
+# Steps 05-07 drive Schrödinger tools. Those under Job Control run detached under jobserverd, so the
+# pipeline both starts that daemon before the run (_ensure_jobserver) and cancels its jobs on an
+# interrupt (_cancel_schrodinger_jobs).
+
 # Cancel every still-active Schrödinger job this pipeline launched (Desmond MD, WaterMap, System
 # Builder, MM-GBSA). Those jobs run under jobserverd — a separate session — so a `kill -- -PGID` of the
 # pipeline's own process group never reaches them; they outlive a Ctrl-C / kill unless cancelled through
@@ -517,6 +570,33 @@ _cancel_schrodinger_jobs() {
     if [[ -n "$ids" ]]; then
         _tee "  [cleanup] pipeline interrupted — cancelling background Schrödinger job(s): $(echo $ids | tr '\n' ' ')"
         "$jsc" cancel $ids 2>/dev/null || true
+    fi
+}
+
+# Steps 05-07 drive Schrödinger tools; those that use Job Control (Desmond, WaterMap, Prime MM-GBSA,
+# QSite) submit through the local job server, and without a running jobserverd multisim aborts with
+# 'Local job submission requires a locally running job server'. The daemon does not survive a reboot,
+# so start it here. `local-server-start` is idempotent — a second call re-uses the running daemon
+# rather than spawning another. `jsc list` cannot serve as the probe: it exits 1 merely because no
+# jobs are active.
+_ensure_jobserver() {
+    local jsc="${SCHRODINGER:-/opt/schrodinger}/jsc"
+    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null)"
+    if [[ -z "$jsc" || ! -x "$jsc" ]]; then
+        _tee "  ${_C_YELLOW}[jobserver] jsc not found — Steps 05-07 will fail to submit jobs.${_C_RESET}"
+        return 0
+    fi
+    if "$jsc" local-server-status 2>/dev/null | grep -q "RUNNING"; then
+        _tee "  [jobserver] local job server already running."
+        return 0
+    fi
+    _tee "  [jobserver] local job server not running — starting it for Steps 05-07…"
+    if "$jsc" local-server-start >/dev/null 2>&1 && \
+       "$jsc" local-server-status 2>/dev/null | grep -q "RUNNING"; then
+        _tee "  ${_C_GREEN}[jobserver] started.${_C_RESET}"
+    else
+        _tee "  ${_C_RED}[jobserver] failed to start — Steps 05-07 will fail to submit jobs.${_C_RESET}"
+        _tee "  ${_C_RED}            Try manually: \$SCHRODINGER/jsc local-server-start${_C_RESET}"
     fi
 }
 
@@ -620,6 +700,12 @@ run_step "03  Validation figures" \
 
 run_step "04  Dendrogram" \
     python 04_Dendrogram_FAcDs.py "$RUN_ID"
+
+# Ensure the local job server is up before the Schrödinger steps (05 PrepWizard/Jaguar ESP,
+# 06 WaterMap/build/MD/MM-GBSA, 07 QSite).
+if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
+    _ensure_jobserver
+fi
 
 run_step "05  Top-N selection + CIF/PDB generation & preparation (MD-ready cohort)" \
     python 05_TopN_and_PDB_Preparation_FAcDs.py "$RUN_ID"
