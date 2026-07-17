@@ -221,7 +221,7 @@ import matplotlib.pyplot as plt
 import gemmi
 import scipy.stats as _sc_stats
 from scipy.stats import spearmanr, gaussian_kde, chi2_contingency, mannwhitneyu, t as _t_dist
-from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from sklearn.decomposition import PCA
 
 # Bioinformatics Imports
@@ -778,8 +778,8 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
 def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
     """Multi-objective ranking of complexes.
 
-    Scales the feature matrix (robust, with a StandardScaler fallback on zero-IQR
-    columns), derives a PCA PC1 score (sign-aligned to tier_numeric), a CFG-weighted
+    Scales the feature matrix (RobustScaler — it centres a zero-IQR column instead of
+    dividing by zero), derives a PCA PC1 score (sign-aligned to tier_numeric), a CFG-weighted
     composite score, Pareto fronts (confidence vs binding probability) and a UMAP
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
@@ -789,16 +789,13 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
 
     x = df[features].dropna()
     '''
-    Guard the scaler: a feature whose inter-quartile range collapses to 0
-    (heavily skewed or constant tail) makes RobustScaler divide by zero and
-    propagate inf/NaN into PCA and UMAP. Fall back to StandardScaler when any
-    column has zero IQR (it divides by standard deviation instead).
+    RobustScaler already guards its own zero-IQR case: sklearn's _handle_zeros_in_scale sets a zero
+    scale to 1.0 per column, so a constant / heavily-skewed feature is merely centred, never divided by
+    zero — no inf/NaN reaches PCA or UMAP. A whole-matrix StandardScaler fallback (the previous guard)
+    would re-scale EVERY column the moment one degenerate column appeared, throwing away the outlier
+    robustness the ranking depends on, so RobustScaler is used unconditionally.
     '''
-    _iqr = x.quantile(0.75) - x.quantile(0.25)
-    if x.shape[1] > 0 and (_iqr <= 0).any():
-        x_scaled = StandardScaler().fit_transform(x)
-    else:
-        x_scaled = RobustScaler().fit_transform(x)
+    x_scaled = RobustScaler().fit_transform(x)
 
     # Default in case PCA is skipped (len(x) < 2)
     score_pca = np.full(len(x), 50.0)
@@ -2192,7 +2189,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             tier_x = {tier: i for i, tier in enumerate(existing_tiers)}
 
             # Boltz Confidence — box plots (primary, fills the background)
-            if _has_conf:
+            if _has_conf and not df.empty:
                 sns.boxplot(data=df, x=CFG.COL_TIER, y=CFG.COL_CONF,
                             order=existing_tiers, palette=TIER_PALETTE, linewidth=1.2,
                             flierprops=dict(marker="o", markersize=2, alpha=0.25),
@@ -2641,6 +2638,10 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             """
             f17_plot = f17_df.copy()
             valid_tiers_f17 = [t for t in existing_tiers if t in f17_plot[CFG.COL_TIER].values]
+            if f17_df.empty or not valid_tiers_f17:
+                # No numeric Active_Site_RMSD rows → the % zone maths would divide by zero and seaborn
+                # would be asked to plot an empty frame. Skip cleanly via the block's own handler below.
+                raise RuntimeError("no rows with a numeric Active_Site_RMSD")
             _sn_max17 = 0.0
             for _t17s in valid_tiers_f17:
                 _sv17 = f17_plot.loc[f17_plot[CFG.COL_TIER] == _t17s, "Active_Site_RMSD"]

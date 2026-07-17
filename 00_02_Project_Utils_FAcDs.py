@@ -390,11 +390,13 @@ def write_json_atomic(path, payload: dict) -> None:
     atomic within a filesystem, so a run killed mid-write leaves either the old file or the new
     one, never a truncated hybrid another step would parse as truth.
     """
-    import json
+    import json, os, uuid
     from pathlib import Path as _Path
     path = _Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _tmp = path.with_suffix(path.suffix + ".tmp")
+    # Per-process/per-call unique temp name: a fixed "<file>.tmp" would let two workers writing the same
+    # path clobber each other's half-written temp before the rename. pid + a short uuid make it collision-free.
+    _tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     _tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
     _tmp.replace(path)
 
@@ -406,10 +408,13 @@ def atomic_write_csv(df, path, **to_csv_kwargs) -> None:
     renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the old file
     or the complete new one, never a truncated hybrid a downstream step would parse as truth.
     """
+    import os, uuid
     from pathlib import Path as _Path
     path = _Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _tmp = path.with_suffix(path.suffix + ".tmp")
+    # Per-process/per-call unique temp name (see write_json_atomic) so concurrent writers to one path
+    # cannot clobber each other's temp before the atomic rename.
+    _tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     to_csv_kwargs.setdefault("index", False)
     df.to_csv(_tmp, **to_csv_kwargs)
     _tmp.replace(path)

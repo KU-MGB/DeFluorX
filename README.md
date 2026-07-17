@@ -201,7 +201,7 @@ flowchart TD
 
     subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
         M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~7,285 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 54 panels (incl. 5 Ramachandran) · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,485 lines &nbsp; "]
+        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 54 panels (incl. 5 Ramachandran) · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,486 lines &nbsp; "]
         M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,659 lines &nbsp; "]
         M2 --> M3
         M2 --> M4
@@ -217,7 +217,7 @@ flowchart TD
 
     subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
         EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; ESP Physics: WaterMap · Build · MD · SID · MM-GBSA &nbsp; \n &nbsp; ESP merge → WaterMap → System Builder → Desmond MD &nbsp; \n &nbsp; Sequential per rank: MD → SID → MM-GBSA, one rank fully done before the next &nbsp; \n &nbsp; All physics from CFG §17b · disk-aware subjob cap · phase-aware heartbeat &nbsp; \n &nbsp; 📄 ~3,632 lines &nbsp; "]
+        M6["06 · &nbsp; ESP Physics: WaterMap · Build · MD · SID · MM-GBSA &nbsp; \n &nbsp; ESP merge → WaterMap → System Builder → Desmond MD &nbsp; \n &nbsp; Sequential per rank: MD → SID → MM-GBSA, one rank fully done before the next &nbsp; \n &nbsp; All physics from CFG §17b · disk-aware subjob cap · phase-aware heartbeat &nbsp; \n &nbsp; 📄 ~3,633 lines &nbsp; "]
         M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~5,078 lines &nbsp; "]
         EXT_MD --> M6 --> M7
     end

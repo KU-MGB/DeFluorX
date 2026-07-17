@@ -1585,7 +1585,9 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     # (input order is lexicographic groupby order, so a plain dedup would always keep the control).
     d = pd.DataFrame(_rows)
     d["_ctrl"] = d["structure"].str.startswith("0000000")
-    d = (d.sort_values(["ligand", "_ctrl"]).drop_duplicates("ligand", keep="first")
+    # 'structure' (unique per row) as the final tie-break makes the kept row deterministic: without it,
+    # two structures sharing a ligand + control-status would resolve by pandas' unstable sort order.
+    d = (d.sort_values(["ligand", "_ctrl", "structure"]).drop_duplicates("ligand", keep="first")
            .sort_values("q_alpha"))
 
     fig, ax = plt.subplots(figsize=(8.6, 4.8))

@@ -2758,7 +2758,8 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
 def _md_msj(time_ps: float, interval_ps: float) -> str:
     relax = Path(f"{SCHRO}/mmshare-v7.3/data/desmond/desmond_npt_relax.msj")
     if not relax.exists():
-        relax = next(iter(glob.glob(f"{SCHRO}/mmshare-*/data/desmond/desmond_npt_relax.msj")), None)
+        # sorted() so a machine with several mmshare-* suites picks the same one every run.
+        relax = next(iter(sorted(glob.glob(f"{SCHRO}/mmshare-*/data/desmond/desmond_npt_relax.msj"))), None)
     if not relax or not Path(relax).exists():
         raise RuntimeError("desmond_npt_relax.msj not found — refusing to run production on an "
                            "unequilibrated box (equilibration must precede production).")
