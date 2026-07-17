@@ -387,10 +387,10 @@ FAcDs_PFAS-27_Defluorination/
 
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
+| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | **Entry point** — bash orchestrator; conda-activates then runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; Ctrl-C / kill cancels background Schrödinger jobs. Imports nothing — invokes each script as a subprocess | — | Logs, all outputs |
 | [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** — all tiers, thresholds, scoring weights, figure-style tokens, and CSV name stems; imported by every step | — | `CFG` dataclass instance |
 | [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: ConsoleColours, geometry / MIC / Kabsch, logging, atomic CSV/JSON, `latest_by_mtime`, `apply_figure_style` | — | `ConsoleColours`, `calculate_angle()`, `latest_by_mtime()`, etc. |
 | [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check + conda/pip export (reproducibility spec) | — | `PFAS.yml`, `requirements.txt` |
-| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Bash orchestrator — runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; Ctrl-C / kill cancels background Schrödinger jobs | — | Logs, all outputs |
 | [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
 | [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** — MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
 | [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 49 figure panels + 5 Ramachandran controls (= 54) in 7 content-matched figure folders + 01_Analysis_Data — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
@@ -403,6 +403,9 @@ FAcDs_PFAS-27_Defluorination/
 
 
 ## 🛠 Installation
+
+<details>
+<summary><b>Prerequisites, conda environment & Schrödinger setup — click to expand</b></summary>
 
 ### Prerequisites
 
@@ -475,9 +478,14 @@ export SCHRODINGER=/opt/schrodinger   # adjust to your installation path
 
 Steps **01–04** (merge, Boltz-2 co-folding, validation figures, dendrogram) run **without** Schrödinger. Without it, step 05 falls back to raw Gemmi-converted PDBs and skips ESP charging, and steps 06–07 cannot run.
 
+</details>
+
 ---
 
 ## ⚡ Quick start
+
+<details>
+<summary><b>Running the pipeline — full run, smoke test, resume, individual steps — click to expand</b></summary>
 
 ### Full pipeline — one command
 
@@ -560,11 +568,28 @@ python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z
 python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 ```
 
+</details>
+
 ---
 
 ## 💻 Technical reference
 
 ### 📖 Script catalogue
+
+<details>
+<summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
+
+**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
+
+**Usage:**
+```bash
+bash 00_00_run_pipeline_FAcDs.sh
+```
+
+The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
+
+**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
+</details>
 
 <details>
 <summary><b>00_01_Project_Config_FAcDs.py — Central Configuration</b></summary>
@@ -766,21 +791,6 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 **Outputs (with `--export`):**
 - `PFAS.yml` — full pinned conda environment spec
 - `requirements.txt` — pip requirements (auto-exported from conda)
-</details>
-
-<details>
-<summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
-
-**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
-
-**Usage:**
-```bash
-bash 00_00_run_pipeline_FAcDs.sh
-```
-
-The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
-
-**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
 </details>
 
 <details>
