@@ -228,9 +228,8 @@ flowchart TD
     M2 --> M5
     M5 --> M6
 
-    %% ── shared foundation: 00_01 CFG + 00_02 utils are imported by EVERY step; 00_03 is the standalone env spec ──
-    CFG -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-    UTL -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
+    %% ── shared foundation bus: 00_01 CFG + 00_02 utils imported by EVERY step; drawn once per phase (+ standalone Merge) instead of 14 crossing lines. 00_03 is the standalone env spec ──
+    FOUNDATION -.-> M1 & PHASE1 & PHASE2 & PHASE3
 
     %% ── 00_00 orchestrates: runs each step 01–07 in sequence (own run per step, resume-aware) ──
     ORCH -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
@@ -249,13 +248,13 @@ flowchart TD
 
     %% edges 0–6 = data flow (declared inside subgraphs first: M2→M3, M3→M4, M6→M7, then START→M1, M1→M2, M2→M5, M5→M6)
     linkStyle 0,1,2,3,4,5,6 stroke:#e2e8f0,stroke-width:2.5px
-    %% edges 7–20 = the 14 grey foundation-import links (CFG×7, UTL×7)
-    linkStyle 7,8,9,10,11,12,13,14,15,16,17,18,19,20 stroke:#64748b,stroke-width:1px
-    %% edges 21–27 = the 7 violet 00_00-orchestration ("runs") links
-    linkStyle 21,22,23,24,25,26,27 stroke:#a855f7,stroke-width:1.2px
+    %% edges 7–10 = the foundation-import bus (FOUNDATION → Merge, Phase 1, Phase 2, Phase 3)
+    linkStyle 7,8,9,10 stroke:#64748b,stroke-width:1.4px,stroke-dasharray:4 3
+    %% edges 11–17 = the 7 violet 00_00-orchestration ("runs") links
+    linkStyle 11,12,13,14,15,16,17 stroke:#a855f7,stroke-width:1.2px
 ```
 
-**Diagram key:** thick white arrows = **data flow** (`04` reads `03`'s enriched dataset, not `02`'s directly; within Phase 1, `02 → 03 → 04` is a data chain). Grey dashed = **imports** — `00_01 CFG` and `00_02 utils` are imported by every step (01–07); `00_03` is the standalone conda-env spec. Violet dashed = **orchestration** — `00_00` (bash) runs each step 01–07 in sequence (a separate run per step, resume-aware).
+**Diagram key:** thick white arrows = **data flow** (`04` reads `03`'s enriched dataset, not `02`'s directly; within Phase 1, `02 → 03 → 04` is a data chain). Grey dashed = **imports** — `00_01 CFG` and `00_02 utils` are imported by every step (01–07), drawn as one bus per phase (and to the standalone Merge) rather than 14 crossing lines; `00_03` is the standalone conda-env spec. Violet dashed = **orchestration** — `00_00` (bash) runs each step 01–07 in sequence (a separate run per step, resume-aware).
 
 **Three-phase design:**
 
