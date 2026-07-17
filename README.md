@@ -266,17 +266,19 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 
 A function-level knowledge graph of the whole pipeline (826 nodes · 1,701 edges ·
 51 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
-and regenerated on major code changes. **`CFG` is the top hub node (65 edges, the most
-connected)** — every module's thresholds and figure colours route through it, the
-single-source-of-truth architecture showing up structurally.
+and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_FAcDs.py) is the top
+hub node (65 edges, the most connected)** — every module's thresholds and figure colours route
+through it, the single-source-of-truth architecture showing up structurally.
 
-The graph output lives in **`graphify-out/`** and is regenerated with `/graphify`:
+![FAcDs code architecture graph — communities coloured, hub nodes enlarged](graphify-out/graphify.png)
+
+The graph output lives in **[`graphify-out/`](./graphify-out/)** and is regenerated with `/graphify`:
 
 > [!NOTE]
-> `graphify-out/graph.html` (interactive — zoom, pan, community filter, node search),
-> `graphify-out/graph.json` (the raw graph, GraphRAG-ready) and
-> `graphify-out/GRAPH_REPORT.md` (audit trail: hub nodes, communities, surprising
-> connections). Open `graph.html` locally to explore the graph.
+> [`graphify-out/graph.html`](./graphify-out/graph.html) (interactive — zoom, pan, community
+> filter, node search), [`graphify-out/graph.json`](./graphify-out/graph.json) (the raw graph,
+> GraphRAG-ready) and [`graphify-out/GRAPH_REPORT.md`](./graphify-out/GRAPH_REPORT.md) (audit
+> trail: hub nodes, communities, surprising connections). Open `graph.html` locally to explore the graph.
 
 ---
 
