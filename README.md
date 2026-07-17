@@ -185,63 +185,54 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 ---
 
-## 🔄 Pipeline architecture
+## 🔄 Pipeline architecture (~38K lines)
 
 ```mermaid
 flowchart TD
-    subgraph FOUNDATION["  Foundation & Configuration  "]
-        CFG["📋 &nbsp; 00_01 · Project Config &nbsp; \n &nbsp; Single source of truth &nbsp; \n &nbsp; All thresholds · constants · weights &nbsp; \n &nbsp; 📄 ~3,189 lines &nbsp; "]
-        UTL["🔧 &nbsp; 00_02 · Project Utils &nbsp; \n &nbsp; Geometry · ConsoleColours &nbsp; \n &nbsp; Logging · MIC vectors &nbsp; \n &nbsp; 📄 ~1,117 lines &nbsp; "]
-        ENV["🛠 &nbsp; 00_03 · Environment &nbsp; \n &nbsp; Conda/Pip pinning &nbsp; \n &nbsp; Reproducibility spec &nbsp; \n &nbsp; 📄 ~300 lines &nbsp; "]
+    START(["🧬 Input FASTA + SMILES"]):::io
+
+    subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration &nbsp;"]
+        direction LR
+        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>thresholds · constants · weights<br/>📄 ~3,202 lines"]:::found
+        UTL["🔧 &nbsp;<b>00_02 · Project Utils</b><br/>geometry · ConsoleColours<br/>logging · MIC vectors<br/>📄 ~1,137 lines"]:::found
+        ENV["🛠 &nbsp;<b>00_03 · Environment</b><br/>conda / pip pinning<br/>reproducibility spec<br/>📄 ~312 lines"]:::found
         CFG --- UTL --- ENV
     end
 
-    START(["🧬 &nbsp; Input FASTA + SMILES &nbsp;"]) --> M1
-    M1["01 · &nbsp; Merge & QC &nbsp; \n &nbsp; Deduplicate · Flag ambiguities &nbsp; \n &nbsp; 📄 ~700 lines &nbsp; "] --> M2
+    M1["<b>01 · Merge &amp; QC</b><br/>deduplicate · flag ambiguities<br/>📄 ~695 lines"]:::hts
 
-    subgraph PHASE1["  Phase 1 — High-Throughput Screening (HTS)  "]
-        M2["02 · &nbsp; Production Engine &nbsp; \n &nbsp; Boltz-2 GPU co-folding &nbsp; \n &nbsp; Mechanistic NAC scoring &nbsp; \n &nbsp; 📄 ~7,285 lines &nbsp; "]
-        M3["03 · &nbsp; Validation Figures &nbsp; \n &nbsp; 54 panels (incl. 5 Ramachandran) · 7 folders &nbsp; \n &nbsp; Tier distribution · AI quality &nbsp; \n &nbsp; 📄 ~10,486 lines &nbsp; "]
-        M4["04 · &nbsp; Dendrogram &nbsp; \n &nbsp; Interactive D3.js tree &nbsp; \n &nbsp; Taxonomic tier overlay &nbsp; \n &nbsp; 📄 ~1,659 lines &nbsp; "]
+    subgraph PHASE1["🟢 &nbsp; Phase 1 — High-Throughput Screening &nbsp;"]
+        M2["<b>02 · Production Engine</b><br/>Boltz-2 GPU co-folding<br/>mechanistic NAC scoring · tiering<br/>📄 ~7,289 lines"]:::hts
+        M3["<b>03 · Validation Figures</b><br/>54 panels · 7 folders<br/>tier · AI-quality · geometry<br/>📄 ~10,487 lines"]:::hts
+        M4["<b>04 · Dendrogram</b><br/>interactive D3.js tree<br/>taxonomic tier overlay<br/>📄 ~1,674 lines"]:::hts
         M2 --> M3
         M2 --> M4
     end
 
-    M2 --> M5
-
-    subgraph PHASE2["  Phase 2 — Top-N Selection, Preparation & Filtering  "]
-        M5["05 · &nbsp; Top-N + PDB Preparation &nbsp; \n &nbsp; MD-ready gate · Gemmi CIF→PDB · PrepWizard (0.15 Å) &nbsp; \n &nbsp; Pose-drift + 8-residue machinery figures · ESP charges (default) · PyMOL · PLIP &nbsp; \n &nbsp; 📄 ~4,087 lines &nbsp; "]
+    subgraph PHASE2["🟠 &nbsp; Phase 2 — Top-N Selection &amp; Preparation &nbsp;"]
+        M5["<b>05 · Top-N + PDB Preparation</b><br/>MD-ready gate · Gemmi CIF→PDB<br/>PrepWizard 0.15 Å · ESP charges<br/>PyMOL · PLIP · pose-drift figures<br/>📄 ~4,089 lines"]:::prep
     end
 
-    M5 --> EXT_MD
-
-    subgraph PHASE3["  Phase 3 — Dynamic Validation & Quantum Mechanics  "]
-        EXT_MD[["💻 &nbsp; External MD & WaterMap &nbsp; \n &nbsp; Desmond trajectory runs &nbsp; \n &nbsp; WaterMap hydration mapping &nbsp;"]]
-        M6["06 · &nbsp; ESP Physics: WaterMap · Build · MD · SID · MM-GBSA &nbsp; \n &nbsp; ESP merge → WaterMap → System Builder → Desmond MD &nbsp; \n &nbsp; Sequential per rank: MD → SID → MM-GBSA, one rank fully done before the next &nbsp; \n &nbsp; All physics from CFG §17b · disk-aware subjob cap · phase-aware heartbeat &nbsp; \n &nbsp; 📄 ~3,633 lines &nbsp; "]
-        M7["07 · &nbsp; MD + QM/MM Defluorination Engine &nbsp; \n &nbsp; NAC geometry · 8-res Dream-Team · WaterMap · EAF &nbsp; \n &nbsp; Continuous NAC dwell (ns) · NAC-conditioned MM-GBSA &nbsp; \n &nbsp; QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge (C–F cleavage) &nbsp; \n &nbsp; Defluor_Propensity (a monotonic **ranking proxy**, not a rate: it carries the *electronic* barrier ΔE‡, and no frequency calculation is run, so it has no ZPE, no thermal correction and no TΔS‡ term — never quote it as a k_cat) + Is_Defluorinating verdict &nbsp; \n &nbsp; Reaction-profile · decomposition · landscape figures &nbsp; \n &nbsp; 📄 ~5,078 lines &nbsp; "]
-        EXT_MD --> M6 --> M7
+    subgraph PHASE3["🔵 &nbsp; Phase 3 — Dynamics &amp; Quantum Mechanics &nbsp;"]
+        M6["<b>06 · ESP Physics</b><br/>WaterMap → System Builder → Desmond MD<br/>SID → Prime MM-GBSA (sequential per rank)<br/>all physics from CFG · phase-aware heartbeat<br/>📄 ~3,663 lines"]:::dyn
+        M7["<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell (ns) · NAC-conditioned MM-GBSA<br/>QSite SN2 ΔE‡ / ΔE_rxn + departing-F charge<br/>Defluor_Propensity (ranking proxy, not a rate)<br/>+ Is_Defluorinating verdict<br/>📄 ~5,080 lines"]:::dyn
+        M6 --> M7
     end
 
-    %% Dependencies
-    FOUNDATION -.-> M1
-    FOUNDATION -.-> M2
-    FOUNDATION -.-> M5
-    FOUNDATION -.-> M6
-    FOUNDATION -.-> M7
+    START --> M1 --> M2
+    M2 --> M5 --> M6
+    FOUNDATION -.-> M1 & M2 & M5 & M6 & M7
 
-    style FOUNDATION fill:#0f172a,color:#38bdf8,stroke:#38bdf8
-    style CFG fill:#1e293b,color:#f8fafc
-    style UTL fill:#1e293b,color:#f8fafc
-    style ENV fill:#1e293b,color:#f8fafc
-    style PHASE1 fill:#064e3b,color:#34d399,stroke:#34d399,stroke-width:2px,stroke-dasharray: 6 4
-    style PHASE2 fill:#1e3a8a,color:#93c5fd,stroke:#93c5fd,stroke-width:2px,stroke-dasharray: 6 4
-    style PHASE3 fill:#172554,color:#60a5fa,stroke:#60a5fa,stroke-width:2px,stroke-dasharray: 6 4
-    style FOUNDATION stroke-dasharray: 6 4
-    style M2 fill:#065f46,color:#f8fafc
-    style M6 fill:#1e40af,color:#f8fafc
-    style M7 fill:#1e40af,color:#f8fafc
-    style START fill:#14532d,color:#f8fafc
-    style EXT_MD fill:#1e1b4b,color:#a5b4fc
+    classDef io    fill:#14532d,stroke:#4ade80,color:#f0fdf4,stroke-width:2px
+    classDef found fill:#1e293b,stroke:#94a3b8,color:#f1f5f9
+    classDef hts   fill:#065f46,stroke:#34d399,color:#ecfdf5
+    classDef prep  fill:#7c2d12,stroke:#fb923c,color:#fff7ed
+    classDef dyn   fill:#1e3a8a,stroke:#60a5fa,color:#eff6ff
+
+    style FOUNDATION fill:#0f172a,stroke:#64748b,color:#cbd5e1,stroke-width:1px,stroke-dasharray:5 4
+    style PHASE1 fill:#052e2b,stroke:#34d399,color:#6ee7b7,stroke-width:2px,stroke-dasharray:6 4
+    style PHASE2 fill:#3b160a,stroke:#fb923c,color:#fdba74,stroke-width:2px,stroke-dasharray:6 4
+    style PHASE3 fill:#0c1f4a,stroke:#60a5fa,color:#93c5fd,stroke-width:2px,stroke-dasharray:6 4
 ```
 
 **Diagram key:** solid arrows = data flow; dashed arrows (`-.->`) = foundation dependencies.
@@ -264,8 +255,8 @@ Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the e
 
 ## 🕸 Code architecture graph
 
-A function-level knowledge graph of the whole pipeline (826 nodes · 1,701 edges ·
-51 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
+A function-level knowledge graph of the whole pipeline (1,006 nodes · 2,074 edges ·
+62 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
 and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_FAcDs.py) is the top
 hub node (65 edges, the most connected)** — every module's thresholds and figure colours route
 through it, the single-source-of-truth architecture showing up structurally.
@@ -318,8 +309,8 @@ FAcDs_PFAS-27_Defluorination/
 │   │   ├── 3_Sequence_Reference_Data/   ← BLOSUM62 alignments, identity tables
 │   │   ├── 4_Prediction_Jobs/           ← Boltz-2 run outputs + confidence JSON
 │   │   ├── 00_Boltz2_Production.log       ← Production engine log file
-│   │   ├── 6_Boltz2_FAcDs_Master_*.csv  ← Master results CSV (all jobs)
-│   │   └── 7_Boltz2_FAcDs_Ranked_*.csv  ← Tier-ranked results CSV
+│   │   ├── 5_Boltz2_FAcDs_Master_*.csv  ← Master results CSV (all jobs)
+│   │   └── 6_Boltz2_FAcDs_Ranked_*.csv  ← Tier-ranked results CSV
 │   │
 │   ├── 2_Best_Complexes_CIFs/           ← Top-ranked CIF per protein × ligand (generated by 02_Production_FAcDs.py)
 │   │
@@ -374,7 +365,7 @@ FAcDs_PFAS-27_Defluorination/
 | [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
 | [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
 | [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** — MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
-| [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 50 figure panels + 5 Ramachandran controls (= 55) in 7 content-matched figure folders + 01_Analysis_Data — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
+| [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 49 figure panels + 5 Ramachandran controls (= 54) in 7 content-matched figure folders + 01_Analysis_Data — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
 | [`04_Dendrogram_FAcDs.py`](./04_Dendrogram_FAcDs.py) | Interactive phylogenetic D3 tree | merged FASTA + `03_Figure_Enriched_Dataset.csv` | `03_Global_Master_Interactive_App.html` (+ per-tier apps) |
 | [`05_TopN_and_PDB_Preparation_FAcDs.py`](./05_TopN_and_PDB_Preparation_FAcDs.py) | MD-ready gate → Gemmi CIF→PDB + PrepWizard + Top-N extraction + PyMOL/PLIP figures | ranked CSV + CIF files | prepared `.pdb` files, tier CSV, interaction figures |
 | [`06_Physics_Validation_FAcDs.py`](./06_Physics_Validation_FAcDs.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD → SID → MM-GBSA, strictly sequential; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*_mmgbsa-prime-out.csv`, **`06_Analysis/` — every Step-06 figure in one folder** (build/solvation QC, MD trajectory QC, MM-GBSA individual + combined), **`00_Phase_Timings.csv`** (per-job + per-phase wall-clock), merged log |
@@ -1475,7 +1466,7 @@ Pre-generate A3M MSA files locally using `colabfold_search` and place them in th
 
 ```bash
 # Back up before recovery
-cp Boltz-2_Run_*/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv backup.csv
+cp Boltz-2_Run_*/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv backup.csv
 # Resume — the pipeline re-scores only the missing jobs
 python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 ```

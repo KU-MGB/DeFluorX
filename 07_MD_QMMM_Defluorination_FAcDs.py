@@ -37,8 +37,8 @@ Date   : 20 July 2026 <───────────────────
                                                                /*.eaf
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N.csv  (Step-06 WaterMap export)
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
-                  <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
+                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
                     - <Name>_NAC_Dashboard.png     (2-panel figure)
@@ -1985,9 +1985,11 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
             "dir": d,
         })
 
-    ranked = sorted((run_dir / "1_Boltz2_Production").glob("*Ranked*.csv"))
-    if ranked:
-        rk = pd.read_csv(ranked[-1], low_memory=False)
+    _prod = run_dir / "1_Boltz2_Production"
+    ranked = (_utils_mod.latest_by_mtime(_prod.glob(CFG.GLOB_RANKED_CSV))
+              or _utils_mod.latest_by_mtime(_prod.glob("*Ranked*.csv")))
+    if ranked is not None:
+        rk = pd.read_csv(ranked, low_memory=False)
         for e in out:
             row = rk[rk["job_name"] == e["job"]]
             if not row.empty:
@@ -4658,7 +4660,7 @@ def main():
     console_info(f"Frame Stride     : {args.stride} (requested){' — all frames' if args.stride == 1 else f' — 1-in-{args.stride} sampled'}")
     console_separator()
 
-    # ── Ranked CSV (7_Boltz2_FAcDs_Ranked_*.csv or any *_Ranked*.csv) ──────────
+    # ── Ranked CSV (6_Boltz2_FAcDs_Ranked_*.csv or any *_Ranked*.csv) ──────────
     prod_dir     = work_dir.parent / "1_Boltz2_Production"
     ranked_csvs  = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                     sorted(prod_dir.glob("*_Ranked*.csv")))

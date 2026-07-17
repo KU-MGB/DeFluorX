@@ -118,8 +118,9 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 03_Fluorine_Engagement_by_Tier.png           <-- Fluorine engagement ratio box + trend line
     • 04_Catalytic_Quality_vs_Inhibition.png       <-- Soft-catalytic-score violin + active-site contact density
     • 05_ActiveSite_Contact_Density_by_Tier.png    <-- Active-site contact density box + strip
+    • 06_Binding_Energetics.png                    <-- Binding-probability violin by tier
     • 07_Chemical_Space_Map.png                    <-- UMAP chemical-space manifold, competence hexbin + {CFG.TIER_TOP} structure thumbnails
-    • 08_Binding_Energetics.png                    <-- Binding-probability violin by tier
+    • 08_Binding_Affinity_Metrics.png              <-- Binding-affinity distribution by tier (2-column legend + stats)
 
     ── 07_PFAS_Scope_and_Synthesis/ ── multi-metric synthesis + publication assembly
     • 01_Radar_TopHits.png                         <-- Radar: top-5 hits vs worst-tier baseline
@@ -249,6 +250,7 @@ _utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00
 CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
+latest_by_mtime = _utils_mod.latest_by_mtime   # newest ranked/master CSV by mtime (prefix-agnostic)
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
 SEPARATOR_DASH  = _utils_mod.SEPARATOR_DASH
@@ -677,10 +679,10 @@ def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.Data
     figures key on). Ranked-only: no master-CSV fallback — a missing ranked CSV is a hard error,
     since every figure axis and the enriched dataset depend on Scientific_Rank.
     """
-    candidates = sorted(list(prod_dir.glob("*_Ranked_*.csv")))
-    if not candidates: raise FileNotFoundError("No Ranked CSV found in Production folder.")
-
-    target = candidates[-1]
+    # SSOT glob first, wildcard fallback; newest by mtime (a name sort can rank an older file last when the leading number differs).
+    target = (latest_by_mtime(prod_dir.glob(CFG.GLOB_RANKED_CSV))
+              or latest_by_mtime(prod_dir.glob("*_Ranked_*.csv")))
+    if target is None: raise FileNotFoundError("No Ranked CSV found in Production folder.")
     reporter.log(f"Input Data Source: {target.resolve()}")
     df = pd.read_csv(target, low_memory=False)
 
@@ -740,7 +742,7 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
     """Step 1 (01_Analysis_Data): per active-site residue, list the query proteins whose alignment
     failed to map it → 01_Active_Site_Residue_Mapping_Missed.csv. Written here so the whole
     01_Analysis_Data set is finalised before the figure steps; the Step-3 coverage figure recomputes
-    its own bar counts from the same alignment table and no longer writes this CSV."""
+    its own bar counts from the same alignment table rather than this CSV."""
     import json as _json
     _aln_csv = (out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data"
                 / "Active_Site_Alignments" / CFG.FILE_ALIGNMENT_STATS)
@@ -791,9 +793,9 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     '''
     RobustScaler already guards its own zero-IQR case: sklearn's _handle_zeros_in_scale sets a zero
     scale to 1.0 per column, so a constant / heavily-skewed feature is merely centred, never divided by
-    zero — no inf/NaN reaches PCA or UMAP. A whole-matrix StandardScaler fallback (the previous guard)
-    would re-scale EVERY column the moment one degenerate column appeared, throwing away the outlier
-    robustness the ranking depends on, so RobustScaler is used unconditionally.
+    zero — no inf/NaN reaches PCA or UMAP. A whole-matrix StandardScaler would re-scale EVERY column the
+    moment one degenerate column appeared, throwing away the outlier robustness the ranking depends on, so
+    RobustScaler is used unconditionally.
     '''
     x_scaled = RobustScaler().fit_transform(x)
 
@@ -1435,7 +1437,7 @@ _PANEL_FIG_PATHS = {
 
 
 def _fig_path(fig_key: str) -> str:
-    """Map a figure key (e.g. '22', '18b', '01C') to its folder/NN_name.png for skip logs — the folded
+    """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.png for skip logs — the folded
     panels via _PANEL_FIG_PATHS, the main suite via _FIG_MAPPING. Falls back to 'Figure <key>'."""
     if fig_key in _PANEL_FIG_PATHS:
         return _PANEL_FIG_PATHS[fig_key]
@@ -4733,13 +4735,11 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
     # --- Figure 18a: Chemical Space UMAP Manifold ---
     if "UMAP_X" in df.columns:
-        # Degradability landscape: hexbin over the UMAP chemical space coloured by
-        # the MEAN competence per bin, so chemical regions enriched for good degraders
-        # light up. The MD-ready / elite hits are overlaid as labelled stars. This
-        # replaces the former 58k-point tier scatter, which was an unreadable hairball.
-        # Margin scaffold shared with the thumbnail figures: the main axes sit in the middle band and the
-        # right margin holds the PyMOL structure thumbnails (moved here from the former Figure 18b, which
-        # was the same UMAP without the competence colouring). No tight_layout — it would fight the margins.
+        # Degradability landscape: a hexbin over the UMAP chemical space coloured by the MEAN competence
+        # per bin, so chemical regions enriched for good degraders light up; the MD-ready / elite hits are
+        # overlaid as stars, each with its PyMOL active-site thumbnail in the right margin. The main axes
+        # sit in the middle band and the right margin holds the thumbnails — no tight_layout, it would
+        # fight the margins.
         fig, ax = plt.subplots(figsize=(11, 7.5))
         fig.subplots_adjust(**_TT_MARGINS)
         _u = df.dropna(subset=["UMAP_X", "UMAP_Y"]).copy()
@@ -4793,9 +4793,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         ax.grid(False)
         ax.legend(loc="lower left")
         _stat_box(ax, _umap_tier_separation(_u), "upper left")
-        # PyMOL active-site thumbnails for the Tier_1A representatives (moved here from the removed
-        # Figure 18b, which was this same UMAP without the competence colouring): each thumbnail's arrow
-        # and box share the colour of the star it points to.
+        # PyMOL active-site thumbnails for the Tier_1A representatives: each thumbnail's arrow and box
+        # share the colour of the star it points to.
         if _pax is not None and not _pax.empty:
             _tt_draw_thumbnails(fig, ax, _pax, _imgs)
         plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -8524,10 +8523,11 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     """
     _nuc_by_job: dict = {}
     _prot_by_job: dict = {}
-    _rank_csv = sorted((prod_dir).glob(CFG.GLOB_RANKED_CSV))
-    if _rank_csv:
+    _rank_csv = (latest_by_mtime(prod_dir.glob(CFG.GLOB_RANKED_CSV))
+                 or latest_by_mtime(prod_dir.glob("*_Ranked_*.csv")))
+    if _rank_csv is not None:
         try:
-            _rk = pd.read_csv(_rank_csv[-1], low_memory=False,
+            _rk = pd.read_csv(_rank_csv, low_memory=False,
                               usecols=["job_name", "Mapped_Nucleophile", "Protein_Name"])
             for _jn, _mn, _pn in zip(_rk["job_name"], _rk["Mapped_Nucleophile"], _rk["Protein_Name"]):
                 _prot_by_job[str(_jn)] = str(_pn)
@@ -8784,10 +8784,11 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     never needed to carry is missing.
     """
     if CFG.COL_TIER not in vdf.columns:
-        _rk = sorted(Path(_prod).glob(CFG.GLOB_RANKED_CSV))
-        if _rk:
+        _rk = (latest_by_mtime(Path(_prod).glob(CFG.GLOB_RANKED_CSV))
+               or latest_by_mtime(Path(_prod).glob("*_Ranked_*.csv")))
+        if _rk is not None:
             try:
-                _tier_map = pd.read_csv(_rk[-1], low_memory=False,
+                _tier_map = pd.read_csv(_rk, low_memory=False,
                                         usecols=["job_name", CFG.COL_TIER])
                 vdf = vdf.merge(_tier_map, how="left", left_on=id_col, right_on="job_name")
                 _n_tier = int(vdf[CFG.COL_TIER].notna().sum())
@@ -9905,10 +9906,10 @@ def write_figure_descriptions(out_dir: Path):
         "-" * 80,
         "Figure 18a — Figure_18a_Chemical_Space_Map.png",
         "  Title   : Chemical Space Map (UMAP manifold, competence hexbin)",
-        f"  Type    : Hexbin over the UMAP embedding coloured by mean competence per bin; {CFG.TIER_TOP} ★ overlaid, with inset PyMOL active-site thumbnails (moved here from the former Landscape figure)",
+        f"  Type    : Hexbin over the UMAP embedding coloured by mean competence per bin; {CFG.TIER_TOP} ★ overlaid, with inset PyMOL active-site thumbnails",
         "  Axes    : UMAP dimensions 1 & 2 — distances reflect chemical similarity",
         "  Colour  : Mean competence score per bin (brighter = more degradable)",
-        f"  Markers : ★ = MD-ready / {CFG.TIER_TOP} hits, labelled by ligand; thumbnails show each one's active-site geometry",
+        f"  Markers : ★ = MD-ready / {CFG.TIER_TOP} hits, each ★ tinted to match its own thumbnail's box + arrow; the thumbnail names the protein + ligand and shows its active-site geometry",
         f"  Look for: Bright chemical regions enriched for degraders, with the {CFG.TIER_TOP} stars clustering there.",
         "            Thumbnails reveal the active-site geometry behind each top hit at a glance.",
         "",

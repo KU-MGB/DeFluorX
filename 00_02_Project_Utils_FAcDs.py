@@ -383,6 +383,20 @@ def apply_figure_style(cfg) -> None:
     })
 
 
+def latest_by_mtime(paths):
+    """The newest existing file by modification time, or None.
+
+    Selection is by mtime, NOT by name: a name sort ranks on the leading number, so a file with a higher
+    leading digit sorts last even when it is older — which would silently feed a stale file downstream.
+    mtime is prefix-agnostic and always returns the file written last. Callers pass the SSOT glob first
+    and a wildcard fallback second, e.g.
+        latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV)) or latest_by_mtime(prod.glob("*Ranked*.csv"))
+    """
+    from pathlib import Path as _P
+    _ps = [_P(p) for p in paths if _P(p).exists()]
+    return max(_ps, key=lambda p: p.stat().st_mtime) if _ps else None
+
+
 def write_json_atomic(path, payload: dict) -> None:
     """Write a JSON file so a reader never sees a half-written one.
 

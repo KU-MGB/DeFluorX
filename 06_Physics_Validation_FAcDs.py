@@ -1730,11 +1730,12 @@ def _lookup_tiers(run_root: Path) -> dict:
     """Map Scientific_Rank → degrader_tier from the Step 02 ranked CSV, for tier
     colouring. Returns {} if not found (figures fall back to a neutral colour)."""
     prod = run_root / "1_Boltz2_Production"
-    hits = sorted(prod.glob("*Ranked*.csv")) if prod.is_dir() else []
-    if not hits:
+    hit = (_utils_mod.latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV))
+           or _utils_mod.latest_by_mtime(prod.glob("*Ranked*.csv"))) if prod.is_dir() else None
+    if hit is None:
         return {}
     try:
-        df = pd.read_csv(hits[-1], usecols=["Scientific_Rank", "degrader_tier"])
+        df = pd.read_csv(hit, usecols=["Scientific_Rank", "degrader_tier"])
         return {int(r): str(t) for r, t in zip(df["Scientific_Rank"], df["degrader_tier"])}
     except Exception:
         return {}
@@ -1745,11 +1746,12 @@ def _lookup_ligands(run_root: Path) -> dict:
     PFAS species rather than only its rank. Returns {} if unavailable (labels fall back to
     the bare rank)."""
     prod = run_root / "1_Boltz2_Production"
-    hits = sorted(prod.glob("*Ranked*.csv")) if prod.is_dir() else []
-    if not hits:
+    hit = (_utils_mod.latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV))
+           or _utils_mod.latest_by_mtime(prod.glob("*Ranked*.csv"))) if prod.is_dir() else None
+    if hit is None:
         return {}
     try:
-        df = pd.read_csv(hits[-1], usecols=["Scientific_Rank", "Ligand_Name"])
+        df = pd.read_csv(hit, usecols=["Scientific_Rank", "Ligand_Name"])
         return {int(r): str(l) for r, l in zip(df["Scientific_Rank"], df["Ligand_Name"])}
     except Exception:
         return {}

@@ -26,8 +26,8 @@ Date   : 20 July 2026 <───────────────────
                   User-supplied *.smi (SMILES ligand file)
   Writes        : <Run>/1_Boltz2_Production/  (Boltz-2 CIF outputs)
                   <Run>/2_Best_Complexes_CIFs/ (top-model CIF selection)
-                  <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Master_*.csv
+                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
   Upstream      : 01_Merge_FAcDs.py → writes the merged FASTA consumed here
   Downstream    : 03_Validation_Figures_FAcDs.py → reads ranked CSV
                   05_TopN_and_PDB_Preparation_FAcDs.py → reads Best_Complexes_CIFs
@@ -111,7 +111,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
 
 -------------------------------------------------------------------------------
 RANKING LOGIC (Sorting the Master CSV):
-The final `06_Ranked.csv` file uses a hierarchical scoring system to prioritise
+The final ranked CSV (CFG.RANKED_CSV_STEM) uses a hierarchical scoring system to prioritise
 catalytic mechanism over generic binding affinity.
 
     1. Tier Value (Primary Sort Key):
@@ -5179,7 +5179,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
     rank_csv_path = None
     rank_columns_count = 0
     try:
-        rank_csv_name = f"7_Boltz2_FAcDs_Ranked_{ts_now}.csv"
+        rank_csv_name = f"{CFG.RANKED_CSV_STEM}_{ts_now}.csv"   # name from CFG SSOT (glob derives from the same stem)
         rank_csv_path = PROD / rank_csv_name
 
         if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
@@ -5491,7 +5491,7 @@ def main():
 
     ts_now = datetime.now().strftime("%Y%m%d_%H%M%S")
     LOG_PATH = PROD / "00_Boltz2_Production.log"
-    CSV_PATH = PROD / f"6_Boltz2_FAcDs_Master_{ts_now}.csv"
+    CSV_PATH = PROD / f"{CFG.MASTER_CSV_STEM}_{ts_now}.csv"   # name from CFG SSOT
     setup_logging(LOG_PATH)
 
     prev_elapsed_map = {}

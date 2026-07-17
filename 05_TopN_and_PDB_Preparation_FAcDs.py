@@ -23,7 +23,7 @@ Date   : 20 July 2026 <───────────────────
                   00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                             console helpers, Ramachandran helpers)
   Reads         : <Run>/2_Best_Complexes_CIFs/*.cif
-                  <Run>/1_Boltz2_Production/7_Boltz2_FAcDs_Ranked_*.csv  (MD_Selected)
+                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv  (MD_Selected)
                   <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*
   Writes        : <Run>/5_TopN_and_Preparation/  (one consolidated folder)
                     1_Converted_Raw_PDB/   (raw PDBs + Figures/)
@@ -282,7 +282,7 @@ def collect_best_cifs(best_cifs_dir: Path) -> list:
 
 def load_rank_map(prod_dir: Path) -> dict:
     """Loads the master CSV to annotate PDB headers with a score/rank.
-    Prefers the FAcDs Ranked CSV (7_Boltz2_FAcDs_Ranked_*), then any ranked CSV,
+    Prefers the FAcDs Ranked CSV (6_Boltz2_FAcDs_Ranked_*), then any ranked CSV,
     then falls back to any master CSV.
     Uses Scientific_Rank if present, otherwise Boltz_Model_Confidence (rounded to 4dp).
     """
@@ -293,7 +293,7 @@ def load_rank_map(prod_dir: Path) -> dict:
         console_info("Warning: No Ranked CSV found in production directory.")
         return {}
 
-    latest_csv = sorted(rank_csvs)[-1]
+    latest_csv = _utils_mod.latest_by_mtime(rank_csvs)   # newest by mtime, not name (a name sort can rank an older file last when the leading number differs)
     console_info(f"Loaded Rank File : {latest_csv.name}")
 
     try:
@@ -324,7 +324,7 @@ def load_md_selected_jobs(prod_dir: Path) -> set:
     if not rank_csvs:
         return set()
     try:
-        df = pd.read_csv(sorted(rank_csvs)[-1], low_memory=False)
+        df = pd.read_csv(_utils_mod.latest_by_mtime(rank_csvs), low_memory=False)
         if md_col not in df.columns or "job_name" not in df.columns:
             return set()
         _sel = df[md_col].astype(str).str.lower().isin(["true", "1", "1.0"])
@@ -813,7 +813,7 @@ def load_machinery_map(prod_dir: Path) -> dict:
     if not _rank:
         return {}
     try:
-        _df = pd.read_csv(sorted(_rank)[-1], low_memory=False)
+        _df = pd.read_csv(_utils_mod.latest_by_mtime(_rank), low_memory=False)
     except Exception:
         return {}
     if "job_name" not in _df.columns:
@@ -1630,7 +1630,7 @@ def load_catalytic_anchor_map(prod_dir: Path) -> dict:
     if not rank_csvs:
         return {}
     try:
-        df = pd.read_csv(sorted(rank_csvs)[-1], low_memory=False)
+        df = pd.read_csv(_utils_mod.latest_by_mtime(rank_csvs), low_memory=False)
     except Exception:
         return {}
     _cols = {"Nuc": "Mapped_Nucleophile", "Acid": "Mapped_Acid", "Base": "Mapped_Base"}
@@ -3591,7 +3591,7 @@ def topn_extraction_phase(args):
         console_info("Error: No Ranked CSV found in production directory.")
         sys.exit(1)
 
-    rank_csv = rank_csvs[-1]
+    rank_csv = _utils_mod.latest_by_mtime(rank_csvs)   # newest by mtime, not name
     console_info(f"Loading Logic : {rank_csv.name}")
 
     try:

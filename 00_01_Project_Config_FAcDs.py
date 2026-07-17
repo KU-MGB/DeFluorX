@@ -2881,7 +2881,13 @@ class CFG:
     can see. A rename then breaks the consumer silently (an empty glob reads as 'nothing to do',
     not as an error).
     """
-    GLOB_RANKED_CSV:    str = "7_Boltz2_FAcDs_Ranked_*.csv"   # 02 writes → 05/07 read
+    # SINGLE SOURCE OF TRUTH for the two Step-02 production CSV names. Change the leading number (or the
+    # base) HERE ONLY: 02 builds the filename as f"{STEM}_{timestamp}.csv" and every consumer globs the
+    # matching GLOB_* (derived below in __post_init__). The number prefixes the production folder order.
+    RANKED_CSV_STEM:    str = "6_Boltz2_FAcDs_Ranked"        # 02 writes → 03/05/06/07 read (the ranked sheet)
+    MASTER_CSV_STEM:    str = "5_Boltz2_FAcDs_Master"        # 02 writes → all-jobs superset (not tier-ranked)
+    GLOB_RANKED_CSV:    str = ""                             # derived: f"{RANKED_CSV_STEM}_*.csv"
+    GLOB_MASTER_CSV:    str = ""                             # derived: f"{MASTER_CSV_STEM}_*.csv"
     SUFFIX_RAW_PDB:     str = "_RAW.pdb"                      # 05 internal (pre-prep structure)
     SUFFIX_PLIP_LOG:    str = "_PLIP.log"                     # 05 internal (interaction run log)
     SUFFIX_SID_EAF:     str = "_SID-out.eaf"                  # Desmond SID → 06 reads
@@ -3166,7 +3172,7 @@ class CFG:
         Internal-consistency guards (read-only; frozen-dataclass safe). Several constants
         are intentionally equal to another CFG value or must sum to 1.0. A field default
         edit that breaks one of these couplings fails loudly at import rather than silently
-        drifting apart. Assertions only — no mutation.
+        drifting apart. Assertions, plus the derived file-name globs built from the CSV STEMs at the end.
         """
         import math as _math
         _isclose = lambda a, b: _math.isclose(float(a), float(b), abs_tol=1e-9)
@@ -3189,3 +3195,8 @@ class CFG:
         assert _isclose(self.SOFT_W_NUC + self.SOFT_W_ANG + self.SOFT_W_INT, 1.0), "soft_catalytic_score weights must sum to 1.0"
         assert _isclose(self.CONSERV_W_INTEGRITY + self.CONSERV_W_GEO + self.CONSERV_W_IDENT, 1.0), "candidate conservation weights must sum to 1.0"
         assert _isclose(self.CONSERV_REF_W_IDENT + self.CONSERV_REF_W_GEO, 1.0), "reference conservation weights must sum to 1.0"
+        # Derived file-name globs — the ONLY place they are built, from the STEM single-source-of-truth
+        # above (object.__setattr__ because the dataclass is frozen). Bump the number/base in RANKED_CSV_STEM
+        # / MASTER_CSV_STEM and every producer (02) and consumer (03/05/06/07) tracks it with no other edit.
+        object.__setattr__(self, "GLOB_RANKED_CSV", f"{self.RANKED_CSV_STEM}_*.csv")
+        object.__setattr__(self, "GLOB_MASTER_CSV", f"{self.MASTER_CSV_STEM}_*.csv")
