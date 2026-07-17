@@ -162,6 +162,9 @@ Boltz-2 confidence metrics (ipTM, pLDDT, cross-PAE) assess structural plausibili
 
 The tier ladder gates on a **feasibility-weighted mechanistic score** — `mechanistic_score_effective` = raw geometry mechanistic score **−** a graded chemistry penalty (scissile C–F BDE + backside occlusion) **−** a graded pocket-containment penalty. Both penalties are **graded, per-pose, and engage only past a chemistry/steric threshold**, so proven small substrates are untouched and the demotion is proportional to how recalcitrant or oversized a ligand is — never a hard substrate-class veto. A novel variant that reorganises its pocket, or presents a favourable pose, can still surface. Competence and within-tier ranking keep the **raw** geometry score. Every ligand-side gate keys on the α-carbon reactive centre.
 
+<details>
+<summary><b>The full gate table + graded-penalty logic (click to expand)</b></summary>
+
 | Gate | Criterion | Basis |
 |------|-----------|-------|
 | **Productive α-attack** | The SN2 attack carbon (used for the distance/angle gates) must be the **α-carbon adjacent to the ligand carboxylate**; required for every degrader tier. A mid-chain CF₂ or a non-carboxylate head (sulfonate, ether) does not qualify. | FAcD attacks Cα of a 2-haloalkanoate; the carboxylate is the obligatory anchoring handle (Chan 2011; Kurihara & Esaki 2008) |
@@ -183,12 +186,15 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 **On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide — high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-acid electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
 
+</details>
+
 ---
 
 ## 🔄 Pipeline architecture (~38K lines)
 
 ```mermaid
 flowchart TD
+    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~694 lines"}}:::orch
     START(["🧬 Input<br/>FASTA + SMILES"]):::io
 
     subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration — imported by every step &nbsp;"]
@@ -224,12 +230,15 @@ flowchart TD
     M2 --> M5
     M5 --> M6
 
-    %% ── shared foundation: 00_01 CFG + 00_02 utils are imported by EVERY step; 00_03 pins the runtime ──
+    %% ── shared foundation: 00_01 CFG + 00_02 utils are imported by EVERY step; 00_03 is the standalone env spec ──
     CFG -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
     UTL -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
-    ENV -.->|conda env| START
+
+    %% ── 00_00 orchestrates: runs each step 01–07 in sequence (own run per step, resume-aware) ──
+    ORCH -.-> M1 & M2 & M3 & M4 & M5 & M6 & M7
 
     classDef io    fill:#14532d,stroke:#4ade80,color:#f0fdf4,stroke-width:2px
+    classDef orch  fill:#3b0764,stroke:#c084fc,color:#faf5ff,stroke-width:2px
     classDef found fill:#1e293b,stroke:#94a3b8,color:#f1f5f9
     classDef hts   fill:#065f46,stroke:#34d399,color:#ecfdf5
     classDef prep  fill:#7c2d12,stroke:#fb923c,color:#fff7ed
@@ -242,11 +251,13 @@ flowchart TD
 
     %% edges 0–6 = data flow (declared inside subgraphs first: M2→M3, M3→M4, M6→M7, then START→M1, M1→M2, M2→M5, M5→M6)
     linkStyle 0,1,2,3,4,5,6 stroke:#e2e8f0,stroke-width:2.5px
-    %% edges 7–21 = the 15 dotted foundation-import links (CFG×7, UTL×7, ENV×1)
-    linkStyle 7,8,9,10,11,12,13,14,15,16,17,18,19,20,21 stroke:#64748b,stroke-width:1px
+    %% edges 7–20 = the 14 grey foundation-import links (CFG×7, UTL×7)
+    linkStyle 7,8,9,10,11,12,13,14,15,16,17,18,19,20 stroke:#64748b,stroke-width:1px
+    %% edges 21–27 = the 7 violet 00_00-orchestration ("runs") links
+    linkStyle 21,22,23,24,25,26,27 stroke:#a855f7,stroke-width:1.2px
 ```
 
-**Diagram key:** thick solid arrows = **data flow** (`M1` produces the input `02` consumes, and so on; `04` reads `03`'s enriched dataset, not `02`'s directly). Thin dashed arrows = **imports**: `00_01 CFG` and `00_02 utils` are imported by every step (01–07), and `00_03` pins the conda environment the whole run executes in. Within Phase 1, `02 → 03 → 04` is a data chain (03 writes the enriched dataset that 04 reads).
+**Diagram key:** thick white arrows = **data flow** (`04` reads `03`'s enriched dataset, not `02`'s directly; within Phase 1, `02 → 03 → 04` is a data chain). Grey dashed = **imports** — `00_01 CFG` and `00_02 utils` are imported by every step (01–07); `00_03` is the standalone conda-env spec. Violet dashed = **orchestration** — `00_00` (bash) runs each step 01–07 in sequence (a separate run per step, resume-aware).
 
 **Three-phase design:**
 
@@ -286,13 +297,16 @@ The graph output lives in **[`graphify-out/`](./graphify-out/)** and is regenera
 
 ## 📁 Repository structure
 
+<details>
+<summary><b>Full directory tree (click to expand)</b></summary>
+
 ```
 FAcDs_PFAS-27_Defluorination/
 │
 ├── 00_00_run_pipeline_FAcDs.sh              ← One-command full pipeline runner
-├── 00_03_Environment_FAcDs.py  ← Environment check, conda/pip export
 ├── 00_01_Project_Config_FAcDs.py            ← ★ Central configuration (all parameters)
 ├── 00_02_Project_Utils_FAcDs.py             ← Shared utilities (logging, geometry, colours)
+├── 00_03_Environment_FAcDs.py               ← Environment check, conda/pip export
 │
 ├── 01_Merge_FAcDs.py                        ← FASTA merge, deduplication, QC
 ├── 02_Production_FAcDs.py                   ← Boltz-2 prediction + scoring (MAIN ENGINE)
@@ -366,14 +380,16 @@ FAcDs_PFAS-27_Defluorination/
 └── LICENSE                          ← CC BY-NC 4.0
 ```
 
+</details>
+
 ### Key file descriptions
 
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
-| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Orchestrates all HTS, prep, and analysis steps with timing | — | Logs, all outputs |
-| [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check, conda/pip export | — | `PFAS.yml`, `requirements.txt` |
-| [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** — all thresholds, weights, paths | — | `CFG` dataclass instance |
-| [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: console colours, geometry functions, logging | — | `ConsoleColours`, `calculate_angle()`, `print_elapsed()`, etc. |
+| [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** — all tiers, thresholds, scoring weights, figure-style tokens, and CSV name stems; imported by every step | — | `CFG` dataclass instance |
+| [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: ConsoleColours, geometry / MIC / Kabsch, logging, atomic CSV/JSON, `latest_by_mtime`, `apply_figure_style` | — | `ConsoleColours`, `calculate_angle()`, `latest_by_mtime()`, etc. |
+| [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check + conda/pip export (reproducibility spec) | — | `PFAS.yml`, `requirements.txt` |
+| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | Bash orchestrator — runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; Ctrl-C / kill cancels background Schrödinger jobs | — | Logs, all outputs |
 | [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
 | [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** — MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
 | [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 49 figure panels + 5 Ramachandran controls (= 54) in 7 content-matched figure folders + 01_Analysis_Data — overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
@@ -448,15 +464,15 @@ Expected output:
   ✔ PLIP             : 3.0.0
 ```
 
-### Step 4 — Optional: Schrödinger Suite
+### Step 4 — Schrödinger Suite (required for steps 05–07)
 
-PrepWizard (step 05) and QSite (step 07) require a Schrödinger licence. Set the environment variable before running:
+The whole physics/QM half runs on Schrödinger: **PrepWizard + Jaguar ESP (step 05)**, **WaterMap · System Builder · Desmond MD · SID · Prime MM-GBSA (step 06)**, and **QSite QM/MM (step 07)** all need a Schrödinger licence. Set the environment variable before running:
 
 ```bash
 export SCHRODINGER=/opt/schrodinger   # adjust to your installation path
 ```
 
-If Schrödinger is unavailable, step 05 will skip PrepWizard and use raw Gemmi-converted PDB files.
+Steps **01–04** (merge, Boltz-2 co-folding, validation figures, dendrogram) run **without** Schrödinger. Without it, step 05 falls back to raw Gemmi-converted PDBs and skips ESP charging, and steps 06–07 cannot run.
 
 ---
 
@@ -548,48 +564,6 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 ## 💻 Technical reference
 
 ### 📖 Script catalogue
-
-<details>
-<summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
-
-**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
-
-**Usage:**
-```bash
-bash 00_00_run_pipeline_FAcDs.sh
-```
-
-The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
-
-**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
-</details>
-
-<details>
-<summary><b>00_03_Environment_FAcDs.py — Environment Setup</b></summary>
-
-**Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
-
-**Usage:**
-```bash
-# Check environment only
-python 00_03_Environment_FAcDs.py
-
-# Export current environment to PFAS.yml and requirements.txt (overwrite)
-python 00_03_Environment_FAcDs.py --export
-```
-
-The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, so `PFAS.yml` and `requirements.txt` are always refreshed to the current host versions (export timestamp in each file's header).
-
-**Arguments:**
-
-| Flag | Description |
-|------|-------------|
-| `--export` | Export conda environment to `PFAS.yml` and `requirements.txt` (overwrite) |
-
-**Outputs (with `--export`):**
-- `PFAS.yml` — full pinned conda environment spec
-- `requirements.txt` — pip requirements (auto-exported from conda)
-</details>
 
 <details>
 <summary><b>00_01_Project_Config_FAcDs.py — Central Configuration</b></summary>
@@ -753,8 +727,6 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 
 </details>
 
-
-
 <details>
 <summary><b>00_02_Project_Utils_FAcDs.py — Shared Utilities</b></summary>
 
@@ -763,6 +735,48 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 **Usage:** Loaded by numbered pipeline scripts through `importlib.util.spec_from_file_location`, because the filename begins with digits.
 
 **Typical downstream consumers:** `01_Merge_FAcDs.py`, `02_Production_FAcDs.py`, `03_Validation_Figures_FAcDs.py`, `04_Dendrogram_FAcDs.py`, `05_TopN_and_PDB_Preparation_FAcDs.py`, `06_Physics_Validation_FAcDs.py`, and `07_MD_QMMM_Defluorination_FAcDs.py`.
+</details>
+
+<details>
+<summary><b>00_03_Environment_FAcDs.py — Environment Setup</b></summary>
+
+**Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
+
+**Usage:**
+```bash
+# Check environment only
+python 00_03_Environment_FAcDs.py
+
+# Export current environment to PFAS.yml and requirements.txt (overwrite)
+python 00_03_Environment_FAcDs.py --export
+```
+
+The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, so `PFAS.yml` and `requirements.txt` are always refreshed to the current host versions (export timestamp in each file's header).
+
+**Arguments:**
+
+| Flag | Description |
+|------|-------------|
+| `--export` | Export conda environment to `PFAS.yml` and `requirements.txt` (overwrite) |
+
+**Outputs (with `--export`):**
+- `PFAS.yml` — full pinned conda environment spec
+- `requirements.txt` — pip requirements (auto-exported from conda)
+</details>
+
+<details>
+<summary><b>00_00_run_pipeline_FAcDs.sh — Pipeline Runner</b></summary>
+
+**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
+
+**Usage:**
+```bash
+bash 00_00_run_pipeline_FAcDs.sh
+```
+
+The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
+
+**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
 </details>
 
 <details>
@@ -949,23 +963,25 @@ python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
 </details>
 
 <details>
-<summary><b>05_TopN_and_PDB_Preparation_FAcDs.py — Structure Preparation</b></summary>
+<summary><b>05_TopN_and_PDB_Preparation_FAcDs.py — Structure Preparation, Top-N Extraction & 3D Figures</b></summary>
 
-**Purpose:** Converts Boltz-2 mmCIF outputs to PDB files and applies Schrödinger PrepWizard for complete protein preparation, targeting only the viable complexes listed in the ranked CSV.
+**Purpose:** One script covering the whole hand-off from Boltz-2 to the physics stage — it (a) converts the MD-selected mmCIF outputs to PDB, runs Schrödinger PrepWizard, and assigns QM ligand charges, then (b) extracts the top-N candidates from the ranked CSV by tier/score/quota and renders per-candidate 3D interaction figures.
 
 **Usage:**
 ```bash
 python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp   # + QM ligand charges
+python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp   # force QM ligand charges (ON by default)
 ```
 
-**Pipeline:**
+Interactive mode prompts tier selection if multiple tiers contain viable candidates; auto-selects the highest available tier after a 30-second timeout.
+
+**Part A — preparation pipeline:**
 1. **Gemmi CIF→PDB conversion** — moves non-standard residues (ligands) to Chain L; retains metals (Zn, Mg, Ca, Fe) and modified amino acids (MSE, SEP, TPO) in the protein chain
 2. **PrepWizard preparation** (requires Schrödinger):
    - Fills truncated side chains common in AI predictions
    - PropKa protonation at pH 8.0 (physiological FAcD context)
    - Epik PFAS ligand protonation at pH 8.0
-   - RMSD-restrained minimisation (0.3 Å cutoff) for clash resolution
+   - RMSD-restrained minimisation for clash resolution
    - Disulfide bond detection and bonding
 3. Parallel processing: `CFG.GLOBAL_MAX_WORKERS` workers
 
@@ -991,8 +1007,7 @@ python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp  
    The log also prints a boxed per-complex geometry table (SN2 angle CIF→prep, nucleophile distance
    CIF→prep, attack Oδ, and whether the prepared pose stayed inside the relaxed NAC envelope).
 5. **QM ligand charges** (`CFG.ESP_CHARGES_ENABLE`, **ON by default**; `--esp` forces it) — a Jaguar DFT
-   single-point with `icfit=1` on each prepared ligand, writing `<ligand>_ESP.mae`. Every Step-05 run now
-   produces `4_Ligand_ESP_Charges/`.
+   single-point with `icfit=1` on each prepared ligand, writing `<ligand>_ESP.mae` into `4_Ligand_ESP_Charges/`.
 
    > OPLS4 assigns ligand charges by atom type, so it cannot see the one quantity an SN2 rate turns on:
    > how electrophilic the α-carbon is. The QM charge on that carbon climbs across the substrates —
@@ -1005,30 +1020,10 @@ python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp  
 
    Outputs: `4_Ligand_ESP_Charges/00_ESP_Charges_Summary.csv` and `01_ESP_Alpha_Carbon_Charge.png`.
 
-**Configuration (CFG §15):** pH values, RMSD threshold, CPU reservation, chain names, ESP basis/functional.
-
-**Scientific references:**
-| Method | Reference |
-|---|---|
-| PrepWizard protein preparation | Sastry et al. (2013) *J Comput Aided Mol Des* 27:221–234. [DOI](https://doi.org/10.1007/s10822-013-9644-8) |
-| Gemmi CIF→PDB conversion | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
-| PropKa protonation at pH 8.0 | Olsson et al. (2011) *J Chem Theory Comput* 7:525–537. [DOI](https://doi.org/10.1021/ct100578z) |
-
-</details>
-
-<details>
-<summary><b>05_TopN_and_PDB_Preparation_FAcDs.py — Candidate Filtering & 3D Figure Generation</b></summary>
-
-**Purpose:** Extracts the top-N candidates from the ranked CSV based on tier ranking, score thresholds, and per-tier quotas. Copies prepared PDB files to a structured output directory and generates detailed 3D molecular interaction figures for each candidate.
-
-**Usage:**
-```bash
-python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
-```
-
-Interactive mode prompts tier selection if multiple tiers contain viable candidates; auto-selects the highest available tier after a 30-second timeout.
-
-**Output:** per-tier subdirectory within `5_TopN_and_Preparation/3_Comparative_Analysis/` containing raw complexes, prepared PDBs, Ramachandran figures, a scientific data CSV, sequence FASTA, ligand SDF/SMI/PDB files, and interaction figure sets from all supported visualisation engines.
+**Part B — top-N extraction & 3D figures:** copies the prepared PDBs to a per-tier subdirectory within
+`5_TopN_and_Preparation/3_Comparative_Analysis/` (raw complexes, prepared PDBs, Ramachandran figures, a
+scientific data CSV, sequence FASTA, ligand SDF/SMI/PDB) and renders a per-candidate interaction figure set
+from every supported visualisation engine.
 
 > **Ramachandran disclaimer:** the favoured / allowed regions drawn on the Ramachandran plots are approximate visualisation boundaries for qualitative backbone inspection. They are not MolProbity-certified validation polygons and must not be cited as formal stereochemical-quality statistics.
 
@@ -1040,11 +1035,14 @@ Interactive mode prompts tier selection if multiple tiers contain viable candida
 | PLIP | Interaction XML → matplotlib 2D diagram | Protein–Ligand Interaction Profiler; binary or `python -m plip` |
 | InteractionMap | Pure-Python 2D interaction diagram (matplotlib) | No external tool required; always available as fallback |
 
-**Configuration (CFG §13):** image resolution, ray tracing, contact radii, timeouts.
+**Configuration:** CFG §15 (pH, RMSD threshold, CPU reservation, chain names, ESP basis/functional) and CFG §13 (image resolution, ray tracing, contact radii, timeouts).
 
 **Scientific references:**
 | Method | Reference |
 |---|---|
+| PrepWizard protein preparation | Sastry et al. (2013) *J Comput Aided Mol Des* 27:221–234. [DOI](https://doi.org/10.1007/s10822-013-9644-8) |
+| Gemmi CIF→PDB conversion | Wojdyr (2022) *J Open Source Softw* 7:4200. [DOI](https://doi.org/10.21105/joss.04200) |
+| PropKa protonation at pH 8.0 | Olsson et al. (2011) *J Chem Theory Comput* 7:525–537. [DOI](https://doi.org/10.1021/ct100578z) |
 | PLIP protein–ligand interaction profiler | Salentin et al. (2015) *Nucleic Acids Res* 43:W443–W447. [DOI](https://doi.org/10.1093/nar/gkv315) |
 | π–π stacking interactions | McGaughey et al. (1998) *J Biol Chem* 273:15458–15463. [DOI](https://doi.org/10.1074/jbc.273.25.15458) |
 | Cation–π interactions | Gallivan & Dougherty (1999) *PNAS* 96:9459–9464. [DOI](https://doi.org/10.1073/pnas.96.17.9459) |
@@ -1094,7 +1092,8 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 
 ---
 
-#### 🧪 `6_Physics_Validation/` — what Step 06 runs (settings, job naming, layout)
+<details>
+<summary><b>🧪 6_Physics_Validation/ — what Step 06 runs: settings, job naming, layout (click to expand)</b></summary>
 
 Step 06 runs the whole physics chain automatically; the settings below are the **CFG §17b** values it
 uses, and the layout it writes. Steps 06 and 07 locate every artefact **by path and by job name**, so
@@ -1216,6 +1215,8 @@ is what pocket residency means.
 |---|---|---|
 | `Cation_Capped` / `Cation_Capped_Pct` | A counter-ion (Na⁺/K⁺/Mg²⁺/Ca²⁺) sits within `CATION_CAP_DIST` (3.0 Å — inner-sphere) of the nucleophile Oδ or a ligand carboxylate oxygen. PFAS carboxylates pair strongly with Na⁺, and such a frame's NAC geometry can look ideal while the catalytic charge is screened | Frame is flagged and reported, and **barred from QM/MM frame selection** — a QM region containing a Na⁺ on the nucleophile computes that ion pair's barrier, not the enzyme's. A high `Cation_Capped_Pct` means the System Builder ion-exclusion region was too small |
 | `Fold_RMSD_A` / `Frames_Fold_Rejected` | Cα RMSD of the frame against the WaterMap reference exceeds `MD_FOLD_RMSD_MAX` (3.0 Å) | The frame's WaterMap term is **withheld** (a rigid transform exists between any two point sets, so a broken fold still yields a rotation and the sites it carries land arbitrarily). Its geometry is kept |
+
+</details>
 
 #### Memory Requirements & Concurrency Control
 As the final computational analysis step, the following design architectures are built in to ensure robust execution and prevent memory exhaustion:
