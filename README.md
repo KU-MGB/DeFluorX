@@ -216,7 +216,7 @@ flowchart TD
     end
 
     subgraph PHASE3["🔵 &nbsp; Phase 3 — Dynamics &amp; Quantum Mechanics &nbsp;"]
-        M6["🔴&nbsp;<b>06 · ESP Physics</b><br/>WaterMap → System Builder → MD<br/>SID → Prime MM-GBSA (per rank)<br/>→ 06_Analysis/<br/>📄 ~3,663 lines"]:::dyn
+        M6["🔴&nbsp;<b>06 · ESP Physics</b><br/>WaterMap → System Builder → MD<br/>SID → Prime MM-GBSA (per rank)<br/>→ 06_Analysis/<br/>📄 ~3,718 lines"]:::dyn
         M7["🔴&nbsp;<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell · NAC-conditioned MM-GBSA<br/>QSite ΔE‡ + departing-F charge<br/>Defluor_Propensity + verdict<br/>📄 ~5,080 lines"]:::dyn
         M6 --> M7
     end

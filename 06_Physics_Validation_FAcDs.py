@@ -2690,9 +2690,21 @@ def run_build(complex_mae: Path, jobname: str, wd: Path) -> Path:
     msj.write_text(_build_msj(_lig_atom_indices(oriented)))
     out_cms = wd / f"{jobname}-out.cms"
     _LAUNCHED_JOBS.add(jobname)                       # cancelled on Ctrl-C/kill if it does not finish
-    subprocess.run([f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
-                    "-maxjob", "1", "-m", str(msj), "-o", str(out_cms), str(oriented), "-WAIT"],
-                   cwd=str(wd), check=True)
+    cmd = [f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
+           "-maxjob", "1", "-m", str(msj), "-o", str(out_cms), str(oriented), "-WAIT"]
+    """multisim inherits the terminal and writes its own lines at their own indent — the JobId lands
+    at column 0, out of step with every other line this phase prints. Stream it instead and re-emit
+    each line through _log at the step's indent, which also mirrors multisim's output into the step
+    log file. check=True is reproduced explicitly so a build failure still raises."""
+    proc = subprocess.Popen(cmd, cwd=str(wd), stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+    for line in proc.stdout:
+        line = line.strip()
+        if line:
+            _log(line)
+    rc = proc.wait()
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, cmd)
     _LAUNCHED_JOBS.discard(jobname)
     return out_cms
 
@@ -2796,14 +2808,18 @@ def _md_msj(time_ps: float, interval_ps: float) -> str:
     return Path(relax).read_text() + _md_production(time_ps=time_ps, interval_ps=interval_ps)
 
 
-def _unpack_md_production(wd: Path, jobname: str) -> None:
-    """Repoint the cms to the production trajectory the job dir already holds (07/06 read them flat).
+def _unpack_md_production(wd: Path, jobname: str, expected_time_ps: "float | None" = None) -> None:
+    """Put the production trajectory at the job-dir root as {job}_trj + {job}.ene and repoint the cms.
 
-    multisim leaves the PRODUCTION stage (7) at the job-dir root as {job}_trj + {job}.ene and archives
-    ONLY the earlier stages as {job}_N-out.tgz — the production stage is never archived. So an archived
-    tgz is always an equilibration stage (the last is the restrained 24 ps NPT relax); installing one as
-    production would silently score an unequilibrated trajectory. Require the real {job}_trj at the root
-    and repoint the cms to it; if it is absent the MD did not finish, so raise rather than fall back.
+    multisim leaves the production stage (the final `simulate`) in one of two shapes, both the same
+    finished run: loose at the job-dir root as {job}_trj + {job}.ene, or — after its own 'Cleaning up
+    files' pass — packed into the highest-numbered stage archive {job}_N-out.tgz. The earlier archives
+    are equilibration stages (the last a restrained 24 ps NPT relax); installing one of those as
+    production would silently score an unequilibrated trajectory. A packed archive is therefore accepted
+    only when its own cfg reports last_time == the requested production length, which no relax stage
+    does. 07 and thermal_mmgbsa read the trajectory flat, so the accepted stage is unpacked to the root
+    and its staged name flattened. If neither a loose trajectory nor a matching production archive is
+    present the MD did not finish, so raise rather than fall back to an equilibration stage.
     """
     cms = wd / f"{jobname}-out.cms"
 
@@ -2822,14 +2838,50 @@ def _unpack_md_production(wd: Path, jobname: str) -> None:
         except Exception:
             pass
 
+    # Loose production trajectory already at the root — the common case, and the resume no-op.
     if (wd / f"{jobname}_trj").exists():
         _repoint_cms()
         return
+
+    """Production packed into a stage archive. Take the highest-numbered stage (production is the last
+    simulate), but install it only after its cfg confirms it is the full-length run — an equilibration
+    tgz can never stand in for production. The cfg sits ahead of the frames in the stream, so reading it
+    with --occurrence=1 stops tar early rather than decompressing the whole multi-GB archive."""
+    def _stage_num(p: Path) -> int:
+        return int(re.search(rf"{re.escape(jobname)}_(\d+)-out\.tgz$", p.name).group(1))
+    for tgz in sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_stage_num, reverse=True):
+        stage = f"{jobname}_{_stage_num(tgz)}"
+        try:
+            cfg = subprocess.run(["tar", "xzf", str(tgz), f"{stage}/{stage}-out.cfg",
+                                  "--occurrence=1", "-O"], capture_output=True, timeout=300).stdout
+        except (subprocess.SubprocessError, OSError):
+            continue
+        m = re.search(rb"last_time\s*=\s*([0-9.]+)", cfg)
+        if not m:
+            continue
+        if expected_time_ps is not None and abs(float(m.group(1)) - expected_time_ps) > 1.0:
+            continue                                     # an equilibration stage, not production
+        # --strip-components=1 drops the {stage}/ parent so the trajectory lands directly in the job dir
+        # rather than a nested {stage}/ subdir; only the {stage}_N basename is then flattened to {job}.
+        # check=True: tar returns 0 only after the gzip CRC and every requested member extract cleanly,
+        # so a truncated or corrupt archive raises here and the production tgz below is never removed.
+        subprocess.run(["tar", "xzf", str(tgz), "-C", str(wd), "--strip-components=1",
+                        f"{stage}/{stage}_trj", f"{stage}/{stage}.ene"], check=True)
+        (wd / f"{stage}_trj").rename(wd / f"{jobname}_trj")
+        ene = wd / f"{stage}.ene"
+        if ene.exists():
+            ene.rename(wd / f"{jobname}.ene")
+        # Leave the job dir as Maestro does: production loose at the root, the archive gone. The small
+        # equilibration archives ({job}_1..6-out.tgz) stay — Maestro keeps those too. Removed only after
+        # the verified extract above, so the loose trajectory is never deleted without its replacement.
+        tgz.unlink(missing_ok=True)
+        _repoint_cms()
+        return
+
     raise RuntimeError(
-        f"{jobname}: production trajectory {jobname}_trj is not at the job-dir root. multisim leaves "
-        f"stage-7 (production) _trj/.ene there and archives only the earlier equilibration stages, so "
-        f"there is no production tgz to fall back to — an archived stage is a 24 ps NPT relax, not "
-        f"production. The MD did not finish; re-run it for this rank.")
+        f"{jobname}: no production trajectory — neither a loose {jobname}_trj at the job-dir root nor a "
+        f"stage archive whose last_time matches the requested production length ({expected_time_ps} ps). "
+        f"The MD did not finish; re-run it for this rank.")
 
 
 def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int) -> Path:
@@ -2846,7 +2898,7 @@ def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int
                         "-SUBHOST", "localhost", "-maxjob", "1", "-m", str(msj), "-o", str(out_cms),
                         str(system_cms), "-WAIT"], cwd=str(wd), check=True)
     _LAUNCHED_JOBS.discard(jobname)
-    _unpack_md_production(wd, jobname)                    # {job}_trj/ + {job}.ene at the job-dir root
+    _unpack_md_production(wd, jobname, time_ps)           # {job}_trj/ + {job}.ene at the job-dir root
     return out_cms
 
 
@@ -3467,6 +3519,7 @@ def _phase_build(entry: dict, dirs: dict) -> None:
         try:
             q = reapply_esp_to_cms(setup_cms, entry["esp"])
             _ok(f"[build] R_{rank} ✔ already built — ESP re-verified (sum {q:+.3f} e)")
+            _echo("")                                 # one rank's build block per paragraph
             return
         except RuntimeError as _e:
             _bad = setup_cms.with_suffix(setup_cms.suffix + f".corrupt.{time.strftime('%Y%m%d_%H%M%S')}")
@@ -3479,6 +3532,7 @@ def _phase_build(entry: dict, dirs: dict) -> None:
     entry["setup_cms"] = setup_cms
     q = reapply_esp_to_cms(setup_cms, entry["esp"])
     _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
+    _echo("")                                         # one rank's build block per paragraph
 
 
 def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
@@ -3490,8 +3544,9 @@ def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
     if md_cms.exists():
         # Repoint the cms to {job}_trj on resume too: a kill between multisim's -out.cms and the unpack
         # would otherwise leave the cms pointing at the staged {job}_N_trj and MM-GBSA aborts with
-        # "No trajectory found associated with CMS". Idempotent (returns cheaply when already flat).
-        _unpack_md_production(md_dir, f"desmond_md_job_R_{rank}")
+        # "No trajectory found associated with CMS". Idempotent (returns cheaply when already flat), and
+        # unpacks a production stage multisim archived rather than left loose.
+        _unpack_md_production(md_dir, f"desmond_md_job_R_{rank}", a.md_ns * 1000.0)
         _ok(f"[md] R_{rank} ✔ already done ({md_cms.name}) — skipping"); return md_dir
     if not setup_cms.exists():
         raise RuntimeError(f"no built system {setup_cms.name} — build first")
