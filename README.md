@@ -192,11 +192,11 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** — `mecha
 
 ```mermaid
 flowchart TD
-    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>starts the Schrödinger job server before 05<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~757 lines"}}:::orch
+    ORCH{{"🚀 &nbsp;<b>00_00 · Orchestrator (bash)</b><br/>runs 00_03 → 01 → 02 → … → 07 in sequence<br/>--resume-from any step · systemd-oomd guard<br/>starts the Schrödinger job server before 05<br/>Ctrl-C / kill cancels background Schrödinger jobs<br/>📄 ~780 lines"}}:::orch
 
     subgraph FOUNDATION["🧱 &nbsp; Foundation &amp; Configuration — imported / provisioned for every step &nbsp;"]
         direction LR
-        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>degrader tiers · geometry cutoffs<br/>scoring weights · ESP / MD / WaterMap params<br/>figure-style tokens · CSV name stems<br/>📄 ~3,202 lines"]:::found
+        CFG["📋 &nbsp;<b>00_01 · Project Config</b><br/>single source of truth<br/>degrader tiers · geometry cutoffs<br/>scoring weights · ESP / MD / WaterMap params<br/>figure-style tokens · CSV name stems<br/>📄 ~3,204 lines"]:::found
         UTL["🔧 &nbsp;<b>00_02 · Project Utils</b><br/>geometry · MIC vectors · Kabsch<br/>ConsoleColours · logging<br/>atomic CSV / JSON · latest_by_mtime<br/>figure-style SSOT (apply_figure_style)<br/>📄 ~1,137 lines"]:::found
         ENV["🛠 &nbsp;<b>00_03 · Environment</b><br/>conda + pip version pinning<br/>reproducibility spec (--export)<br/>📄 ~312 lines"]:::found
     end
@@ -216,8 +216,8 @@ flowchart TD
     end
 
     subgraph PHASE3["🔵 &nbsp; Phase 3 — Dynamics &amp; Quantum Mechanics &nbsp;"]
-        M6["🔴&nbsp;<b>06 · ESP Physics</b><br/>WaterMap → System Builder → MD<br/>SID → Prime MM-GBSA (per rank)<br/>→ 06_Analysis/<br/>📄 ~3,718 lines"]:::dyn
-        M7["🔴&nbsp;<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell · NAC-conditioned MM-GBSA<br/>QSite ΔE‡ + departing-F charge<br/>Defluor_Propensity + verdict<br/>📄 ~5,080 lines"]:::dyn
+        M6["🔴&nbsp;<b>06 · ESP Physics</b><br/>WaterMap → System Builder → MD<br/>SID → Prime MM-GBSA (per rank)<br/>→ 06_Analysis/<br/>📄 ~3,831 lines"]:::dyn
+        M7["🔴&nbsp;<b>07 · MD + QM/MM Defluorination</b><br/>NAC dwell · NAC-conditioned MM-GBSA<br/>QSite ΔE‡ + departing-F charge<br/>Defluor_Propensity + verdict<br/>📄 ~5,084 lines"]:::dyn
         M6 --> M7
     end
 

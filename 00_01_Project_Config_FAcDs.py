@@ -3050,7 +3050,8 @@ class CFG:
     Set MMGBSA_SHARD_FRAMES = 0 to fall back to one plain serial thermal_mmgbsa run.
     """
     MMGBSA_SHARD_FRAMES: int = 2000        # trajectory frames per shard (0 = no sharding)
-    MMGBSA_SHARD_PRIME_NJOBS: int = 6      # Prime subjobs inside one shard
+    MMGBSA_SHARD_PRIME_NJOBS: int = 0      # Prime subjobs per shard; 0 = auto-pick with concurrency from CPU+RAM (see _shard_plan)
+    MMGBSA_PRIME_EFFECTIVE_CORES: int = 3  # live Prime workers thermal_mmgbsa actually runs per shard (measured ~2-3, not the requested -NJOBS); the auto planner counts busy cores against this, not the request
     MMGBSA_SHARD_CONCURRENCY: int = 0      # shards in flight (0 = auto: GLOBAL_MAX_WORKERS // MMGBSA_SHARD_PRIME_NJOBS, then clamped to free RAM)
     """
     Memory budget for the shard plan: a shard costs one reader plus its MMGBSA_SHARD_PRIME_NJOBS
@@ -3064,6 +3065,7 @@ class CFG:
     MMGBSA_READER_RAM_PER_1K_FRAMES_GB: float = 0.36  # reader RSS growth per 1000 frames read
     MMGBSA_PRIME_RAM_GB: float = 1.8                # measured peak RSS of ONE Prime subjob
     MMGBSA_RAM_HEADROOM_FRAC: float = 0.85          # fraction of free RAM the run may occupy
+    MMGBSA_RAM_SWAP_FRAC: float = 0.0               # fraction of FREE SWAP added to the RAM budget; 0 = physical only (Prime on swap thrashes to disk and risks OOM kills — raise only deliberately)
     MMGBSA_SHARD_SUBDIR: str = "_MMGBSA_Shards"   # per-shard logs and Prime outputs live here, out of the job folder's glob path
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.

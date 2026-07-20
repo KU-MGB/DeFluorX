@@ -2879,8 +2879,12 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
             _pct  = min(100, int(100 * _done / _total))
             _fill = _pct // 5
             _bar  = "#" * _fill + "-" * (20 - _fill)
+            # Linear ETA from the scan points already converged; shown only once at least one point is
+            # done and the scan is not finished, so an idle start or a completed scan prints no estimate.
+            _eta  = (f" | ETA ~{_elapsed * (_total - _done) / _done / 60:.1f} min"
+                     if 0 < _done < _total else "")
             print(f"  [Rank {rank}] QSite {jobname}: [{_bar}] {_done}/{_total} pts "
-                  f"({_pct}%) | {_elapsed / 60:.1f} min", flush=True)
+                  f"({_pct}%) | {_elapsed / 60:.1f} min{_eta}", flush=True)
         else:
             print(f"  [Rank {rank}] QSite {jobname}: running… {_elapsed / 60:.1f} min elapsed",
                   flush=True)

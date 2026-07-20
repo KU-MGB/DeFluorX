@@ -190,9 +190,14 @@ _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length
 EXIT_WARN = 3   # step completed but a complementary part (MM-GBSA) was deferred/failed; the pipeline runner renders WARN and continues (0=PASS, 1=hard error, 3=warn)
 
 # Schrödinger jobs run under jobserverd, independent of this process — so on Ctrl-C / kill they would
-# outlive the script. Every WaterMap/build/MD job name is registered here BEFORE submit and removed only
-# on clean completion; a signal/atexit handler cancels whatever is still registered (see _install_job_cleanup).
+# outlive the script. Every WaterMap/build/MD job name (and each MM-GBSA shard's Prime subjob) is registered
+# here BEFORE submit and removed only on clean completion; a signal/atexit handler cancels whatever is still
+# registered (see _install_job_cleanup).
 _LAUNCHED_JOBS: "set[str]" = set()
+# Local Schrödinger subprocesses that do NOT go through the job server — SID (analyze_simulation/event_analysis,
+# run -LOCAL) and the MM-GBSA thermal_mmgbsa drivers. These reparent to init on a kill and keep running, so the
+# same handler terminates each one's process group. Launched via _run_tracked, which registers and removes them.
+_LAUNCHED_PROCS: "set[subprocess.Popen]" = set()
 _CLEANUP_DONE = False
 
 # Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
@@ -283,6 +288,14 @@ def _fmt_dur(sec: float) -> str:
     if m:
         return f"{m}m{s:02d}s"
     return f"{s}s"
+
+
+def _eta_str(done: float, total: float, elapsed_sec: float) -> str:
+    """A ' · ETA <dur>' suffix from a linear extrapolation of the current rate — empty until there is
+    enough progress to extrapolate (done in (0, total)), so a just-started or finished step shows none."""
+    if done <= 0 or done >= total or elapsed_sec <= 0:
+        return ""
+    return f" · ETA {_fmt_dur(elapsed_sec * (total - done) / done)}"
 
 
 @contextmanager
@@ -652,7 +665,8 @@ class Heartbeat:
 
     def _run(self):
         while not self._stop.wait(self.interval):
-            elapsed_min = int((time.time() - self._start) // 60)
+            elapsed_sec = time.time() - self._start
+            elapsed_min = int(elapsed_sec // 60)
             try:
                 text = self.log_file.read_text(errors="ignore")
             except Exception:
@@ -677,7 +691,8 @@ class Heartbeat:
                     _n, _tot = _struct
                     _pct = min(100, _n * 100 // max(_tot, 1))
                     self._progress(f"{self.label}: PHASE 2/2 Prime minimised structure {_n:,} of "
-                                   f"{_tot:,} ({_pct}%, {elapsed_min}m elapsed)")
+                                   f"{_tot:,} ({_pct}%, {elapsed_min}m elapsed"
+                                   f"{_eta_str(_n, _tot, elapsed_sec)})")
                 else:
                     prog = self._prime_progress()
                     if prog is not None:
@@ -695,7 +710,8 @@ class Heartbeat:
             frame = self._latest_frame(text)
             pct = min(100, frame * 100 // self.total)
             self._progress(f"{self.label}: {self.read_phase}read frame {frame:,} of "
-                           f"{self.total:,} ({pct}%, {elapsed_min}m elapsed)")
+                           f"{self.total:,} ({pct}%, {elapsed_min}m elapsed"
+                           f"{_eta_str(frame, self.total, elapsed_sec)})")
 
     def __enter__(self):
         self._start = time.time()
@@ -731,6 +747,8 @@ class ShardHeartbeat:
         self._thread: threading.Thread | None = None
         self._start = 0.0
         self._line_open = False
+        self._scored0 = 0        # shards already scored when this run began; the ETA rate ignores them
+                                 # so a resume does not credit the previous run's shards to this elapsed
 
     def _counts(self) -> "tuple[int, int]":
         """(frames read across all shards, shards currently in Prime minimisation)."""
@@ -747,20 +765,31 @@ class ShardHeartbeat:
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval):
-            mins = int((time.time() - self._start) // 60)
+            elapsed_sec = time.time() - self._start
+            mins = int(elapsed_sec // 60)
             read, priming = self._counts()
             scored = self.done_fn()
             pct = min(100, read * 100 // self.total_frames)
             priming = max(0, priming - scored)
+            # ETA off shards completed since this run began, so a resume's pre-scored shards do not
+            # inflate the rate; the remaining count is still measured to the full shard total.
+            eta = _eta_str(scored - self._scored0, self.n_shards - self._scored0, elapsed_sec)
             sys.stdout.write(
                 f"\r    [PROGRESS] {self.label}: read {read:,} of {self.total_frames:,} frames "
                 f"({pct}%) · {scored}/{self.n_shards} shards scored · {priming} minimising in "
-                f"Prime · {mins}m elapsed\033[K")
+                f"Prime · {mins}m elapsed{eta}\033[K")
             sys.stdout.flush()
             self._line_open = True
 
     def __enter__(self):
         self._start = time.time()
+        # Baseline = shards already scored on disk from a previous run (resumed). done_fn() is 0 at this
+        # instant — the worker pool has not registered the resume-skips yet — so reading it here would
+        # credit those instant resumes to this run's clock and make the ETA far too short. Count the CSVs.
+        try:
+            self._scored0 = sum(1 for _ in self.shard_dir.glob("*_shard*-prime-out.csv"))
+        except Exception:
+            self._scored0 = 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         return self
@@ -1029,7 +1058,7 @@ def run_event_analysis(job_dir: Path, job_name: str, cms_file: Path, in_eaf: Pat
     _echo("  Running event_analysis.py to generate SID-in.eaf...")
     log = job_dir / f"{job_name}_event_analysis.log"
     with open(log, "w") as fh:
-        subprocess.run(
+        _run_tracked(
             [SCHROD_RUN, "event_analysis.py", "analyze", str(cms_file),
              "-out", f"{job_name}_SID"],
             cwd=str(job_dir), stdout=fh, stderr=subprocess.STDOUT, check=True,
@@ -1048,7 +1077,7 @@ def run_analyze_simulation(job_dir: Path, job_name: str, cms_file: Path,
     log = job_dir / f"{job_name}_analyze_simulation.log"
     with Heartbeat(log, label, total_frames):
         with open(log, "w") as fh:
-            subprocess.run(
+            _run_tracked(
                 [SCHROD_RUN, "analyze_simulation.py", "-NOJOBID", "-LOCAL",
                  str(cms_file), str(trj_dir),
                  f"{job_name}_SID-out.eaf", f"{job_name}_SID-in.eaf"],
@@ -1189,45 +1218,81 @@ def _avail_ram_gb() -> float:
     return 0.0
 
 
+def _free_swap_gb() -> float:
+    """Free swap (SwapFree). Only added to the MM-GBSA budget when MMGBSA_RAM_SWAP_FRAC > 0 —
+    Prime whose working set lands on a swapfile runs at disk speed and can trip the OOM killer."""
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("SwapFree:"):
+                return int(line.split()[1]) / 2**20
+    except Exception:
+        pass
+    return 0.0
+
+
 def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, int]], int, int]":
     """Split [0, total) into contiguous frame shards and decide how many run at once.
 
-    Returns (ranges, concurrency, prime_njobs_per_shard). Concurrency × prime_njobs is
-    kept at ncpu so no core sits idle, then clamped so the concurrent shard readers fit
-    in free RAM (a reader's RSS grows with the frames it has read).
+    Returns (ranges, concurrency, prime_njobs_per_shard). The pair is chosen to keep the most
+    cores busy on this machine's CPU and free RAM, then a final pass guarantees reader + Prime
+    fit the RAM budget. With MMGBSA_SHARD_PRIME_NJOBS = 0 the njobs is auto-picked too; a positive
+    value pins it and only concurrency is derived.
     """
     size = max(1, int(getattr(CFG, "MMGBSA_SHARD_FRAMES", 2000)))
     ranges = [(a, min(a + size, total)) for a in range(0, total, size)]
 
-    njobs = max(1, int(getattr(CFG, "MMGBSA_SHARD_PRIME_NJOBS", 6)))
-    conc = int(getattr(CFG, "MMGBSA_SHARD_CONCURRENCY", 0) or 0) or max(1, ncpu // njobs)
-    conc = min(conc, len(ranges))
-
     """
-    RAM budget. A shard costs its reader PLUS the njobs Prime subjobs it spawns, and Prime is
-    the expensive half (~1.8 GB per subjob × 30 = ~54 GB — enough to exhaust a 60 GB box on its
-    own). Budgeting only the readers is how a 30-subjob run ends up with 2 GB of headroom and
-    starts swapping. Shrink concurrency until reader + Prime fit inside the free RAM, keeping
-    cores busy only to the extent memory allows: an OOM-killed subjob costs a whole shard.
-    """
-    _ram = _avail_ram_gb() * float(getattr(CFG, "MMGBSA_RAM_HEADROOM_FRAC", 0.85))
-    """
-    A reader's RSS is a fixed base plus growth with the frames it actually reads — and a stride
-    means it reads only size/step of them. Budgeting the every-frame figure would reserve memory
-    that Prime could otherwise use.
+    Per-shard cost feeds both the RAM fit and the core count. A shard is one frame reader (a fixed
+    RSS base plus growth with the strided frames it reads) plus its Prime subjobs — the reader is
+    one core, the Prime workers the rest. The budget is physical RAM the kernel hands out without
+    swapping (MemAvailable), optionally plus a slice of free swap: Prime whose working set spills to
+    a swapfile runs at disk speed and can trip the OOM killer, so swap is opt-in (MMGBSA_RAM_SWAP_FRAC,
+    default 0). thermal_mmgbsa does not saturate a large -NJOBS — it runs about
+    MMGBSA_PRIME_EFFECTIVE_CORES live workers per shard — so a shard's core benefit is scored against
+    that effective figure, not the request, and njobs above it would only reserve RAM for idle cores.
     """
     _read_n = max(1, size // max(1, step))
     _reader = (float(getattr(CFG, "MMGBSA_READER_RAM_BASE_GB", 3.6))
                + float(getattr(CFG, "MMGBSA_READER_RAM_PER_1K_FRAMES_GB", 0.36)) * _read_n / 1000.0)
     _prime = max(0.2, float(getattr(CFG, "MMGBSA_PRIME_RAM_GB", 1.8)))
+    _eff = max(1, int(getattr(CFG, "MMGBSA_PRIME_EFFECTIVE_CORES", 3)))
+    _ram = (_avail_ram_gb()
+            + max(0.0, float(getattr(CFG, "MMGBSA_RAM_SWAP_FRAC", 0.0))) * _free_swap_gb()
+            ) * float(getattr(CFG, "MMGBSA_RAM_HEADROOM_FRAC", 0.85))
+
+    def _fit_conc(nj: int) -> int:
+        """Concurrent shards this njobs allows — the tighter of the CPU and RAM limits."""
+        c_cpu = max(1, ncpu // (1 + nj))                        # one reader core + nj Prime cores
+        c_ram = int(_ram // (_reader + nj * _prime)) if _ram > 0 else c_cpu
+        return max(1, min(c_cpu, max(1, c_ram), len(ranges)))
+
+    njobs_cfg = int(getattr(CFG, "MMGBSA_SHARD_PRIME_NJOBS", 0) or 0)
+    conc_cfg = int(getattr(CFG, "MMGBSA_SHARD_CONCURRENCY", 0) or 0)
+    if njobs_cfg > 0:
+        njobs = njobs_cfg
+        conc = conc_cfg or _fit_conc(njobs)
+    else:
+        """
+        Auto. Search njobs and take the (njobs, concurrency) pair that keeps the most cores busy —
+        more Prime subjobs per shard means fewer shards fit, so the two trade off. Busy cores are
+        scored against the effective Prime figure, and ties break toward more concurrent shards,
+        since overlapping readers are what hide the serial per-shard read phase.
+        """
+        best = None
+        for nj in range(1, min(ncpu, 8) + 1):
+            c = _fit_conc(nj)
+            key = (c * (1 + min(nj, _eff)), c)
+            if best is None or key > best[0]:
+                best = (key, c, nj)
+        _, conc, njobs = best
+    conc = max(1, min(conc, len(ranges)))
+
+    # Final RAM safety: trim concurrency, then njobs, until reader + Prime fit the budget.
     if _ram > 0:
         while conc > 1 and conc * (_reader + njobs * _prime) > _ram:
             conc -= 1
-        # A single shard that still cannot fit trims its own Prime subjobs instead.
         while njobs > 1 and conc * (_reader + njobs * _prime) > _ram:
             njobs -= 1
-    else:
-        njobs = max(njobs, ncpu // max(1, conc))   # no RAM reading: fall back to filling cores
     return ranges, conc, njobs
 
 
@@ -1413,15 +1478,21 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
         if step > 0:
             cmd += ["-step_size", str(step)]
         slog = shard_dir / f"{sname}.log"
+        # thermal_mmgbsa drives a Prime subjob named "{sname}-prime" on the job server; register it so a
+        # kill cancels it (like MD), and run the driver itself through _run_tracked so its process group
+        # is terminated too. Both are removed in the finally, so a completed shard leaves nothing registered.
+        _prime_job = f"{sname}-prime"
+        _LAUNCHED_JOBS.add(_prime_job)
         try:
             with open(slog, "w") as fh:
-                rc = subprocess.Popen(cmd, cwd=str(shard_dir), stdout=fh,
-                                      stderr=subprocess.STDOUT).wait()
+                rc = _run_tracked(cmd, cwd=str(shard_dir), stdout=fh, stderr=subprocess.STDOUT)
         except Exception as e:
             _echo(f"\n  [Rank {rank}] shard {i:03d} (frames {a:,}–{b:,}) failed to launch: {e}")
             with _lock:
                 failed.append(i)
             return
+        finally:
+            _LAUNCHED_JOBS.discard(_prime_job)
         if rc != 0 or not _csv_nonempty(csv):
             _echo(f"\n  [Rank {rank}] shard {i:03d} (frames {a:,}–{b:,}) failed rc={rc} — see {slog.name}.")
             _why = _diagnose_shard_failure(slog)
@@ -2529,21 +2600,63 @@ def _cancel_launched_jobs() -> None:
         pass
 
 
+def _run_tracked(cmd: list, *, cwd=None, stdout=None, stderr=None, check: bool = False):
+    """subprocess.run for a LOCAL Schrödinger step (SID; the MM-GBSA thermal_mmgbsa driver), but launched
+    in its own session and registered in _LAUNCHED_PROCS so a signal/atexit handler can terminate its whole
+    process group. Same job-server jobs die via _cancel_launched_jobs; these local ones die here — together
+    they are the MM-GBSA/SID equivalent of the WaterMap/MD kill-cleanup. Blocks like subprocess.run; with
+    check=True a non-zero return raises CalledProcessError. start_new_session so one os.killpg reaches the
+    tool AND every worker it forked, and so the terminal's own Ctrl-C does not race the handler."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=stdout, stderr=stderr, start_new_session=True)
+    _LAUNCHED_PROCS.add(proc)
+    try:
+        rc = proc.wait()
+    finally:
+        _LAUNCHED_PROCS.discard(proc)
+    if check and rc != 0:
+        raise subprocess.CalledProcessError(rc, cmd)
+    return rc
+
+
+def _kill_launched_procs() -> None:
+    """Terminate every still-registered LOCAL subprocess (SID, MM-GBSA drivers) and its process group, so a
+    killed script leaves none running detached under init. Job-server Prime subjobs are cancelled separately
+    by _cancel_launched_jobs. SIGTERM the groups, a short grace, then SIGKILL survivors."""
+    import signal
+    procs = [p for p in list(_LAUNCHED_PROCS) if p.poll() is None]
+    for _sig in (signal.SIGTERM, signal.SIGKILL):
+        for p in procs:
+            if p.poll() is not None:
+                continue
+            try:
+                os.killpg(os.getpgid(p.pid), _sig)
+            except Exception:
+                try:
+                    p.send_signal(_sig)
+                except Exception:
+                    pass
+        if _sig is signal.SIGTERM:
+            time.sleep(2)
+
+
 _OOMD_GUARD: "OomdGuard | None" = None   # set in main once primed; restored on signal/atexit
 
 
 def _install_job_cleanup() -> None:
-    """Cancel the run's job-server jobs on normal exit AND on SIGINT/SIGTERM/SIGHUP, so a killed script
-    never leaves WaterMap/MD jobs running under jobserverd. The same handlers restore systemd-oomd:
-    the signal path re-raises with SIG_DFL and never unwinds the guard's `with`/atexit, so without this
-    a Ctrl-C would leave oomd masked and stopped on the host permanently."""
+    """Cancel the run's job-server jobs AND kill its local subprocesses on normal exit and on
+    SIGINT/SIGTERM/SIGHUP, so a killed script never leaves WaterMap/MD/MM-GBSA jobs under jobserverd or
+    SID/thermal_mmgbsa drivers detached under init. The same handlers restore systemd-oomd: the signal path
+    re-raises with SIG_DFL and never unwinds the guard's `with`/atexit, so without this a Ctrl-C would leave
+    oomd masked and stopped on the host permanently."""
     import atexit
     import signal
+    atexit.register(_kill_launched_procs)
     atexit.register(_cancel_launched_jobs)
     atexit.register(lambda: _OOMD_GUARD and _OOMD_GUARD.restore())
 
     def _handler(signum, _frame):
-        _cancel_launched_jobs()
+        _cancel_launched_jobs()                 # cancel job-server Prime/MD/WaterMap jobs
+        _kill_launched_procs()                  # kill local SID / thermal_mmgbsa driver process groups
         if _OOMD_GUARD is not None:
             _OOMD_GUARD.restore()               # unmask systemd-oomd before the process dies on the signal
         signal.signal(signum, signal.SIG_DFL)   # restore default and re-raise for the correct exit status
