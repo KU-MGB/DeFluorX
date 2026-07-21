@@ -2927,7 +2927,16 @@ class CFG:
     MMGBSA_LIGAND_ASL: str  = "res.ptype LIG"   # ASL passed to thermal_mmgbsa via its -lig_asl flag so Prime scores the correct molecule (matches Step 07's --lig LIG convention). A heavily fluorinated PFAS can be misassigned as solvent by auto-detection; empty string "" reverts to auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
-    MMGBSA_OUTPUT_SUBDIR: str = "Prime_MMGBSA"  # figures folder under <run>/6_Physics_Validation/05_MD_Simulations/ (path derived, not hardcoded)
+    MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/05_MD_Simulations/ (per-rank subfolders Prime-MMGBSA_R{N}/ + combined at root)
+
+    # Defluorination geometry — native per-rank trajectory analysis in Step 06 (Section 8b)
+    DEFLUOR_RUN: bool         = True             # run the per-rank SN2-defluorination geometry analysis
+    DEFLUOR_STRIDE: int       = 100             # analyse every Nth trajectory frame (100 → ~1 per 100 ps at 1 µs)
+    DEFLUOR_OUTPUT_SUBDIR: str = "Defluorination"  # per-rank subfolders Defluorination_R{N}/ + combined at root
+    DEFLUOR_NAC_DIST_A: float  = 3.5            # near-attack Od···C(alpha) distance cutoff (Å)
+    DEFLUOR_NAC_ANGLE_DEG: float = 150.0        # in-line Od–C(alpha)–F attack angle cutoff (deg)
+    DEFLUOR_ENGAGE_A: float    = 4.0            # residue counted as engaged with the ligand within this distance (Å)
+    DEFLUOR_POCKET_RADIUS_A: float = 8.0        # frame-0 pocket = protein Cα within this radius of the ligand (COM reference)
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Failed Prime minimisations. A small PFAS ligand cannot bind at −1000 kcal/mol; frames that

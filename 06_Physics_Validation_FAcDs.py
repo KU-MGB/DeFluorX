@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 06  |  ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA
+FAcDs Pipeline  |  Step 06  |  ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination
 ===============================================================================
 Builds and runs the full explicit-solvent physics for every MD-selected complex,
 using the Jaguar ESP partial charges on the ligand so the reactive α-carbon
@@ -19,13 +19,17 @@ Per run, in phases (all complexes at each phase before the next):
                 into the built .cms force field and HARD-VERIFY (→ 04_System_Builder).
   4. MD       — Desmond MD (relax + NPT production) → 05_MD_Simulations. Strictly sequential
                 per rank: MD (GPU), then its SID (event_analysis + analyze_simulation →
-                *_SID-out.eaf), then Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind), each
+                *_SID-out.eaf), then Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind), then the
+                defluorination geometry analysis (SN2 attack pose + NAC + fluoride cradle +
+                carboxylate clamp + MM-GBSA drivers, read natively from the cms + _trj), each
                 blocking to completion before the next rank starts — nothing overlaps, so no two
-                Prime batches share the scratch disk. A final pass draws the per-job + combined
-                MM-GBSA figures.
+                Prime batches share the scratch disk. A final pass draws the combined MM-GBSA and
+                defluorination cross-rank figures. All figures land in 06_Analysis.
 
 MM-GBSA (end-state binding ΔG over the ensemble) is complementary to the QSite QM/MM
-reaction barrier (Step 07): it scores BINDING, not C–F cleavage.
+reaction barrier (Step 07): it scores BINDING, not C–F cleavage. The defluorination step adds
+the reactive geometry (does the substrate reach the in-line attack pose) alongside binding —
+both are necessary for turnover; Step 07 delivers the QM/MM verdict.
 
 Uses the central CFG / ProjectUtils modules. The ESP/build/WaterMap/MD stage bodies
 import `schrodinger` in-process, so the script runs under the Schrödinger Python; it
@@ -43,7 +47,7 @@ Usage:
   --md-frames N     MD trajectory frames               [default 100000]
   --wm-ns   N       WaterMap production length (ns)     [default 5]
   --lig-dist N      WaterMap active-site radius (Å)     [default 10]
-  --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (SID+MM-GBSA run after each MD)
+  --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (SID + MM-GBSA + Defluorination run after each MD)
   --out     DIR     output root                         [default <run>/6_Physics_Validation]
   --pipeline-mode   called from 00_00_run_pipeline_FAcDs.sh (delegates oomd masking to the runner)
 
@@ -52,7 +56,7 @@ Dependency Map
 -------------------------------------------------------------------------------
   Script        : 06_Physics_Validation_FAcDs.py
   Role          : Step 06 — build + run the ESP-charged explicit-solvent physics
-                  (WaterMap, System Builder, MD) and post-process it (SID + MM-GBSA).
+                  (WaterMap, System Builder, MD) and post-process it (SID + MM-GBSA + Defluorination).
   Imports from  : 00_01_Project_Config_FAcDs.py  (CFG), 00_02_Project_Utils_FAcDs.py (utils)
   Reads         : <Run>/5_TopN_and_Preparation/3_Comparative_Analysis/
                        06_<tier>_<count>hits_Molecular_Handover_Files/R{N}_<stem>.pdb  (N=Scientific_Rank, SSOT)
@@ -64,7 +68,10 @@ Dependency Map
                   <out>/04_System_Builder/desmond_setup_R_N/desmond_setup_R_N-out.cms
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
-                  <out>/05_MD_Simulations/Prime_MMGBSA/{00_MMGBSA_Summary.csv, combined + per-rank PNGs}
+                  <out>/06_Analysis/{Physics_Build_Solvation_QC.png, 00_MMGBSA_Summary.csv,
+                       01_MMGBSA_Combined_AllRanks.png, 00_Defluorination_Combined_AllRanks.png,
+                       Prime-MMGBSA/Prime-MMGBSA_R{N}/Rank_{N}_MMGBSA_Profile_*.png,
+                       Defluorination/Defluorination_R{N}/01_SN2_Attack_Geometry.png … 08_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
@@ -1191,6 +1198,46 @@ def _mmgbsa_csv(job_dir: Path, job_name: str):
     return sorted(hits, key=lambda p: (-p.stat().st_mtime, p.name))[0] if hits else None
 
 
+def _mmgbsa_expected_rows(job_dir: Path, job_name: str) -> int:
+    """Structures Prime should have scored = trajectory frames folded by the stride."""
+    total = traj_frame_count(job_dir / f"{job_name}_trj") or _DEFAULT_FRAME_TOTAL
+    step = max(1, int(getattr(CFG, "MMGBSA_STEP_SIZE", 0) or 1))
+    return total if step <= 1 else -(-total // step)
+
+
+def _mmgbsa_complete(csv: Path, job_dir: Path, job_name: str) -> bool:
+    """A merged MM-GBSA CSV is 100% complete when its row count covers every
+    strided structure of the trajectory. A short CSV (older/partial) is not."""
+    try:
+        return len(pd.read_csv(csv)) >= _mmgbsa_expected_rows(job_dir, job_name)
+    except Exception:
+        return False
+
+
+def _cleanup_mmgbsa_shards(job_dir: Path, job_name: str, rank: str) -> None:
+    """Remove the per-job _MMGBSA_Shards scratch once the merged CSV is settled.
+
+    The merged <job>_mmgbsa-prime-out.csv (beside the job folder) holds every ΔG and is
+    the only MM-GBSA product Steps 06/07 read. The shard directory (per-shard maegz
+    complexes, logs, symlinks) is intermediate — several GB per rank — and nothing
+    downstream consumes it. Called only after a verified-complete merge, at the very end
+    of a rank's MM-GBSA. Symlinks inside are unlinked, not followed, so the real cms/_trj
+    are untouched."""
+    shard_dir = job_dir / getattr(CFG, "MMGBSA_SHARD_SUBDIR", "_MMGBSA_Shards")
+    if not shard_dir.is_dir():
+        return
+    freed = 0
+    for p in shard_dir.rglob("*"):
+        try:
+            if p.is_file() and not p.is_symlink():
+                freed += p.stat().st_size
+        except OSError:
+            pass
+    shutil.rmtree(shard_dir, ignore_errors=True)
+    _echo(f"    ✔ Cleanup      : removed {shard_dir.name}/ "
+          f"({freed / 2**30:.1f} GB of shard scratch) — merged CSV kept.")
+
+
 def _diagnose_mmgbsa_failure(job_dir: Path, job_name: str) -> "str | None":
     """Best-effort human-readable cause when MM-GBSA exits non-zero, read from the
     thermal_mmgbsa log and any Prime subjob logs. Turns a bare 'rc=1' into an
@@ -1555,6 +1602,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     _stamped = "frame-stamped" if MMGBSA_FRAME_COL in _all.columns else "NOT frame-stamped"
     _echo(f"    ✔ Scored       : all {len(ranges)} shards → {merged.name} "
           f"({len(_all):,} rows, {_stamped})")
+    _cleanup_mmgbsa_shards(job_dir, job_name, rank)   # merge settled → drop the shard scratch
     return merged
 
 
@@ -1593,16 +1641,21 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
         _echo(f"    ✘ Skipped      : no {cms_file.name} — the MD simulation has not finished.")
         return None
     existing = _mmgbsa_csv(job_dir, job_name)
-    if existing is not None:
+    if existing is not None and _mmgbsa_complete(existing, job_dir, job_name):
         """
         A CSV written before frame stamping existed carries no `Frame` column, and Step 07 must not
         infer the frame from the row position (row i is frame i·step under a stride). Stamp it in
         place — the frame list is reconstructible from the shard plan — so an already-scored run is
-        brought up to the current format without re-scoring anything.
+        brought up to the current format without re-scoring anything. A 100%-complete CSV here means
+        MM-GBSA never re-runs; any leftover shard scratch is tidied away.
         """
         _retrofit_frame_stamps(existing, job_dir, job_name, rank)
         _echo(f"    ✔ Already done : reusing {existing.name} (delete it to force a re-score).")
+        _cleanup_mmgbsa_shards(job_dir, job_name, rank)
         return existing
+    if existing is not None:
+        _echo(f"    ⚠ Partial CSV  : {existing.name} has fewer rows than the trajectory expects "
+              f"— re-scoring to complete it.")
 
     """
     Parallelise frame subjobs across cores: total cores − reserve (same cap as
@@ -2403,8 +2456,8 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     _echo(_SEP)
     # MM-GBSA data (the summary CSV) stays in its own compute subdir; the FIGURES go to the single
     # 06_Analysis folder alongside every other Step-06 figure. md_dir.parent is 6_Physics_Validation.
-    out_dir = md_dir / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
-    fig_dir = _analysis_dir(md_dir.parent)
+    fig_dir = _analysis_dir(md_dir.parent)                                  # 06_Analysis (all Step-06 figures)
+    out_dir = fig_dir / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")  # per-rank profiles group here
     tiers = _lookup_tiers(run_root)
     ligands = _lookup_ligands(run_root)
     nspf: dict = {}   # rank → ns per trajectory frame, for the time-resolved panel
@@ -2464,7 +2517,9 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
             _echo(f"    Interpretation : GB implicit solvent overstabilises anionic PFAS — compare "
                   f"ΔG_bind BETWEEN ranks, never as an absolute affinity.")
         try:
-            plot_mmgbsa_individual(fig_dir, job_name, rank, dg, ns_per_frame=_nspf)
+            _rank_fig = out_dir / f"{out_dir.name}_R{rank}"      # Prime-MMGBSA/Prime-MMGBSA_R{N}/
+            _rank_fig.mkdir(parents=True, exist_ok=True)
+            plot_mmgbsa_individual(_rank_fig, job_name, rank, dg, ns_per_frame=_nspf)
         except Exception as e:
             _echo(f"    ✘ per-job plot failed ({e}) — skipped.")
         per_job.append((rank, dg))
@@ -2491,11 +2546,11 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
         if "Scientific_Rank" in _sdf.columns:
             _sdf = _sdf.sort_values("Scientific_Rank",
                                     key=lambda s: pd.to_numeric(s, errors="coerce"))
-        _csv_out = out_dir / CFG.FILE_MMGBSA_SUMMARY
+        _csv_out = fig_dir / CFG.FILE_MMGBSA_SUMMARY
         _utils_mod.atomic_write_csv(_sdf, _csv_out)
         _echo(f"  MM-GBSA summary table saved : {_csv_out.resolve()}")
     try:
-        plot_mmgbsa_combined(fig_dir, per_job, ligands, nspf)
+        plot_mmgbsa_combined(fig_dir, per_job, ligands, nspf)   # combined at 06_Analysis root
     except Exception as e:
         _echo(f"  [!] MM-GBSA combined plot failed ({e}) — skipped.")
     if _failed:
@@ -2503,6 +2558,455 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
               f"(see per-rank rc/cause above) — step will report WARN, not PASS.")
         return "warn"
     return "ok"
+
+
+# =============================================================================
+# SECTION 8b: DEFLUORINATION GEOMETRY (native per-rank trajectory analysis)
+# =============================================================================
+"""SN2-defluorination geometry per rank, read straight from the Desmond cms + _trj
+with Schrodinger's own traj API (no format conversion, no external MD toolkit). The
+eight catalytic residues come from the ranked CSV per rank (their numbering shifts
+between ranks); the ligand's alpha-carbon, leaving fluoride and carboxylate oxygens
+are auto-detected from its bond graph, so any carboxylate PFAS works. Writes three
+figures + one merged CSV + a log + descriptions to Defluorination/Defluorination_R{N}/.
+"""
+# All colours from CFG (single source of truth); order preserved for _DEFL_OKABE[i] usage.
+_DEFL_OKABE = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["green"],
+               CFG.VIS_ACCENT["magenta"], CFG.VIS_ACCENT["vermillion"], CFG.VIS_ACCENT["sky"],
+               CFG.VIS_ACCENT["yellow"], CFG.VIS_INK["near_black"]]
+_DEFL_GREEN = CFG.VIS_ACCENT["green"]        # NAC shading / reactive markers
+_DEFL_GREY = CFG.VIS_INK["faint"]            # cutoff lines, non-reactive points, "other" bars
+_DEFL_MUTE = CFG.VIS_INK["mid"]              # zero-reference line
+_DEFL_GRID_X = CFG.VIS_INK["faint"]          # neutral grey gridlines (never a data-line colour)
+_DEFL_GRID_Y = CFG.VIS_INK["faint"]          # neutral grey gridlines (never a data-line colour)
+_DEFL_AXTXT = CFG.VIS_INK["near_black"]       # axis labels + tick values (black)
+_DEFL_NAC_DIST = float(getattr(CFG, "DEFLUOR_NAC_DIST_A", 3.5))      # Od...C(alpha) near-attack distance
+_DEFL_NAC_ANGLE = float(getattr(CFG, "DEFLUOR_NAC_ANGLE_DEG", 150.0))  # Od-C(alpha)-F in-line attack angle
+_DEFL_ENGAGE = float(getattr(CFG, "DEFLUOR_ENGAGE_A", 4.0))          # residue engaged with ligand within this
+_DEFL_POCKET = float(getattr(CFG, "DEFLUOR_POCKET_RADIUS_A", 8.0))   # frame-0 pocket radius for the COM reference
+
+
+def _defl_resid(mapped) -> int:
+    return int("".join(c for c in str(mapped) if c.isdigit()) or 0)
+
+
+def _defl_min_image(dvec, box):
+    """Orthorhombic minimum-image on a displacement array (n,3)."""
+    L = np.array([box[0][0], box[1][1], box[2][2]], float)
+    L[L <= 0] = 1e9
+    return dvec - L * np.round(dvec / L)
+
+
+def _defl_ligand_atoms(fs):
+    """(alpha_C aid, F aid, [carboxylate O aids]) from the LIG bond graph."""
+    lig = [a for a in fs.atom if a.pdbres.strip() == "LIG" and a.element.strip() != "H"]
+    ele = {int(a): a.element.strip() for a in lig}
+    nb = {int(a): [] for a in lig}
+    for b in fs.bond:
+        i, j = int(b.atom1), int(b.atom2)
+        if i in nb and j in nb:
+            nb[i].append(j); nb[j].append(i)
+    cC = next((i for i in ele if ele[i] == "C" and sum(ele[k] == "O" for k in nb[i]) >= 2), None)
+    if cC is None:
+        raise RuntimeError("no carboxylate carbon in ligand")
+    cox = [k for k in nb[cC] if ele[k] == "O"]
+    cn = [k for k in nb[cC] if ele[k] == "C"]
+    aC = next((c for c in cn if any(ele[k] == "F" for k in nb[c])), cn[0] if cn else None)
+    if aC is None:
+        raise RuntimeError("no alpha-carbon in ligand")
+    F = next((k for k in nb[aC] if ele[k] == "F"), None)
+    if F is None:
+        raise RuntimeError("no fluorine on the alpha-carbon (not a scissile C-F ligand)")
+    return aC, F, cox
+
+
+def _defl_mapped_residues(run_root: Path, rank: str) -> dict:
+    """Per-rank catalytic residue numbers from the ranked CSV (Mapped_* columns)."""
+    try:
+        rk = pd.read_csv(newest_ranked_csv(run_root))
+        m = rk[rk["Scientific_Rank"].astype(str) == str(rank)]
+        if not len(m):
+            return {}
+        r = m.iloc[0]
+        return {k: _defl_resid(r.get(c)) for k, c in (
+            ("nuc", "Mapped_Nucleophile"), ("base", "Mapped_Base"), ("acid", "Mapped_Acid"),
+            ("c1", "Mapped_Clamp1"), ("c2", "Mapped_Clamp2"), ("sh", "Mapped_Stabiliser_H"),
+            ("sw", "Mapped_Stabiliser_W"), ("sy", "Mapped_Stabiliser_Y"))}
+    except Exception:
+        return {}
+
+
+def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
+                       run_root: Path, md_ns: float) -> "Path | None":
+    """SN2-defluorination geometry for one rank, native from cms + _trj."""
+    if not getattr(CFG, "DEFLUOR_RUN", True):
+        _echo("    ✘ Skipped      : defluorination disabled (CFG.DEFLUOR_RUN = False).")
+        return None
+    cms_file = job_dir / f"{job_name}-out.cms"
+    trj = job_dir / f"{job_name}_trj"
+    if not cms_file.is_file() or not trj.is_dir():
+        _echo("    ✘ Skipped      : no cms/_trj for defluorination.")
+        return None
+    R = _defl_mapped_residues(run_root, rank)
+    if not R.get("nuc"):
+        _echo("    ✘ Skipped      : no mapped catalytic residues for this rank.")
+        return None
+    out = _analysis_dir(md_dir.parent) / getattr(CFG, "DEFLUOR_OUTPUT_SUBDIR", "Defluorination") / f"Defluorination_R{rank}"
+    out.mkdir(parents=True, exist_ok=True)
+    _echo("")
+    _echo(f"  Defluorination geometry — Rank {rank}  ·  SN2 attack pose · NAC · fluoride cradle · "
+          f"carboxylate clamp · MM-GBSA drivers  (native from cms + _trj)")
+
+    # ── atom selections as trajectory gids ────────────────────────────────────────────
+    # Catalytic residues come from the ranked CSV (per rank); the ligand's alpha-carbon,
+    # leaving fluoride and carboxylate oxygens are auto-detected from its bond graph. Every
+    # selection is mapped to trajectory gids so positions can be read straight from a frame.
+    from schrodinger.application.desmond.packages import topo, traj
+    msys, cms = topo.read_cms(str(cms_file))
+    fs = cms.fsys_ct
+    n_real = fs.atom_total
+    aid2gid = dict(zip(range(1, n_real + 1), topo.aids2gids(cms, list(range(1, n_real + 1)))))
+
+    def G(resnums, names):
+        rs, ns = set(resnums), set(names)
+        return [aid2gid[int(a)] for a in fs.atom
+                if a.resnum in rs and a.pdbname.strip() in ns and int(a) in aid2gid]
+
+    aC_aid, F_aid, cox_aids = _defl_ligand_atoms(fs)
+    gC = aid2gid[aC_aid]; gF = aid2gid[F_aid]
+    gCox = [aid2gid[i] for i in cox_aids]
+    gOd = G([R["nuc"]], {"OD1", "OD2", "OE1", "OE2"})
+    _STD = set("ALA ARG ASN ASP CYS GLN GLU GLY HIS HID HIE HIP ILE LEU LYS MET PHE "
+               "PRO SER THR TRP TYR VAL".split())
+    gCA = [aid2gid[int(a)] for a in fs.atom
+           if a.pdbname.strip() == "CA" and a.pdbres.strip() in _STD and int(a) in aid2gid]
+    gLig = [aid2gid[int(a)] for a in fs.atom
+            if a.pdbres.strip() == "LIG" and a.element.strip() != "H" and int(a) in aid2gid]
+    cradle = {f"HIS{R['sh']}": G([R["sh"]], {"ND1", "NE2"}),
+              f"TRP{R['sw']}": G([R["sw"]], {"NE1"}),
+              f"TYR{R['sy']}": G([R["sy"]], {"OH"}),
+              f"ARG{R['c1']}": G([R["c1"]], {"NH1", "NH2", "NE"}),
+              f"ARG{R['c2']}": G([R["c2"]], {"NH1", "NH2", "NE"})}
+    clamp = {f"ARG{R['c1']}": cradle[f"ARG{R['c1']}"], f"ARG{R['c2']}": cradle[f"ARG{R['c2']}"]}
+    res8 = {f"ASP{R['nuc']}·Nu": [R["nuc"]], f"HIS{R['base']}·base": [R["base"]],
+            f"ASP{R['acid']}·acid": [R["acid"]], f"ARG{R['c1']}·clamp": [R["c1"]],
+            f"ARG{R['c2']}·clamp": [R["c2"]], f"HIS{R['sh']}·stab": [R["sh"]],
+            f"TRP{R['sw']}·stab": [R["sw"]], f"TYR{R['sy']}·stab": [R["sy"]]}
+    res8_g = {k: [aid2gid[int(a)] for a in fs.atom
+                  if a.resnum in set(v) and a.element.strip() != "H" and int(a) in aid2gid]
+              for k, v in res8.items()}
+
+    # ── per-frame geometry over the strided trajectory ────────────────────────────────
+    # attack distance + SN2 angle, fluoride cradle, carboxylate clamp, per-residue
+    # engagement, protein Rg and ligand-COM displacement — all minimum-image (PBC-aware).
+    tr = traj.read_traj(str(trj))
+    stride = max(1, int(getattr(CFG, "DEFLUOR_STRIDE", 100)))
+    idx = list(range(0, len(tr), stride))
+    nfr = len(idx)
+    total_ns = md_ns if md_ns and md_ns > 0 else 1000.0
+    t = np.linspace(0, total_ns, nfr)
+
+    def _mind(pa, pb, box):
+        d = _defl_min_image(pa[:, None, :] - pb[None, :, :], box).reshape(-1, 3)
+        return np.linalg.norm(d, axis=1).min()
+
+    attack = np.empty(nfr); angle = np.empty(nfr); rg = np.empty(nfr); com = np.empty(nfr)
+    cradle_d = {k: np.empty(nfr) for k in cradle}
+    clamp_d = {k: np.empty(nfr) for k in clamp}
+    eng = np.empty((len(res8), nfr))
+    # pocket COM reference: protein Cα atoms within DEFLUOR_POCKET_RADIUS_A of the ligand at frame 0
+    p0 = tr[idx[0]].pos()
+    lig0, ca0 = p0[gLig], p0[gCA]
+    dmask = np.linalg.norm(ca0[:, None, :] - lig0[None, :, :], axis=2).min(axis=1) < _DEFL_POCKET
+    poc_ref = ca0[dmask].mean(axis=0) if dmask.any() else ca0.mean(axis=0)
+
+    for m, fi in enumerate(idx):
+        fr = tr[fi]; pos = fr.pos(); box = fr.box
+        od = pos[gOd]; c = pos[gC][None, :]; f = pos[gF]
+        dd = np.linalg.norm(_defl_min_image(od - c, box), axis=1)
+        attack[m] = dd.min()
+        o = od[np.argmin(dd)]
+        v1 = _defl_min_image((o - pos[gC])[None, :], box)[0]
+        v2 = _defl_min_image((f - pos[gC])[None, :], box)[0]
+        angle[m] = np.degrees(np.arccos(np.clip(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1, 1)))
+        for k, g in cradle.items():
+            cradle_d[k][m] = _mind(f[None, :], pos[g], box) if g else np.nan
+        for k, g in clamp.items():
+            clamp_d[k][m] = _mind(pos[g], pos[gCox], box) if g else np.nan
+        for j, g in enumerate(res8_g.values()):
+            eng[j, m] = _mind(pos[g], pos[gLig], box) if g else np.nan
+        ca = pos[gCA]
+        rg[m] = np.sqrt(((ca - ca.mean(0)) ** 2).sum(1).mean())
+        com[m] = np.linalg.norm(pos[gLig].mean(0) - poc_ref)
+
+    nac = (attack < _DEFL_NAC_DIST) & (angle > _DEFL_NAC_ANGLE)
+    nac_pct = 100 * nac.mean()
+    occ = {name: 100 * np.nanmean(eng[j] < _DEFL_ENGAGE) for j, name in enumerate(res8)}
+    dist_pct = 100 * (attack < _DEFL_NAC_DIST).mean()
+    angle_pct = 100 * (angle > _DEFL_NAC_ANGLE).mean()
+
+    # ── MM-GBSA binding joined per frame ──────────────────────────────────────────────
+    # Frame-stamped CSV; the defluorination (strided) frames are a subset of the scored
+    # frames, so they join directly. Reactivity (NAC) and binding (ΔG_bind) together gate
+    # turnover — a ligand must reach the attack pose AND stay bound. GB overstabilises
+    # anionic PFAS, so ΔG_bind (total + per-component terms) is relative-only.
+    _COMPS = [("Coulomb", "_Coulomb"), ("vdW", "_vdW"), ("Hbond", "_Hbond"), ("Lipo", "_Lipo"),
+              ("Packing", "_Packing"), ("SelfCont", "_SelfCont"), ("Solv_GB", "_Solv_GB"),
+              ("Solv_SA", "_Solv_SA"), ("Covalent", "_Covalent")]
+    dG = np.full(nfr, np.nan)
+    comp = {}                          # component label → per-frame ΔG contribution (joined)
+    mmgbsa_median = np.nan; mmgbsa_cond = np.nan; _cond_label = "n/a"
+    _mmcsv = _mmgbsa_csv(job_dir, job_name)
+    if _mmcsv is not None:
+        try:
+            _mm = pd.read_csv(_mmcsv)
+            if MMGBSA_FRAME_COL in _mm.columns and CFG.MMGBSA_DG_COLUMN in _mm.columns:
+                _mm.index = pd.to_numeric(_mm[MMGBSA_FRAME_COL], errors="coerce")
+                _sel = _mm.reindex(idx)          # rows for our (strided) frames; NaN where unscored
+                dG = pd.to_numeric(_sel[CFG.MMGBSA_DG_COLUMN], errors="coerce").to_numpy(float)
+                for _lab, _suf in _COMPS:
+                    if CFG.MMGBSA_DG_COLUMN + _suf in _sel.columns:
+                        _arr = pd.to_numeric(_sel[CFG.MMGBSA_DG_COLUMN + _suf],
+                                             errors="coerce").to_numpy(float)
+                        if np.isfinite(_arr).any():        # drop components Prime left empty
+                            comp[_lab] = _arr
+                _fin = dG[np.isfinite(dG)]
+                if _fin.size:
+                    mmgbsa_median = float(np.median(_fin))
+                    if nac.any():
+                        _c, _cond_label = dG[nac], "NAC frames"
+                    else:
+                        _c, _cond_label = dG[np.argsort(attack)[:max(1, nfr // 10)]], "closest-approach 10%"
+                    _c = _c[np.isfinite(_c)]
+                    mmgbsa_cond = float(np.median(_c)) if _c.size else np.nan
+        except Exception:
+            pass
+
+    # ── merged per-frame CSV ──────────────────────────────────────────────────────────
+    hdr = ["frame", "time_ns", "attack_Od_Ca", "sn2_angle", "nac_competent"]
+    cols = [np.array(idx), t, attack, angle, nac.astype(int)]
+    for k in cradle: hdr.append(f"Fcradle_{k}"); cols.append(cradle_d[k])
+    for k in clamp: hdr.append(f"clamp_{k}"); cols.append(clamp_d[k])
+    for j, name in enumerate(res8): hdr.append("engage_" + name.split("·")[0]); cols.append(eng[j])
+    hdr += ["protein_Rg", "lig_com_disp", "mmgbsa_dG_bind"]; cols += [rg, com, dG]
+    for _lab in comp:
+        hdr.append("mmgbsa_" + _lab); cols.append(comp[_lab])
+    np.savetxt(out / "06_Defluorination_Geometry.csv", np.column_stack(cols),
+               delimiter=",", header=",".join(hdr), comments="")
+
+    # ── figures (black axis labels/values, neutral grey grid, CFG colours/DPI) ──────────
+    _dpi = int(CFG.VIS_FIGURE_DPI)
+    _LF, _FA = CFG.VIS_FONT_LEGEND, CFG.VIS_LEGEND_FRAME_ALPHA
+
+    def _dgrid(ax):
+        ax.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.7)
+        ax.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.7); ax.set_axisbelow(True)
+
+    # 01 attack geometry
+    fig, ax1 = plt.subplots(figsize=(11, 4.6))
+    l1, = ax1.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
+    ax1.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.5)
+    ax1.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT); ax1.set_ylabel("attack distance (Å)", color=_DEFL_AXTXT, labelpad=2)
+    ax1.tick_params(axis="y", labelcolor=_DEFL_AXTXT); ax1.set_ylim(0, attack.max() * 1.05)
+    ax1.set_xticks(np.arange(0, total_ns + 1, 50)); ax1.set_yticks(np.arange(0, attack.max() * 1.05, 4))
+    ax1.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
+    # black axis labels + values, neutral grey grid (distinct from every coloured data line).
+    ax1.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.5)
+    ax1.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.5); ax1.set_axisbelow(True)
+    ax2 = ax1.twinx()
+    l2, = ax2.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
+    ax2.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.5)
+    ax2.set_ylabel("SN2 attack angle (°)", color=_DEFL_AXTXT, labelpad=2)
+    ax2.tick_params(axis="y", labelcolor=_DEFL_AXTXT); ax2.set_ylim(0, 180)
+    b = ax1.fill_between(t, 0, ax1.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=0.18, step="mid")
+    ax1.legend([l1, l2, b], [f"ASP{R['nuc']} Oδ···Cα distance", "Oδ–Cα–F attack angle",
+               f"NAC-competent ({nac_pct:.1f}%)"], loc="upper right", ncol=3, framealpha=_FA, fontsize=_LF)
+    fig.tight_layout(); fig.savefig(out / "01_SN2_Attack_Geometry.png", dpi=_dpi); plt.close(fig)
+
+    # 02 cradle + clamp
+    _cmax = float(np.nanmax([np.nanmax(d) for d in cradle_d.values()])) * 1.05
+    _lmax = float(np.nanmax([np.nanmax(d) for d in clamp_d.values()])) * 1.05
+    fig, (axt, axb) = plt.subplots(2, 1, figsize=(11, 7.4), sharex=True)
+    for (k, d), c in zip(cradle_d.items(), _DEFL_OKABE):
+        axt.plot(t, d, lw=0.8, color=c, label=f"F···{k}")
+    axt.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
+    axt.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT); axt.set_ylim(0, _cmax)
+    axt.set_yticks(np.arange(0, _cmax, 4)); axt.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axt)
+    axt.legend(loc="upper right", ncol=5, fontsize=_LF, framealpha=_FA, columnspacing=1.1, handlelength=1.4)
+    for (k, d), c in zip(clamp_d.items(), [_DEFL_OKABE[4], _DEFL_OKABE[2]]):
+        axb.plot(t, d, lw=0.8, color=c, label=f"{k} → carboxylate")
+    axb.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
+    axb.set_ylabel("Arg NHx ··· carboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
+    axb.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
+    axb.set_ylim(0, _lmax); axb.set_yticks(np.arange(0, _lmax, 4))
+    axb.set_xticks(np.arange(0, total_ns + 1, 50))
+    axb.tick_params(axis="y", labelcolor=_DEFL_AXTXT); axb.tick_params(axis="x", labelcolor=_DEFL_AXTXT); _dgrid(axb)
+    axb.legend(loc="upper right", ncol=2, fontsize=_LF, framealpha=_FA)
+    fig.tight_layout(); fig.savefig(out / "02_Fluoride_Cradle_and_Carboxylate_Clamp.png", dpi=_dpi); plt.close(fig)
+
+    # 03 reactive summary
+    fig, (axa, axb2) = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw={"width_ratios": [1.7, 1]})
+    names = list(occ.keys()); vals = [occ[k] for k in names]
+    axa.barh(names, vals, color=_DEFL_OKABE[:len(names)]); axa.invert_yaxis()
+    axa.set_xlabel(f"% of trajectory within {_DEFL_ENGAGE:.0f} Å of ligand")
+    axa.grid(axis="x", alpha=0.3); axa.set_xlim(0, max(vals) * 1.28 + 1)
+    for i, v in enumerate(vals):
+        axa.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=8)
+    crit = [(f"attack distance < {_DEFL_NAC_DIST:.1f} Å", dist_pct, _DEFL_OKABE[0]),
+            (f"SN2 angle > {_DEFL_NAC_ANGLE:.0f}°", angle_pct, _DEFL_OKABE[1]),
+            ("NAC-competent (both)", nac_pct, _DEFL_GREEN)]
+    axb2.barh([c[0] for c in crit], [c[1] for c in crit], color=[c[2] for c in crit]); axb2.invert_yaxis()
+    axb2.set_xlabel("% of frames satisfying criterion")
+    axb2.grid(axis="x", alpha=0.3); axb2.set_xlim(0, max(max(c[1] for c in crit) * 1.35, 1) + 1)
+    for i, c in enumerate(crit):
+        axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=9)
+    fig.tight_layout(); fig.savefig(out / "03_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
+
+    # 07 binding vs reactivity (only when MM-GBSA is available for this rank)
+    if np.isfinite(dG).any():
+        m = np.isfinite(dG)
+        _dv = dG[m]
+        # clip the y-axis to the physical spread: a few Prime blown-up minimisations reach
+        # hundreds of kcal/mol. A Tukey fence (Q1 − 3·IQR) drops those so the real 0…−20 band
+        # fills the panel instead of leaving it mostly empty.
+        _q1, _q3 = np.percentile(_dv, [25, 75])
+        _phys = _dv[_dv >= _q1 - 3.0 * (_q3 - _q1)]
+        _lo = float(_phys.min()) if _phys.size else float(_dv.min())
+        fig, ax = plt.subplots(figsize=(7.8, 5.2))
+        ax.scatter(attack[m & ~nac], dG[m & ~nac], s=14, color=_DEFL_GREY, alpha=0.7, label="non-NAC frame")
+        if (m & nac).any():
+            ax.scatter(attack[m & nac], dG[m & nac], s=28, color=_DEFL_GREEN, label="NAC-competent frame")
+        ax.axvline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.6, label=f"attack cutoff {_DEFL_NAC_DIST} Å")
+        ax.set_ylim(_lo * 1.1, 5.0)
+        _xa = attack[m]
+        ax.set_xticks(np.arange(np.floor(_xa.min() / 2) * 2, np.ceil(_xa.max()) + 1, 2))
+        ax.tick_params(axis="x", rotation=90)
+        ax.set_xlabel("attack distance (Å)")
+        ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
+        ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=9, framealpha=0.85)
+        fig.tight_layout(); fig.savefig(out / "04_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
+
+    # 08 MM-GBSA energy-component decomposition — the binding DRIVERS, and whether the
+    # near-attack (reactive) frames gain the right stabilisation vs the rest.
+    if comp:
+        _finite = np.isfinite(dG)
+        if _finite.sum() >= 4:            # drop Prime blown-up minimisations before averaging
+            _q1c, _q3c = np.percentile(dG[_finite], [25, 75])
+            _ok = _finite & (dG >= _q1c - 3.0 * (_q3c - _q1c))
+        else:
+            _ok = _finite
+        _react = (nac if nac.any() else (attack <= np.percentile(attack, 10)))
+        _near, _rest = _react & _ok, (~_react) & _ok
+        _lbls = list(comp.keys())
+        _nv = [np.nanmean(comp[l][_near]) if _near.any() else np.nan for l in _lbls]
+        _rv = [np.nanmean(comp[l][_rest]) if _rest.any() else np.nan for l in _lbls]
+        _x = np.arange(len(_lbls)); _w = 0.4
+        fig, ax = plt.subplots(figsize=(11, 5.2))
+        ax.bar(_x - _w / 2, _nv, _w, color=_DEFL_GREEN, label=f"near-attack ({_cond_label})")
+        ax.bar(_x + _w / 2, _rv, _w, color=_DEFL_GREY, label="other frames")
+        ax.axhline(0, color=_DEFL_MUTE, lw=0.8)
+        ax.set_xticks(_x); ax.set_xticklabels(_lbls, rotation=30, ha="right")
+        ax.set_ylabel("mean ΔG contribution (kcal/mol)  ·  relative-only")
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(loc="upper right", ncol=2, fontsize=_LF, framealpha=_FA)
+        fig.tight_layout(); fig.savefig(out / "05_MMGBSA_Components.png", dpi=_dpi); plt.close(fig)
+
+    # ── run log + figure-description file ─────────────────────────────────────────────
+    log = [f"FAcD defluorination MD analysis — Rank {rank}",
+           f"ligand atoms: alpha-C={fs.atom[aC_aid].pdbname.strip()} "
+           f"F={fs.atom[F_aid].pdbname.strip()} carboxylate-O={[fs.atom[i].pdbname.strip() for i in cox_aids]}",
+           f"frames {nfr} (stride {stride}) · {total_ns:.0f} ns",
+           f"NAC-competent (dist<{_DEFL_NAC_DIST} Å & angle>{_DEFL_NAC_ANGLE:.0f}°): {nac_pct:.2f}%",
+           f"attack distance: mean {attack.mean():.2f} Å  min {attack.min():.2f} Å",
+           f"SN2 attack angle: mean {angle.mean():.1f}°",
+           f"ligand COM displacement: start {com[:5].mean():.1f} Å  end {com[-20:].mean():.1f} Å",
+           f"protein Rg: mean {rg.mean():.2f} Å"]
+    if np.isfinite(mmgbsa_median):
+        log.append(f"MM-GBSA ΔG_bind: median {mmgbsa_median:.1f} kcal/mol "
+                   f"(relative-only; GB overstabilises anionic PFAS)")
+        log.append(f"conditioned ΔG_bind ({_cond_label}): {mmgbsa_cond:.1f} kcal/mol")
+    else:
+        log.append("MM-GBSA ΔG_bind: not available for this rank")
+    log.append("per-residue engagement occupancy:")
+    log += [f"  {name:16s} {v:5.1f}%" for name, v in occ.items()]
+    (out / "07_Analysis_Log.log").write_text("\n".join(log) + "\n")
+    (out / "08_Figure_Descriptions.txt").write_text(
+        f"FAcD Defluorination MD Analysis — Rank {rank} · {nfr} frames · {total_ns:.0f} ns\n"
+        f"01 SN2 attack geometry (Oδ···Cα distance + Oδ-Cα-F angle; green = NAC-competent)\n"
+        f"02 fluoride cradle (F···stabilisers) + carboxylate clamp (Arg···carboxylate)\n"
+        f"03 reactive summary (per-residue engagement + NAC criterion decomposition)\n"
+        f"04 binding vs reactivity (MM-GBSA ΔG_bind vs attack distance; only if MM-GBSA present)\n"
+        f"05 MM-GBSA component decomposition (Coulomb/vdW/Hbond/Lipo/GB/SA…): near-attack vs other frames\n"
+        f"06 per-frame geometry CSV (geometry + mmgbsa_dG_bind + per-component terms)\n"
+        f"07 run log · 08 this figure-description file\n")
+    _dg_note = f" · ΔG {mmgbsa_median:.0f}" if np.isfinite(mmgbsa_median) else ""
+    _echo(f"    ✔ Defluor      : NAC {nac_pct:.1f}% · attack min {attack.min():.2f} Å{_dg_note} → {out.name}/")
+    return out
+
+
+def plot_defluor_combined(md_dir: Path) -> None:
+    """Cross-rank defluorination comparison (drawn at Finalise)."""
+    analysis = _analysis_dir(md_dir.parent)                                       # 06_Analysis
+    root = analysis / getattr(CFG, "DEFLUOR_OUTPUT_SUBDIR", "Defluorination")     # per-rank subfolders
+    if not root.is_dir():
+        return
+    rows = []
+    for d in sorted(root.glob("Defluorination_R*"), key=lambda p: _natural_rank(p)):
+        csv = d / "06_Defluorination_Geometry.csv"
+        if not csv.is_file():
+            continue
+        try:
+            df = pd.read_csv(csv)
+        except Exception:
+            continue
+        rk = d.name.replace("Defluorination_", "")
+        _dg = np.nan
+        if "mmgbsa_dG_bind" in df.columns:
+            _v = pd.to_numeric(df["mmgbsa_dG_bind"], errors="coerce").dropna()
+            _dg = float(_v.median()) if len(_v) else np.nan
+        rows.append((rk, 100 * df["nac_competent"].mean(),
+                     df["attack_Od_Ca"].min(), df["attack_Od_Ca"].mean(), df["sn2_angle"].mean(), _dg))
+    if not rows:
+        return
+    rks = [r[0] for r in rows]
+
+    def _labels(a, vals, fmt):
+        top = max([v for v in vals if np.isfinite(v)] or [1])
+        for i, v in enumerate(vals):
+            if np.isfinite(v):
+                a.text(i, v + top * 0.02, fmt.format(v), ha="center", va="bottom", fontsize=8)
+
+    _dgs = [r[5] for r in rows]
+    _have_dg = any(np.isfinite(v) for v in _dgs)
+    fig, _axg = plt.subplots(2, 2, figsize=(11, 8.6))   # 2×2, balanced
+    ax = _axg.flatten()
+    nac_vals = [r[1] for r in rows]
+    ax[0].bar(rks, nac_vals, color=_DEFL_OKABE[2])
+    ax[0].set_ylabel("NAC-competent (%)"); ax[0].set_ylim(0, max(max(nac_vals), 1.0) * 1.2)
+    _labels(ax[0], nac_vals, "{:.2f}%")
+    ax[1].bar(rks, [r[2] for r in rows], color=_DEFL_OKABE[0]); ax[1].set_ylabel("min attack distance (Å)")
+    ax[1].axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY); _labels(ax[1], [r[2] for r in rows], "{:.2f}")
+    ax[2].bar(rks, [r[4] for r in rows], color=_DEFL_OKABE[1]); ax[2].set_ylabel("mean SN2 angle (°)")
+    ax[2].axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_GREY); _labels(ax[2], [r[4] for r in rows], "{:.1f}°")
+    _used = [ax[0], ax[1], ax[2]]
+    if _have_dg:
+        _fin = [v if np.isfinite(v) else 0.0 for v in _dgs]
+        ax[3].bar(rks, _fin, color=_DEFL_OKABE[3])
+        ax[3].set_ylabel("median MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative")
+        ax[3].axhline(0, color=_DEFL_GREY, lw=0.8)
+        for i, v in enumerate(_dgs):
+            ax[3].text(i, _fin[i], "n/a" if not np.isfinite(v) else f"{v:.1f}", ha="center",
+                       va="bottom" if _fin[i] >= 0 else "top", fontsize=8)
+        _used.append(ax[3])
+    else:
+        ax[3].axis("off")
+    for a in _used:
+        a.grid(axis="y", alpha=0.3); a.set_xlabel("Rank")
+    fig.tight_layout()
+    fig.savefig(analysis / "00_Defluorination_Combined_AllRanks.png",
+                dpi=int(CFG.VIS_FIGURE_DPI))
+    plt.close(fig)
+    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/00_Defluorination_Combined_AllRanks.png")
 
 
 # =============================================================================
@@ -3630,12 +4134,12 @@ def _phase_build(entry: dict, dirs: dict) -> None:
     if not entry["complex_mae"].exists():
         raise RuntimeError(f"no ESP complex {entry['complex_mae'].name} — merge first")
     if setup_cms.exists():
-        # Resume over an existing build. reapply_esp_to_cms now REFUSES a collapsed/corrupt build
+        # Resume over an existing build. reapply_esp_to_cms REFUSES a collapsed/corrupt build
         # (the comp_ct invariant), so a resume must not treat that refusal as a permanent failure —
         # reapply is the only path here and run_build lives in the rebuild branch below. Quarantine the
         # bad file and fall through to a fresh build, rather than bricking the rank on every re-run
-        # (R_1's on-disk setup_cms is comp_ct=1 right now). A genuine ESP name-mismatch will still fail
-        # on the fresh build's own reapply, which is correct.
+        # when its on-disk setup_cms is collapsed (comp_ct=1). A genuine ESP name-mismatch will still
+        # fail on the fresh build's own reapply, which is correct.
         try:
             q = reapply_esp_to_cms(setup_cms, entry["esp"])
             _ok(f"[build] R_{rank} ✔ already built — ESP re-verified (sum {q:+.3f} e)")
@@ -3777,7 +4281,7 @@ def main() -> int:
 
     _mmgbsa_status = "ok"
     if "md" in stages:
-        _section(f"Step 4/4 — MD → SID → MM-GBSA  ({a.md_ns:g} ns · one rank fully done before the next)")
+        _section(f"Step 4/4 — MD → SID → MM-GBSA → Defluorination  ({a.md_ns:g} ns · one rank fully done before the next)")
         run_root = run
         md_dir = dirs["md"]
         with _guard:                                     # reuse the guard primed at start (idempotent)
@@ -3815,8 +4319,10 @@ def main() -> int:
                         _mg = run_mmgbsa(jd, jd.name, _rank_of(jd.name))   # 3) MM-GBSA (blocking)
                     if _mg is None:
                         _mmgbsa_status = "warn"
+                    with _timed("defluor", rank):                          # 4) defluorination geometry
+                        run_defluorination(jd, jd.name, rank, md_dir, run_root, a.md_ns)
                 except Exception as exc:
-                    _warn(f"[sid/mmgbsa] R_{rank}: {str(exc).splitlines()[0]}")
+                    _warn(f"[sid/mmgbsa/defluor] R_{rank}: {str(exc).splitlines()[0]}")
                     _mmgbsa_status = "warn"
                 ok.append(_complex_label(e, ranked_map))               # MD done; SID/MM-GBSA issues are WARN
 
@@ -3829,6 +4335,10 @@ def main() -> int:
                 _st = run_mmgbsa_phase(md_dir, run_root, plots_only=True)   # read existing CSVs → plots only, never re-run
                 if _st != "ok":
                     _mmgbsa_status = _st
+                try:
+                    plot_defluor_combined(md_dir)          # cross-rank defluorination comparison
+                except Exception as exc:
+                    _warn(f"[defluor] combined figure skipped — {str(exc).splitlines()[0]}")
                 # MD trajectory QC (Cα-RMSD · ligand RMSD · temperature · Cα-RMSF) from the SID .eaf + .ene.
                 try:
                     make_md_qc_figure(md_dir, out_root, _lookup_ligands(run_root))
