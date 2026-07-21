@@ -1086,18 +1086,25 @@ def run_analyze_simulation(job_dir: Path, job_name: str, cms_file: Path,
     return total_frames
 
 
-def process_jobs(to_run: list[Path]) -> None:
+def process_jobs(to_run: list[Path], job_index: int | None = None,
+                 job_total: int | None = None) -> None:
     """Iterate the work list, generating SID-in then SID-out for each job.
 
     Each rank is isolated: a Schrödinger failure (event_analysis/analyze_simulation)
     or an incomplete EAF is logged and skipped so the remaining ranks still run.
     Step 07 consumes whichever *_SID-out.eaf files completed.
+
+    job_index/job_total, when supplied by the sequential driver, label the banner
+    with the rank's position across the whole run (e.g. Job 2/3). Without them the
+    counter falls back to this call's local work list.
     """
     total = len(to_run)
     failures: list[str] = []
     for index, d in enumerate(to_run, start=1):
         job_name = d.name
         rank = _rank_of(job_name)
+        disp_index = job_index if job_index is not None else index
+        disp_total = job_total if job_total is not None else total
         out_eaf = d / f"{job_name}_SID-out.eaf"
         in_eaf = d / f"{job_name}_SID-in.eaf"
         cms_file = d / f"{job_name}-out.cms"
@@ -1109,7 +1116,7 @@ def process_jobs(to_run: list[Path]) -> None:
         if out_eaf.is_file():
             of = out_eaf_frames(out_eaf)
             tf = traj_frame_count(trj_dir)
-            _echo(f"[Job {index}/{total}] Re-processing (Incomplete): {job_name} (Rank {rank})")
+            _echo(f"[Job {disp_index}/{disp_total}] Re-processing (Incomplete): {job_name} (Rank {rank})")
             _echo(_SEP)
             _echo(f"  [RE-RUN] Output EAF is incomplete ({of}/{tf} frames). Re-running analysis...")
             # A misjudged "incomplete" must never destroy a good result.
@@ -1118,7 +1125,7 @@ def process_jobs(to_run: list[Path]) -> None:
             out_eaf.replace(bak)
             _echo(f"  [BACKUP] Previous EAF moved to: {bak}")
         else:
-            _echo(f"[Job {index}/{total}] Processing: {job_name} (Rank {rank})")
+            _echo(f"[Job {disp_index}/{disp_total}] Processing: {job_name} (Rank {rank})")
             _echo(_SEP)
 
         # Verify the trajectory folder is present (dir or packed .xtc).
@@ -1126,7 +1133,7 @@ def process_jobs(to_run: list[Path]) -> None:
             _echo(f"  [WARNING] Trajectory folder not found: {trj_dir}. Skipping Rank {rank}.")
             continue
 
-        label = f"Job {index}/{total} Rank {rank}"
+        label = f"Job {disp_index}/{disp_total} Rank {rank}"
         try:
             run_event_analysis(d, job_name, cms_file, in_eaf)
             total_frames = run_analyze_simulation(d, job_name, cms_file, trj_dir, out_eaf, label)
@@ -3777,9 +3784,15 @@ def main() -> int:
             # Strictly sequential per rank: MD (GPU) → SID (CPU) → MM-GBSA (CPU), each blocking to
             # completion. Nothing overlaps, so no two Prime batches ever share the scratch disk and a
             # running SID/MM-GBSA is never pre-empted by the next rank's MD.
+            # Rank position across the whole run, so the SID banner reads Job 2/3
+            # (this rank of all active ranks) rather than a per-call 1/1.
+            _active_entries = [e for e in entries if not e.get("_skip")]
+            _job_total = len(_active_entries)
+            _job_pos = 0
             for e in entries:
                 if e.get("_skip"):
                     continue
+                _job_pos += 1
                 rank = e["rank"]
                 try:
                     jd = _phase_md(e, dirs, a)                          # 1) MD  (blocking)
@@ -3791,7 +3804,13 @@ def main() -> int:
                     continue
                 try:
                     with _timed("sid", rank):
-                        process_jobs(scan_jobs([jd]))          # 2) SID  (blocking)
+                        _sid_todo = scan_jobs([jd])
+                        if not _sid_todo:
+                            _echo("")
+                            _echo(_SEP)
+                            _echo(f"[Job {_job_pos}/{_job_total}] Rank {rank}: SID already done — advancing to MM-GBSA.")
+                            _echo(_SEP)
+                        process_jobs(_sid_todo, _job_pos, _job_total)   # 2) SID  (blocking)
                     with _timed("mmgbsa", rank):
                         _mg = run_mmgbsa(jd, jd.name, _rank_of(jd.name))   # 3) MM-GBSA (blocking)
                     if _mg is None:
