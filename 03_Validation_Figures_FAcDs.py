@@ -6374,8 +6374,8 @@ def _mm_load_variance_df(fig_root: Path, df: pd.DataFrame):
 
 def _mm_nac_lines(ax_d, ax_a):
     """Strict-NAC reference lines shared by the multi-model panels (CFG-sourced)."""
-    _dl = float(getattr(CFG, "NAC_DIST_STRICT", 3.2))
-    _al = float(getattr(CFG, "NAC_ANGLE_STRICT", 155.0))
+    _dl = float(CFG.NAC_DIST_STRICT)
+    _al = float(CFG.NAC_ANGLE_STRICT)
     ax_d.axhline(_dl, color=CFG.VIS_ACCENT["blue"], ls="--", lw=1.2, label=f"strict NAC {_dl:g} Å")
     ax_a.axhline(_al, color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.2, label=f"strict NAC {_al:g}°")
 
@@ -6405,8 +6405,15 @@ def _mm_variance_by_model(df, out_dir, reporter):
             _ax.get_legend().remove()
     ax_a.tick_params(axis="x", rotation=30)
     # Model legend INSIDE the top panel (its upper band is empty — data sits at 2–4.5 Å); no title.
+    # The strict-NAC reference lines are drawn by _mm_nac_lines but sit outside seaborn's hue legend,
+    # so add them explicitly (CFG values, matching the dashed-line colours) — otherwise the lines show
+    # with no key.
+    _dl = float(CFG.NAC_DIST_STRICT); _al = float(CFG.NAC_ANGLE_STRICT)
     _h = [Line2D([0], [0], marker="s", ls="", color=_mpal[i % len(_mpal)]) for i in range(len(_models))]
-    ax_d.legend(_h, _models, loc="upper left", ncol=len(_models), framealpha=0.6,
+    _h += [Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], ls="--", lw=1.2),
+           Line2D([0], [0], color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.2)]
+    _labs = list(_models) + [f"strict NAC {_dl:g} Å", f"strict NAC {_al:g}°"]
+    ax_d.legend(_h, _labs, loc="upper left", ncol=len(_labs), framealpha=0.6,
                 fontsize=CFG.VIS_FONT_LEGEND, handletextpad=0.3, columnspacing=1.0)
     fig.tight_layout()
     fig.savefig(out_dir / "13_MultiModel_Geometry_Variance_by_Model.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")

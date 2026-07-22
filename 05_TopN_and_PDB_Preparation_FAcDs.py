@@ -604,6 +604,16 @@ def check_prep_needed(job_name: str, dir_raw: Path, dir_prep_clean: Path):
 
     return True # Needed (Missing)
 
+def _is_reference_control(job) -> bool:
+    """The single control retained in the comparative figures — the CFG-designated MD control:
+    the reference structure (CFG.REFERENCE_PDB_ID) paired with a CFG.CONTROL_MD_LIGANDS ligand
+    (3R3U × fluoroacetate). The other reference systems (3R3U-DFA/TFA, DeHa4-*) are scored/tiered
+    but not simulated, so they are dropped here. Nothing about the control is hardcoded — both the
+    protein and the ligand come from CFG."""
+    j = str(job)
+    return CFG.REFERENCE_PDB_ID in j and any(str(lig) in j for lig in CFG.CONTROL_MD_LIGANDS)
+
+
 def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     """What preparation does to the two numbers the tier is decided on.
 
@@ -645,27 +655,37 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     # clearer than interleaving them with the controls by angle. The 'job' secondary key keeps equal
     # angles deterministic (rows otherwise arrive in thread-completion order).
     df["_is_md"] = ~df["job"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
+
+    def _short(j):
+        return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
+                .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
+
+    # Keep the MD-selected candidates + only the CFG-designated control (3R3U × fluoroacetate); the
+    # other reference systems (3R3U-DFA/TFA, DeHa4-*) are dropped so one canonical control is shown.
+    _keep = df["_is_md"] | df["job"].map(_is_reference_control)
+    df = df[_keep].reset_index(drop=True)
+    if df.empty:
+        return None
     df = df.sort_values(["_is_md", "prep_sn2_angle", "job"],
                         ascending=[True, True, True], kind="mergesort").reset_index(drop=True)
 
-    _label = ["_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
-              .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", "")
-              for j in df["job"]]
+    _label = [_short(j) for j in df["job"]]
     _is_md = [not str(j).startswith(CFG.CONTROL_JOB_PREFIX) for j in df["job"]]
     _y = np.arange(len(df))
 
     fig, (ax_a, ax_d) = plt.subplots(1, 2, figsize=(17.0, 0.62 * len(df) + 3.0), sharey=True,
                                      gridspec_kw={"wspace": 0.06})
 
-    def _panel(ax, ccif, c0, c1, gate, gate_lbl, relaxed, relaxed_lbl, xlab, worse_is):
+    def _panel(ax, ccif, c0, c1, gate, gate_lbl, relaxed, relaxed_lbl, xlab, worse_is, strict, dfmt="{:+.1f}"):
         """
         The two zones are SHADED, not merely ruled. A dashed line tells the reader where the gate is; a
         filled band tells them which side of it means competent, without translating a number first. For
         the angle the gate is a FLOOR (pass = to the right of it); for the distance a CEILING (pass = to
-        the left). The fills carry that reversal so the eye does not have to.
+        the left). The fills carry that reversal so the eye does not have to. A dash-dot strict-NAC line
+        (CFG.NAC_*_STRICT) is drawn as a third reference (keyed in the legend, not the margin).
         """
-        _lo = min(df[ccif].min(), df[c0].min(), df[c1].min(), gate, relaxed)
-        _hi = max(df[ccif].max(), df[c0].max(), df[c1].max(), gate, relaxed)
+        _lo = min(df[ccif].min(), df[c0].min(), df[c1].min(), gate, relaxed, strict)
+        _hi = max(df[ccif].max(), df[c0].max(), df[c1].max(), gate, relaxed, strict)
         _m = (_hi - _lo) * 0.13
         _x0, _x1 = _lo - _m, _hi + _m
         if worse_is == "down":                      # angle: elite is HIGH
@@ -673,13 +693,13 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
             ax.axvspan(_x0, relaxed, color=CFG.VIS_TINT["red"], alpha=0.55, lw=0, zorder=0)
             _zones = [((gate + _x1) / 2, "clears Tier_1A gate", CFG.VIS_BAND["high"]),
                       ((relaxed + gate) / 2, "relaxed NAC,\nbelow Tier_1A gate", CFG.VIS_INK["muted"]),
-                      ((_x0 + relaxed) / 2, "outside relaxed\nNAC envelope", CFG.VIS_BAND["low"])]
+                      ((_x0 + relaxed) / 2, "outside NAC", CFG.VIS_BAND["low"])]
         else:                                       # distance: elite is LOW
             ax.axvspan(_x0, gate, color=CFG.VIS_TINT["green"], alpha=0.55, lw=0, zorder=0)
             ax.axvspan(relaxed, _x1, color=CFG.VIS_TINT["red"], alpha=0.55, lw=0, zorder=0)
             _zones = [((_x0 + gate) / 2, "clears Tier_1A gate", CFG.VIS_BAND["high"]),
                       ((gate + relaxed) / 2, "relaxed NAC,\nbelow Tier_1A gate", CFG.VIS_INK["muted"]),
-                      ((relaxed + _x1) / 2, "outside relaxed\nNAC envelope", CFG.VIS_BAND["low"])]
+                      ((relaxed + _x1) / 2, "outside NAC", CFG.VIS_BAND["low"])]
         # The three zones are labelled WHERE THEY ARE, at the foot of the panel, so the reader never has
         # to translate a legend swatch into a region. Each label is centred in its own band.
         for _zx, _zt, _zc in _zones:
@@ -706,11 +726,13 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
             # top of the gate line the arrow is crossing.
             _pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012 if ax.get_xlim()[1] > ax.get_xlim()[0] else 0.0
             _dir = 1 if _b >= _a else -1
-            ax.annotate(f"{_b:.1f}", xy=(_b, _i), xytext=(9 * _dir, 0), textcoords="offset points",
-                        ha="left" if _dir > 0 else "right", va="center",
+            # Endpoint value + the signed minimisation drift (RAW→minimised), e.g. "177.0 (+3)".
+            ax.annotate(f"{_b:.1f} ({dfmt.format(_b - _a)})", xy=(_b, _i), xytext=(9 * _dir, 0),
+                        textcoords="offset points", ha="left" if _dir > 0 else "right", va="center",
                         fontsize=CFG.VIS_FONT_ANNOT - 0.5, color=_col, zorder=6)
         ax.axvline(gate, ls="--", lw=1.4, color=CFG.VIS_INK["dark"], alpha=0.9, zorder=2)
         ax.axvline(relaxed, ls=":", lw=1.2, color=CFG.VIS_INK["ghost"], zorder=2)
+        ax.axvline(strict, ls="-.", lw=1.3, color=CFG.VIS_ACCENT["blue"], alpha=0.9, zorder=2)
         """
         The gate labels sit in the MARGIN ABOVE the panel, not inside it. Rotated 90° across the data
         they crossed arrows, values and rows — the reader had to decode the label before reading the
@@ -731,11 +753,13 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     _panel(ax_a, "cif_sn2_angle", "raw_sn2_angle", "prep_sn2_angle",
            CFG.TIER_ANGLE_MIN[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_ANGLE_MIN[CFG.TIER_TOP]:.0f}°",
            CFG.NAC_ANGLE_RELAXED, f"relaxed NAC  {CFG.NAC_ANGLE_RELAXED:.0f}°",
-           "SN2 attack angle at the mapped nucleophile  (°)", worse_is="down")
+           "SN2 attack angle at the mapped nucleophile  (°)", worse_is="down",
+           strict=CFG.NAC_ANGLE_STRICT, dfmt="{:+.0f}")
     _panel(ax_d, "cif_dist_nuc", "raw_dist_nuc", "prep_dist_nuc",
            CFG.TIER_NUC_DIST[CFG.TIER_TOP], f"Tier_1A gate  {CFG.TIER_NUC_DIST[CFG.TIER_TOP]:.1f} Å",
            CFG.NAC_DIST_RELAXED, f"relaxed NAC  {CFG.NAC_DIST_RELAXED:.1f} Å",
-           "Nucleophile distance  (Å)", worse_is="up")
+           "Nucleophile distance  (Å)", worse_is="up",
+           strict=CFG.NAC_DIST_STRICT, dfmt="{:+.1f}")
 
     ax_a.set_yticks(_y)
     ax_a.set_yticklabels(_label)
@@ -756,17 +780,18 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
                   label="minimised pose moved AWAY from the gate"),
           _Line2D([0], [0], color=CFG.VIS_BAND["high"], lw=2.2, marker=">", markersize=9,
                   markerfacecolor=CFG.VIS_BAND["high"], markeredgecolor=CFG.VIS_BAND["high"],
-                  label="minimised pose moved TOWARDS the gate")]
-    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.03, 1.045), ncol=2,
+                  label="minimised pose moved TOWARDS the gate"),
+          _Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], ls="-.", lw=1.4,
+                  label=f"strict NAC  ({CFG.NAC_ANGLE_STRICT:.0f}° / {CFG.NAC_DIST_STRICT:.1f} Å)")]
+    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.03, 1.045), ncol=len(_h),
                 frameon=False, fontsize=CFG.VIS_FONT_LEGEND)
 
     _da = pd.to_numeric(df["prep_d_angle"], errors="coerce").dropna()
     _dd = pd.to_numeric(df["prep_d_dist"], errors="coerce").dropna()
     fig.text(0.5, 0.012,
-             f"Stages: CIF (Boltz) → RAW (gemmi convert) → Minimised (PrepWizard, MD start).   CIF and RAW "
-             f"coincide — conversion is lossless (max |Δ| 0.04°) — so the whole arrow is the minimisation.   "
-             f"Minimisation: mean |Δangle| {_da.abs().mean():.1f}° (max {_da.abs().max():.1f}°), "
-             f"mean Δdistance {_dd.mean():+.2f} Å.   Blue labels = MD-selected.",
+             f"CIF (Boltz) → RAW (gemmi, lossless) → Minimised (PrepWizard, MD start).   "
+             f"Minimisation drift: mean |Δangle| {_da.abs().mean():.1f}°, mean Δdist {_dd.mean():+.2f} Å.   "
+             f"Blue = MD-selected.",
              ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -903,6 +928,12 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     cradle)."""
     if not rows:
         return None
+    # Keep the MD-selected candidates + only the CFG-designated control (3R3U × fluoroacetate); drop the
+    # other reference systems (3R3U-DFA/TFA, DeHa4-*) from every layer (violin, strip, drift stem, legend).
+    rows = [r for r in rows if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)
+            or _is_reference_control(r["job"])]
+    if not rows:
+        return None
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D as _Line2D
     import matplotlib.patches as _mpatches
@@ -968,6 +999,10 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
 
     # separate the reactive relay (first 3) from the positioning machinery
     _n_react = sum(1 for _rk, _c, _l, _g, _p in _MACHINERY_ROLES if _g == "reactive")
+    # dotted separators between every residue column (same style as the per-tier separators in 03)
+    for _sx in range(_n - 1):
+        if abs((_sx + 0.5) - (_n_react - 0.5)) > 1e-6:      # the relay|positioning divider is drawn solid next
+            ax.axvline(_sx + 0.5, color=CFG.VIS_INK["mid"], ls=":", alpha=0.5, lw=1.0, zorder=1)
     ax.axvline(_n_react - 0.5, ls="-", lw=0.8, color=CFG.VIS_INK["pale"], zorder=1)
     ax.annotate("reactive relay", xy=((_n_react - 1) / 2, 1.0), xycoords=("data", "axes fraction"),
                 xytext=(0, 6), textcoords="offset points", ha="center", va="bottom",
@@ -990,13 +1025,20 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     ax.yaxis.set_major_locator(MultipleLocator(0.2))     # finer gridlines for reading the tight spread
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
-    # zone labels at the right edge, inside each band
-    for _yv, _yt, _yc in ((_react, f"reactive ≤{_react:g} Å", CFG.VIS_BAND["high"]),
-                          ((_react + _outer) / 2, f"in contact ≤{_outer:g} Å", CFG.VIS_INK["muted"]),
-                          (_ymax - 0.2, "out of contact", CFG.VIS_BAND["low"])):
-        ax.annotate(_yt, xy=(1.0, _yv), xycoords=("axes fraction", "data"), xytext=(-4, 0),
-                    textcoords="offset points", ha="right", va="center", style="italic",
-                    fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_yc, alpha=0.9)
+    # Zone labels at the right edge, each centred in its VISIBLE band. The reactive label rides just
+    # ABOVE its dashed line on the top layer (high zorder) so the line never sits over it. The "in
+    # contact" band is only drawn up to the visible top (_outer may exceed the axis), and the "out of
+    # contact" label is drawn only when that band is actually on screen (_ymax > _outer) — otherwise
+    # the two upper labels would collide at the top.
+    _mod_top = min(_outer, _ymax)
+    _zlabels = [(_react, f"reactive ≤{_react:g} Å", CFG.VIS_BAND["high"], "bottom", 3),
+                ((_react + _mod_top) / 2, f"in contact ≤{_outer:g} Å", CFG.VIS_INK["muted"], "center", 0)]
+    if _ymax > _outer + 0.05:
+        _zlabels.append(((_outer + _ymax) / 2, "out of contact", CFG.VIS_BAND["low"], "center", 0))
+    for _yv, _yt, _yc, _va, _dy in _zlabels:
+        ax.annotate(_yt, xy=(1.0, _yv), xycoords=("axes fraction", "data"), xytext=(-4, _dy),
+                    textcoords="offset points", ha="right", va=_va, style="italic",
+                    fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_yc, alpha=0.95, zorder=7)
 
     _h = ([_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
                    markeredgecolor=CFG.VIS_INK["dark"], ms=6, label="MD-selected median @ CIF"),
@@ -1005,7 +1047,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=_md_colour[_j],
                      markeredgecolor=CFG.VIS_INK["dark"], ms=6, label=_short_job(_j)) for _j in _md_jobs]
           + [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["silver"],
-                     markeredgecolor=CFG.VIS_INK["dark"], ms=5, label="control")])
+                     markeredgecolor=CFG.VIS_INK["dark"], ms=5, label=f"{CFG.REFERENCE_PDB_ID} control")])
     ax.legend(handles=_h, loc="upper left", frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 0.5, ncol=2)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -1652,8 +1694,6 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     When `anchors` (02's dynamic Mapped_* positions for this job) is supplied the
     search is anchored there — robust to homolog insertions/deletions — rather than
     on a static window around the canonical reference numbers."""
-    import json
-
     anchors = anchors or {}
     nuc_ref  = anchors.get("Nuc")  or cfg.DREAM_TEAM_REFS["Nuc"]   # 02 dynamic align, else canonical 110
     acid_ref = anchors.get("Acid") or cfg.DREAM_TEAM_REFS["Acid"]  # else 134
@@ -1730,8 +1770,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     }
 
     out_json = prepared_pdb_path.parent / f"{job_name}_index_offset.json"
-    with open(out_json, "w") as fh:
-        json.dump(record, fh, indent=2)
+    _utils_mod.write_json_atomic(out_json, record)   # atomic (temp + rename), like every other data write
 
     return record
 
@@ -3192,15 +3231,16 @@ def prep_and_convert_phase(args):
     jobs = collect_best_cifs(best_cifs_dir)
     _n_all_cifs = len(jobs)
 
-    # SECTION 18 gate: restrict to the MD-ready cohort so only ~10 complexes are
-    # converted and prepared, not the whole predicted library. Control jobs
-    # (ID 0000000_*) are always kept alongside the cohort so their raw/prepared
-    # PDBs exist for the downstream control comparison. Falls back to all CIFs
-    # when the ranked CSV carries no MD_Selected column.
+    # SECTION 18 gate: restrict to the MD-ready cohort so only the MD_Selected complexes are converted
+    # and prepared, not the whole predicted library. Of the control jobs (ID 0000000_*) only the single
+    # CFG-designated MD control is kept — the reference structure paired with a CFG.CONTROL_MD_LIGANDS
+    # ligand (3R3U × fluoroacetate); the other reference systems (3R3U-DFA/TFA, DeHa4-*) are scored and
+    # tiered upstream but never simulated, so they are not converted here. Falls back to all CIFs when
+    # the ranked CSV carries no MD_Selected column.
     _md_jobs = load_md_selected_jobs(prod_dir)
     if _md_jobs:
         jobs = [(jn, cif) for (jn, cif) in jobs
-                if jn in _md_jobs or jn.startswith(CFG.CONTROL_JOB_PREFIX)]
+                if jn in _md_jobs or (jn.startswith(CFG.CONTROL_JOB_PREFIX) and _is_reference_control(jn))]
 
     _utils_mod.print_script_banner(
         "05_TopN_and_PDB_Preparation_FAcDs.py",
@@ -3626,11 +3666,12 @@ def topn_extraction_phase(args):
 
     TIER_ORDER = CFG.TIER_ORDER
 
-    # Separate controls from candidates (controls always extracted independently). The test is a
-    # prefix on one column, so it is a vectorised string op computed once, not a Python callback run
-    # per row and then run again for the complement.
+    # Separate controls from candidates. Only the CFG-designated control (3R3U × fluoroacetate) is
+    # extracted — the other reference systems (3R3U-DFA/TFA, DeHa4-*) are never converted/prepared
+    # (SECTION 18 gate), so listing them here only produced spurious "Missing Raw/Prepared Control"
+    # warnings. The prefix test isolates control rows; _is_reference_control keeps the one real control.
     _is_control = df["job_name"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
-    df_controls   = df[_is_control].copy()
+    df_controls   = df[_is_control & df["job_name"].map(_is_reference_control)].copy()
     df_candidates = df[~_is_control].copy()
 
     # SECTION 18 gate: when the ranked CSV carries MD_Selected, extract exactly that
@@ -3764,8 +3805,7 @@ def topn_extraction_phase(args):
         if not df_controls.empty:
             console_info(f"Extracting {len(df_controls)} control structure(s) → Controls/")
             for _, crow in df_controls.iterrows():
-                ctrl_name  = str(crow.get("job_name", ""))
-                # Control jobs: 0000000_02–3 (DeHa4) / 0000000_4–6 (3R3U)
+                ctrl_name  = str(crow.get("job_name", ""))   # the single CFG control (3R3U × fluoroacetate)
                 fname_raw  = f"{ctrl_name}_RAW.pdb"
                 fname_prep = f"{ctrl_name}_Prepared.pdb"
 
@@ -3979,9 +4019,12 @@ def topn_extraction_phase(args):
         _ctrl_df = pd.DataFrame(ctrl_csv_rows) if ctrl_csv_rows else pd.DataFrame()
         if not _ctrl_df.empty:
             _ctrl_df = _ctrl_df.reindex(columns=subset.columns)
-        # Provenance flag so controls stay distinguishable from candidate hits in the
-        # merged CSV (the reindex above drops any control marker carried in the rows).
-        subset = subset.copy()
+        # Provenance flag so controls stay distinguishable from candidate hits in the merged CSV (the
+        # reindex above drops any control marker carried in the rows). The MD control (3R3U-FA) is both
+        # is_control and MD_Selected, so it was folded into `subset` for extraction AND is carried in
+        # _ctrl_df — drop it from the candidate side here so the merged CSV lists it once (from _ctrl_df,
+        # is_control=True) instead of twice.
+        subset = subset[~subset["job_name"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)].copy()
         subset["is_control"] = False
         if not _ctrl_df.empty:
             _ctrl_df["is_control"] = True
