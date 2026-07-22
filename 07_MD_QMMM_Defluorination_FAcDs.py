@@ -3477,7 +3477,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     No tgz-extract / recursive fallback: multisim leaves the PRODUCTION stage flat at the job-dir root
     ({job}_trj + {job}-out.cms) and archives ONLY the earlier equilibration stages as *_N-out.tgz.
-    Extracting those and concatenating them as production (as an earlier version did) analyses a
+    Extracting those and concatenating them as production would analyse a
     Brownie/NVT/NPT relax as if it were production, with no root .ene so every relax frame counts as
     post-equilibration. Step 06 now refuses that on the build side; 07 mirrors it — a missing flat
     {job}_trj means the MD did not finish, so skip the rank.

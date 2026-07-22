@@ -52,7 +52,7 @@
 <text x="389" y="354.59999999999997" font-size="9.2" fill="#d1fae5">6-tier ladder · elite-angle + floor</text>
 <text x="389" y="367.79999999999995" font-size="9.2" fill="#d1fae5">controls FA→2A · DFA→2B · TFA→3</text>
 <text x="389" y="380.99999999999994" font-size="9.2" fill="#d1fae5">→ ranked + master CSV · best CIFs</text>
-<text x="597" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~7,407</text>
+<text x="597" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~7,433</text>
 <g filter="url(#ds)"><rect x="616" y="278" width="236" height="134" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
 <text x="633" y="298" font-size="10.4" font-weight="800" fill="#ecfdf5">03_Validation_Figures_FAcDs.py</text>
 <text x="633" y="315" font-size="9.2" fill="#d1fae5">the judge — 54 panels · 7 folders</text>
@@ -60,7 +60,7 @@
 <text x="633" y="341.4" font-size="9.2" fill="#d1fae5">BH stats · Ramachandran · control★</text>
 <text x="633" y="354.59999999999997" font-size="9.2" fill="#d1fae5">multi-model variance · separators</text>
 <text x="633" y="367.79999999999995" font-size="9.2" fill="#d1fae5">→ Figure_Enriched_Dataset.csv</text>
-<text x="841" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~11,323</text>
+<text x="841" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~11,331</text>
 <g filter="url(#ds)"><rect x="860" y="278" width="224" height="134" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
 <text x="877" y="298" font-size="10.4" font-weight="800" fill="#ecfdf5">04_Dendrogram_FAcDs.py</text>
 <text x="877" y="315" font-size="9.2" fill="#d1fae5">alignment-free k-mer (k=3)</text>
@@ -78,7 +78,7 @@
 <text x="73" y="552.6000000000001" font-size="9.2" fill="#ffedd5">PyMOL / PLIP contact figures</text>
 <text x="73" y="565.8000000000002" font-size="9.2" fill="#ffedd5">pose-drift + 8-residue machinery figures</text>
 <text x="73" y="579.0000000000002" font-size="9.2" fill="#ffedd5">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="317" y="602" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,099</text>
+<text x="317" y="602" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,142</text>
 <rect x="356" y="446" width="744" height="178" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="728.0" y="465" font-size="11.5" font-weight="800" fill="#1d4ed8" text-anchor="middle" letter-spacing="0.3">Phase 3 — Dynamics &amp; Quantum Mechanics</text>
 <g filter="url(#ds)"><rect x="372" y="476" width="356" height="134" rx="10" fill="#1d4ed8" stroke="#60a5fa" stroke-width="1.5"/></g>

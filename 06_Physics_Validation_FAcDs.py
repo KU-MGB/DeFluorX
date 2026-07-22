@@ -3518,8 +3518,8 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
             else:
                 verified += 1
     # Fail-CLOSED: the whole point of this function is to guarantee ESP reached the force field. A
-    # ligand PDB-name mismatch after System Builder writes nothing, verifies nothing and — under the old
-    # `if bad` test — passed silently while returning the ESP file's own sum. Require every LIG atom.
+    # ligand PDB-name mismatch after System Builder writes nothing and verifies nothing; a lenient
+    # `if bad` test would pass silently while returning the ESP file's own sum. Require every LIG atom.
     if n_lig == 0:
         raise RuntimeError("reapply_esp_to_cms: no LIG atoms in the built cms.")
     if applied != n_lig or verified != n_lig or bad:

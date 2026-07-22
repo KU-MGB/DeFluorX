@@ -31,10 +31,10 @@ Date   : 20 July 2026 <───────────────────
                     06_Ligand_Interactions_and_Chemical_Space/ 01_*.png … 08_*.png
                     07_PFAS_Scope_and_Synthesis/            01_*.png … 13_*.png
                     08_Diagnostic_and_MultiModel_Trends/    01_*.png … 09_*.png  (pocket-fit + consensus + competence)
-                  <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
-                  <Run>/3_Validation_Figures/04_ACTION_Rescue_Hidden_Gems.csv
-                  <Run>/3_Validation_Figures/05_Figure_Descriptions.txt
-                  <Run>/3_Validation_Figures/00_Validation_Figures.log
+                  <Run>/3_Validation_Figures/01_Analysis_Data/03_Figure_Enriched_Dataset.csv
+                  <Run>/3_Validation_Figures/01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv
+                  <Run>/3_Validation_Figures/01_Analysis_Data/05_Figure_Descriptions.txt
+                  <Run>/3_Validation_Figures/01_Analysis_Data/00_Validation_Figures.log
   Upstream      : 02_Production_FAcDs.py → writes the master ranked CSV (incl. the pocket-fit
                   columns active_site_volume, ligand_volume, pocket_occupancy, fit_ratio,
                   ligand_fits) consumed here
@@ -77,9 +77,11 @@ Purpose:
 
 -------------------------------------------------------------------------------
 Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
-    [Data — written to the folder root]
+    [Data — written to 01_Analysis_Data/]
     • 03_Figure_Enriched_Dataset.csv        <-- ranked CSV + figure columns (PCA/UMAP/Pareto/conflict); NOT a rank source
     • 04_ACTION_Rescue_Hidden_Gems.csv      <-- MANUAL REVIEW LIST
+    • 06_Statistical_Tests.csv              <-- per-test BH q-values (multiplicity paid once)
+    • 07_Boltz2_MultiModel_QC_Variance.csv  <-- per-Boltz-model geometry variance (figs 13–15)
     • 05_Figure_Descriptions.txt            <-- Per-figure description log
     • 00_Validation_Figures.log             <-- Detailed Execution Log
 
@@ -825,8 +827,8 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
             _m = None
         if not isinstance(_m, dict):
             # An absent or unparseable mapping produced NO residues — this is the coverage-evidence
-            # CSV, so count the protein as missed for every role. Skipping it (the old `continue`)
-            # let an alignment that mapped nothing read as fully mapped (missing is not zero-missed).
+            # CSV, so count the protein as missed for every role. Skipping the row would let an
+            # alignment that mapped nothing read as fully mapped (missing is not zero-missed).
             for k in _keys:
                 _missed[k].append(str(_prot))
             continue
@@ -1788,7 +1790,7 @@ def _jf_importance(df, folder_dir, reporter):
         axR.set_ylabel("Candidates (stream)"); axR.set_xlabel("Ligand")
         axR.legend(ncol=len(ct.columns), fontsize=_JF_FA - 0.5, loc="lower center",
                    bbox_to_anchor=(0.5, 1.0), handlelength=0.9, columnspacing=1.0,
-                   handletextpad=0.4, borderpad=0.3); axR.grid(False)
+                   borderpad=0.3); axR.grid(False)   # framealpha/handletextpad inherit the CFG legend SSOT
         for s in axR.spines.values():
             s.set_visible(False)
         _jf_save(fig, folder_dir, "12_Feature_Importance_Tier_Streams.png")
@@ -1815,7 +1817,7 @@ def _jf_swimmer(df, folder_dir, reporter):
         ax.set_xlabel("Mechanistic score (effective)"); ax.set_ylabel("Tier · ligand  (top 3 per tier)")
         leg = ax.legend(handles=[_JF_Line([0], [0], marker=">", ls="", mfc="black", mec="black", label="MD-selected"),
                                  _JF_Line([0], [0], marker="o", ls="", mfc=_JF_SIG["up"], mec=_JF_SIG["up"], label="degrader")],
-                        loc="lower right", fontsize=_JF_FA, frameon=True, framealpha=0.85, edgecolor="none")
+                        loc="lower right", fontsize=_JF_FA, frameon=True, edgecolor="none")  # framealpha ← CFG SSOT
         leg.get_frame().set_facecolor("white"); ax.margins(y=0.01); _jf_box(ax)
         _jf_save(fig, folder_dir, "16_Swimmer_Top_Per_Tier.png")
 
@@ -5852,7 +5854,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         ax_f2.set_xticklabels(["0%", "25%", "50%", "75%", "100%"])
         ax_f2.set_axisbelow(True)
         ax_f2.xaxis.grid(True, alpha=0.30, linestyle=":", color=CFG.VIS_INK["ghost"], zorder=0)
-        #ax_f2.set_title("Conflict-Category Composition by Degrader Tier",  pad=10)
 
         # Top-right badge: total jobs | tiered count — lifted above the axes frame
         ax_f2.text(0.99, 1.06,
@@ -6413,8 +6414,8 @@ def _mm_variance_by_model(df, out_dir, reporter):
     _h += [Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], ls="--", lw=1.2),
            Line2D([0], [0], color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.2)]
     _labs = list(_models) + [f"strict NAC {_dl:g} Å", f"strict NAC {_al:g}°"]
-    ax_d.legend(_h, _labs, loc="upper left", ncol=len(_labs), framealpha=0.6,
-                fontsize=CFG.VIS_FONT_LEGEND, handletextpad=0.3, columnspacing=1.0)
+    ax_d.legend(_h, _labs, loc="upper left", ncol=len(_labs),
+                fontsize=CFG.VIS_FONT_LEGEND, columnspacing=1.0)   # framealpha/handletextpad ← CFG SSOT
     fig.tight_layout()
     fig.savefig(out_dir / "13_MultiModel_Geometry_Variance_by_Model.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)

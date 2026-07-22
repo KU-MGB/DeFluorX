@@ -7,8 +7,7 @@ FAcDs Pipeline  |  Step 02  |  Boltz-2 Production, Analysis & FAcD Ranking
 Large-scale, resume-safe Boltz-2 protein-ligand predictions with deep
 structural, geometric, and chemical scoring for FAcD SN2 degrader tiers.
 
-Clean/final build: all old-format folder/file migration and job-name renaming
-have been removed. Resume (--resume) is retained and reuses completed GPU
+Resume (--resume) reuses completed GPU
 predictions (boltz_results_*/), recomputing only analysis; it assumes the input
 roster (proteins × ligands) is stable across resumes — change parameters and
 re-run, not the ligand/protein list. Only the canonical directory layout and
@@ -579,11 +578,11 @@ DEFAULT_METRICS = {
     "is_degrader": False,
     CFG.COL_LIKE_S: 0.0,
     CFG.COL_MECH_S: 0.0,
-    "Active_Site_RMSD": 999.0,
+    "Active_Site_RMSD": CFG.SENTINEL_UNDEFINED,
     "Identity_to_Control": 0.0,
     "Halide_Stabilisation": False,
     "Carboxylate_Clamp": False,
-    "catalytic_dist_A": 999.0,
+    "catalytic_dist_A": CFG.SENTINEL_UNDEFINED,
     CFG.COL_IDENS: 0.0,
     "custom_affinity_score": 0.0,
     "ligand_smiles_stale": 0,   # 1 = the finished structure predates the current input SMILES; it is
@@ -591,7 +590,7 @@ DEFAULT_METRICS = {
     "binding_likelihood_computed": 0.0,
     "confidence_score": 0.0,
     "sn2_attack_angle": 0.0,
-    "sn2_trajectory_dev": 999.0,
+    "sn2_trajectory_dev": CFG.SENTINEL_UNDEFINED,
     "scissile_cf_bde": 0.0,                 # est. leaving C–F bond-dissociation energy (kcal/mol); SN2 dead-end check A
     "sn2_backside_occlusion": 0.0,          # vdW bulk crowding the SN2 backside approach; dead-end check B
     "sn2_dead_end": 0,                       # 1 = scissile C–F too strong + backside blocked (diagnostic)
@@ -607,8 +606,8 @@ DEFAULT_METRICS = {
     "model_degrader_consensus": 0.0,        # fraction of Boltz models independently reaching a degrader tier
     "nuc_resolution": "none",               # how the catalytic Asp was resolved (direct / window+N); §5.4 QC
     "nuc_rescue_offset": 0,                 # residue offset of a windowed nucleophile rescue (0 = direct hit)
-    "burgi_dunitz_angle": 999.0,            # aux reference (carbonyl); non-gating; 999.0 = undefined
-    "flippin_lodge_offset": 999.0,          # aux reference (in-plane offset); non-gating; 999.0 = undefined
+    "burgi_dunitz_angle": CFG.SENTINEL_UNDEFINED,            # aux reference (carbonyl); non-gating; CFG.SENTINEL_UNDEFINED = undefined
+    "flippin_lodge_offset": CFG.SENTINEL_UNDEFINED,          # aux reference (in-plane offset); non-gating; CFG.SENTINEL_UNDEFINED = undefined
     "mainchain_clash_ratio": 0.0,           # clashing tail atoms / all ligand heavy atoms (size-fair diagnostic)
     "mainchain_clash_count": 0,             # absolute backbone-interpenetrating tail-atom count
     # --- Active-site pocket vs ligand steric fit (DIAGNOSTIC columns — reported for analysis; by design NOT a tier/rank input) ---
@@ -628,9 +627,9 @@ DEFAULT_METRICS = {
     "containment_penalty": 0.0,             # graded pocket-fit penalty subtracted from mech for the tier gate
     "mechanistic_score_effective": 0.0,     # feasibility-weighted mech (raw geometry − chem − containment); tier-gate key
 }
-# Initialises all specific residue distances to an arbitrary maximum (999.0).
+# Initialises all specific residue distances to an arbitrary maximum (CFG.SENTINEL_UNDEFINED).
 for k in REF_ACTIVE_SITE_MAP:
-    DEFAULT_METRICS[f"dist_{k}"] = 999.0
+    DEFAULT_METRICS[f"dist_{k}"] = CFG.SENTINEL_UNDEFINED
 
 # -------------------------------------------------------------------------------
 # Step 2.9: Global State Variables
@@ -2432,7 +2431,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
     used. When omitted, the nearest-Cα search is used instead.
     """
     result = {
-        "Active_Site_RMSD": 999.0,
+        "Active_Site_RMSD": CFG.SENTINEL_UNDEFINED,
         "Halide_Stabilisation": False,
         "Carboxylate_Clamp": False
     }
@@ -2603,7 +2602,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                     if _min_cradle <= CFG.MECH_CRADLE_RADIUS:
                         has_halide_cradle = True
 
-            result["Active_Site_RMSD"] = math.sqrt(rmsd_sq_sum / count) if count > 0 else 999.0
+            result["Active_Site_RMSD"] = math.sqrt(rmsd_sq_sum / count) if count > 0 else CFG.SENTINEL_UNDEFINED
             result["Halide_Stabilisation"] = has_halide_cradle
             result["Carboxylate_Clamp"] = has_carb_clamp
     except Exception as e:
@@ -2676,12 +2675,12 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     (CFG §5.3: the α-carbon adjacent to the ligand carboxylate), so the geometry is
     measured at the catalytically productive position rather than an incidental C–F.
     """
-    if not asp_atoms or not lig_atoms: return 0.0, 999.0, 0, None, None, None
+    if not asp_atoms or not lig_atoms: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
     asp_oxygens = [a for a in asp_atoms if a.name in ("OD1", "OD2")]
     lig_carbons = [a for a in lig_atoms if a.element.name == "C"]
     lig_halogens = [a for a in lig_atoms if a.element.name == "F"]
 
-    if not asp_oxygens or not lig_carbons or not lig_halogens: return 0.0, 999.0, 0, None, None, None
+    if not asp_oxygens or not lig_carbons or not lig_halogens: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
     valid_cx_pairs = []
 
@@ -2709,7 +2708,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                 if c.pos.dist(x.pos) < CFG.CF_DIST_TOLERANCE:
                     valid_cx_pairs.append((c, x))
 
-    if not valid_cx_pairs: return 0.0, 999.0, 0, None, None, None
+    if not valid_cx_pairs: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
     """
     Restrict the attack carbon to the catalytically productive set when supplied
@@ -2720,7 +2719,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     if preferred_c_names:
         _restricted = [(c, x) for (c, x) in valid_cx_pairs if c.name in preferred_c_names]
         if not _restricted:
-            return 0.0, 999.0, 0, None, None, None
+            return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
         valid_cx_pairs = _restricted
 
     """
@@ -2781,7 +2780,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             if _best_key is None or _key > _best_key:
                 _best_key, best_O, best_C = _key, o, c
 
-    if not best_O or not best_C: return 0.0, 999.0, 0, None, None, None
+    if not best_O or not best_C: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
     """
     Select the scissile (leaving) fluorine among those bonded to the chosen best_C.
@@ -2807,7 +2806,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                 max_ang = ang
                 best_X = x
 
-    if not best_X: return 0.0, 999.0, 0, None, None, None
+    if not best_X: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
     # Derives the final structured Geometric Result (Vector Angle)
     angle = calculate_angle(best_O.pos, best_C.pos, best_X.pos)
@@ -2832,7 +2831,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             deviation = float(np.linalg.norm(np.cross(vec_cnu, _u)))     # perpendicular offset
         else:
             deviation = float(np.linalg.norm(vec_cnu))                   # front side: fully off-axis
-    except Exception: deviation = 999.0
+    except Exception: deviation = CFG.SENTINEL_UNDEFINED
 
     # Teflon Shield Calculation: Count adjacent fluorines that sterically clash with Aspartate catalytic oxygen
     teflon_clashes = 0
@@ -2936,7 +2935,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     has three chances to present some fluorine anti-periplanar — so it is the bond COUNT that
     matters, not which of them the cradle later identifies as leaving.
     """
-    aux = {"burgi_dunitz_angle": 999.0, "flippin_lodge_offset": 999.0,
+    aux = {"burgi_dunitz_angle": CFG.SENTINEL_UNDEFINED, "flippin_lodge_offset": CFG.SENTINEL_UNDEFINED,
            "n_scissile_f": n_scissile_f, "beta_f_count": beta_f_count,
            "attack_o_atom": best_O}
     if rd_mol and mm_map:
@@ -3012,7 +3011,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     detected by distance (≤ CFG.BOND_DIST_MAX). Only fills values still at 999.
     """
     try:
-        if aux.get("burgi_dunitz_angle", 999.0) >= 999.0 or aux.get("flippin_lodge_offset", 999.0) >= 999.0:
+        if aux.get("burgi_dunitz_angle", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX or aux.get("flippin_lodge_offset", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX:
             _bmax = float(getattr(CFG, "BOND_DIST_MAX", 1.9))
             _nuc_np = np.array([best_O.pos.x, best_O.pos.y, best_O.pos.z])
 
@@ -3024,7 +3023,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                 return np.array([a.pos.x, a.pos.y, a.pos.z])
 
             # Bürgi–Dunitz from structure ligand atoms (shared derivation).
-            if aux.get("burgi_dunitz_angle", 999.0) >= 999.0:
+            if aux.get("burgi_dunitz_angle", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX:
                 _centres = [a for a in lig_atoms if a.element.name in ("C", "S", "P")]
                 _bd = _derive_burgi_dunitz(
                     _nuc_np, _centres,
@@ -3035,7 +3034,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                     aux["burgi_dunitz_angle"] = _bd
 
             # Flippin–Lodge from structure ligand atoms (shared derivation).
-            if aux.get("flippin_lodge_offset", 999.0) >= 999.0:
+            if aux.get("flippin_lodge_offset", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX:
                 _fl = _derive_flippin_lodge(
                     _nuc_np, best_C, _np_of(best_C),
                     neigh_fn=_neigh,
@@ -3056,7 +3055,7 @@ def sigmoid(x: float, k: float = 1.0, x0: float = 0.0) -> float:
     DECREASE with distance. So the overflow branch cannot key on the sign of (x - x0) — that assumes a
     positive k, and with a negative one it is inverted, handing a PERFECT 1.0 to an enormous distance.
 
-    The trap is concrete: calculate_sn2_metrics returns 999.0 A as its "no nucleophile" sentinel, and at
+    The trap is concrete: calculate_sn2_metrics returns CFG.SENTINEL_UNDEFINED A as its "no nucleophile" sentinel, and at
     k = -4 the exp() overflows past 180.4 A. A complex with no nucleophile at all must not score a perfect
     nucleophile term.
 
@@ -3249,8 +3248,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
     Evaluates exact distance topologies within the active site against strictly defined tiers,
     subsequently assigning a final categorical degrader tier.
     """
-    results = {f"dist_{k}": 999.0 for k in REF_ACTIVE_SITE_MAP.keys()}
-    results.update({"sn2_attack_angle": 0.0, "sn2_trajectory_dev": 999.0})
+    results = {f"dist_{k}": CFG.SENTINEL_UNDEFINED for k in REF_ACTIVE_SITE_MAP.keys()}
+    results.update({"sn2_attack_angle": 0.0, "sn2_trajectory_dev": CFG.SENTINEL_UNDEFINED})
 
     try:
         # -------------------------------------------------------------------------------
@@ -3324,11 +3323,11 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                         """
                         site_atoms.pop(_tk, None)
                         site_atoms_obj.pop(_tk, None)
-                        results[f"dist_{_tk}"] = 999.0
+                        results[f"dist_{_tk}"] = CFG.SENTINEL_UNDEFINED
 
         if not lig_coords:
                     results.update({
-                        "catalytic_dist_A": 999.0, CFG.COL_TIER: CFG.TIER_DECOY, "is_degrader": False,
+                        "catalytic_dist_A": CFG.SENTINEL_UNDEFINED, CFG.COL_TIER: CFG.TIER_DECOY, "is_degrader": False,
                         "residues_within_6A": "None", "constraint_check": "Ligand absence indicated",
                         "scientific_meaning": "No validated ligand atoms identified within structure.",
                         "Interaction_Density_Norm": 0.0, "Interaction_Density_Calc": "0.00",
@@ -3342,7 +3341,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         # -------------------------------------------------------------------------------
         dists = {}
         for key_res in REF_ACTIVE_SITE_MAP.keys():
-            min_d = 999.0
+            min_d = CFG.SENTINEL_UNDEFINED
             if key_res in site_atoms:
                 for pa in site_atoms[key_res]:
                     for la in lig_coords:
@@ -3375,7 +3374,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             _donor = POLAR_SIDECHAIN_ATOMS.get(_res3, set())
             if _sk in site_atoms_obj and _donor and _lig_f_pos:
                 _dd = min((la.dist(a.pos) for a in site_atoms_obj[_sk] if a.name in _donor
-                           for la in _lig_f_pos), default=999.0)
+                           for la in _lig_f_pos), default=CFG.SENTINEL_UNDEFINED)
                 dists[_sk] = _dd
                 results[f"dist_{_sk}"] = round(_dd, 2)
 
@@ -3397,8 +3396,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             # naming mismatch cannot silently re-admit backbone CA···CA relay contacts.
             return _pts or [a.pos for a in _objs if a.name not in _BACKBONE_NAMES] or [a.pos for a in _objs]
 
-        dist_nuc_base = 999.0
-        dist_base_acid = 999.0
+        dist_nuc_base = CFG.SENTINEL_UNDEFINED
+        dist_base_acid = CFG.SENTINEL_UNDEFINED
         if site_atoms_obj.get("Nuc") and site_atoms_obj.get("Base"):
             _nuc_p, _base_p = _triad_func_pos("Nuc"), _triad_func_pos("Base")
             dist_nuc_base = min(p1.dist(p2) for p1 in _nuc_p for p2 in _base_p)
@@ -3453,8 +3452,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["teflon_shield_clashes"] = steric_clashes
         # Auxiliary (non-gating) reference geometries
         _aux = sn2_aux or {}
-        results["burgi_dunitz_angle"]   = _aux.get("burgi_dunitz_angle", 999.0)
-        results["flippin_lodge_offset"] = _aux.get("flippin_lodge_offset", 999.0)
+        results["burgi_dunitz_angle"]   = _aux.get("burgi_dunitz_angle", CFG.SENTINEL_UNDEFINED)
+        results["flippin_lodge_offset"] = _aux.get("flippin_lodge_offset", CFG.SENTINEL_UNDEFINED)
 
         scissile_is_alpha = bool(best_c_atom is not None and best_c_atom.name in alpha_c_names)
         results["scissile_is_alpha"] = 1.0 if scissile_is_alpha else 0.0
@@ -3479,7 +3478,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         d_nuc = results["dist_Nuc"]
         angle  = results["sn2_attack_angle"]
-        d_trp, d_tyr = results.get("dist_Stab_W", 999.0), results.get("dist_Stab_Y", 999.0)
+        d_trp, d_tyr = results.get("dist_Stab_W", CFG.SENTINEL_UNDEFINED), results.get("dist_Stab_Y", CFG.SENTINEL_UNDEFINED)
 
         # --- ACTIVE SITE FLUORIDE-STABILISATION METRICS ---
         # Validates the documented aromatic/His fluoride cradle near the leaving halogen.
@@ -3503,8 +3502,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                 "dist_Stab_H": (RESIDUE_CLASS_GROUPS["AROMATIC"] - {"PHE"}) | RESIDUE_CLASS_GROUPS["POSITIVE"],
             }
             for _sk, _cls in _stab_classes.items():
-                if results.get(_sk, 999.0) >= 999.0:
-                    _best = 999.0
+                if results.get(_sk, CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX:
+                    _best = CFG.SENTINEL_UNDEFINED
                     for p_at in all_prot_atoms:
                         _canon_st = _canonical_resname(p_at["resname"])
                         # Only the residue's H-bond-DONOR atoms count (POLAR_SIDECHAIN_ATOMS):
@@ -3516,7 +3515,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                             if _d < _best: _best = _d
                     if _best <= CFG.MECH_CRADLE_RADIUS:
                         results[_sk] = round(_best, 2)
-            d_trp, d_tyr = results.get("dist_Stab_W", 999.0), results.get("dist_Stab_Y", 999.0)
+            d_trp, d_tyr = results.get("dist_Stab_W", CFG.SENTINEL_UNDEFINED), results.get("dist_Stab_Y", CFG.SENTINEL_UNDEFINED)
 
         """
         Fluoride stabilisation requires the documented cradle — an aromatic π-system
@@ -3525,7 +3524,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         pocket some polar atom is always nearby, which would make the flag fire for every
         pose and carry no signal.
         """
-        d_his = results.get("dist_Stab_H", 999.0)
+        d_his = results.get("dist_Stab_H", CFG.SENTINEL_UNDEFINED)
         stabilised = (d_trp <= CFG.MECH_STAB_RADIUS
                       or d_tyr <= CFG.MECH_STAB_RADIUS
                       or d_his <= CFG.MECH_STAB_RADIUS)
@@ -4106,7 +4105,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         """
         logger.error(f"check_catalytic_geometry FAILED for {getattr(cif_path, 'name', cif_path)}: "
                      f"{type(e).__name__}: {e}", exc_info=True)
-        results.update({"catalytic_dist_A": 999.0, "error": f"{type(e).__name__}: {e}",
+        results.update({"catalytic_dist_A": CFG.SENTINEL_UNDEFINED, "error": f"{type(e).__name__}: {e}",
                         CFG.COL_TIER: "Error"})
         return results
 
@@ -4680,7 +4679,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 ident = data.get(CFG.COL_ID_PCT, 0.0)
                 data["Identity_to_Control"] = round(ident, 2)
 
-                rmsd = data.get("Active_Site_RMSD", 999.0)
+                rmsd = data.get("Active_Site_RMSD", CFG.SENTINEL_UNDEFINED)
                 if rmsd >= 99.0: geo_fit = 0.0
                 else: geo_fit = 100.0 / (1.0 + rmsd)
 
@@ -4736,7 +4735,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 # eight residues are geometrically ASSEMBLED like the crystal — not merely
                 # present and correctly typed (that is active_site_integrity, Criterion A).
                 # ----------------------------------------------------------------------
-                _as_rmsd = float(data.get("Active_Site_RMSD", 999.0))
+                _as_rmsd = float(data.get("Active_Site_RMSD", CFG.SENTINEL_UNDEFINED))
                 _B = 0.0 if _as_rmsd >= 99.0 else round(1.0 / (1.0 + _as_rmsd), 3)
                 data["catalytic_constellation_score"] = _B
                 """
@@ -4838,6 +4837,33 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                         aligned_ok=data.get("alignment_reliable", False),
                         identity=data.get(CFG.COL_ID_PCT, 0.0)
                     ) + f" | Tier: {_demoted_to} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
+
+            # Final competence-feasibility floor (re-applied after the caps). The geometry-elite tiers
+            # (1A/1B) gate on geometry only, and both caps above demote on constellation / machinery —
+            # none re-checks feasibility. So a geometry-perfect but low-feasibility pose (e.g. a high-BDE
+            # TFA) can be capped INTO 2A/2B while its competence_score sits below that tier's floor, which
+            # the FORWARD 2A/2B gate would have rejected. Re-apply the same CFG floor (TIER_COMP_MIN) here
+            # so the demotion path obeys it too: drop such a row to Tier_3 (not a degrader).
+            _fin_t = data.get(CFG.COL_TIER)
+            _fin_cmin = CFG.TIER_COMP_MIN.get(_fin_t)
+            if _fin_cmin is not None and float(data.get("competence_score", 0.0) or 0.0) < _fin_cmin:
+                _fin_comp = float(data.get("competence_score", 0.0) or 0.0)
+                data[CFG.COL_TIER] = CFG.TIER_ORDER[4]          # Tier_3
+                data["is_degrader"] = False
+                _ctag = f"low_competence({_fin_comp:.3f}<{_fin_cmin:g})"
+                _cprev = data.get("competence_demotion", "none")
+                data["competence_demotion"] = _ctag if _cprev in ("", "none") else f"{_cprev}+{_ctag}"
+                _cmean = (f"Substrate feasibility below the {_fin_t} floor "
+                          f"(competence {_fin_comp:.3f} < {_fin_cmin:g}); a geometry-elite pose capped into "
+                          f"{_fin_t} still fails the competence floor the forward gate enforces — "
+                          f"demoted to {CFG.TIER_ORDER[4]}.")
+                data["scientific_meaning"] = _cmean
+                data["Justification"] = generate_rich_justification(
+                    tier=CFG.TIER_ORDER[4], meaning=_cmean,
+                    constraint=data.get("constraint_check", "Pass"),
+                    aligned_ok=data.get("alignment_reliable", False),
+                    identity=data.get(CFG.COL_ID_PCT, 0.0)
+                ) + f" | Tier: {CFG.TIER_ORDER[4]} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
             """
             The tier ladder is size-agnostic: ligand_max_extent is computed and
@@ -5503,7 +5529,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 sn2_backside_occlusion  0.0    = no steric blockade whatsoever
                 chem_penalty            0.0    = no BDE or occlusion penalty at all
 
-            Those columns are filled with CFG.SENTINEL_UNDEFINED (999.0) — the value the rest of the
+            Those columns are filled with CFG.SENTINEL_UNDEFINED (CFG.SENTINEL_UNDEFINED) — the value the rest of the
             pipeline already uses for 'not measurable', and which every gate and every figure filters out.
             Columns where 0.0 genuinely IS the worst case (an angle, a score, a confidence, a count) keep
             the zero fill, because there the fill and the meaning agree.
@@ -7159,7 +7185,7 @@ def main():
 
             fill_dict = {}
             for c in df.columns:
-                if "dist" in c or "catalytic" in c: fill_dict[c] = 999.0
+                if "dist" in c or "catalytic" in c: fill_dict[c] = CFG.SENTINEL_UNDEFINED
                 elif "score" in c or "iptm" in c or "plddt" in c or "density" in c or "angle" in c or "rmsd" in c: fill_dict[c] = 0.0
                 elif "count" in c or "Total_" in c: fill_dict[c] = 0
                 else: fill_dict[c] = "NA"
@@ -7167,11 +7193,11 @@ def main():
             Field-specific overrides — must be set after the generic loop.
             Numeric aux geometries must get a NUMERIC sentinel, never the "NA"
             string: pandas re-parses "NA" as NaN on the next read, which would
-            re-open the gap in the downstream ranked CSV. 999.0 marks "undefined"
+            re-open the gap in the downstream ranked CSV. CFG.SENTINEL_UNDEFINED marks "undefined"
             (consistent with the CFG.SENTINEL_VALID_MAX guard in the SN2 analysis).
             """
-            fill_dict["flippin_lodge_offset"]        = 999.0
-            fill_dict["burgi_dunitz_angle"]          = 999.0
+            fill_dict["flippin_lodge_offset"]        = CFG.SENTINEL_UNDEFINED
+            fill_dict["burgi_dunitz_angle"]          = CFG.SENTINEL_UNDEFINED
             fill_dict["residues_within_6A"]          = "0"
             fill_dict["hydrophobic_desolvation_ratio"] = 0.0
             fill_dict["active_site_contact_flag"]    = 0.0

@@ -18,7 +18,7 @@ Date   : 20 July 2026 <───────────────────
   Upstream      : None (root module — must load before all others).
   Downstream    : 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
-                  05_TopN_and_PDB_Preparation_FAcDs.py,
+                  06_Physics_Validation_FAcDs.py,
                   07_MD_QMMM_Defluorination_FAcDs.py
 ───────────────────────────────────────────────────────────────────────────────
 
