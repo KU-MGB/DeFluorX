@@ -225,13 +225,15 @@ through it, the single-source-of-truth architecture showing up structurally.
 
 ![FAcDs code architecture graph — communities coloured, hub nodes enlarged](assets/graphify.png)
 
+**▶ [Open the interactive graph in your browser](https://htmlpreview.github.io/?https://github.com/KU-MGB/FAcDs_PFAS-27_Defluorination/blob/main/assets/graph.html)** — renders the live `assets/graph.html` (GitHub shows repo HTML as source, so it is served through the htmlpreview proxy).
+
 The graph output lives in **[`assets/`](./assets/)** and is regenerated with `/graphify`:
 
 > [!NOTE]
 > [`assets/graph.html`](./assets/graph.html) (interactive — zoom, pan, community
 > filter, node search), [`assets/graph.json`](./assets/graph.json) (the raw graph,
 > GraphRAG-ready) and [`assets/GRAPH_REPORT.md`](./assets/GRAPH_REPORT.md) (audit
-> trail: hub nodes, communities, surprising connections). Open `graph.html` locally to explore the graph.
+> trail: hub nodes, communities, surprising connections). Explore it via the browser link above, or open `assets/graph.html` locally.
 
 </details>
 
