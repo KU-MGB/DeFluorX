@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17bd8c"/><stop offset="1" stop-color="#0c7d5d"/></linearGradient>
+    <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa3d4"/><stop offset="1" stop-color="#2b6f9e"/></linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b431"/><stop offset="1" stop-color="#d68a00"/></linearGradient>
+    <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a3d"/><stop offset="1" stop-color="#d81f16"/></linearGradient>
+    <filter id="ds" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#123" flood-opacity="0.18"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9fb0ad"/>
+    </marker>
+  </defs>
+
+  <!-- ===== header wordmark ===== -->
+  <text x="60" y="70" font-size="52" font-weight="800" fill="#0c7d5d" letter-spacing="1">FAcD</text>
+  <text x="215" y="70" font-size="52" font-weight="300" fill="#2b2f33" letter-spacing="0.5">·PFAS Defluorination Pipeline</text>
+  <text x="62" y="98" font-size="18" font-weight="600" fill="#15b587" letter-spacing="3.6">FLUOROACETATE  DEHALOGENASE  (3R3U)   ·   27  PFAS  SUBSTRATES</text>
+  <line x1="62" y1="116" x2="1200" y2="116" stroke="#d9e6e1" stroke-width="2"/>
+
+  <!-- ===== connectors (drawn first, behind medallions) ===== -->
+  <g stroke="#c3d3cf" stroke-width="5" fill="none">
+    <line x1="262" y1="250" x2="358" y2="250" marker-end="url(#arrow)"/>
+    <line x1="562" y1="250" x2="658" y2="250" marker-end="url(#arrow)"/>
+    <line x1="862" y1="250" x2="958" y2="250" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ============ STAGE 1 — PREDICT (Boltz-2) ============ -->
+  <g filter="url(#ds)">
+    <circle cx="180" cy="250" r="70" fill="url(#gTeal)"/>
+    <!-- protein ribbon coil -->
+    <path d="M150 278 C140 250 176 250 168 224 C162 204 186 202 190 224 C194 246 214 240 210 268"
+          fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+    <!-- ligand in pocket -->
+    <circle cx="196" cy="256" r="9" fill="#bff0df"/>
+  </g>
+  <text x="180" y="200" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">×5</text>
+  <text x="180" y="345" font-size="21" font-weight="700" fill="#0c7d5d" text-anchor="middle">Predict</text>
+  <text x="180" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Boltz-2 · 5 models</text>
+
+  <!-- ============ STAGE 2 — SCREEN & TIER ============ -->
+  <g filter="url(#ds)">
+    <circle cx="480" cy="250" r="70" fill="url(#gBlue)"/>
+    <!-- descending tier bars (funnel 27 -> elite) -->
+    <rect x="440" y="216" width="80" height="12" rx="4" fill="#fff"/>
+    <rect x="450" y="236" width="60" height="12" rx="4" fill="#fff" opacity="0.85"/>
+    <rect x="460" y="256" width="40" height="12" rx="4" fill="#fff" opacity="0.7"/>
+    <rect x="470" y="276" width="20" height="12" rx="4" fill="#fdd" opacity="0.95"/>
+  </g>
+  <text x="480" y="345" font-size="21" font-weight="700" fill="#2b6f9e" text-anchor="middle">Screen &amp; Tier</text>
+  <text x="480" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">competence-floor tiers</text>
+
+  <!-- ============ STAGE 3 — SIMULATE (MD) ============ -->
+  <g filter="url(#ds)">
+    <circle cx="780" cy="250" r="70" fill="url(#gAmber)"/>
+    <!-- trajectory sine wave -->
+    <path d="M742 258 q 12 -34 24 0 t 24 0 t 24 0" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+    <line x1="742" y1="282" x2="820" y2="282" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  </g>
+  <text x="780" y="345" font-size="21" font-weight="700" fill="#b9760a" text-anchor="middle">Simulate</text>
+  <text x="780" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Desmond MD · 1000 ns</text>
+
+  <!-- ============ STAGE 4 — DEFLUORINATE (QM/MM) ============ -->
+  <g filter="url(#ds)">
+    <circle cx="1080" cy="250" r="70" fill="url(#gRed)"/>
+    <!-- alpha carbon -->
+    <circle cx="1080" cy="256" r="15" fill="#3a1512"/>
+    <text x="1080" y="261" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">C</text>
+    <!-- Asp O- backside attack arrow -->
+    <path d="M1036 256 L1060 256" stroke="#fff" stroke-width="4" stroke-dasharray="5 4" stroke-linecap="round"/>
+    <circle cx="1030" cy="256" r="8" fill="#fff"/>
+    <!-- C-F breaking bond -->
+    <line x1="1090" y1="244" x2="1104" y2="222" stroke="#fff" stroke-width="4" stroke-dasharray="4 4" stroke-linecap="round"/>
+  </g>
+  <text x="1080" y="345" font-size="21" font-weight="700" fill="#c21d15" text-anchor="middle">Defluorinate</text>
+  <text x="1080" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">QM/MM · ΔE‡ · F⁻ release</text>
+
+  <!-- ===== the story's payoff: fluoride leaving ===== -->
+  <g filter="url(#ds)">
+    <circle cx="1180" cy="176" r="26" fill="url(#gRed)"/>
+    <circle cx="1180" cy="176" r="26" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+    <text x="1180" y="183" font-size="22" font-weight="800" fill="#fff" text-anchor="middle">F⁻</text>
+  </g>
+  <path d="M1150 150 q 12 -12 4 -26" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M1206 152 q 12 -6 22 -14" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+</svg>

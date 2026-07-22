@@ -15,6 +15,12 @@
 
 ---
 
+<div align="center">
+<img src="assets/facd_workflow_logo.png" alt="FAcD — PFAS defluorination workflow: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="900">
+</div>
+
+---
+
 ## Table of contents
 
 <table>
@@ -284,14 +290,14 @@ and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_FAcDs.py
 hub node (65 edges, the most connected)** — every module's thresholds and figure colours route
 through it, the single-source-of-truth architecture showing up structurally.
 
-![FAcDs code architecture graph — communities coloured, hub nodes enlarged](graphify-out/graphify.png)
+![FAcDs code architecture graph — communities coloured, hub nodes enlarged](assets/graphify.png)
 
-The graph output lives in **[`graphify-out/`](./graphify-out/)** and is regenerated with `/graphify`:
+The graph output lives in **[`assets/`](./assets/)** and is regenerated with `/graphify`:
 
 > [!NOTE]
-> [`graphify-out/graph.html`](./graphify-out/graph.html) (interactive — zoom, pan, community
-> filter, node search), [`graphify-out/graph.json`](./graphify-out/graph.json) (the raw graph,
-> GraphRAG-ready) and [`graphify-out/GRAPH_REPORT.md`](./graphify-out/GRAPH_REPORT.md) (audit
+> [`assets/graph.html`](./assets/graph.html) (interactive — zoom, pan, community
+> filter, node search), [`assets/graph.json`](./assets/graph.json) (the raw graph,
+> GraphRAG-ready) and [`assets/GRAPH_REPORT.md`](./assets/GRAPH_REPORT.md) (audit
 > trail: hub nodes, communities, surprising connections). Open `graph.html` locally to explore the graph.
 
 </details>
