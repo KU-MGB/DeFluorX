@@ -5,7 +5,7 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1018 nodes · 2195 edges · 55 communities (53 shown, 2 thin omitted)
+- 1018 nodes · 2195 edges · 54 communities (53 shown, 1 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 132 edges (avg confidence: 0.71)
 - Token cost: 0 input · 0 output
 
@@ -64,7 +64,6 @@
 - [[_COMMUNITY_Community 51|Community 51]]
 - [[_COMMUNITY_Community 52|Community 52]]
 - [[_COMMUNITY_Community 53|Community 53]]
-- [[_COMMUNITY_Community 54|Community 54]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CFG` - 73 edges
@@ -93,23 +92,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (55 total, 2 thin omitted)
+## Communities (54 total, 1 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.08
-Nodes (53): _control_star_df(), _ctrl_star(), _diag10_model_agreement(), _fig24_sankey(), _fig25_pfas_size(), _fig_folder05_catalytic(), _fig_folder07_pfas(), generate_additional_figures() (+45 more)
+Nodes (46): _auto_label_colour(), _control_star_df(), _ctrl_star(), _diag10_model_agreement(), _fig25_pfas_size(), _fig_05b_tt_ai_quality(), _fig_13b_tt_mechanistic(), _fig_14b_tt_interactions() (+38 more)
 
 ### Community 1 - "Community 1"
+Cohesion: 0.08
+Nodes (43): analyse_conflicts(), _fig23_multitarget(), _fig23b_toptier_breakdown(), _fig24_sankey(), _fig_folder07_pfas(), _is_control_mask(), DataFrame, Folder 07_PFAS_Scope_and_Synthesis - synthesis + publication assembly. (+35 more)
+
+### Community 2 - "Community 2"
 Cohesion: 0.10
 Nodes (39): _generate_comprehensive_figures_impl(), _jf_box(), _jf_circos(), _jf_fit_fs(), _jf_importance(), _jf_ligshort(), _jf_manhattan(), _jf_metric_matrix() (+31 more)
 
-### Community 2 - "Community 2"
-Cohesion: 0.09
-Nodes (25): _ConsoleRuleFilter, install_console_rule_filter(), Collapse stacked separator rules for the rest of this process's output., Simultaneous console + file logger shared by the pipeline steps.      The log pa, Record a line in the log file WITHOUT printing it to the console.          For o, A stdout wrapper that collapses consecutive separator rules.      The logs grow, ReportManager, clean_id() (+17 more)
-
 ### Community 3 - "Community 3"
 Cohesion: 0.09
-Nodes (35): latest_by_mtime(), The newest existing file by modification time, or None.      Selection is by mti, analyse_conflicts(), _aux_dir(), calculate_pareto_fronts(), console_info(), generate_comprehensive_figures(), generate_ramachandran_figures() (+27 more)
+Nodes (25): _ConsoleRuleFilter, install_console_rule_filter(), Collapse stacked separator rules for the rest of this process's output., Simultaneous console + file logger shared by the pipeline steps.      The log pa, Record a line in the log file WITHOUT printing it to the console.          For o, A stdout wrapper that collapses consecutive separator rules.      The logs grow, ReportManager, clean_id() (+17 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.08
@@ -124,28 +123,28 @@ Cohesion: 0.11
 Nodes (35): _analysis_dir(), _ctrl_label(), _ctrl_palette(), _echo(), _emit_timings(), _fail(), _log(), main() (+27 more)
 
 ### Community 7 - "Community 7"
+Cohesion: 0.10
+Nodes (33): latest_by_mtime(), The newest existing file by modification time, or None.      Selection is by mti, _aux_dir(), calculate_pareto_fronts(), console_info(), generate_comprehensive_figures(), generate_ramachandran_figures(), load_and_prep_data() (+25 more)
+
+### Community 8 - "Community 8"
 Cohesion: 0.09
 Nodes (13): Heartbeat, MDHeartbeat, Periodically report a long Schrödinger step's progress by tailing its log., Rewrite the single progress line in place with a carriage return., Close the open in-place \r line with a newline (phase change / exit)., Largest last-match across all configured patterns (phase-tolerant)., Best-effort (done, total) for the Prime phase from a ``*-prime*.log`` in, Highest 'Structure N (of M)' seen in the main log or any ``*-prime*.log`` (+5 more)
 
-### Community 8 - "Community 8"
+### Community 9 - "Community 9"
 Cohesion: 0.11
 Nodes (28): _append_auxiliary_log(), _draw_interaction_diagram(), _im_don_acc(), _im_parse_pdb(), _im_project(), _im_render_diagram(), _im_ring(), _im_separate_atoms() (+20 more)
 
-### Community 9 - "Community 9"
+### Community 10 - "Community 10"
 Cohesion: 0.07
 Nodes (27): _blockade_vec(), compute_wm_csv_stats(), _eaf_at(), identity_from_cms(), kabsch_transform(), LazyTrajectory, load_eaf_scalar_series(), mapped_resnum() (+19 more)
 
-### Community 10 - "Community 10"
+### Community 11 - "Community 11"
 Cohesion: 0.09
 Nodes (28): _clean_job_env(), _complex_label(), _defl_ligand_atoms(), _defl_mapped_residues(), _defl_min_image(), _defl_resid(), find_esp(), _hydrate() (+20 more)
 
-### Community 11 - "Community 11"
+### Community 12 - "Community 12"
 Cohesion: 0.07
 Nodes (29): _build_msj(), _csv_nonempty(), _diagnose_shard_failure(), discover_handover(), export_watermap_csv(), _lig_atom_indices(), _load_module(), _lookup_controls() (+21 more)
-
-### Community 12 - "Community 12"
-Cohesion: 0.13
-Nodes (28): _fig23_multitarget(), _fig23b_toptier_breakdown(), _fig_05b_tt_ai_quality(), _fig_13b_tt_mechanistic(), _fig_14b_tt_interactions(), _fig_folder04_ai_confidence(), _fig_folder06_ligand(), _fig_path() (+20 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.08
@@ -232,24 +231,24 @@ Cohesion: 0.16
 Nodes (14): analyse_pi_interactions(), _canonical_resname(), classify_pair(), generate_detailed_interactions(), get_plane_normal(), _ligand_ionisable(), load_atoms_from_structure(), Calculates the optimal best-fit plane normal vector for Pi-stacking analysis usi (+6 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.14
-Nodes (14): _auto_label_colour(), _fig_folder03_dataset(), Auto-contrast label colour for hex_bg (delegates to _auto_label_colour)., Folder 03_Dataset_and_Alignment_Overview - coverage, tiers, alignment grades., Register one test into the family. extra carries effect size, group ns, medians, The full statistical battery, registered into the same BH-corrected family as th, Paired Wilcoxon signed-rank test of ipTM vs pTM across complexes., Silhouette of tier labels in UMAP space with a label-permutation p-value.     Su (+6 more)
-
-### Community 35 - "Community 35"
 Cohesion: 0.15
 Nodes (13): Remove all ANSI/VT100 escape sequences from a string., _strip_ansi(), console_separator(), console_title(), load_triad_mapping(), main(), _mask_oomd_at_start(), _qsite_concurrency() (+5 more)
 
-### Community 36 - "Community 36"
+### Community 35 - "Community 35"
 Cohesion: 0.20
 Nodes (12): _block_bootstrap_median_ci(), _cliffs_delta(), _delta_word(), _draw_time_cumulative(), _effective_n(), plot_mmgbsa_combined(), Confidence interval on the median by MOVING-BLOCK bootstrap.      Frames are aut, Cliff's delta: P(a > b) − P(a < b). A non-parametric effect size that needs no (+4 more)
 
-### Community 37 - "Community 37"
+### Community 36 - "Community 36"
 Cohesion: 0.18
 Nodes (8): _cancel_launched_jobs(), _install_job_cleanup(), _kill_launched_procs(), OomdGuard, Cancel every still-registered job on the job server. Idempotent (guarded), safe, Terminate every still-registered LOCAL subprocess (SID, MM-GBSA drivers) and its, Cancel the run's job-server jobs AND kill its local subprocesses on normal exit, Optionally mask systemd-oomd to prevent Out-Of-Memory kills during long SID runs
 
-### Community 38 - "Community 38"
+### Community 37 - "Community 37"
 Cohesion: 0.18
 Nodes (11): graph_map_mmcif_to_rdkit(), kabsch_transform(), map_mmcif_to_rdkit(), Constructs a three-dimensional RDKit molecule from a SMILES string.     This is, Extracts raw XYZ coordination matrices from RDKit molecule data blocks., Determines the optimal rotation/translation matrix required to superimpose spati, Map Boltz-predicted (mmCIF) atoms to RDKit template atoms by CONNECTIVITY, not b, FALLBACK atom map, reached only when graph_map_mmcif_to_rdkit above cannot perce (+3 more)
+
+### Community 38 - "Community 38"
+Cohesion: 0.20
+Nodes (10): _kruskal_by_tier(), Register one test into the family. extra carries effect size, group ns, medians, The full statistical battery, registered into the same BH-corrected family as th, Kruskal–Wallis across tiers with epsilon-squared effect size. Returns annotation, Paired Wilcoxon signed-rank test of ipTM vs pTM across complexes., Silhouette of tier labels in UMAP space with a label-permutation p-value.     Su, _register_p(), _statistical_battery() (+2 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.20
@@ -310,16 +309,16 @@ Nodes (4): _eta_str(), _fmt_dur(), Seconds → compact H/M/S (2h07m03s · 8m12s 
 ## Knowledge Gaps
 - **5 isolated node(s):** `WARN_EXIT_CODE`, `_TT_W_NAME`, `_TT_W_TIME`, `_TT_W_STAT`, `git_push_FAcDs.sh script`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **2 thin communities (<3 nodes) omitted from report** - run `graphify query` to explore isolated nodes.
+- **1 thin communities (<3 nodes) omitted from report** - run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CFG` connect `Community 30` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 16`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 28`, `Community 34`, `Community 35`, `Community 36`, `Community 48`?**
+- **Why does `CFG` connect `Community 30` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 10`, `Community 11`, `Community 12`, `Community 16`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 28`, `Community 34`, `Community 35`, `Community 38`, `Community 48`?**
   _High betweenness centrality (0.626) - this node is a cross-community bridge._
 - **Why does `main()` connect `Community 4` to `Community 13`, `Community 15`, `Community 16`, `Community 47`, `Community 50`, `Community 51`, `Community 30`?**
   _High betweenness centrality (0.105) - this node is a cross-community bridge._
-- **Why does `_generate_comprehensive_figures_impl()` connect `Community 1` to `Community 0`, `Community 2`, `Community 3`, `Community 34`, `Community 5`, `Community 12`, `Community 30`?**
+- **Why does `_generate_comprehensive_figures_impl()` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 5`, `Community 7`, `Community 30`?**
   _High betweenness centrality (0.097) - this node is a cross-community bridge._
 - **Are the 58 inferred relationships involving `CFG` (e.g. with `calculate_sn2_metrics()` and `check_catalytic_geometry()`) actually correct?**
   _`CFG` has 58 INFERRED edges - model-reasoned connections that need verification._
