@@ -87,7 +87,7 @@ fi
 # The open is probed in a subshell first, for two reasons. `-r /dev/tty` is not a valid test:
 # the node is readable by permission, yet opening it fails with ENXIO when the process has no
 # controlling terminal (cron, setsid, a detached run). And `exec 3</dev/tty 2>/dev/null` must
-# never be used to silence that failure - redirections on a command-less `exec` are PERMANENT,
+# must never silence that failure - redirections on a command-less `exec` are PERMANENT,
 # so it would send this shell's stderr to /dev/null for the rest of the run, silently
 # swallowing every `read -p` prompt (they are written to stderr).
 if ( : </dev/tty ) 2>/dev/null; then

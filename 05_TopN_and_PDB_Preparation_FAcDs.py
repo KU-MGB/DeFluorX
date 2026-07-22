@@ -2921,7 +2921,7 @@ class SoftwareManager:
         """
         1. PyMOL - prefer the binary in the running conda env over the system one
         (system /usr/bin/pymol on Ubuntu 24.04 uses python3-pymol 2.5 which
-        calls `from imp import find_module`; imp was removed in Python 3.12)
+        calls `from imp import find_module`; imp is absent in Python 3.12+)
         """
         _conda_pymol = Path(sys.executable).parent / "pymol"
         if _conda_pymol.exists():

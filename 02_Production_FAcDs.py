@@ -492,7 +492,7 @@ RES_PROPS = CFG.RES_PROPS
 # (covers all four aromatic residues, incl. His imidazole + Trp indole; see config docstring).
 AROMATIC_RING_ATOMS = CFG.AROMATIC_RING_ATOMS
 
-# Functional (H-bond donor) sidechain atoms used to validate fluoride-cradle stabilisation -
+# Functional (H-bond donor) sidechain atoms for validating fluoride-cradle stabilisation -
 # single source of truth in CFG (prevents backbone atoms being flagged as stabilising).
 POLAR_SIDECHAIN_ATOMS = CFG.POLAR_SIDECHAIN_ATOMS
 
@@ -987,7 +987,7 @@ def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> boo
 # Step 4.4: Stale YAML and Run Folder Cleanup
 # -------------------------------------------------------------------------------
 def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
-    """Deletes YAML files and active run folders that are no longer referenced within the input dataset."""
+    """Deletes YAML files and active run folders not referenced by the input dataset."""
     yaml_count, run_count = 0, 0
 
     # 1. Clean designated YAML structures
@@ -1026,7 +1026,7 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
 # Step 5.1: Caching Framework
 # -------------------------------------------------------------------------------
 def load_cached_alignments(csv_path: Path):
-    """Loads previously calculated alignments into memory and ensures data types are strictly preserved."""
+    """Loads already-calculated alignments into memory and ensures data types are strictly preserved."""
     if csv_path.exists():
         try:
             df = pd.read_csv(csv_path, dtype={"protein": str, "protein_id": str})
@@ -4902,7 +4902,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             return None, gpu_idx
 
     # -------------------------------------------------------------------------------
-    # Sub-Step 9.3.5: Return Valid Data For Previously Completed Jobs
+    # Sub-Step 9.3.5: Return Valid Data For Already-Completed Jobs
     # -------------------------------------------------------------------------------
     if CFG.COL_ID_PCT not in data or data.get(CFG.COL_ID_PCT, 0) == 0:
         _persist_aln = job["protein"] not in _PERSISTED_PROTEINS
@@ -5817,8 +5817,8 @@ def main():
                     else:
                         if is_completed:
                             """
-                            THE STRUCTURE WAS PREDICTED FROM THE OLD MOLECULE. IT MUST BE ANALYSED AS THE
-                            OLD MOLECULE.
+                            THE FINISHED PREDICTION CORRESPONDS TO THE MOLECULE IT WAS PREDICTED FROM. IT MUST BE
+                            ANALYSED AS THAT SAME MOLECULE.
 
                             Keeping a finished prediction when the input SMILES has since changed is the
                             right call - re-running days of GPU because a carboxylate was re-protonated in
@@ -6970,9 +6970,9 @@ def main():
                                 gpu_queue_for_analysis.put(job)
 
                         if failed_jobs:
-                            console_info(f"    [BATCH RESULTS] {moved_count}/{n_jobs} securely migrated, {len(failed_jobs)} instances encountered systemic failure")
+                            console_info(f"    [BATCH RESULTS] {moved_count}/{n_jobs} securely moved, {len(failed_jobs)} instances encountered systemic failure")
                         _tty_write(
-                            f"\r -> [DONE] [{batch_label}] | {moved_count}/{n_jobs} structural evaluation results effectively migrated\033[K\n"
+                            f"\r -> [DONE] [{batch_label}] | {moved_count}/{n_jobs} structural evaluation results effectively moved\033[K\n"
                         )
                         sys.stdout.flush()
                         for batch_pid in proteins_for_batch:

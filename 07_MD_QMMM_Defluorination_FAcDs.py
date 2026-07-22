@@ -84,7 +84,7 @@ Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
                       Boltz-2_Run_20260309T085406Z). Glob-expanded to match timestamp
                       suffix automatically. Resolves into 6_Physics_Validation.
-    --dir    DIR      Alternative to positional (legacy). Same resolution logic.
+    --dir    DIR      Alternative to positional. Same resolution logic.
     --lig    RESNAME  Ligand residue name in the CMS system file.  Default: LIG
     --stride N        Analyse every N-th trajectory frame (1 = all frames).
                       Higher values trade accuracy for speed.     Default: 1
@@ -398,7 +398,7 @@ _strip_ansi = getattr(_utils_mod, '_strip_ansi', lambda x: x)
 
 
 def _sigmoid07(x: float, k: float, x0: float) -> float:
-    """The graded NAC term used to pick the attacking oxygen (CFG §4.1).
+    """The graded NAC term that picks the attacking oxygen (CFG §4.1).
 
     Identical in form to Step 02's sigmoid, so both stages score a near-attack conformation on the
     same scale and agree on which aspartate oxygen is attacking. A frame whose distance and angle
@@ -2941,7 +2941,7 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
 def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
     """Read the QSite/Jaguar .out and return a human-readable reason when the scan
     failed to produce a valid PES (charge/electron mismatch, skipped points), else
-    None. Used to convert Jaguar's silent 'Skipping to next scan point' into a clear
+    None. Converts Jaguar's silent 'Skipping to next scan point' into a clear
     diagnosis rather than an empty barrier."""
     try:
         _o = next((p for p in ([qsite_dir / f"{job_name}.out"] + sorted(qsite_dir.glob("*.out")))
@@ -3839,7 +3839,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     ideal_frame_idx = -1
     _qm_candidates: list = []   # (score, f_idx, nuc_o_idx, lig_c_idx) for every productive NAC frame
     n_pocket = n_relaxed = n_strict = n_triad = n_nac = 0
-    n_fold_reject = 0        # frames whose fold no longer superimposes on the WaterMap reference
+    n_fold_reject = 0        # frames whose fold does not superimpose on the WaterMap reference
     n_cation_capped = 0      # frames with a counter-ion coordinating the nucleophile or the ligand head
     _wm_radius = CFG.WATERMAP_SITE_RADIUS
 
@@ -4036,7 +4036,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _R, _t, _fold_rmsd = kabsch_transform(_ref_ca_xyz, unwrap_ca_trace(_p[_li_ca], box))
             if _fold_rmsd > float(CFG.MD_FOLD_RMSD_MAX):
                 """
-                The fold in this frame no longer superimposes on the WaterMap reference. Carrying the
+                The fold in this frame does not superimpose on the WaterMap reference. Carrying the
                 hydration sites through a transform fitted to a mismatched fold places them at
                 arbitrary positions, and every site-based blockade term computed from them is noise.
                 The frame keeps its geometry-only metrics; its WaterMap contribution is withheld.
@@ -4255,7 +4255,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         "Frames_Triad_Intact":      n_triad,
         "Frames_Relaxed_Catalysis": n_relaxed,
         "Frames_Strict_Catalysis":  n_strict,
-        # Frames whose fold no longer superimposes on the WaterMap reference (Cα RMSD >
+        # Frames whose fold does not superimpose on the WaterMap reference (Cα RMSD >
         # CFG.MD_FOLD_RMSD_MAX): their hydration term is withheld, their geometry is kept.
         "Frames_Fold_Rejected":     n_fold_reject,
         # Frames with a counter-ion coordinating the nucleophile Oδ or the ligand carboxylate. Their
@@ -4673,7 +4673,7 @@ def main():
     parser.add_argument("run_dir",  nargs="?", default=None,
                         help="Boltz-2 run folder name or prefix (e.g. Boltz-2_Run_20260309T085406Z)")
     parser.add_argument("--dir",    default=None,
-                        help="Alternative to positional run_dir (legacy --dir flag)")
+                        help="Alternative to positional run_dir (--dir flag)")
     parser.add_argument("--lig",    default="LIG", help="Ligand residue name")
     parser.add_argument("--stride", type=int, default=1,
                         help="Frame stride (1 = all frames, default).")

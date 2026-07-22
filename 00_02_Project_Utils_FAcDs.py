@@ -398,8 +398,8 @@ def latest_by_mtime(paths):
 def write_json_atomic(path, payload: dict) -> None:
     """Write a JSON file so a reader never sees a half-written one.
 
-    The write goes to a temporary file beside the target and is then renamed over it - rename is
-    atomic within a filesystem, so a run killed mid-write leaves either the old file or the new
+    The write goes to a scratch file beside the target and is then renamed over it - rename is
+    atomic within a filesystem, so a run killed mid-write leaves either the previous file or the new
     one, never a truncated hybrid another step would parse as truth.
     """
     import json, os, uuid
@@ -416,8 +416,8 @@ def write_json_atomic(path, payload: dict) -> None:
 def atomic_write_csv(df, path, **to_csv_kwargs) -> None:
     """Write a DataFrame to CSV so a reader never sees a half-written file.
 
-    Same guarantee as write_json_atomic: the frame goes to a temporary file beside the target and is
-    renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the old file
+    Same guarantee as write_json_atomic: the frame goes to a scratch file beside the target and is
+    renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the previous file
     or the complete new one, never a truncated hybrid a downstream step would parse as truth.
     """
     import os, uuid
@@ -873,7 +873,7 @@ def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
 
 def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     """
-    Out-of-plane improper dihedral at centre p1 - used to detect transition-state
+    Out-of-plane improper dihedral at centre p1 - for detecting transition-state
     (Walden inversion) flattening of the sp3 electrophilic carbon.
     Ref (Walden inversion): Walden, P. (1896) Ber. Dtsch. Chem. Ges. 29:133–138.
     DOI: https://doi.org/10.1002/cber.18960290127

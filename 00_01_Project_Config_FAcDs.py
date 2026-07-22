@@ -229,7 +229,7 @@ class CFG:
     # Step 1.5: Confidence scoring weights
     # -------------------------------------------------------------------------------
     """
-    Weights for the composite Boltz confidence score used to rank models.
+    Weights for the composite Boltz confidence score that ranks models.
     Higher weight = stronger contribution to final ranking.
     """
     BOLTZ_W_IPTM: float         = 3.0   # interface predicted TM-score (primary signal)
@@ -708,7 +708,7 @@ class CFG:
     })
     VDW_RADIUS_DEFAULT: float       = 1.70    # Å  fallback vdW radius (carbon) for unlisted elements
     """
-    Maximum donor–H bond length used to assign hydrogens to their heavy-atom
+    Maximum donor–H bond length for assigning hydrogens to their heavy-atom
     donor when detecting true H···A geometry on protonated (PrepWizard) PDBs.
     """
     HB_DH_BOND_MAX: float           = 1.30    # Å  X–H covalent bond ceiling
@@ -1868,7 +1868,7 @@ class CFG:
     # Step 9.4: Catalytic viability display thresholds (%)
     # -------------------------------------------------------------------------------
     """
-    Used to colour-code console output and figures in Step 07.
+    Colour-codes console output and figures in Step 07.
     Boltz-2 predicted structures (not crystal structures) typically show
     lower NAC populations (0.01–2%) owing to the Boltz-2 starting geometry
     not being pre-optimised for the reactive SN2 trajectory.
@@ -1895,7 +1895,7 @@ class CFG:
     Level of theory: B3LYP / 6-31+G(d,p) - Becke (1993) + Lee, Yang & Parr (1988)
     hybrid functional; Rosta et al. (2006) QM/MM free-energy methodology;
     Murphy et al. (2000) QSite implementation.
-    NB: QSite frozen-orbital QM/MM cuts (used to place the catalytic sidechains in
+    NB: QSite frozen-orbital QM/MM cuts (which place the catalytic sidechains in
     the QM region) only support a limited set of plain functionals - B3LYP/HF.
     Meta-GGA hybrids (e.g. M06-2X) and dispersion-corrected variants (B3LYP-D3)
     are rejected by QSite with frozen cuts, hence B3LYP for the residue-selective
@@ -2097,7 +2097,7 @@ class CFG:
     '''
     Minimum number of strict-NAC frames that must be scored by Prime before the NAC-conditioned
     MM-GBSA penalty is reported. Prime's per-frame ΔG_bind scatter is several kcal/mol, so a mean
-    over one or two frames carries an uncertainty larger than the penalty it is being used to claim.
+    over one or two frames carries an uncertainty larger than the penalty it is claiming.
     Below this count the mean and its dispersion are still recorded - they are the evidence - but the
     PENALTY is withheld rather than published to two decimal places from a sample that cannot support
     them.
@@ -3068,7 +3068,7 @@ class CFG:
     figure scales to the ROBUST core (percentile clip) and flags them explicitly rather than
     silently deleting them. Frames beyond K × IQR from the quartiles are counted as failures.
     """
-    MMGBSA_DG_OUTLIER_IQR_K: float = 3.0   # Tukey fence multiplier used to FLAG failed minimisations
+    MMGBSA_DG_OUTLIER_IQR_K: float = 3.0   # Tukey fence multiplier for FLAGGING failed minimisations
     MMGBSA_PLOT_CLIP_PCT: float = 0.5      # per-job figure y-axis spans this to (100 − this) percentile
     """
     Statistics for the cross-rank comparison. MD frames are NOT independent: neighbouring frames

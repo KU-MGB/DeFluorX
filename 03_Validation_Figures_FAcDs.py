@@ -9350,8 +9350,8 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
         """Write everything resolved so far - the prior rows plus the new ones - atomically.
 
         A build this long must be able to die without losing the hours it already paid for. The write
-        goes to a temporary file and is renamed over the target, because rename is atomic within a
-        filesystem: a run killed mid-write leaves either the old complete file or the new one, never a
+        goes to a scratch file and is renamed over the target, because rename is atomic within a
+        filesystem: a run killed mid-write leaves either the complete previous file or the new one, never a
         truncated hybrid that the next run would read as truth and resume from.
         """
         _out = pd.DataFrame(rows_so_far)
@@ -11302,7 +11302,7 @@ def main():
         # lands in folder 04 (fig 10), all routed into their numbered folders from inside this call.
         generate_comprehensive_figures(df, features, out_dir, reporter)
 
-        # Cleanup temporary structure thumbnails
+        # Cleanup the structure thumbnails
         for p in sorted(out_dir.rglob("_tt_thumbnails")):
             if p.is_dir():
                 shutil.rmtree(p)
