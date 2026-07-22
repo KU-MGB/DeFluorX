@@ -6436,6 +6436,8 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
         _ax.set_ylabel(_ylab)
         _tier_seps(_ax, len(_tiers)); _ax.spines["top"].set_visible(False); _ax.spines["right"].set_visible(False); _ax.grid(axis="y", alpha=0.3)
     ax_d.set_xlabel(""); ax_a.set_xlabel("Degrader tier"); ax_a.tick_params(axis="x", rotation=30)
+    for _lab, _t in zip(ax_a.get_xticklabels(), _tiers):   # tick label inherits its tier's box colour
+        _lab.set_color(TIER_PALETTE.get(_t, CFG.VIS_INK["dark"]))
     _mm_nac_lines(ax_d, ax_a)
     ax_d.legend(loc="upper right", fontsize=CFG.VIS_FONT_LEGEND)
     ax_a.legend(loc="lower right", fontsize=CFG.VIS_FONT_LEGEND)
