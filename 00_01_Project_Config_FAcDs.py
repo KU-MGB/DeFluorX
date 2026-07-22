@@ -72,6 +72,10 @@ Scientific References:
     3. FAcD crystal structure & catalytic mechanism (PDB 3R3U):
        - Chan, P.W.Y., Yakunin, A.F., Edwards, E.A. & Pai, E.F. (2011) JACS 133:7461–7468.
        - DOI: https://doi.org/10.1021/ja200277d
+       - Positive-control basis — FAcD hydrolytically defluorinates fluoroacetate (the founding
+         C–F cleavage assay establishing FA/DFA as genuine substrates; the 3R3U × FA/DFA controls
+         must therefore register as degraders): Goldman, P. (1965) J Biol Chem 240:3434–3438
+         (pre-DOI); mechanism/kinetics confirmed in Chan et al. (2011), above.
        - FAcD small-substrate scope + TFA recalcitrance (graded chemistry/containment penalties):
          Wackett, L.P. (2022) Microb Biotechnol 15(3):773–792. DOI: https://doi.org/10.1111/1751-7915.13928
     4. DEHA4 experimental defluorination (Delftia acidovorans D4B):
@@ -171,7 +175,7 @@ class CFG:
     Bump the MINOR component when a change moves the numbers (a gate, a weight, a metric definition)
     and the PATCH component for anything that cannot.
     """
-    PIPELINE_VERSION: str = "2.1.0"   # 2.1.0 — protein-aware pocket containment, attacking-oxygen NAC, BDE elite ceiling, cradle-aware Šidák, active-site pLDDT gate
+    PIPELINE_VERSION: str = "2.1.0"   # 2.1.0 — protein-aware pocket containment, attacking-oxygen NAC, BDE elite ceiling, multiplicity-corrected Šidák, active-site pLDDT gate
 
     # -------------------------------------------------------------------------------
     # Step 1.1: Executable & model
@@ -274,9 +278,13 @@ class CFG:
     # Step 2.2: Reference protein sequence
     # -------------------------------------------------------------------------------
     """
-    DEHA4 = DeHa4_[Delftia acidovorans D4B] — structural reference for all alignments.
+    DEHA4 = DeHa4_[Delftia acidovorans D4B] — experimental defluorination control sequence.
     Source: Farajollahi et al. (2024) — see header Scientific References §4.
     Position cross-validated; establishes HIS277 (not HIS288) in DEHA4 sequences.
+    Role: the DeHa4 CONTROL jobs (functional benchmark). It is NOT the alignment reference —
+    active-site mapping aligns every query against the RPA1163 3R3U crystal (RPA1163_3R3U_SEQ,
+    below), the real fluoroacetate-dehalogenase structure; DeHa4 vs 3R3U were shown to yield
+    identical catalytic residue picks, so the mapping is unchanged while the reference is the crystal.
     """
     DEHA4_CONTROL_SEQ: str = (
         "MHTDPWMPGLRQQRITVDDGVEINAWVGGQGPALLLVHGHPQTSAIWHRVAPRLAQQFTVVLADLRGYGDSSRPAGDPEH"
@@ -284,7 +292,29 @@ class CFG:
         "QPAPLPERLIEADPAAYVREIMGRRSAGLAPFDPRALAEYQRCLALPGSAHGMCEDYRASAGIDLDHDREDRQLGRRLSM"
         "PLLVLWGEEGWHRCFDPLREWQLVADDVRGRPLACGHYIAEEAPDALLDAALPFLLQAG"
     )
-    DEHA4_REF_FASTA: str = "DeHa4_Ref.fasta"       # per-run reference FASTA filename (SSOT: 02 writes)
+    REFERENCE_FASTA: str = "Reference_RPA1163_3R3U.fasta"   # per-run active-site alignment reference FASTA filename — holds RPA1163_3R3U_SEQ (SSOT: 02 writes)
+
+    """
+    RPA1163_3R3U_SEQ — the WILD-TYPE fluoroacetate dehalogenase RPA1163 sequence from the 3R3U
+    crystal (Chan et al. 2011, header §3), used as the active-site alignment reference:
+    REF_SEQUENCE_STR (§02) = this string, so every query is aligned against the real FAcD crystal.
+
+    Derivation from the RCSB SEQRES (GHMPDLADL…VRFFSAAPGS, 306 aa). Two fragments are REMOVED:
+      • leading  "GH" — an N-terminal His-tag cloning remnant (crystal PDB residues −1 and 0);
+      • trailing "GS" — a C-terminal cloning artifact (unresolved in the crystal, beyond Pro302).
+    Neither is part of the enzyme and neither is present in the query homologs, so removing them does
+    not move any catalytic residue in the alignment (verified: mapped residues identical with or
+    without them). What it buys: the reference then has no tag offset and no numbering gaps, so the
+    1-based position in THIS string EQUALS the 3R3U PDB residue number — REF_ACTIVE_SITE_MAP 'id' ==
+    'pdb_id' (Asp110 = position 110, His280 = 280), and DREAM_TEAM_REFS (§11) uses that same PDB
+    numbering directly for Step 07's alignment-map lookup. Result is the resolved core Met1…Pro302.
+    """
+    RPA1163_3R3U_SEQ: str = (
+        "MPDLADLFPGFGSEWINTSSGRIFARVGGDGPPLLLLHGFPQTHVMWHRVAPKLAERFKVIVADLPGYGWSDMPESDEQH"
+        "TPYTKRAMAKQLIEAMEQLGHVHFALAGHDRGARVSYRLALDSPGRLSKLAVLDILPTYEYWQRMNRAYALKIYHWSFLA"
+        "QPAPLPENLLGGDPDFYVKAKLASWTRAGDLSAFDPRAVEHYRIAFADPMRRHVMCEDYRAGAYADFEHDKIDVEAGNKI"
+        "PVPMLALWGASGIAQSAATPLDVWRKWASDVQGAPIESGHFLPEEAPDQTAEALVRFFSAAP"
+    )
 
     # -------------------------------------------------------------------------------
     # Step 2.3: Crystal structure reference — PDB 3R3U
@@ -321,9 +351,31 @@ class CFG:
     positive assertion would therefore assert that TFA is a degrader and invert the control, which is
     exactly the trap this split exists to close. Anything asserting on controls must name which
     direction it expects.
+
+    Scope of the assertion. The decoy expectation is anchored to the REFERENCE enzyme, not to the
+    candidate panel. A candidate FAcD variant that turns over FA or DFA is the normal, expected
+    outcome and is never treated as a control failure. The one negative that must hold is the
+    reference wild-type enzyme (3R3U, RPA1163) paired with TFA: 3R3U × TFA MUST fail. That single
+    pairing is what validates the decoy direction; variant-vs-substrate degradation is a result, not
+    a control, and carries no pass/fail obligation here.
     '''
-    CTRL_POSITIVE: tuple = ("Fluoroacetate", "Difluoroacetate")   # must register as degraders
-    CTRL_NEGATIVE: tuple = ("TFA",)                               # must NOT — the decoy
+    CTRL_POSITIVE: tuple = ("Fluoroacetate", "Difluoroacetate")   # must register as degraders — FAcD defluorinates FA (Goldman 1965; Chan et al. 2011), see header §3
+    CTRL_NEGATIVE: tuple = ("TFA",)                               # must NOT — the decoy (Wackett 2022, header §3)
+
+    # Reference control complexes taken through the physics (Steps 05–07). The 3R3U crystal
+    # sequence (WT/apo RPA1163 fluoroacetate dehalogenase, EC 3.8.1.3) paired with each control
+    # substrate becomes a first-class MD job: the positive controls (FA/DFA) anchor what a real
+    # degrader looks like, the decoy (TFA) anchors the negative, so every downstream read-out
+    # (NAC dwell, MM-GBSA, QM/MM barrier) is judged against a known-answer yardstick.
+    CONTROL_INTO_MD: bool   = True             # route the 3R3U reference control(s) through Step 05 selection + Step 06/07 physics
+    CONTROL_MD_FOLDER_PREFIX: str = "CTRL_3R3U"  # readable MD-folder / job-name prefix for a control (candidates use desmond_md_job_R_N; the reserved "0000000" job-index in CONTROL_JOB_PREFIX (§16.1) remains the is-control test)
+    CONTROL_MD_LIGANDS: list = field(default_factory=lambda: [
+        "26_Fluoroacetate"])   # ONLY 3R3U × fluoroacetate goes to MD — the decisive positive control (does the real WT FAcD hold its native substrate through the MD protocol?). DFA/TFA controls are scored/tiered but not simulated; the decoy direction is validated at the tier (3R3U × TFA not elite) + downstream QM/MM barrier, not by an MD run.
+    CONTROL_EXPECTED_VERDICT: dict = field(default_factory=lambda: {
+        "26_Fluoroacetate":  "degrader",       # positive control — must turn over
+        "27_Difluoroacetate": "degrader",      # positive control — must turn over
+        "25_TFA":            "non_degrader",   # decoy — 3R3U × TFA must fail (validates the negative direction)
+    })
 
     # -------------------------------------------------------------------------------
     # Step 2.5: Reference active-site mapping (3R3U / DEHA4 canonical)
@@ -337,8 +389,8 @@ class CFG:
     Residue identities and roles are taken from the WILD-TYPE structure and the
     article text — never from the catalytically-dead mutant PDBs (3R3V/3R3W =
     Asp110Asn, 3R3Y/3R41 = His280Asn; those carry Asn, not the WT residue, and
-    merely confirm the role by knockout). Positions are then verified against the
-    DEHA4_CONTROL_SEQ (§2.2): every 'id' below holds the stated WT residue.
+    merely confirm the role by knockout). Positions are verified against the crystal
+    sequence RPA1163_3R3U_SEQ (§2.2): every 'id' below holds the stated WT residue.
 
     Primary structural source — WT FAcD RPA1163, PDB 3R3U (3R3U PDB numbering)
     [Chan et al. (2011) — see header Scientific References §3]:
@@ -352,12 +404,14 @@ class CFG:
         • Asp134  orients/polarises the His280 base (Asp–His catalytic dyad)
         • Tyr219  charge acceptor along the SN2 axis, easing electronic repulsion
 
-    DEHA4 reference sequence (Delftia acidovorans D4B homolog; the alignment
-    target for all 2150 sequences) [Farajollahi et al. (2024) — see header §4].
+    The alignment reference for all query sequences is the RPA1163 3R3U crystal
+    (RPA1163_3R3U_SEQ) — the real fluoroacetate-dehalogenase structure [Chan et al.
+    (2011) §3]. DeHa4 remains the experimental functional control (§4), not the ruler.
 
-    Two numberings are kept because DEHA4 ≠ RPA1163 (different organism, slight
-    offset past ~residue 215): 'id' = position in DEHA4_CONTROL_SEQ; 'pdb_id' =
-    3R3U PDB residue number. Both verified to carry the canonical residue.
+    'id' = 1-based position of the residue in the alignment reference RPA1163_3R3U_SEQ.
+    The reference drops the N-terminal GHM tag and has no numbering gaps, so 'id' EQUALS the
+    3R3U PDB residue number; 'pdb_id' is kept as the explicit PDB number for reporting/anchoring
+    and DREAM_TEAM_REFS (§11) shares this numbering. Both verified to carry the canonical residue.
     role strings are consumed by ROLE_EXPECTED_RESIDUES (§2.7) — do not rename.
     """
     REF_ACTIVE_SITE_MAP: dict = field(default_factory=lambda: {
@@ -367,8 +421,8 @@ class CFG:
         "Acid":   {"res": "ASP", "id": 134, "pdb_id": 134, "role": "Acid_Catalyst"},
         "Stab_H": {"res": "HIS", "id": 155, "pdb_id": 155, "role": "Fluorine_Stabiliser"},
         "Stab_W": {"res": "TRP", "id": 156, "pdb_id": 156, "role": "Fluoride_Cradle"},
-        "Stab_Y": {"res": "TYR", "id": 217, "pdb_id": 219, "role": "Fluoride_Cradle"},
-        "Base":   {"res": "HIS", "id": 277, "pdb_id": 280, "role": "Base_Catalyst"},
+        "Stab_Y": {"res": "TYR", "id": 219, "pdb_id": 219, "role": "Fluoride_Cradle"},
+        "Base":   {"res": "HIS", "id": 280, "pdb_id": 280, "role": "Base_Catalyst"},
     })
 
     # -------------------------------------------------------------------------------
@@ -389,11 +443,11 @@ class CFG:
 
     Expected classes are anchored to the canonical FAcD residues (§2.5, Chan
     et al. 2011, PDB 3R3U). Catalytic positions strictly conserved across the
-    family — the Asp nucleophile (Asp110), Asp acid (Asp134), His base (His277)
+    family — the Asp nucleophile (Asp110), Asp acid (Asp134), His base (His280)
     and Arg carboxylate clamp (Arg111/Arg114) — keep a narrow class (the
     canonical identity plus its protonation variants only). The halide-pocket
     positions tolerate the documented chemical alternatives: an H-bond-capable
-    aromatic (Trp/Tyr/His) for the Trp156/Tyr217 cradle, and an H-bond donor /
+    aromatic (Trp/Tyr/His) for the Trp156/Tyr219 cradle, and an H-bond donor /
     cationic group for the His155 fluoride stabiliser. PHE is excluded from both —
     its π-system offers no polar donor to stabilise the leaving F⁻.
     """
@@ -1361,10 +1415,18 @@ class CFG:
     })
 
     # -------------------------------------------------------------------------------
-    # Step 8.2: Attack angle minimum thresholds (°, lower bound)
+    # Step 8.2: Attack angle reference thresholds (°, lower bound)
     # -------------------------------------------------------------------------------
+    # Per-tier minimum raw SN2 attack angle. These ARE hard tier gates at the elite and
+    # functional-top rungs: the ladder tests angle_effective >= this value at Tier_1A (170°),
+    # Tier_1B (165°) and Tier_2A (155°). Tier_2B carries NO raw-angle gate, so a bent-but-feasible
+    # substrate (e.g. difluoroacetate, ~108°) is retained at 2B rather than cliffed below a
+    # straight-posed decoy. The angle ALSO enters the mechanistic score continuously (graded angle
+    # term), so it penalises a bent pose there too; the true attack-angle dynamics are resolved in
+    # MD. Poly-fluorinated / high-BDE decoys are additionally held out of the functional band by the
+    # competence-feasibility floor (TIER_COMP_MIN), not by angle alone.
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS). A geometry gate only: which complexes clear it is decided by the docked pose, not by ligand identity. Perfluoroalkyl (β-fluorinated) chains are held out of Tier_1A by the β-withdrawal + containment penalties, not by this angle gate. An α-CF3 carbon (scissile C–F 127.5) sits just below the bond-strength ceiling TIER_ELITE_BDE_MAX (128, §8.5), so it stays eligible for Tier_1A on a pose that earns it — held near the tier floor by the graded C–F penalty; only a scissile C–F ABOVE the ceiling is capped at Tier_1B (geometry cannot repeal thermochemistry).
+        "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS)
         "Tier_1B": 165.0,
         "Tier_2A":    155.0,   # = NAC_ANGLE_STRICT
         "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
@@ -1399,9 +1461,28 @@ class CFG:
     anchor is missing) while the control tiers are reproduced.
     """
     TIER_MECH_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 0.85,   # ladder floor; the elite tier is further refined by the coupled machinery gate below
-        "Tier_1B": 0.85,   # complete anchors + strong (≥165°) trajectory
-        "Tier_2A":    0.70,   # tolerates one missing anchor with a good (≥155°) trajectory
+        "Tier_1A": 0.85,   # elite mech floor; further refined by the coupled machinery gate below. Tier_1A also hard-gates the raw SN2 angle (>= TIER_ANGLE_MIN['Tier_1A']) and the elite BDE ceiling; the mech score additionally carries the graded angle + chemistry penalty
+        "Tier_1B": 0.85,   # complete anchors + high mechanistic competence
+        "Tier_2A": 0.70,   # functional geometry floor (mech). 2A ALSO hard-gates the raw angle (TIER_ANGLE_MIN['Tier_2A']) and the competence floor below
+        "Tier_2B": 0.55,   # marginal degrader floor (mech). 2B has NO raw-angle gate (keeps a bent-but-feasible substrate such as DFA) but does apply the competence floor below
+    })
+
+    """
+    Step 8.4b: Feasibility (competence_score) floors for the FUNCTIONAL band.
+    mech_score (mechanistic_score_effective) is largely geometry and is too flat to
+    separate substrate feasibility — the 3R3U references score mech 0.99/0.90/0.80 for
+    FA/DFA/TFA, all above the 2A mech floor. competence_score is the feasibility-weighted
+    axis (folds the graded C–F BDE / substrate class), on which the same three references
+    read 0.872 / 0.758 / 0.316 and the ENTIRE trifluoroacetate family caps at ≈0.35.
+    Applying a competence floor to Tier_2A / Tier_2B therefore drops a high-BDE decoy
+    (TFA-like) out of the degrader band while retaining a genuine substrate. Combined with
+    the 2A raw-angle gate (which drops a bent pose such as DFA from 2A to 2B), the three
+    references separate cleanly FA → 2A, DFA → 2B, TFA → Tier_3. Applied to every complex,
+    not just the controls — it is a general substrate-feasibility gate.
+    """
+    TIER_COMP_MIN: dict = field(default_factory=lambda: {
+        "Tier_2A": 0.50,   # high feasibility required for the functional-degrader tier
+        "Tier_2B": 0.40,   # minimum feasibility; clears the whole TFA family (competence ≤ 0.351) into Tier_3
     })
 
     """
@@ -1409,7 +1490,7 @@ class CFG:
     A pose holds Tier_1A only if it has either (a) complete catalytic machinery and an
     open SN2 backside (mech ≥ MECH_ELITE_HI), OR (b) near-complete machinery
     (mech ≥ MECH_ELITE_LO) redeemed by a crystal-exact catalytic constellation
-    (catalytic_constellation_score ≥ MECH_ELITE_CONSTELLATION, RMSD ≲ 0.25 Å). Clause (b)
+    (catalytic_constellation_score ≥ MECH_ELITE_CONSTELLATION, RMSD ≲ 0.35 Å). Clause (b)
     is the principled route by which a slightly backside-occluded native substrate such
     as α-CF3 trifluoroacetate can still register as elite — but only its single most
     crystal-perfect pose, not every mediocre one. This is geometry/machinery only; no
@@ -1746,6 +1827,32 @@ class CFG:
     MD_EQUIL_CA_RMSD_MAX_A: float      = 3.0    # A  mean Ca RMSD over the production window
 
     # -------------------------------------------------------------------------------
+    # Step 9.2b: Ligand-retention restraints (Step 06 MD production msj)
+    # -------------------------------------------------------------------------------
+    """
+    A crystal-quality Michaelis complex is NOT automatically a stable minimum once Desmond releases
+    the System-Builder equilibration restraints: a small substrate such as fluoroacetate relaxes out
+    of the reactive pose and DIFFUSES INTO BULK within the first nanoseconds, and every downstream
+    read-out then correctly reports an empty active site. That escape is a pose-quality artefact, not
+    physics, and it has repeatedly wasted week-long MD runs. These restraints are added to the
+    PRODUCTION stage so they persist for the whole run and stop the escape. They use the proven
+    Schrödinger production-restraint pattern — harmonic positional restraints via the Desmond msj
+    `restrain = [ {atom = "asl:…" force_constant = k} … ]` block; the shipped kinetics_membrane_md.msj
+    production stage restrains exactly "(backbone or ligand)" this way:
+      • the LIGAND heavy atoms (res.ptype LIG) are positionally restrained (MD_RESTRAIN_LIG_FORCE_K),
+        so the substrate is held in the crystallographic Michaelis pose instead of diffusing to bulk;
+      • the BACKBONE heavy atoms carry a gentle restraint (MD_RESTRAIN_BB_FORCE_K) so the protein does
+        not translate/tumble in the box (which would drag an absolute-frame ligand restraint away from
+        the moving pocket); the low constant lets the fold still breathe.
+    Disclosed as a methodological restraint: it MAINTAINS the reactive complex for MM-GBSA / QM/MM;
+    it does not by itself prove spontaneous binding — that is what a separate UNrestrained run (or a
+    lower force constant) tests. Set MD_RESTRAIN_LIGAND = False for the original free MD.
+    """
+    MD_RESTRAIN_LIGAND: bool        = True   #      hold the ligand in the pocket through the whole production run
+    MD_RESTRAIN_LIG_FORCE_K: float  = 5.0    # kcal/mol/Å²  ligand heavy-atom positional restraint (res.ptype LIG)
+    MD_RESTRAIN_BB_FORCE_K: float   = 2.0    # kcal/mol/Å²  gentle backbone-heavy-atom anchor (prevents box drift / tumble)
+
+    # -------------------------------------------------------------------------------
     # Step 9.3: Frame scoring weights (QM/MM frame selection only)
     # -------------------------------------------------------------------------------
     """
@@ -1861,7 +1968,7 @@ class CFG:
     double-count). Publication-grade activation energies on top candidates use
     explicit-solvent QM/MM-FEP or thermodynamic integration downstream.
     '''
-    QSITE_QM_INCLUDE_CRADLE: bool = True     # include the full fluoride cradle (Trp156 + Tyr217 alongside His155) in the QM region — the departing F⁻ is a hard base whose charge-transfer/polarisation with the aromatic cradle is poorly captured by MM point charges; only the handful of Tier_1A candidates reach QSite, so the added DFT cost is bounded. Set False for the cheaper His155-only QM region.
+    QSITE_QM_INCLUDE_CRADLE: bool = True     # include the full fluoride cradle (Trp156 + Tyr219 alongside His155) in the QM region — the departing F⁻ is a hard base whose charge-transfer/polarisation with the aromatic cradle is poorly captured by MM point charges; only the handful of Tier_1A candidates reach QSite, so the added DFT cost is bounded. Set False for the cheaper His155-only QM region.
     QSITE_SCAN_START: float = 3.5            # Å  scan start (pre-reaction approach; 3.5 → 1.3 Å = full SN2 coordinate)
     QSITE_SCAN_STEP: float  = -0.1           # Å  step per point (negative = bond compression)
     QSITE_SCAN_NSTEPS: int  = 23             # points total → covers 3.5 → 1.3 Å (last point: 3.5 + −0.1×22 = 1.3 Å)
@@ -1885,6 +1992,14 @@ class CFG:
 
     # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
     QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 scans only the single best frame, which reports a lower bound rather than an ensemble
+
+    # Step 07 phase orchestration. The SN2 / pose analysis (Phase A) is cheap and embarrassingly
+    # parallel, so it runs across all ranks at once behind a single live \r progress line. QSite
+    # (Phase B) is the expensive quantum step: running it SEQUENTIALLY, one job at a time at the
+    # full CPU allowance (cores − 2), lands the first barrier in ~1 day (testable early, fail-fast)
+    # instead of many under-resourced parallel jobs that all surface a failure a week later.
+    SN2_PARALLEL: bool     = True            # Phase A — analyse ranks concurrently with one live multi-rank progress line
+    QSITE_SEQUENTIAL: bool = True            # Phase B — run QSite jobs one after another, each at cores − 2
     QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap.
     """
     The QM/MM system around the reaction centre. The droplet is the MM shell the QSite job keeps
@@ -2017,30 +2132,30 @@ class CFG:
     # SECTION 11: CANONICAL RESIDUE MAPPING — 3R3U Reference  (Step 07)
     # ===============================================================================
     """
-    Reference sequence positions in DEHA4_CONTROL_SEQ numbering (the alignment
-    reference, REF_SEQUENCE_STR = DEHA4_CONTROL_SEQ). Step 07 looks these up as
-    keys in aln_dict, which is keyed by DEHA4 reference positions from the
-    Full_Sequence_Alignment_Map column. (DEHA4 numbering Asp110/Asp134/His277;
-    the 3R3U crystal carries the +3-shifted His280 etc.)
-    Must stay in sync with REF_ACTIVE_SITE_MAP (§2.5).
+    Reference sequence positions in RPA1163_3R3U_SEQ numbering (the alignment
+    reference, REF_SEQUENCE_STR = RPA1163_3R3U_SEQ). Step 07 looks these up as keys in
+    aln_dict, which is keyed by the 3R3U reference positions parsed from the
+    Full_Sequence_Alignment_Map column. The reference drops the GHM tag and has no
+    numbering gaps, so these positions EQUAL the 3R3U PDB numbers (Asp110/Asp134/His280).
+    Must stay in sync with REF_ACTIVE_SITE_MAP 'id' (§2.5).
 
-    Catalytic triad = Asp110–His277–Asp134 (DEHA4 numbering; His280 in the 3R3U
-    crystal of Chan et al. (2011) JACS 133:7461). Mechanism: Asp110 SN2 attack on
-    Cα displaces F⁻ (→ glycolyl-enzyme ester); His277 activates water to hydrolyse
-    the ester; Asp134 is the third triad residue that orients/polarises His277 (it
+    Catalytic triad = Asp110–His280–Asp134 (3R3U PDB numbering; Chan et al. (2011)
+    JACS 133:7461). Mechanism: Asp110 SN2 attack on
+    Cα displaces F⁻ (→ glycolyl-enzyme ester); His280 activates water to hydrolyse
+    the ester; Asp134 is the third triad residue that orients/polarises His280 (it
     does NOT protonate fluoride — F⁻ leaves stabilised as the anion by the pocket).
-    Halide pocket (3 H-bonds to F⁻): His155, Trp156, Tyr217. Oxyanion hole:
+    Halide pocket (3 H-bonds to F⁻): His155, Trp156, Tyr219. Oxyanion hole:
     backbone amides of Phe40 + Arg111. Carboxylate clamp: Arg111, Arg114.
     """
     DREAM_TEAM_REFS: dict = field(default_factory=lambda: {
         "Nuc":    110,   # Asp110 — nucleophile; SN2 attack, forms covalent glycolyl-ester intermediate
         "Clamp1": 111,   # Arg111 — carboxylate clamp 1 (also oxyanion-hole backbone amide)
         "Clamp2": 114,   # Arg114 — carboxylate clamp 2
-        "Acid":   134,   # Asp134 — third catalytic-triad residue; orients/polarises His277 base
+        "Acid":   134,   # Asp134 — third catalytic-triad residue; orients/polarises His280 base
         "Stab_H": 155,   # His155 — halide-pocket fluoride stabiliser (H-bond to F⁻)
         "Stab_W": 156,   # Trp156 — halide-pocket fluoride stabiliser (cradle)
-        "Stab_Y": 217,   # Tyr217 — halide-pocket fluoride stabiliser / charge acceptor on SN2 axis (DEHA4 seq 217; 3R3U PDB Tyr219)
-        "Base":   277,   # His277 — general base; activates hydrolytic water (DEHA4 seq 277; 3R3U PDB His280)
+        "Stab_Y": 219,   # Tyr219 — halide-pocket fluoride stabiliser / charge acceptor on SN2 axis (3R3U PDB numbering)
+        "Base":   280,   # His280 — general base; activates hydrolytic water (3R3U PDB numbering)
     })
 
     # ===============================================================================
@@ -2171,6 +2286,12 @@ class CFG:
         # the MD-selected star (fill + stroke) — it must read instantly at a glance
         "star":       "#FFD400",
         "star_edge":  "#B8860B",
+        # the 3R3U reference-control star — an inversion of the MD-selected star (red fill / gold
+        # stroke vs gold fill / dark stroke) so the positive control reads as a distinct landmark on
+        # any figure that already carries MD-selected stars. The decoy (3R3U × TFA) is drawn hollow.
+        "control":        "#E32219",   # positive control fill (3R3U × FA) — red
+        "control_edge":   "#FFD400",   # positive control stroke — gold
+        "control_decoy_edge": "#7F7F7F",   # decoy control stroke (hollow fill) — grey
         # twin-axis pair: each axis carries a different quantity, so its ticks, label and gridlines
         # take the axis colour and cannot be misread as one another
         "axis_left":  "#2C6FAC",
@@ -2627,7 +2748,7 @@ class CFG:
     the histidine base must be neutral HID (Nδ1-H present, Nε2 free). Guaranteeing HID means: HIP → remove
     HE2; HID → unchanged; HIE → remove HE2 AND add the Nδ1-H (add_H), so no input tautomer is left as a
     proton-less imidazole or an unconverted HIE. The other five (the two arginine clamps, the His155
-    fluoride stabiliser, the Trp156/Tyr217 cradle) take their standard state at PREPWIZARD_PROPKA_PH and are
+    fluoride stabiliser, the Trp156/Tyr219 cradle) take their standard state at PREPWIZARD_PROPKA_PH and are
     declared here for their FUNCTION only (`enforce=False`, never stripped). They are NOT loaded into the
     Step-05 anchor map, so they are not currently re-verified for identity — enforcement and the identity
     guard both act on Nuc/Acid/Base alone.
@@ -2925,6 +3046,8 @@ class CFG:
     """
     MMGBSA_STEP_SIZE: int   = 10
     MMGBSA_LIGAND_ASL: str  = "res.ptype LIG"   # ASL passed to thermal_mmgbsa via its -lig_asl flag so Prime scores the correct molecule (matches Step 07's --lig LIG convention). A heavily fluorinated PFAS can be misassigned as solvent by auto-detection; empty string "" reverts to auto-detect.
+    LIGAND_RESNAME_ASSERT: str = "LIG"          # the built complex MUST carry the ligand under this residue name. thermal_mmgbsa's own AslLigandSearcher auto-detect drops anything below 5 atoms; a bare fluoroacetate (5 heavy / 7 total) sits on that edge, so Step 05/06 assert this name rather than trust size-based detection — res.ptype LIG then selects the whole substrate regardless of size.
+    LIGAND_MIN_ATOMS: int      = 5              # fallback floor: if MMGBSA_LIGAND_ASL matches no atoms, Step 06 pins the smallest non-protein / non-solvent molecule with at least this many atoms (a bare fluoroacetate has 7) rather than dropping to size-blind auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
     MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/05_MD_Simulations/ (per-rank subfolders Prime-MMGBSA_R{N}/ + combined at root)

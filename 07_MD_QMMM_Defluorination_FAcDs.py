@@ -93,7 +93,7 @@ Arguments:
     --nuc    RESNUM   Fallback nucleophile residue number if alignment map absent.
                       Default: 110  (FAcD canonical Asp110)
     --base   RESNUM   Fallback catalytic base residue number.
-                      Default: 277  (FAcD canonical His277)
+                      Default: 280  (FAcD canonical His280, 3R3U numbering)
     --acid   RESNUM   Fallback catalytic acid residue number.
                       Default: 134  (FAcD canonical Asp134)
     --csv    PATH     Path to 02_Production_FAcDs.py master CSV for triad mapping and
@@ -304,6 +304,11 @@ _REPO_DIR  = Path(__file__).resolve().parent
 _cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
 _utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
 CFG        = _cfg_mod.CFG()
+
+# The 3R3U × FA positive control gets one distinct label + colour across every 07 figure, so it
+# never blends into the candidate fluoroacetate cohort.
+_CTRL_LABEL  = "3R3U-FA"
+_CTRL_COLOUR = CFG.VIS_ACCENT["control"]
 
 # ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
 apply_figure_style = _utils_mod.apply_figure_style
@@ -732,7 +737,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
 # =============================================================================
 
 def parse_mapping(map_str: str) -> dict:
-    """Parses 'ASP110:ASP112 | HIS277:HIS280' alignment string into {ref_num: tgt_num}."""
+    """Parses 'ASP110:ASP112 | HIS280:HIS282' alignment string into {ref_num: tgt_num} (3R3U reference numbering)."""
     aln_dict = {}
     if not isinstance(map_str, str) or map_str.lower() == 'nan':
         return aln_dict
@@ -1240,7 +1245,10 @@ def load_eaf_scalar_series(eaf_path, keyword: str) -> np.ndarray:
 
 
 def format_job_label(job_name: str, rank: int) -> str:
-    """Formats verbose job names to 'Rx_ProteinName_LigandName'."""
+    """Formats verbose job names to 'Rx_ProteinName_LigandName'. The 3R3U × FA positive control is
+    labelled distinctly (Rx_3R3U-FA) so it never reads as a candidate fluoroacetate."""
+    if str(job_name).startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in str(job_name).upper():
+        return f"R{int(rank)}_{_CTRL_LABEL}"
     clean = job_name.replace("desmond_md_job_", "").replace("_Prepared", "").replace("_CONTROL", "")
     clean = re.sub(r"^R(?:ank)?_\d+_", "", clean)
     parts = [p for p in clean.split('_') if p]
@@ -1474,6 +1482,9 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     sorted_df = df_master.sort_values('Scientific_Rank', ascending=True)
     sorted_labels = [format_job_label(row['Job_Name'], row['Scientific_Rank']) for _, row in sorted_df.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
+    for _lab in list(job_colour_map):          # 3R3U-FA control gets the one distinct control colour
+        if _CTRL_LABEL in str(_lab):
+            job_colour_map[_lab] = _CTRL_COLOUR
 
     # Vectorised piecewise distance transformation function
     def transform_distance(x):
@@ -1652,6 +1663,9 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     # Consistent colour map based on ascending Scientific_Rank (tab20)
     sorted_labels = [format_job_label(r['Job_Name'], r['Scientific_Rank']) for _, r in df_plot.iterrows()]
     job_colour_map = dict(zip(sorted_labels, sns.color_palette("tab20", n_colors=len(sorted_labels))))
+    for _lab in list(job_colour_map):          # 3R3U-FA control gets the one distinct control colour
+        if _CTRL_LABEL in str(_lab):
+            job_colour_map[_lab] = _CTRL_COLOUR
 
     n_rows  = len(df_plot)
     row_h   = 0.85
@@ -1851,9 +1865,11 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         Y = float(getattr(CFG, "DEFLUOR_DWELL_MIN_NS", 1.0))
         Z = float(getattr(CFG, "DEFLUOR_BARRIER_MAX_KCAL", 22.0))
         fig, ax = plt.subplots(figsize=(11, 7.5))
-        _xhi = max(float(x.max()) * 1.12, Y * 1.5)
+        # Floors keep the axes non-degenerate when the data is sparse/all-zero (e.g. a single
+        # rank or a strided test) — a singular xlim/ylim otherwise warns and collapses the frame.
+        _xhi = max(float(x.max()) * 1.12, Y * 1.5, 1.0)
         _ylo = min(float(y.min()) * 0.9, 0.0)
-        _yhi = max(float(y.max()) * 1.12, (Z * 1.25 if _has_bar else float(y.max()) * 1.12))
+        _yhi = max(float(y.max()) * 1.12, (Z * 1.25 if _has_bar else float(y.max()) * 1.12), _ylo + 1.0)
         _C = CFG.DEFLUOR_FIG_COLOUR
         ax.set_xlim(0, _xhi); ax.set_ylim(_ylo, _yhi)
         if _has_bar:
@@ -1876,6 +1892,15 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         ax.set_xlabel("Catalytic persistence — longest continuous strict-NAC dwell (ns)")
         ax.set_ylabel(ylab)
         clean_spines(ax)
+        # Disclosure: the MD this dwell is measured on runs under the Step-06 ligand positional
+        # restraint (CFG.MD_RESTRAIN_LIGAND), so persistence reflects NAC geometry SUSTAINED under
+        # restraint — the ligand is held near its pose by design, not free to escape. The QM/MM ΔE‡
+        # (y-axis / colour) is the unrestrained arbiter of turnover.
+        if getattr(CFG, "MD_RESTRAIN_LIGAND", False):
+            fig.text(0.5, 0.005,
+                     "NAC dwell measured under the Step-06 ligand positional restraint — persistence is "
+                     "restraint-sustained, not spontaneous; the QM/MM ΔE‡ is the unrestrained turnover arbiter.",
+                     ha="center", va="bottom", fontsize=7.5, color="0.45", wrap=True)
         out_path = out_dir / "05_Defluorination_Landscape.png"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -1977,9 +2002,12 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
             continue
         job = nac_csv.name.replace(CFG.SUFFIX_NAC_DATA, "")
         _full = re.sub(r"^\d+_", "", job.split("_")[-1]) if "_" in job else job
-        lig = CFG.VIS_LIGAND_SHORT.get(_full.lower(), _full)
+        # The 3R3U × FA positive control shares the ligand 'FA' with the candidate fluoroacetate;
+        # label it distinctly (3R3U-FA) so every downstream figure names + colours it as the control.
+        _is_ctrl = job.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in job.upper()
+        lig = _CTRL_LABEL if _is_ctrl else CFG.VIS_LIGAND_SHORT.get(_full.lower(), _full)
         out.append({
-            "rank": rank, "job": job, "ligand": lig, "mapped": {},
+            "rank": rank, "job": job, "ligand": lig, "is_control": _is_ctrl, "mapped": {},
             "nac": pd.read_csv(nac_csv),
             "mmgbsa": pd.read_csv(mg_csv) if mg_csv.is_file() else pd.DataFrame(),
             "dir": d,
@@ -2074,7 +2102,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
             n_scored = len(set(int(f) for f in fr) &
                            set(pd.to_numeric(r["mmgbsa"]["Frame"], errors="coerce")
                                .dropna().astype(int)))
-            col = _pal[gi % len(_pal)]
+            col = _CTRL_COLOUR if r.get("is_control") else _pal[gi % len(_pal)]
             bar_cols = ([cmap(i % 10) for i in range(len(terms))] if not merged else col)
             for si, (vals, alpha) in enumerate(((allc, 0.40), (nacc, 1.0))):
                 off = (gi * 2 + si) * width - 0.39 + width / 2
@@ -2221,7 +2249,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
             Merged, the colour must separate the CANDIDATES, since the role is already given by the
             container they share.
             """
-            col = _pal[gi % len(_pal)]
+            col = _CTRL_COLOUR if r.get("is_control") else _pal[gi % len(_pal)]
             bar_cols = ([_roles.get(role, col) for _, role, _, _ in _ENGAGE_ROLES]
                         if not merged else col)
             meds, occs, q1s, q3s = [], [], [], []
@@ -2533,7 +2561,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
       &qmregion    — ligand molecule (QM) + catalytic-sidechain QM/MM cuts
       &zvar/&coord — relaxed scan of the Nu_O–C_lig distance (start → product)
 
-    QM region = LIG substrate + Asp110 (Nuc) + His277 (Base) + Asp134 (Acid)
+    QM region = LIG substrate + Asp110 (Nuc) + His280 (Base) + Asp134 (Acid)
     + His155 (StabH) sidechains + the fluoride-cradle aromatic/H-bond donors
     (TRP/TYR/HIS, `cradle_nums`) + up to `_QM_WATER_MAX` coordinating waters
     within `_QM_WATER_RADIUS` of the reaction centre. Excluding Base/Acid from QM
@@ -3292,6 +3320,36 @@ _SOL_SPHERE_SAMPLE_FRAMES = max(1, int(CFG.SOLVENT_SPHERE_SAMPLE_FRAMES))
 _QSITE_RUN = CFG.QSITE_RUN
 _QSITE_PROCS = CFG.QSITE_PROCS
 
+# QSite/Jaguar QM/MM engine (Impact `main1h`) is effectively SINGLE-THREADED for these small
+# frozen-cut QM regions — measured at ~100% of ONE core regardless of `-PARALLEL N`. Serialising
+# QSite therefore wasted cores-1 of the budget. Instead we run many QM/MM scans CONCURRENTLY, each
+# on its own core, bounded by this semaphore (set in main() to min(cores-2, RAM cap)). Per-job
+# procs is forced to 1 (the -PARALLEL flag does nothing here but spawn idle helpers). The prep that
+# mutates the shared cms_model stays sequential; only the independent Jaguar subprocesses run in
+# parallel. Total concurrent scans is capped by both this semaphore and the number of QM/MM jobs
+# actually available (ranks x QSITE_N_FRAMES).
+_QSITE_SEM = threading.Semaphore(1)   # reassigned in main() to the concurrency cap
+
+
+def _qsite_concurrency() -> int:
+    """Concurrent single-threaded QSite scans to run: min(cores-2, RAM budget). Each Jaguar QM
+    job needs ~1.5 GB; keep 60% of MemAvailable for QSite so the MD/analysis keep headroom."""
+    cores = max(1, (os.cpu_count() or 4) - 2)
+    ram_cap = cores
+    try:
+        with open("/proc/meminfo") as _f:
+            _avail_kb = next(int(_l.split()[1]) for _l in _f if _l.startswith("MemAvailable"))
+        ram_cap = max(1, int((_avail_kb / 1024.0 / 1024.0) * 0.60 / 1.5))
+    except Exception:
+        pass
+    return max(1, min(cores, ram_cap))
+# Serialises multi-line progress prints from parallel rank threads so lines never interleave.
+_PROGRESS_LOCK = threading.Lock()
+# True only when a single rank is processed (e.g. the --ranks 1 test): the per-frame counter
+# then updates in place with a carriage return; with multiple parallel ranks it appends
+# throttled lines instead (in-place \r from concurrent threads would garble).
+_PROGRESS_CR = False
+
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
 # as a whole molecule (F⁻ leaving-group stabilisation). Capped to keep the QM
@@ -3350,7 +3408,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        master_out_dir: Path, lig_resname: str, stride: int,
                        triad_override: dict = None,
                        fallback_nuc:  int = DREAM_TEAM_REF.get('Nuc', 110),
-                       fallback_base: int = DREAM_TEAM_REF.get('Base', 277),
+                       fallback_base: int = DREAM_TEAM_REF.get('Base', 280),
                        fallback_acid: int = DREAM_TEAM_REF.get('Acid', 134)):
     """Orchestrates the full analysis pipeline for one MD trajectory."""
 
@@ -3502,7 +3560,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     aln_dict     = parse_mapping(row.get('Full_Sequence_Alignment_Map', ''))
     to           = triad_override or {}
     nuc_hint  = aln_dict.get(DREAM_TEAM_REF.get('Nuc', 110))  or to.get('nuc')  or fallback_nuc
-    base_hint = aln_dict.get(DREAM_TEAM_REF.get('Base', 277)) or to.get('base') or fallback_base
+    base_hint = aln_dict.get(DREAM_TEAM_REF.get('Base', 280)) or to.get('base') or fallback_base
     acid_hint = aln_dict.get(DREAM_TEAM_REF.get('Acid', 134)) or to.get('acid') or fallback_acid
     stab_f_num   = aln_dict.get(DREAM_TEAM_REF.get('Stab_H', 155))
 
@@ -3788,7 +3846,21 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # ===============================================================================
     # Per-frame analysis loop (chunked streaming — _CHUNK_SIZE frames at a time)
     # ===============================================================================
+    # Live progress cadence: ~100 updates across the trajectory (never every frame).
+    _prog_step = max(1, _nf // 100)
     for _fi, f_idx, _p, box, frame_t in _iter_frames():
+        # Live per-rank frame counter — "Processing: Rank_N: k/total frames (pct%)".
+        # In place (\r) for a single rank; throttled appended lines when ranks run parallel.
+        if (_fi % _prog_step == 0) or (_fi + 1 == _nf):
+            _pct_fr = int(100 * (_fi + 1) / _nf) if _nf else 100
+            _msg_fr = f"  Processing: Rank_{rank}: {_fi + 1:,}/{_nf:,} frames ({_pct_fr}%)"
+            with _PROGRESS_LOCK:
+                if _PROGRESS_CR and sys.stdout.isatty():
+                    print(f"\r{_msg_fr}   ", end="", flush=True)
+                    if _fi + 1 == _nf:
+                        print(flush=True)
+                else:
+                    print(_msg_fr, flush=True)
 
         """
         Frames recorded before the box equilibrated are not samples of the equilibrium ensemble, so
@@ -4411,15 +4483,15 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             if len(_sel) >= _n_qm:
                 break
 
-        def _prep_and_run(_fi: int, _geom: dict, _folder: Path, _primary: bool) -> dict:
-            """Snap → PBC-repair → droplet → .in → run → parse for one frame.
+        def _prep_qsite_frame(_fi: int, _geom: dict, _folder: Path, _primary: bool):
+            """Snap → PBC-repair → droplet → .in for ONE frame. Returns the .in path if the frame
+            still needs a Jaguar run, or None if the folder is already present (cached → parse-only).
 
-            Repairs periodic wrapping (make_whole_cms) and re-centres the box on the
-            LIGAND (center_cms) so a surface active site sits at the box middle and
-            every first-shell water stays in the primary cell — centring on the whole
-            protein pushes a surface site to the box edge and the droplet trim then
-            misses its waters (vacuum artefact → SCF divergence / warped barrier).
-            Idempotent: an existing folder is re-parsed, not re-run.
+            This step MUTATES the shared cms_model (update/make_whole/center), so it must run
+            sequentially across frames — only the QM/MM run itself is parallelised (below). Repairs
+            periodic wrapping and re-centres the box on the LIGAND so a surface active site sits at
+            the box middle and the droplet trim keeps its first-shell waters (vacuum artefact →
+            SCF divergence otherwise).
             """
             topo.update_cms(cms_model, tr[_fi])
             topo.make_whole_cms(msys_model, cms_model)
@@ -4428,40 +4500,56 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             if _primary:
                 cms_model.fsys_ct.write(str(job_out_dir / f"{job_name}_Ideal_Final.maegz"))
             if _folder.exists():
-                console_info(f"    [Rank {rank}] QSite folder exists — parsing: {_folder.name}")
-            else:
-                _folder.mkdir(parents=True, exist_ok=True)
-                # QSite/Jaguar reads uncompressed .mae; trim the periodic box to a
-                # local solvation droplet so the QM/MM MM region stays tractable.
-                _mae = _folder / f"{job_name}_Ideal_Final.mae"
-                _ds = write_qsite_droplet(cms_model, _mae, lig_resname)
-                print(f"  [Rank {rank}] QSite .mae solvent (frame {_fi}): {_ds}", flush=True)
-                _inp = generate_qsite_inputs(
-                    _mae, job_name, _qm_nuc, _qm_stab,
-                    _geom['lig_c'], _geom['nuc_o'],
-                    base_num=_qm_base, acid_num=_qm_acid, lig_resname=lig_resname,
-                    cradle_nums=_qm_cradle)
-                for _a in (_mae, _inp):
-                    if not _a.exists() or _a.stat().st_size == 0:
-                        console_info(f"    [!] QSite input missing/empty for {job_name}: {_a.name}")
-                if _primary:
-                    console_qmm_ready(f"Best frame: {_fi} | Score: {best_score:.2f} | "
-                                      f"QSite input: {_inp.name}")
-                if _QSITE_RUN:
-                    run_qsite(_folder, _inp, job_name, rank)
-                else:
-                    console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) — "
-                                 f"inputs written to {_folder.name}")
-            return parse_qsite_barrier(_folder, job_name)
+                console_info(f"    [Rank {rank}] QSite folder exists — will parse: {_folder.name}")
+                return None
+            _folder.mkdir(parents=True, exist_ok=True)
+            # QSite/Jaguar reads uncompressed .mae; trim the periodic box to a
+            # local solvation droplet so the QM/MM MM region stays tractable.
+            _mae = _folder / f"{job_name}_Ideal_Final.mae"
+            _ds = write_qsite_droplet(cms_model, _mae, lig_resname)
+            print(f"  [Rank {rank}] QSite .mae solvent (frame {_fi}): {_ds}", flush=True)
+            _inp = generate_qsite_inputs(
+                _mae, job_name, _qm_nuc, _qm_stab,
+                _geom['lig_c'], _geom['nuc_o'],
+                base_num=_qm_base, acid_num=_qm_acid, lig_resname=lig_resname,
+                cradle_nums=_qm_cradle)
+            for _a in (_mae, _inp):
+                if not _a.exists() or _a.stat().st_size == 0:
+                    console_info(f"    [!] QSite input missing/empty for {job_name}: {_a.name}")
+            if _primary:
+                console_qmm_ready(f"Best frame: {_fi} | Score: {best_score:.2f} | "
+                                  f"QSite input: {_inp.name}")
+            return _inp
 
         print(f"  [Rank {rank}] QM/MM: {len(_sel)} frame(s) (best {ideal_frame_idx}, "
               f"score {best_score:.2f}) — ensemble SN2 barrier.", flush=True)
+        _folds = [(job_out_dir / f"{job_name}_QSite_SN2") if _k == 0
+                  else (job_out_dir / f"{job_name}_QSite_SN2_f{_cand[1]}")
+                  for _k, _cand in enumerate(_sel)]
+        # PHASE 1 — sequential prep (mutates cms_model); collect the frames that still need a run.
+        _runjobs = []
+        for _k, _cand in enumerate(_sel):
+            _inp = _prep_qsite_frame(_cand[1], {'nuc_o': _cand[2], 'lig_c': _cand[3]}, _folds[_k], _k == 0)
+            if _inp is not None and _QSITE_RUN:
+                _runjobs.append((_folds[_k], _inp))
+        # PHASE 2 — run the QM/MM scans CONCURRENTLY (each Jaguar QM engine is single-threaded),
+        # globally bounded by _QSITE_SEM so parallel ranks × frames never exceed the core/RAM cap.
+        if _QSITE_RUN and _runjobs:
+            def _run_one(_job):
+                _fold_r, _inp_r = _job
+                with _QSITE_SEM:
+                    console_info(f"    [Rank {rank}] QSite scan (concurrent) — {_fold_r.name}")
+                    run_qsite(_fold_r, _inp_r, job_name, rank)
+            with ThreadPoolExecutor(max_workers=len(_runjobs), thread_name_prefix=f"QSiteR{rank}") as _qpool:
+                list(_qpool.map(_run_one, _runjobs))
+        elif not _QSITE_RUN:
+            for _fold_r in _folds:
+                console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) — inputs in {_fold_r.name}")
+        # PHASE 3 — parse every selected frame (freshly run or cached), sequentially.
         _barriers, _derxns = [], []
         for _k, _cand in enumerate(_sel):
-            _fi = _cand[1]
-            _fold = (job_out_dir / f"{job_name}_QSite_SN2") if _k == 0 \
-                    else (job_out_dir / f"{job_name}_QSite_SN2_f{_fi}")
-            _res = _prep_and_run(_fi, {'nuc_o': _cand[2], 'lig_c': _cand[3]}, _fold, _k == 0)
+            _fold = _folds[_k]
+            _res = parse_qsite_barrier(_fold, job_name)
             _b = _res.get("QSite_Barrier_kcal")
             if _b == _b:   # not NaN → a barrier was parsed
                 _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
@@ -4592,7 +4680,7 @@ def main():
     parser.add_argument("--ranks",  type=int, default=None,
                         help="Number of ranked jobs (default: auto-detect from 05_MD_Simulations dirs)")
     parser.add_argument("--nuc",    type=int, default=DREAM_TEAM_REF.get('Nuc', 110),  help="Fallback nucleophile resnum")
-    parser.add_argument("--base",   type=int, default=DREAM_TEAM_REF.get('Base', 277), help="Fallback base resnum")
+    parser.add_argument("--base",   type=int, default=DREAM_TEAM_REF.get('Base', 280), help="Fallback base resnum")
     parser.add_argument("--acid",   type=int, default=DREAM_TEAM_REF.get('Acid', 134), help="Fallback acid resnum")
     parser.add_argument("--csv",    default=None,
                         help="Path to master CSV (auto-detected if omitted)")
@@ -4600,14 +4688,19 @@ def main():
                         help="Number of parallel workers (default: auto-detect based on CPU cores)")
     parser.add_argument("--no-run-qsite", action="store_true",
                         help="Only write QSite .in/.mae inputs; do not launch the QSite executable.")
-    parser.add_argument("--qsite-procs", type=int, default=CFG.QSITE_PROCS,
-                        help=f"CPUs per QSite job, qsite -PARALLEL (default: {CFG.QSITE_PROCS}).")
+    parser.add_argument("--qsite-procs", type=int, default=None,
+                        help="CPUs per QSite job, qsite -PARALLEL (default 1 — the QM engine is single-threaded; scans run concurrently instead).")
     args = parser.parse_args()
 
     # QSite execution policy: CFG default, overridable per-run from the CLI.
-    global _QSITE_RUN, _QSITE_PROCS
+    global _QSITE_RUN, _QSITE_PROCS, _PROGRESS_CR, _QSITE_SEM
     _QSITE_RUN = CFG.QSITE_RUN and not args.no_run_qsite
-    _QSITE_PROCS = args.qsite_procs
+    # QSite QM/MM (Impact main1h) is single-threaded here, so -PARALLEL >1 only spawns idle
+    # helpers: default 1 proc per job, and instead run many scans concurrently (below).
+    _QSITE_PROCS = args.qsite_procs if args.qsite_procs is not None else 1
+    _QSITE_SEM = threading.Semaphore(_qsite_concurrency())
+    console_info(f"QSite concurrency: up to {_qsite_concurrency()} single-threaded QM/MM scans in "
+                 f"parallel (cores-2 vs RAM cap), {_QSITE_PROCS} proc/job")
 
     # Optional sudo up front so the run is fully unattended (systemd-oomd masked for the QSite phase).
     import atexit as _atexit
@@ -4703,7 +4796,12 @@ def main():
     master_stats   = []
     _stats_lock    = threading.Lock()
     _rank_list     = _auto_rank_list if _auto_rank_list else list(range(1, args.ranks + 1))
-    _n_workers     = args.workers if args.workers is not None else min(len(_rank_list), CFG.GLOBAL_MAX_WORKERS)
+    # Frame/SN2 analysis runs parallel across ranks at 100% of total_cores-2 (QSite is
+    # serialised separately, so it cannot oversubscribe). Explicit --workers overrides.
+    _cores_budget  = max(1, (os.cpu_count() or 4) - 2)
+    _n_workers     = args.workers if args.workers is not None else max(1, min(len(_rank_list), _cores_budget))
+    # Single rank → in-place \r frame counter; multiple parallel ranks → throttled append lines.
+    _PROGRESS_CR   = (len(_rank_list) == 1)
 
     console_info(f"  Effective Stride : {args.stride}{' (all frames)' if args.stride == 1 else f' (1-in-{args.stride})'}")
     console_separator()
@@ -4831,7 +4929,8 @@ def main():
                 )
         return r, _log_lines, res
 
-    console_info(f"Parallel workers : {_n_workers} (of {len(_rank_list)} ranks)")
+    console_info(f"Parallel workers : {_n_workers} (of {len(_rank_list)} ranks) — "
+                 f"frame/SN2 analysis parallel @ cores-2={_cores_budget}; QSite QM/MM serialised (1 at a time)")
     print(flush=True)
 
     _failed_ranks: list  = []

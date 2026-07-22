@@ -1626,6 +1626,53 @@ def _await_mmgbsa_jobserver(job_prefix: str, poll: int = 30, max_wait: int = 172
         time.sleep(poll)
 
 
+def _resolve_mmgbsa_lig_asl(cms_file: Path) -> str:
+    """Resolve the -lig_asl handed to thermal_mmgbsa, size-independently.
+
+    Preference order:
+      1. CFG.MMGBSA_LIGAND_ASL (default "res.ptype LIG") when it selects ≥1 atom in the
+         built complex — the reliable path: a 5-atom fluoroacetate is pinned exactly like a
+         large PFAS, with no dependence on molecule size.
+      2. Fallback when that name is absent (a rebuild under a different resname): the smallest
+         non-protein / non-solvent molecule carrying at least CFG.LIGAND_MIN_ATOMS atoms,
+         pinned by an explicit molecule ASL. This deliberately avoids thermal_mmgbsa's own
+         AslLigandSearcher, whose 5-atom floor would drop a bare fluoroacetate.
+      3. Empty string → let thermal_mmgbsa auto-detect (last resort)."""
+    _cfg_asl = str(getattr(CFG, "MMGBSA_LIGAND_ASL", "") or "").strip()
+    try:
+        from schrodinger.structure import StructureReader
+        from schrodinger.structutils import analyze
+        fs = max(StructureReader(str(cms_file)), key=lambda c: c.atom_total)
+    except Exception:
+        return _cfg_asl   # cannot introspect the complex → trust the configured ASL
+    if _cfg_asl:
+        try:
+            if len(analyze.evaluate_asl(fs, _cfg_asl)) > 0:
+                return _cfg_asl
+        except Exception:
+            pass
+    _min_atoms = int(getattr(CFG, "LIGAND_MIN_ATOMS", 5))
+    _std = set("ALA ARG ASN ASP CYS GLN GLU GLY HIS HID HIE HIP ILE LEU LYS "
+               "MET PHE PRO SER THR TRP TYR VAL".split())
+    _solvent = {"T3P", "SPC", "HOH", "WAT", "NA", "CL", "K", "POT", "SOD", "CLA", "NA+", "CL-"}
+    _cands = []
+    for mol in fs.molecule:
+        _resns = {a.pdbres.strip() for a in mol.atom}
+        if (_resns & _std) or (_resns <= _solvent):
+            continue
+        if mol.atom_total >= _min_atoms:
+            _cands.append(mol)
+    if _cands:
+        _lig = min(_cands, key=lambda m: m.atom_total)
+        _rn = next(iter({a.pdbres.strip() for a in _lig.atom}))
+        _echo(f"    [!] MM-GBSA: '{_cfg_asl}' matched no atoms — pinning smallest non-solvent "
+              f"ligand '{_rn}' ({_lig.atom_total} atoms) via 'mol.num {_lig.number}'.")
+        return f"mol.num {_lig.number}"
+    _echo(f"    [!] MM-GBSA: '{_cfg_asl}' matched no atoms and no fallback ligand "
+          f"≥{_min_atoms} atoms found — reverting to thermal_mmgbsa auto-detect.")
+    return ""
+
+
 def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     """Run thermal_mmgbsa.py on <job>-out.cms inside its MD folder. Idempotent:
     returns the existing CSV when already computed. Returns the results CSV path
@@ -1691,7 +1738,7 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     except Exception:
         pass
 
-    _lig_asl_cfg = str(getattr(CFG, "MMGBSA_LIGAND_ASL", "") or "").strip()
+    _lig_asl_cfg = _resolve_mmgbsa_lig_asl(cms_file)   # size-independent LIG resolve + ≥5-atom fallback
     _step_cfg = int(getattr(CFG, "MMGBSA_STEP_SIZE", 0) or 0)
     _interval = max(5, int(getattr(CFG, "MMGBSA_PROGRESS_INTERVAL_SEC", 30)))
     # Ground-truth frame count (same source the SID phase uses).
@@ -1710,10 +1757,10 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
 
     cmd = [SCHROD_RUN, "thermal_mmgbsa.py", cms_file.name,
            "-j", f"{job_name}_mmgbsa", "-NJOBS", str(_ncpu)]
-    # Pin the ligand explicitly (ASL from CFG, via thermal_mmgbsa's -lig_asl flag) so
-    # Prime scores the PFAS molecule; a small/heavily-fluorinated ligand can otherwise
-    # be misassigned as solvent by auto-detection. Empty CFG value → auto-detect.
-    _lig_asl = str(getattr(CFG, "MMGBSA_LIGAND_ASL", "") or "").strip()
+    # Pin the ligand explicitly via thermal_mmgbsa's -lig_asl flag so Prime scores the substrate;
+    # a small or heavily-fluorinated ligand is otherwise misassigned by auto-detection. The ASL was
+    # resolved once above (configured name if it matches, else the ≥5-atom fallback, else empty).
+    _lig_asl = _lig_asl_cfg
     if _lig_asl:
         cmd += ["-lig_asl", _lig_asl]
     if getattr(CFG, "MMGBSA_STEP_SIZE", 0) and CFG.MMGBSA_STEP_SIZE > 0:
@@ -1886,6 +1933,51 @@ def _lookup_ligands(run_root: Path) -> dict:
         return {int(r): str(l) for r, l in zip(df["Scientific_Rank"], df["Ligand_Name"])}
     except Exception:
         return {}
+
+
+_CTRL_LABEL = "3R3U-FA"                     # distinct label for the 3R3U × FA positive control
+_CTRL_COLOUR = CFG.VIS_ACCENT["control"]    # one distinct colour for the control across every 06/07 figure
+
+
+def _lookup_controls(run_root: Path) -> set:
+    """Scientific_Ranks that are the 3R3U control (is_control, or job_name reserved index
+    CONTROL_JOB_PREFIX). Lets every physics figure paint the control distinctly and label it
+    '3R3U-FA' instead of a bare 'FA' shared with the candidate fluoroacetate. Empty if unavailable."""
+    prod = run_root / "1_Boltz2_Production"
+    hit = (_utils_mod.latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV))
+           or _utils_mod.latest_by_mtime(prod.glob("*Ranked*.csv"))) if prod.is_dir() else None
+    if hit is None:
+        return set()
+    try:
+        df = pd.read_csv(hit)
+        _pref = str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))
+        _is_ctrl = pd.Series(False, index=df.index)
+        if "is_control" in df.columns:
+            _is_ctrl |= df["is_control"].astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])
+        if "job_name" in df.columns:
+            _is_ctrl |= df["job_name"].astype(str).str.startswith(_pref)
+        return {int(r) for r in df.loc[_is_ctrl, "Scientific_Rank"]}
+    except Exception:
+        return set()
+
+
+def _ctrl_label(rk, ligands: dict, controls: set) -> str:
+    """'3R3U-FA' for a control rank, else the short PFAS name (fallback R_<rk>)."""
+    if rk in controls:
+        return _CTRL_LABEL
+    return _short_ligand(ligands.get(rk, "")) or f"R_{rk}"
+
+
+def _ctrl_palette(ranks, controls: set, base_palette) -> list:
+    """Per-rank colours: the control gets the one distinct control colour, candidates cycle the
+    base palette (skipping the control so its colour is never reused for a candidate)."""
+    out, _bi = [], 0
+    for rk in ranks:
+        if rk in controls:
+            out.append(_CTRL_COLOUR)
+        else:
+            out.append(base_palette[_bi % len(base_palette)]); _bi += 1
+    return out
 
 
 def _dg_failures(dg: "pd.Series") -> "pd.Series":
@@ -2682,6 +2774,9 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
            if a.pdbname.strip() == "CA" and a.pdbres.strip() in _STD and int(a) in aid2gid]
     gLig = [aid2gid[int(a)] for a in fs.atom
             if a.pdbres.strip() == "LIG" and a.element.strip() != "H" and int(a) in aid2gid]
+    if len(gOd) == 0 or len(gLig) == 0:
+        _echo("    ✘ Skipped      : nucleophile has no OD/OE atoms, or no ligand heavy atoms, in the prepared cms.")
+        return None
     cradle = {f"HIS{R['sh']}": G([R["sh"]], {"ND1", "NE2"}),
               f"TRP{R['sw']}": G([R["sw"]], {"NE1"}),
               f"TYR{R['sy']}": G([R["sy"]], {"OH"}),
@@ -2703,6 +2798,9 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     stride = max(1, int(getattr(CFG, "DEFLUOR_STRIDE", 100)))
     idx = list(range(0, len(tr), stride))
     nfr = len(idx)
+    if nfr == 0:
+        _echo("    ✘ Skipped      : trajectory recorded zero frames (MD-kill / empty _trj).")
+        return None
     total_ns = md_ns if md_ns and md_ns > 0 else 1000.0
     t = np.linspace(0, total_ns, nfr)
 
@@ -2832,7 +2930,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     axt.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
     axt.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT); axt.set_ylim(0, _cmax)
     axt.set_yticks(np.arange(0, _cmax, 4)); axt.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axt)
-    axt.legend(loc="upper right", ncol=5, fontsize=_LF, framealpha=_FA, columnspacing=1.1, handlelength=1.4)
+    axt.legend(loc="upper right", ncol=5, fontsize=_LF, framealpha=_FA, columnspacing=CFG.VIS_LEGEND_COLUMNSPACING, handlelength=CFG.VIS_LEGEND_HANDLELENGTH)
     for (k, d), c in zip(clamp_d.items(), [_DEFL_OKABE[4], _DEFL_OKABE[2]]):
         axb.plot(t, d, lw=0.8, color=c, label=f"{k} → carboxylate")
     axb.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
@@ -2883,7 +2981,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.tick_params(axis="x", rotation=90)
         ax.set_xlabel("attack distance (Å)")
         ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
-        ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=9, framealpha=0.85)
+        ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
         fig.tight_layout(); fig.savefig(out / "04_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
 
     # 08 MM-GBSA energy-component decomposition — the binding DRIVERS, and whether the
@@ -3048,6 +3146,20 @@ def _md_production(time_ps: float, interval_ps: float) -> str:
     """
     temp = CFG.MD_EQUIL_TARGET_T                                   # one temperature for MD + MM-GBSA
     dt = " ".join(str(x) for x in CFG.PHYS_MD_TIMESTEP_PS)
+    # Ligand-retention restraints kept ON through production (Desmond `restrain` block, CFG §9.2b):
+    # positionally restrain the ligand heavy atoms so a small substrate cannot diffuse out of the
+    # pocket (the escape artefact), plus a gentle backbone anchor so the protein does not translate/
+    # tumble in the box and drag the ligand restraint off the moving site. Proven msj syntax (cf.
+    # $SCHRODINGER .../data/desmond/kinetics_membrane_md.msj production stage). Off → original free MD.
+    _restrain = ""
+    if getattr(CFG, "MD_RESTRAIN_LIGAND", False):
+        _lig_res = getattr(CFG, "LIGAND_RESNAME_ASSERT", "LIG")
+        _restrain = (
+            f'  restrain = [\n'
+            f'    {{atom = "asl: (res.ptype {_lig_res}) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_LIG_FORCE_K}}}\n'
+            f'    {{atom = "asl: (backbone) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_BB_FORCE_K}}}\n'
+            f'  ]\n'
+        )
     return (
         f'\nsimulate {{\n'
         f'  title       = "Production MD"\n'
@@ -3059,6 +3171,7 @@ def _md_production(time_ps: float, interval_ps: float) -> str:
         f'  randomize_velocity = {{ first = 0.0 interval = inf temperature = {temp} seed = {CFG.PHYS_MD_SEED} }}\n'
         f'  eneseq.interval    = {CFG.PHYS_MD_ENESEQ_PS}\n'
         f'  trajectory = {{ interval = {interval_ps} center = solute write_velocity = false }}\n'
+        f'{_restrain}'
         f'}}\n'
     )
 
@@ -3809,7 +3922,7 @@ def _analysis_dir(physics_root: Path) -> Path:
     return d
 
 
-def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: dict) -> None:
+def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: dict, controls: set = None) -> None:
     """Draw the build/solvation QC figure — ESP charge gradient, per-atom charges, WaterMap ΔG, box size.
 
     One 4-panel snapshot of what the physics build produced for every MD-selected rank, from the numbers
@@ -3834,10 +3947,11 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
 
     recs.sort(key=lambda r: r["rank"])
     ranks = [r["rank"] for r in recs]
-    labs = [_short_ligand(ligands.get(rk, "")) or f"R_{rk}" for rk in ranks]
+    controls = controls or set()
+    labs = [_ctrl_label(rk, ligands, controls) for rk in ranks]
     _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
     palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
-    cols = [palette[i % len(palette)] for i in range(len(recs))]
+    cols = _ctrl_palette(ranks, controls, palette)
     xp = np.arange(len(recs))
     fa = CFG.VIS_FONT_ANNOT
 
@@ -3994,7 +4108,7 @@ def _read_md_qc(job_dir: Path, jobname: str) -> "dict | None":
     return d
 
 
-def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
+def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set = None) -> None:
     """Draw the MD trajectory-QC figure — Cα-RMSD, ligand RMSD, temperature, Cα-RMSF — across the ranks.
 
     A single stability snapshot proving the production runs are trustworthy before their MM-GBSA / Step-07
@@ -4002,6 +4116,11 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
     RMSD, fit on protein), was the thermostat stable (T), and which regions stayed rigid (Cα-RMSF). Reads
     the SID .eaf + .ene already on disk; best-effort — a rank without SID output is dropped, and the whole
     figure is skipped rather than failing the run. Written to 6_Physics_Validation/06_Analysis/.
+
+    NB: when CFG.MD_RESTRAIN_LIGAND is set the production runs under a positional restraint (ligand heavy
+    atoms + backbone), so the Cα-RMSD and ligand-RMSD panels here show RESTRAINT-ENFORCED stability, not
+    spontaneous retention — a disclosing footnote is stamped on the figure. The unrestrained reaction
+    barrier is the QM/MM ΔE‡ in Step 07, not these positional-restraint panels.
     """
     job_dirs = sorted((d for d in md_dir.iterdir()
                        if d.is_dir() and re.match(r"desmond_md_job_R(?:ank)?_\d", d.name)),
@@ -4021,10 +4140,12 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
         _warn("[qc] no SID .eaf found — MD trajectory-QC figure skipped.")
         return
 
-    labs = [_short_ligand(ligands.get(r["rank"], "")) or f"R_{r['rank']}" for r in recs]
+    controls = controls or set()
+    _rk_list = [r["rank"] for r in recs]
+    labs = [_ctrl_label(rk, ligands, controls) for rk in _rk_list]
     _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
     palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
-    cols = [palette[i % len(palette)] for i in range(len(recs))]
+    cols = _ctrl_palette(_rk_list, controls, palette)
     fl = CFG.VIS_FONT_LEGEND
     fig, ax = plt.subplots(2, 2, figsize=(12, 8.6))
 
@@ -4041,7 +4162,10 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
     for i, r in enumerate(recs):
         b.plot(r["t"], r["lg"], color=cols[i], lw=1.3, label=labs[i])
     b.set_xlabel("time (ns)")
-    b.set_ylabel("Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
+    _lg_ylab = ("Ligand RMSD (Å), fit on protein\nhigher = drift within the pocket restraint (see note)"
+                if getattr(CFG, "MD_RESTRAIN_LIGAND", False)
+                else "Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
+    b.set_ylabel(_lg_ylab)
     b.legend(loc="upper left", fontsize=fl)
 
     # C — system temperature vs the target (thermostat stability), zoomed to a tight band.
@@ -4070,6 +4194,15 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict) -> None:
     dd.legend(loc="upper right", fontsize=fl)
 
     fig.tight_layout()
+    # Honest disclosure: when the production is positionally restrained, retention/equilibration in
+    # panels A/B are enforced by the restraint, not observed as spontaneous — say so on the figure.
+    if getattr(CFG, "MD_RESTRAIN_LIGAND", False):
+        fig.subplots_adjust(bottom=0.11)
+        fig.text(0.5, 0.01,
+                 f"Production run under a positional restraint (ligand heavy atoms k={CFG.MD_RESTRAIN_LIG_FORCE_K}, "
+                 f"backbone k={CFG.MD_RESTRAIN_BB_FORCE_K} kcal/mol/Å²): ligand retention (B) and Cα equilibration (A) "
+                 f"are restraint-enforced, not spontaneous. The unrestrained SN2 barrier is the Step-07 QM/MM ΔE‡.",
+                 ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT - 1, color=CFG.VIS_INK["soft"], wrap=True)
     qc_dir = _analysis_dir(out_root)
     out_path = qc_dir / "MD_Trajectory_QC.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4275,7 +4408,7 @@ def main() -> int:
     if {"build", "watermap"} & stages:
         _section("Physics QC — build & solvation snapshot")
         try:
-            make_physics_qc_figure(entries, dirs, out_root, _lookup_ligands(run))
+            make_physics_qc_figure(entries, dirs, out_root, _lookup_ligands(run), _lookup_controls(run))
         except Exception as exc:
             _warn(f"[qc] physics QC figure skipped — {str(exc).splitlines()[0]}")
 
@@ -4341,7 +4474,7 @@ def main() -> int:
                     _warn(f"[defluor] combined figure skipped — {str(exc).splitlines()[0]}")
                 # MD trajectory QC (Cα-RMSD · ligand RMSD · temperature · Cα-RMSF) from the SID .eaf + .ene.
                 try:
-                    make_md_qc_figure(md_dir, out_root, _lookup_ligands(run_root))
+                    make_md_qc_figure(md_dir, out_root, _lookup_ligands(run_root), _lookup_controls(run_root))
                 except Exception as exc:
                     _warn(f"[qc] MD trajectory-QC figure skipped — {str(exc).splitlines()[0]}")
 

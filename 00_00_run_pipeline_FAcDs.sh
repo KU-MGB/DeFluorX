@@ -648,8 +648,12 @@ run_step "00a  Environment check" \
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
-run_step --optional "00b  Environment export" \
-    python 00_03_Environment_FAcDs.py --export
+# 00b runs only on a Fresh run or when an export is missing — a resume re-uses the
+# existing PFAS.yml / requirements.txt, so it neither re-runs 00_03 nor dirties git.
+if [[ "${_PIPELINE_MODE}" == "fresh" || ! -f PFAS.yml || ! -f requirements.txt ]]; then
+    run_step --optional "00b  Environment export" \
+        python 00_03_Environment_FAcDs.py --export
+fi
 
 run_step "01  Merge sequences" \
     python 01_Merge_FAcDs.py \

@@ -3670,6 +3670,16 @@ def topn_extraction_phase(args):
 
     if _md_subset is not None:
         subset = _md_subset
+        # Route the MD-selected 3R3U reference control (Step 02 forces 3R3U × fluoroacetate into
+        # MD_Selected) through the SAME handover + MD machinery as the candidates, so Step 06
+        # simulates it as a first-class job. It carries its own Scientific_Rank, so its handover
+        # PDB is R{rank}_..._3R3U_Control_...; downstream flags it via is_control (looked up by
+        # job_name from the ranked CSV), and the run gets a real WT-FAcD·FA reference trajectory.
+        if _md_col in df_controls.columns:
+            _ctrl_md = df_controls[df_controls[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])]
+            if len(_ctrl_md):
+                subset = pd.concat([subset, _ctrl_md], ignore_index=False)
+                console_info(f"  + {len(_ctrl_md)} MD-selected 3R3U reference control(s) added to the MD handover")
         selected_tiers = ["MD_Selected"]
         console_info(f"  MD-ready gate: extracting {len(subset)} MD_Selected complexes (tier prompt skipped)")
     elif available_tiers:

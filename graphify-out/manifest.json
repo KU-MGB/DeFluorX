@@ -1,77 +1,297 @@
 {
-  "/mnt/wdpassport/FAcDs/.write_dir.json": {
-    "mtime": 1784032472.1533747,
-    "ast_hash": "c0b7195428c0d179f2b92e04df2911fb",
-    "semantic_hash": "c0b7195428c0d179f2b92e04df2911fb"
+  "/mnt/wdpassport/FAcDs/02_Data/00_00_run_pipeline_FAcDs.sh": {
+    "mtime": 1784690871.5314586,
+    "ast_hash": "3b44e1851a80ee7acefcbe50266e6d65",
+    "semantic_hash": "3b44e1851a80ee7acefcbe50266e6d65"
   },
-  "/mnt/wdpassport/FAcDs/00_00_run_pipeline_FAcDs.sh": {
-    "mtime": 1784269549.6745584,
-    "ast_hash": "6a7bcac7fe7b54d4b6273e85afe2f521",
-    "semantic_hash": "6a7bcac7fe7b54d4b6273e85afe2f521"
+  "/mnt/wdpassport/FAcDs/02_Data/00_01_Project_Config_FAcDs.py": {
+    "mtime": 1784691623.6348124,
+    "ast_hash": "f1bdb6dfd135f9eaaa477785296be7ec",
+    "semantic_hash": "f1bdb6dfd135f9eaaa477785296be7ec"
   },
-  "/mnt/wdpassport/FAcDs/00_01_Project_Config_FAcDs.py": {
-    "mtime": 1784276976.8670628,
-    "ast_hash": "d9318c0943329ef7fd5e4a08d925ba35",
-    "semantic_hash": "d9318c0943329ef7fd5e4a08d925ba35"
+  "/mnt/wdpassport/FAcDs/02_Data/00_02_Project_Utils_FAcDs.py": {
+    "mtime": 1784649744.994527,
+    "ast_hash": "7b8690d1b113424bc9c1921ab80d4193",
+    "semantic_hash": "7b8690d1b113424bc9c1921ab80d4193"
   },
-  "/mnt/wdpassport/FAcDs/00_02_Project_Utils_FAcDs.py": {
-    "mtime": 1784277664.8442717,
-    "ast_hash": "5a56709d886bb6a30eba574d47c79063",
-    "semantic_hash": "5a56709d886bb6a30eba574d47c79063"
-  },
-  "/mnt/wdpassport/FAcDs/00_03_Environment_FAcDs.py": {
+  "/mnt/wdpassport/FAcDs/02_Data/00_03_Environment_FAcDs.py": {
     "mtime": 1784234671.8729775,
     "ast_hash": "768d88b7fd8b58417ebd66b18aa54df3",
     "semantic_hash": "768d88b7fd8b58417ebd66b18aa54df3"
   },
-  "/mnt/wdpassport/FAcDs/01_Merge_FAcDs.py": {
+  "/mnt/wdpassport/FAcDs/02_Data/01_Merge_FAcDs.py": {
     "mtime": 1784233397.8529403,
     "ast_hash": "c952e5ae93085932c65294043a18d1d9",
     "semantic_hash": "c952e5ae93085932c65294043a18d1d9"
   },
-  "/mnt/wdpassport/FAcDs/02_Production_FAcDs.py": {
-    "mtime": 1784277728.6479247,
-    "ast_hash": "ca69013ef9e4f4b334532b1d832485f0",
-    "semantic_hash": "ca69013ef9e4f4b334532b1d832485f0"
+  "/mnt/wdpassport/FAcDs/02_Data/02_Production_FAcDs.py": {
+    "mtime": 1784691612.056325,
+    "ast_hash": "69a36bf5f06850db51065194d870a557",
+    "semantic_hash": "69a36bf5f06850db51065194d870a557"
   },
-  "/mnt/wdpassport/FAcDs/03_Validation_Figures_FAcDs.py": {
-    "mtime": 1784277675.2463217,
-    "ast_hash": "2cba693b9224f469615e65bb626453fc",
-    "semantic_hash": "2cba693b9224f469615e65bb626453fc"
+  "/mnt/wdpassport/FAcDs/02_Data/03_Validation_Figures_FAcDs.py": {
+    "mtime": 1784662407.8254669,
+    "ast_hash": "b3a436c2fa7e2f022599569f7b02e9f6",
+    "semantic_hash": "b3a436c2fa7e2f022599569f7b02e9f6"
   },
-  "/mnt/wdpassport/FAcDs/04_Dendrogram_FAcDs.py": {
+  "/mnt/wdpassport/FAcDs/02_Data/04_Dendrogram_FAcDs.py": {
     "mtime": 1784268341.6380336,
     "ast_hash": "0773eba9b12af4268478d2ba9b042038",
     "semantic_hash": "0773eba9b12af4268478d2ba9b042038"
   },
-  "/mnt/wdpassport/FAcDs/05_TopN_and_PDB_Preparation_FAcDs.py": {
-    "mtime": 1784277685.8461006,
-    "ast_hash": "d4ac0fbd5a58729badfbb513dfcfaec4",
-    "semantic_hash": "d4ac0fbd5a58729badfbb513dfcfaec4"
+  "/mnt/wdpassport/FAcDs/02_Data/05_TopN_and_PDB_Preparation_FAcDs.py": {
+    "mtime": 1784649778.726237,
+    "ast_hash": "66bc337bc9217183c8b6fe9e7e1adb6b",
+    "semantic_hash": "66bc337bc9217183c8b6fe9e7e1adb6b"
   },
-  "/mnt/wdpassport/FAcDs/07_MD_QMMM_Defluorination_FAcDs.py": {
-    "mtime": 1784277451.2007625,
-    "ast_hash": "6744195dd172d0ad102d12fd8a2b72a7",
-    "semantic_hash": "6744195dd172d0ad102d12fd8a2b72a7"
+  "/mnt/wdpassport/FAcDs/02_Data/06_Physics_Validation_FAcDs.py": {
+    "mtime": 1784643897.480174,
+    "ast_hash": "18caffd7d07b3605a17de07a925e60a2",
+    "semantic_hash": "18caffd7d07b3605a17de07a925e60a2"
   },
-  "/mnt/wdpassport/FAcDs/PFAS.yml": {
-    "mtime": 1784235199.1065686,
-    "ast_hash": "5d3f201fb6f24e11dcd8d968283b8f2b",
-    "semantic_hash": "5d3f201fb6f24e11dcd8d968283b8f2b"
+  "/mnt/wdpassport/FAcDs/02_Data/07_MD_QMMM_Defluorination_FAcDs.py": {
+    "mtime": 1784691264.027958,
+    "ast_hash": "62362fbbf46ba2f2d4545db18a4a4dd3",
+    "semantic_hash": "62362fbbf46ba2f2d4545db18a4a4dd3"
   },
-  "/mnt/wdpassport/FAcDs/README.md": {
-    "mtime": 1784277759.741317,
-    "ast_hash": "07392498daf6150cdf3053a0bb3290d0",
-    "semantic_hash": "07392498daf6150cdf3053a0bb3290d0"
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/cases.py": {
+    "mtime": 1784535072.1170213,
+    "ast_hash": "a6ef635229b5a2eb310539e462bfd9d5",
+    "semantic_hash": "a6ef635229b5a2eb310539e462bfd9d5"
   },
-  "/mnt/wdpassport/FAcDs/requirements.txt": {
-    "mtime": 1784235199.451094,
-    "ast_hash": "4fced42f7725beaca4b881b4e8b6a26f",
-    "semantic_hash": "4fced42f7725beaca4b881b4e8b6a26f"
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/dataio.py": {
+    "mtime": 1784534719.4844859,
+    "ast_hash": "ad88a5b5deb35f635cad6221c7e30a65",
+    "semantic_hash": "ad88a5b5deb35f635cad6221c7e30a65"
   },
-  "/mnt/wdpassport/FAcDs/06_Physics_Validation_FAcDs.py": {
-    "mtime": 1784277423.7591467,
-    "ast_hash": "29754dcc5f1004b56e6ba782daf761dc",
-    "semantic_hash": "29754dcc5f1004b56e6ba782daf761dc"
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/mantel_feature_correlation.py": {
+    "mtime": 1784542372.108336,
+    "ast_hash": "f997e3db8056075c2b11ff05851324a4",
+    "semantic_hash": "f997e3db8056075c2b11ff05851324a4"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/merge.py": {
+    "mtime": 1784535016.7705073,
+    "ast_hash": "68a8bc4c173d0f6eff6e151184908a9d",
+    "semantic_hash": "68a8bc4c173d0f6eff6e151184908a9d"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/run_all.py": {
+    "mtime": 1784534377.3222208,
+    "ast_hash": "385f1e6f328d8bb265c5c592c9c8ca07",
+    "semantic_hash": "385f1e6f328d8bb265c5c592c9c8ca07"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/theme_case.py": {
+    "mtime": 1784533915.5382059,
+    "ast_hash": "9cd51ee11645841b687ac48df49845a9",
+    "semantic_hash": "9cd51ee11645841b687ac48df49845a9"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/PFAS.yml": {
+    "mtime": 1784661989.5777583,
+    "ast_hash": "a3d5bfe009b265e8eac904fa907b2a56",
+    "semantic_hash": "a3d5bfe009b265e8eac904fa907b2a56"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/README.md": {
+    "mtime": 1784691818.1545064,
+    "ast_hash": "d028ec2a24567db9b364474c302956f6",
+    "semantic_hash": "d028ec2a24567db9b364474c302956f6"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/FIGURE_CAPTIONS.md": {
+    "mtime": 1784535117.3803723,
+    "ast_hash": "12c953228454aa51685ff93f0ddb9f37",
+    "semantic_hash": "12c953228454aa51685ff93f0ddb9f37"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/README.md": {
+    "mtime": 1784535126.5072436,
+    "ast_hash": "743f44d135bd0142e246fbd479a5717f",
+    "semantic_hash": "743f44d135bd0142e246fbd479a5717f"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/08_Figure_Descriptions.txt": {
+    "mtime": 1784627125.9142082,
+    "ast_hash": "42cb8ed8c2cfafbe46a437a15c64d688",
+    "semantic_hash": "42cb8ed8c2cfafbe46a437a15c64d688"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R2/08_Figure_Descriptions.txt": {
+    "mtime": 1784627129.038905,
+    "ast_hash": "a2c0d6d35c9705c05d14712804b6476c",
+    "semantic_hash": "a2c0d6d35c9705c05d14712804b6476c"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/config_dump.txt": {
+    "mtime": 1784641124.5743654,
+    "ast_hash": "9318653aa863b3f8121ea15dd52022d0",
+    "semantic_hash": "9318653aa863b3f8121ea15dd52022d0"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/pylint_out.txt": {
+    "mtime": 1784640913.0812871,
+    "ast_hash": "ffa15fa6b1d39f63799be6516f23f9bd",
+    "semantic_hash": "ffa15fa6b1d39f63799be6516f23f9bd"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/requirements.txt": {
+    "mtime": 1784661989.8661153,
+    "ast_hash": "b701a66abb5fd2bbcd2084452d10e871",
+    "semantic_hash": "b701a66abb5fd2bbcd2084452d10e871"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/vulture_output.txt": {
+    "mtime": 1784640665.6547146,
+    "ast_hash": "c444b041779c11568cf3e2cb57ba3f55",
+    "semantic_hash": "c444b041779c11568cf3e2cb57ba3f55"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/00_MASTER_20_panels.svg": {
+    "mtime": 1784535097.6631324,
+    "ast_hash": "eb21f1ae1a25550ba025c5096b4a0d20",
+    "semantic_hash": "eb21f1ae1a25550ba025c5096b4a0d20"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/01_individualized_error_dotplot.png": {
+    "mtime": 1784535088.097735,
+    "ast_hash": "b9a10355f438ee17be78e6008646a2b1",
+    "semantic_hash": "b9a10355f438ee17be78e6008646a2b1"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/02_grouped_error_dotplot.png": {
+    "mtime": 1784535088.2137399,
+    "ast_hash": "3e86b33c28469d01f37e0180c2381aae",
+    "semantic_hash": "3e86b33c28469d01f37e0180c2381aae"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/03_multigroup_volcano.png": {
+    "mtime": 1784535088.412748,
+    "ast_hash": "8c8f1b78fa2032119ef112bbf5442aed",
+    "semantic_hash": "8c8f1b78fa2032119ef112bbf5442aed"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/04_manhattan_twas.png": {
+    "mtime": 1784535088.815765,
+    "ast_hash": "c5a32f163c5909f146ad63010f2e0e59",
+    "semantic_hash": "c5a32f163c5909f146ad63010f2e0e59"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/05_paired_boxplot.png": {
+    "mtime": 1784535088.94177,
+    "ast_hash": "2f4ec662ab5bf1209858e3bd329cb10d",
+    "semantic_hash": "2f4ec662ab5bf1209858e3bd329cb10d"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/06_raincloud.png": {
+    "mtime": 1784535089.210781,
+    "ast_hash": "fd1b8231cbf86a797b9033e8ce2cccda",
+    "semantic_hash": "fd1b8231cbf86a797b9033e8ce2cccda"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/07_swimmer.png": {
+    "mtime": 1784535089.3397865,
+    "ast_hash": "520ba2be54a8d94aad95bf821190c820",
+    "semantic_hash": "520ba2be54a8d94aad95bf821190c820"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/08_importance_streams.png": {
+    "mtime": 1784535089.5207942,
+    "ast_hash": "433dfa127eced11722542d4d9388d84e",
+    "semantic_hash": "433dfa127eced11722542d4d9388d84e"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/09_variance_bars_letters.png": {
+    "mtime": 1784535089.613798,
+    "ast_hash": "5dd45c673f416d582ec61138c0848d29",
+    "semantic_hash": "5dd45c673f416d582ec61138c0848d29"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/10_circos_chord.png": {
+    "mtime": 1784535089.8238068,
+    "ast_hash": "fa6c676657eb5060d3013417917cb8bf",
+    "semantic_hash": "fa6c676657eb5060d3013417917cb8bf"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/11_module_network.png": {
+    "mtime": 1784535089.9928136,
+    "ast_hash": "55e17a00ce84223313235d41222a294c",
+    "semantic_hash": "55e17a00ce84223313235d41222a294c"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/12_sankey_enrichment_bubble.png": {
+    "mtime": 1784535090.217823,
+    "ast_hash": "0b4517e4f684b61ffc76efa71d6d5a38",
+    "semantic_hash": "0b4517e4f684b61ffc76efa71d6d5a38"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/13_discrete_heatmap.png": {
+    "mtime": 1784535090.481834,
+    "ast_hash": "e6bfc926bbe0b46c96d5874f7f35a0ce",
+    "semantic_hash": "e6bfc926bbe0b46c96d5874f7f35a0ce"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/14_mantel_composite.png": {
+    "mtime": 1784535091.0338569,
+    "ast_hash": "3c497ed14a2df94fffc23ad555d87523",
+    "semantic_hash": "3c497ed14a2df94fffc23ad555d87523"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/15_correlation_heatmap.png": {
+    "mtime": 1784535091.3388696,
+    "ast_hash": "6dfc79815efd6582e8d358f6fcb735a2",
+    "semantic_hash": "6dfc79815efd6582e8d358f6fcb735a2"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/16_polar_heatmap.png": {
+    "mtime": 1784535091.6868842,
+    "ast_hash": "7e4b04126323e6e48314649736e4667d",
+    "semantic_hash": "7e4b04126323e6e48314649736e4667d"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/17_multilevel_sankey.png": {
+    "mtime": 1784535091.7888882,
+    "ast_hash": "9231a687983b213749fe0a81fc9f8c6d",
+    "semantic_hash": "9231a687983b213749fe0a81fc9f8c6d"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/18_treemap.png": {
+    "mtime": 1784535091.950895,
+    "ast_hash": "7b015b47a610b980f03c6918a896e835",
+    "semantic_hash": "7b015b47a610b980f03c6918a896e835"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/19_mosaic_sunburst.png": {
+    "mtime": 1784535092.1709042,
+    "ast_hash": "e6d853bde3eb290faf361a252855091a",
+    "semantic_hash": "e6d853bde3eb290faf361a252855091a"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/01_Journal_Figures_Port/figures/20_split_violin.png": {
+    "mtime": 1784535092.428915,
+    "ast_hash": "fb0d0a34c21323b5eea6c3d6777e801d",
+    "semantic_hash": "fb0d0a34c21323b5eea6c3d6777e801d"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/00_Defluorination_Combined_AllRanks.png": {
+    "mtime": 1784627129.353049,
+    "ast_hash": "fbf011c1775d3f7b40adf42569132635",
+    "semantic_hash": "fbf011c1775d3f7b40adf42569132635"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/01_MMGBSA_Combined_AllRanks.png": {
+    "mtime": 1784627120.9656947,
+    "ast_hash": "3a0c046b898ec827f0288933d03be1e4",
+    "semantic_hash": "3a0c046b898ec827f0288933d03be1e4"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/01_SN2_Attack_Geometry.png": {
+    "mtime": 1784627124.7558546,
+    "ast_hash": "1f7001aed46497a313e2176005fd9858",
+    "semantic_hash": "1f7001aed46497a313e2176005fd9858"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/02_Fluoride_Cradle_and_Carboxylate_Clamp.png": {
+    "mtime": 1784627125.2478755,
+    "ast_hash": "555882f477c160b28d8aae98c3c3f666",
+    "semantic_hash": "555882f477c160b28d8aae98c3c3f666"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/03_Reactive_Summary.png": {
+    "mtime": 1784627125.4648848,
+    "ast_hash": "3d46f3c2b46833b715949be6c1ade407",
+    "semantic_hash": "3d46f3c2b46833b715949be6c1ade407"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/04_Binding_vs_Reactivity.png": {
+    "mtime": 1784627125.6568928,
+    "ast_hash": "debc0cca364383922fdc811c3ed73ce7",
+    "semantic_hash": "debc0cca364383922fdc811c3ed73ce7"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R1/05_MMGBSA_Components.png": {
+    "mtime": 1784627125.9109035,
+    "ast_hash": "60ee51d34b5efc0d53bb58308466a400",
+    "semantic_hash": "60ee51d34b5efc0d53bb58308466a400"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R2/01_SN2_Attack_Geometry.png": {
+    "mtime": 1784627128.4800122,
+    "ast_hash": "f20914c95cf34b34cebb3577b0d9f5f5",
+    "semantic_hash": "f20914c95cf34b34cebb3577b0d9f5f5"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R2/02_Fluoride_Cradle_and_Carboxylate_Clamp.png": {
+    "mtime": 1784627128.8200264,
+    "ast_hash": "46630f482bb4aa9263b9135bf36d12d6",
+    "semantic_hash": "46630f482bb4aa9263b9135bf36d12d6"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Defluorination/Defluorination_R2/03_Reactive_Summary.png": {
+    "mtime": 1784627129.0360355,
+    "ast_hash": "6e6ca92705a4b4105ca5d9ded834cbea",
+    "semantic_hash": "6e6ca92705a4b4105ca5d9ded834cbea"
+  },
+  "/mnt/wdpassport/FAcDs/02_Data/TEST/06_Analysis/Prime-MMGBSA/Prime-MMGBSA_R1/Rank_01_MMGBSA_Profile_desmond_md_job_R_1.png": {
+    "mtime": 1784627119.5496347,
+    "ast_hash": "455c690b90e785b1f676f6a08dece4f7",
+    "semantic_hash": "455c690b90e785b1f676f6a08dece4f7"
   }
 }

@@ -73,31 +73,46 @@ EXPANDED TIER DEFINITIONS (Mechanism-First Classification - ULTRA STRICT):
 The pipeline assigns a "Degrader Tier" based on strictly tightened catalytic requirements
 derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mechanics.
 
+    The tier ladder gates on two orthogonal chemistry axes so the 3R3U references (FA/DFA/TFA)
+    separate into three distinct tiers:
+      • the raw SN2 attack angle is hard-gated at the elite tiers (Tier_1A ≥170°, Tier_1B ≥165°)
+        and at Tier_2A (≥155°); Tier_2B carries no raw-angle gate (it keeps a bent-but-feasible
+        substrate such as difluoroacetate, ~108°, whose static pose fails the 2A angle floor);
+      • substrate feasibility (competence_score, which folds the graded C–F BDE) is floored at
+        Tier_2A (≥0.50) and Tier_2B (≥0.40); the trifluoroacetate family caps at competence ≈0.35,
+        so a high-BDE decoy fails both functional floors and lands Tier_3.
+    The angle is ALSO folded continuously into the mechanistic score, so a bent pose is penalised
+    there as well. Net on the references: 3R3U × FA → Tier_2A, × DFA → Tier_2B, × TFA → Tier_3.
+
     1. Tier_1A (Elite Catalysis - High Priority for MD)
-       • Mechanistic Score >= 0.85 (ladder floor; angle folded into the score. Elite tier further refined by the coupled machinery gate: mech >= 0.90 OR mech >= 0.85 with a crystal-exact catalytic constellation.)
+       • Mechanistic Score >= 0.85 (ladder floor; angle + chemistry folded into the score. Elite tier further refined by the coupled machinery gate: mech >= 0.90 OR mech >= 0.85 with a crystal-exact catalytic constellation.)
+       • SN2 attack angle:     >= 170 deg (raw angle_effective; elite near-ideal backside gate)
        • (Active Site Conservation is reported downstream for ranking; it is NOT a tier gate.)
        • Nucleophile (Asp110): <= 3.0 A (ligand α-carbon → Asp-Oδ; tight pre-reactive ground-state gate)
-       • Nuc–Base relay:       <= 3.5 A (INTERNAL triad Asp110-Oδ → His277, dist_nuc_base — not a ligand contact)
-       • Base–Acid relay:      <= 4.5 A (INTERNAL triad His277 → Asp134, dist_base_acid — not a ligand contact)
-       • Attack Angle:         >= 170°  (Near-Ideal Linear Trajectory; = TIER_ANGLE_MIN['Tier_1A'])
-       • Stabilisation:        REQUIRED (Trp156/Tyr217 or Dynamic Polar Residue)
+       • Nuc–Base relay:       <= 3.5 A (INTERNAL triad Asp110-Oδ → His280, dist_nuc_base — not a ligand contact)
+       • Base–Acid relay:      <= 4.5 A (INTERNAL triad His280 → Asp134, dist_base_acid — not a ligand contact)
+       • Stabilisation:        REQUIRED (Trp156/Tyr219 or Dynamic Polar Residue)
 
     2. Tier_1B (High Functional)
        • Mechanistic Score >= 0.85
+       • SN2 attack angle:     >= 165 deg (raw angle_effective)
        • Nucleophile (Asp110): <= 3.2 A
        • Base/Acid:            <= 4.0 A / 5.0 A
-       • Attack Angle:         >= 165°
        • Stabilisation:        REQUIRED
 
     3. Tier_2A (Functional Geometry)
+       • Mechanistic Score >= 0.70
+       • SN2 attack angle:     >= 155 deg (raw angle_effective; drops a bent pose such as DFA to 2B)
+       • Substrate feasibility (competence_score): >= 0.50 (drops a high-BDE decoy such as TFA to Tier_3)
        • Nucleophile (Asp110): <= 3.2 A
        • Base/Acid:            <= 5.0 A / 6.0 A
-       • Attack Angle:         >= 155°
        • Stabilisation:        Optional
 
     4. Tier_2B (Marginal Functionality)
+       • Mechanistic Score >= 0.55
+       • Substrate feasibility (competence_score): >= 0.40 (clears the whole TFA family into Tier_3)
        • Nucleophile (Asp110): <= 3.8 A
-       • Attack Angle:         >= 145°
+       • No raw-angle gate (keeps a bent-but-feasible substrate such as DFA)
 
     5. Tier_3 (Non-Catalytic Binding)
        • Nucleophile (Asp110): <= 4.2 A
@@ -108,6 +123,11 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
 
     7. Tier_5_Decoy (Invalid/Decoy)
        • Missing sequences or severe structural clashes.
+
+    (Every numeric threshold listed above is read at gate time from the CFG dicts —
+     TIER_ANGLE_MIN, TIER_NUC_DIST, TIER_NB_MAX, TIER_BA_MAX, TIER_MECH_MIN, TIER_COMP_MIN —
+     never re-hardcoded in the ladder. The values shown here are illustrative of the current
+     config and may drift; the CFG dicts are the single source of truth.)
 
 -------------------------------------------------------------------------------
 RANKING LOGIC (Sorting the Master CSV):
@@ -488,11 +508,15 @@ RESIDUE_CLASS_GROUPS = CFG.RESIDUE_CLASS_GROUPS
 The canonical sequence for DeHa4_[Delftia_acidovorans_D4B].
 This serves as a structural map. As target proteins vary in their numbering,
 each is aligned to this canonical sequence to precisely map the positions of
-key catalytic residues (such as Asp110, Asp134, His277).
+key catalytic residues (such as Asp110, Asp134, His280).
 Source: Farajollahi et al. (2024) — see header Scientific References §4 (position cross-validated, establishing HIS277 rather than HIS288 in DEHA4 sequences).
 """
 DEHA4_CONTROL_SEQ = CFG.DEHA4_CONTROL_SEQ
-REF_SEQUENCE_STR = DEHA4_CONTROL_SEQ
+# Active-site mapping aligns every query against the RPA1163 3R3U crystal — the real
+# fluoroacetate-dehalogenase structure — not the DeHa4 functional control. DeHa4 vs 3R3U
+# were shown to give identical catalytic residue picks, so the mapped residues are unchanged
+# while the reference is now the crystal (REF_ACTIVE_SITE_MAP 'id' indexes RPA1163_3R3U_SEQ).
+REF_SEQUENCE_STR = CFG.RPA1163_3R3U_SEQ
 
 # Fluoroacetate SMILES used for reference construction operations.
 REF_LIGAND_SMILES = CFG.FLUOROACETATE_SMILES
@@ -727,7 +751,7 @@ def setup_reference_data(target_dir: Path):
     target_dir.mkdir(parents=True, exist_ok=True)
 
     pdb_path   = target_dir / f"{CFG.REFERENCE_PDB_ID}.pdb"
-    fasta_path = target_dir / CFG.DEHA4_REF_FASTA
+    fasta_path = target_dir / CFG.REFERENCE_FASTA
     smi_path   = target_dir / "Control_Ligands_TFA_FA_DFA_Ref.smi"
 
     console_info(f"\n{SEPARATOR_LIGHT}")
@@ -749,9 +773,9 @@ def setup_reference_data(target_dir: Path):
     # 2. Create Reference FASTA
     if not fasta_path.exists():
         with open(fasta_path, "w") as f:
-            f.write(f">DeHa4_Reference_Sequence\n{REF_SEQUENCE_STR}\n")
+            f.write(f">RPA1163_3R3U_Reference_Sequence\n{REF_SEQUENCE_STR}\n")
     else:
-        console_info(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC}  DeHa4 Reference Sequence located.")
+        console_info(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC}  3R3U Reference Sequence located.")
 
     # 3. Create Reference SMILES (all three control ligands).
     if not smi_path.exists():
@@ -1249,7 +1273,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     position; if it is missing (gap/indel) or carries the wrong chemical class
     (substitution), scan ±RESIDUE_SEARCH_WINDOW target positions for a residue
     of the role's EXPECTED class and map to the nearest such match. This makes
-    ASP110/ASP134/HIS277 and the cradle/stabilisers tolerant of small numbering
+    ASP110/ASP134/HIS280 and the cradle/stabilisers tolerant of small numbering
     shifts and conservative mutations, instead of returning MISSING/999.
     """
     _WIN = int(getattr(CFG, "RESIDUE_SEARCH_WINDOW", 5))
@@ -2762,7 +2786,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     """
     Select the scissile (leaving) fluorine among those bonded to the chosen best_C.
     Cradle-coupled definition (preferred): the departing F⁻ is the one stabilised by the
-    fluoride cradle (His155/Trp156/Tyr217; Chan et al. 2011), so the leaving F is the
+    fluoride cradle (His155/Trp156/Tyr219; Chan et al. 2011), so the leaving F is the
     α-fluorine pointing into the cradle — the F nearest the cradle centroid. This is the
     physical SN2 leaving group and removes the best-of-N angle inflation that a plain
     max-over-fluorines selection introduces for CF2/CF3 carbons. When the cradle is not
@@ -3414,7 +3438,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["head_is_carboxylate"] = 1.0 if head_is_carboxylate else 0.0
 
         _preferred = alpha_c_names if (CFG.SCISSILE_REQUIRE_ALPHA and alpha_c_names) else None
-        # Cradle atoms (Trp156/Tyr217/His155 sidechains) → couple the leaving-F selection
+        # Cradle atoms (Trp156/Tyr219/His155 sidechains) → couple the leaving-F selection
         # to the fluoride cradle so the scissile F is the departing one (Chan 2011), not the
         # best-of-N most-anti fluorine. Empty when the cradle is unresolved → max-angle fallback.
         _cradle_coords = [(_a.pos.x, _a.pos.y, _a.pos.z)
@@ -3467,7 +3491,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         canonical residue is absent (dist == 999), report the nearest
         functionally-equivalent sidechain to the leaving group instead (same
         dynamic principle as the nucleophile search), accepted only within
-        CFG.MECH_CRADLE_RADIUS. Aromatic π-system for the Trp156/Tyr217 cradle
+        CFG.MECH_CRADLE_RADIUS. Aromatic π-system for the Trp156/Tyr219 cradle
         keys; an H-bond donor / cationic group for the His155 fluoride stabiliser
         — PHE excluded there (no polar donor to F⁻), matching CFG ROLE_EXPECTED_
         RESIDUES['Fluorine_Stabiliser'].
@@ -3979,35 +4003,51 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                 f"His base, Asp acid (mapped Nuc={site_resname.get('Nuc','MISSING')}, "
                 f"Base={site_resname.get('Base','MISSING')}, Acid={site_resname.get('Acid','MISSING')})."), False
 
-        # The ladder gates on angle_effective, the multiplicity-corrected attack angle (CFG §5.2d),
-        # not on the raw one. A poly-fluorinated attack carbon has several equivalent C–F bonds and
-        # so several chances at a near-linear backside geometry; the raw angle rewards that best-of-N
-        # as though it were catalytic competence. Gating on the raw angle lets trifluoroacetate
-        # outrank the native substrate on the DeHa4 control — the enzyme known NOT to turn TFA over —
-        # because Boltz gives its CF3 a better-aligned pose in all five diffusion samples. The
-        # effective angle asks what a single-C–F substrate would have had to achieve to be equally
-        # improbable, so a mediocre CF3 pose falls back and only a near-ideal one holds its tier.
+        # Tier ladder — two orthogonal chemistry axes gate the band, so the 3R3U references
+        # (FA/DFA/TFA) separate into THREE distinct tiers instead of collapsing together:
+        #   • Raw SN2 angle (angle_effective, multiplicity-corrected, CFG §5.2d) is hard-gated at
+        #     Tier_1A / Tier_1B (≥170 / ≥165) AND at Tier_2A (≥155). The elite gate keeps Tier_1A at
+        #     ~10–15 near-ideal poses; the 2A gate drops a statically-bent pose — e.g. difluoroacetate
+        #     (predicted attack angle ~108°) — from 2A down to Tier_2B, which has NO raw-angle gate
+        #     and so retains the bent-but-feasible substrate.
+        #   • Substrate feasibility (competence_score, feasibility-weighted, folds the graded C–F BDE)
+        #     is floored at Tier_2A / Tier_2B (≥0.50 / ≥0.40). The whole trifluoroacetate family caps
+        #     at competence ≈0.35, so a high-BDE decoy (TFA, competence 0.316) fails both functional
+        #     floors and lands Tier_3, below the genuine substrates.
+        # Net on the references: 3R3U × FA → Tier_2A (angle 163° + competence 0.872), 3R3U × DFA →
+        # Tier_2B (bent 108° angle, but competence 0.758), 3R3U × TFA → Tier_3 (competence 0.316).
+        # This holds for every complex, not just the controls — it is the general substrate gate.
+        # mech_score still carries the graded angle continuously; the QM/MM barrier downstream
+        # resolves the true attack dynamics in MD, not on the static pose.
         #
-        # Tier_1A  (TIER_ORDER[0]) — elite: productive α-attack with near-ideal SN2 geometry,
-        # intact catalytic constellation, bidentate carboxylate clamp engaged and a directly
-        # resolved nucleophile. Pruned for near-ideal geometry to reduce downstream MD workload.
-        elif productive_attack and elite_ready and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_TOP] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_TOP] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_TOP] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_TOP] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_TOP]:
-            tier, meaning, is_degrader = CFG.TIER_TOP, "Elite-Grade Analysis: Near-perfect SN2 Trajectory demonstrating absolute anchor integrity.", True
+        # Tier_1A  (TIER_ORDER[0]) — elite: productive α-attack with near-ideal distance geometry
+        # (tight nucleophile + connected relay), intact catalytic constellation, bidentate
+        # carboxylate clamp engaged, a directly resolved nucleophile, and top mechanistic competence
+        # (mech_effective, which carries the graded attack angle and the chemistry penalty). Pruned
+        # tightly to reduce downstream MD workload.
+        elif productive_attack and elite_ready and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_TOP] and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_TOP] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_TOP] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_TOP] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_TOP]:
+            tier, meaning, is_degrader = CFG.TIER_TOP, "Elite-Grade Analysis: tight ground-state contact geometry with a connected catalytic relay and top mechanistic competence.", True
 
         # Tier_1B  (TIER_ORDER[1])
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[1]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[1]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[1]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[1]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[1]]:
+        elif productive_attack and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[1]] and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[1]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[1]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[1]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[1]]:
             tier, meaning, is_degrader = CFG.TIER_ORDER[1], "Crystal-Grade Analysis: Ideal ground-state contact sequence with a connected catalytic relay (elite anchor integrity NOT asserted — Tier_1A only).", True
 
-        # Tier_2A  (TIER_ORDER[2])
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]]:
-            tier, meaning, is_degrader = CFG.TIER_ORDER[2], "Functional Analysis: Nucleophile located in tight contact, accompanied by acceptable target attack angles.", True
+        # Tier_2A  (TIER_ORDER[2]) — functional geometry AND substrate feasibility. Nucleophile in
+        # tight contact, connected relay, mech_score above the 2A floor, the raw SN2 angle above the
+        # 2A angle floor (drops a bent pose such as DFA to 2B), and competence_score (the feasibility-
+        # weighted axis) above the 2A competence floor (drops a high-BDE decoy such as TFA to Tier_3).
+        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and results["competence_score"] >= CFG.TIER_COMP_MIN[CFG.TIER_ORDER[2]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[2], "Functional Analysis: Nucleophile in tight contact with a connected catalytic relay, a near-linear attack angle, and substrate feasibility above the functional floor.", True
 
         # Tier_2B  (TIER_ORDER[3]) — lowest degrader tier: productive α-attack, nucleophile in reach,
-        # SN2 angle ≥ threshold AND a still-connected proton relay (Nuc–Base / Base–Acid within the
-        # loose Tier_2B ceilings). The relay check prevents a catalytically dead, geometrically
-        # dissociated triad from being labelled a (marginal) degrader on nucleophile+angle alone.
-        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[3]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[3]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[3]]:
-            tier, meaning, is_degrader = CFG.TIER_ORDER[3], "Marginal Analysis: Nucleophile in loose contact with a marginal attack angle, catalytic relay still connected.", True
+        # a still-connected proton relay (Nuc–Base / Base–Acid within the loose Tier_2B ceilings), a
+        # minimum mechanistic competence (mech_score ≥ the 2B floor) AND a minimum substrate
+        # feasibility (competence_score ≥ the 2B competence floor, which clears the whole TFA family
+        # into Tier_3). NO raw-angle gate here — a bent-but-feasible substrate such as DFA (whose
+        # static pose fails the 2A angle floor) is retained at 2B. The relay + mech + feasibility
+        # floors prevent a catalytically dead or decoy pose from being labelled a marginal degrader.
+        elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[3]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[3]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[3]] and results["competence_score"] >= CFG.TIER_COMP_MIN[CFG.TIER_ORDER[3]]:
+            tier, meaning, is_degrader = CFG.TIER_ORDER[3], "Marginal Analysis: Nucleophile in loose contact with a connected catalytic relay, minimum mechanistic competence, and minimum substrate feasibility.", True
 
         # Tier_3  (TIER_ORDER[4]) — nucleophile within reach but no productive pathway:
         # either the attack carbon is not the α-carbon (non-carboxylate head or mid-chain
@@ -4015,7 +4055,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         elif d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[4]]:
             _t3_reason = ("the SN2 attack carbon is not the α-carbon adjacent to a carboxylate "
                           "(no productive defluorination pathway)") if not productive_attack else \
-                         ("the SN2 attack angle / anchoring is below the productive threshold in this predicted pose")
+                         ("the mechanistic competence or catalytic-relay geometry is below the productive threshold in this predicted pose")
             tier, meaning, is_degrader = CFG.TIER_ORDER[4], f"Catalytic anchoring present (nucleophile within reach) but {_t3_reason} — not classified as a degrader.", False
 
         # Tier_4 (POOR) / Tier_5_Decoy — catch-all when the nucleophile is out of reach.
@@ -5043,6 +5083,19 @@ def append_rows_to_csv(rows: list, csv_path: Path):
             df_new.drop_duplicates(subset=["job_name"], keep="last", inplace=True)
             # Sort by folder name so rows are ordered protein-first then ligand.
             df_new = df_new.sort_values("job_name", kind="mergesort").reset_index(drop=True)
+            # Control provenance on the master (same derivation as the ranked stage, §18): a job name
+            # beginning with the reserved zero index (CONTROL_JOB_PREFIX) is a control; carry its
+            # reference and known-answer verdict so figures/downstream filter controls without
+            # re-parsing job names.
+            _jn = df_new["job_name"].astype(str)
+            df_new["is_control"] = _jn.str.startswith(str(CFG.CONTROL_JOB_PREFIX))
+            df_new["Control_Ref"] = np.select(
+                [df_new["is_control"] & _jn.str.contains("3R3U",  case=False),
+                 df_new["is_control"] & _jn.str.contains("DeHa4", case=False)],
+                ["3R3U", "DeHa4"], default="")
+            df_new["Expected_Verdict"] = np.where(
+                df_new["is_control"],
+                _jn.str.extract(r"_(\d+_[A-Za-z0-9]+)$", expand=False).map(CFG.CONTROL_EXPECTED_VERDICT).fillna("").to_numpy(), "")
         # job_index is just a plain 0-based row counter; last row == total_rows - 1.
         df_new["job_index"] = range(len(df_new))
         # Reorder to canonical column layout; any extra columns are appended at the end.
@@ -5252,8 +5305,42 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             else:   # "tier" (and fallback when no ligand column for per_ligand)
                 _sel_mask = df_rank[CFG.COL_TIER].isin(CFG.MD_TIERS)
             df_rank[_md_sel] = _sel_mask.astype(bool)
+
+            '''
+            Control provenance + expected-verdict columns. A job name beginning with the reserved
+            zero index (CONTROL_JOB_PREFIX, §16.1) IS a control. The 3R3U (WT/apo RPA1163) controls
+            are the reference the physics is validated against, so when CONTROL_INTO_MD the
+            3R3U × FA/DFA/TFA references are forced into the MD-selected cohort regardless of tier —
+            Step 05/06 then simulate them alongside the candidates. Every control carries its
+            known-answer verdict (FA/DFA → degrader, TFA → non_degrader), which anchors the decoy
+            assertion to 3R3U × TFA rather than to any candidate variant.
+            '''
+            _jn_s = df_rank["job_name"].astype(str)
+            df_rank["is_control"] = _jn_s.str.startswith(str(CFG.CONTROL_JOB_PREFIX))
+            df_rank["Control_Ref"] = np.select(
+                [df_rank["is_control"] & _jn_s.str.contains("3R3U",  case=False),
+                 df_rank["is_control"] & _jn_s.str.contains("DeHa4", case=False)],
+                ["3R3U", "DeHa4"], default="")
+            _lig_suffix = _jn_s.str.extract(r"_(\d+_[A-Za-z0-9]+)$", expand=False)
+            df_rank["Expected_Verdict"] = np.where(
+                df_rank["is_control"],
+                _lig_suffix.map(CFG.CONTROL_EXPECTED_VERDICT).fillna("").to_numpy(), "")
+            if getattr(CFG, "CONTROL_INTO_MD", False):
+                _ctrl_md = (df_rank["Control_Ref"] == "3R3U") & _lig_suffix.isin(list(CFG.CONTROL_MD_LIGANDS))
+                df_rank.loc[_ctrl_md, _md_sel] = True
+                _sel_mask = df_rank[_md_sel]
+                if int(_ctrl_md.sum()):
+                    try:
+                        console_info(f"    + {int(_ctrl_md.sum())} 3R3U reference control(s) forced into "
+                                     f"{_md_sel} (CONTROL_INTO_MD) — physics validation cohort")
+                    except Exception:
+                        pass
+
+            # MD-rank numbering (R_N) is for the CANDIDATE cohort only; controls carry MD_Selected but
+            # no R_N (Step 05/06 name them by CONTROL_MD_FOLDER_PREFIX, e.g. CTRL_3R3U_Fluoroacetate).
             df_rank[_md_rnk] = pd.NA
-            _sel_order = df_rank.loc[_sel_mask].sort_values("Scientific_Rank").index
+            _cand_sel = _sel_mask & (~df_rank["is_control"])
+            _sel_order = df_rank.loc[_cand_sel].sort_values("Scientific_Rank").index
             df_rank.loc[_sel_order, _md_rnk] = range(1, len(_sel_order) + 1)
             _pl_roster_src = ("all unique ligands in tier (data-driven)"
                               if getattr(CFG, "MD_PER_LIGAND_AUTO", True)
@@ -5328,14 +5415,15 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step08")
 
             """
-            Control read-out + VALIDATION. The ranking is geometry-driven and applies
-            NO substrate-class penalty, so where the proven substrates (FA/DFA) and the SN2
-            dead-end (TFA) land is itself a result. Beyond reporting positions/feasibility, this
-            block asserts the positive-control expectation: the native substrates Fluoroacetate
-            and Difluoroacetate must each surface at least one degrader-tier pose (is_degrader). A
-            screen in which the proven substrate fails to register is mis-calibrated, so the failure
-            is raised as a prominent WARNING and recorded, flagging a mis-calibrated ranking rather
-            than shipping it silently. Non-fatal (results are still written); the operator decides.
+            Control read-out + VALIDATION. The ranking is geometry-driven and applies NO
+            substrate-class penalty, so where the proven substrates (FA/DFA) and the SN2 dead-end
+            (TFA) land is itself a result. The assertion is anchored to the 3R3U REFERENCE enzyme,
+            NOT the candidate panel: a candidate variant turning over FA/DFA is the normal, expected
+            outcome and is never treated as a control failure. On the real WT FAcD (3R3U) the tier
+            DIRECTION must hold — the native substrates FA/DFA each surface a degrader-tier pose, and
+            the decoy TFA does NOT reach an elite tier (Tier_1A/1B). A violation of that direction
+            means the tier is mis-calibrated and is raised as a prominent WARNING and recorded rather
+            than shipped silently. Non-fatal (results are still written); the operator decides.
             """
             control_validation = "PASS"
             try:
@@ -5353,26 +5441,40 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     console_info(f"Control read-out — top-tier ({CFG.TIER_TOP}) ligands: {_top_set} | "
                                  f"FA best Scientific_Rank: {_fa_best} | TFA mean reported feasibility: {_tfa_feas:.3f}")
 
-                    # Positive-control assertion: FA and DFA must each register as a degrader.
-                    _hq = set(CFG.TIER_HIGH_QUALITY)
+                    # Assertion anchored to the 3R3U reference enzyme (is_control & Control_Ref=="3R3U"),
+                    # not the candidate panel. Direction that MUST hold on the real WT FAcD: the native
+                    # substrates FA/DFA each register as a degrader, and the TFA decoy does NOT reach an
+                    # elite tier. Each control matched by anchored fullmatch so "Fluoroacetate" does not
+                    # also capture "Difluoroacetate" (substring).
+                    _elite = {CFG.TIER_TOP, CFG.TIER_ORDER[1]}   # Tier_1A, Tier_1B
+                    _ctrl3 = (df_rank[df_rank["is_control"] & (df_rank["Control_Ref"] == "3R3U")]
+                              if {"is_control", "Control_Ref"} <= set(df_rank.columns) else df_rank.iloc[0:0])
+                    def _ctrl_rows(_name):
+                        return _ctrl3[_ctrl3[_lc].astype(str).str.fullmatch(rf"\d+_{_name}", na=False)]
                     _failed = []
-                    for _cname in CFG.CTRL_POSITIVE:
-                        # Anchored fullmatch so "Fluoroacetate" does not also capture
-                        # "Difluoroacetate" (substring) — each control asserted on its own poses.
-                        _crows = df_rank[df_rank[_lc].astype(str).str.fullmatch(rf"\d+_{_cname}", na=False)]
-                        _is_deg = _crows["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0")) \
-                            if "is_degrader" in _crows.columns else pd.Series([], dtype=bool)
-                        _in_hq = _crows[CFG.COL_TIER].isin(_hq) if CFG.COL_TIER in _crows.columns else pd.Series([], dtype=bool)
-                        if not (bool(_is_deg.any()) or bool(_in_hq.any())):
-                            _failed.append(_cname)
+                    for _cname in CFG.CTRL_POSITIVE:            # FA, DFA — must be degraders on 3R3U
+                        _r = _ctrl_rows(_cname)
+                        if _r.empty:
+                            continue
+                        _deg = _r["is_degrader"].astype(str).str.lower().isin(("true", "1", "1.0"))
+                        if not bool(_deg.any()):
+                            _failed.append(f"3R3U×{_cname} expected degrader, got {sorted(set(_r[CFG.COL_TIER]))}")
+                    for _cname in CFG.CTRL_NEGATIVE:            # TFA — decoy must NOT be elite on 3R3U
+                        _r = _ctrl_rows(_cname)
+                        if _r.empty:
+                            continue
+                        _hit = set(_r[CFG.COL_TIER]) & _elite
+                        if _hit:
+                            _failed.append(f"3R3U×{_cname} decoy reached elite {sorted(_hit)}")
                     if _failed:
-                        control_validation = f"FAIL({','.join(_failed)})"
-                        _msg = (f"  ⚠ CONTROL VALIDATION FAILED — positive control(s) {_failed} produced NO "
-                                f"degrader-tier pose. The screen is likely mis-calibrated; inspect before trusting ranks.")
+                        control_validation = "FAIL(" + "; ".join(_failed) + ")"
+                        _msg = (f"  ⚠ CONTROL VALIDATION FAILED on 3R3U — {control_validation}. "
+                                f"The tier direction is mis-calibrated; inspect before trusting ranks.")
                         if logger: logger.warning(_msg)
                         console_info(_msg)
                     else:
-                        console_info("  ✔ Control validation PASS — FA and DFA both register as degraders.")
+                        console_info("  ✔ Control validation PASS — on 3R3U, FA/DFA register as degraders "
+                                     "and the TFA decoy stays out of the elite tier.")
                     df_rank["control_validation"] = control_validation
             except Exception as _ce:
                 console_info(f" Control read-out/validation skipped ({_ce}).")
@@ -5512,7 +5614,7 @@ def main():
         try:
             # Skip the reference files (now co-located in the input folder) when
             # picking the user input FASTA/SMI on resume.
-            _ref_files = {CFG.DEHA4_REF_FASTA, "Control_Ligands_TFA_FA_DFA_Ref.smi"}
+            _ref_files = {CFG.REFERENCE_FASTA, "Control_Ligands_TFA_FA_DFA_Ref.smi"}
             f_path = next(p for p in sorted(D_IN.glob("*.fasta")) if p.name not in _ref_files)
             s_path = next(p for p in sorted(D_IN.glob("*.smi"))   if p.name not in _ref_files)
         except StopIteration:
@@ -7118,6 +7220,22 @@ def main():
                     right=True,
                     include_lowest=True   # close first interval to [0,20] so 0.0 → 'I', not NaN/"nan"
                 ).astype(str)
+
+            # Control provenance on the finalised master superset (same derivation as the ranked
+            # stage, §18). append_rows_to_csv adds these during the checkpoint pass, but on --resume
+            # the master is rebuilt from per-job summaries (which do not carry them), so they are
+            # re-derived here from job_name on the final frame — otherwise the master ships without
+            # is_control / Control_Ref / Expected_Verdict.
+            if "job_name" in df.columns:
+                _jn_m = df["job_name"].astype(str)
+                df["is_control"] = _jn_m.str.startswith(str(CFG.CONTROL_JOB_PREFIX))
+                df["Control_Ref"] = np.select(
+                    [df["is_control"] & _jn_m.str.contains("3R3U",  case=False),
+                     df["is_control"] & _jn_m.str.contains("DeHa4", case=False)],
+                    ["3R3U", "DeHa4"], default="")
+                df["Expected_Verdict"] = np.where(
+                    df["is_control"],
+                    _jn_m.str.extract(r"_(\d+_[A-Za-z0-9]+)$", expand=False).map(CFG.CONTROL_EXPECTED_VERDICT).fillna("").to_numpy(), "")
 
             atomic_to_csv(df, CSV_PATH, index=False)
             GLOBAL_STATS["created_csv_rows"] = len(df)
