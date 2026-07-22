@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 660" width="1140" height="660" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#475569"/></marker>
+<marker id="vio" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
+<marker id="gry" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/></marker>
+<filter id="ds" x="-15%" y="-15%" width="130%" height="130%"><feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#334155" flood-opacity="0.28"/></filter>
+</defs>
+<rect x="0" y="0" width="1140" height="660" rx="18" fill="#ffffff"/>
+<rect x="3" y="3" width="1134" height="654" rx="16" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+<g filter="url(#ds)"><rect x="300.0" y="20" width="540" height="58" rx="10" fill="#4c1d95" stroke="#a78bfa" stroke-width="1.5"/></g>
+<text x="570.0" y="42" font-size="11.5" font-weight="800" fill="#f5f3ff" text-anchor="middle">00_00_run_pipeline_FAcDs.sh   ·   Orchestrator (bash)</text>
+<text x="570.0" y="59.5" font-size="9.3" fill="#ede9fe" text-anchor="middle">runs 00_03 → 01 → 02 → … → 07 in sequence · resume-safe · systemd-oomd guard</text>
+<text x="570.0" y="73.2" font-size="9.3" fill="#ede9fe" text-anchor="middle">starts the Schrödinger job server before 05 · Ctrl-C cancels jobs · ~780 lines</text>
+<rect x="210" y="88" width="720" height="124" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="570.0" y="204" font-size="11.5" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="0.3">Foundation — imported by every step</text>
+<g filter="url(#ds)"><rect x="226" y="108" width="288" height="80" rx="10" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/></g>
+<text x="243" y="128" font-size="10.2" font-weight="800" fill="#f8fafc">00_01_Project_Config_FAcDs.py</text>
+<text x="243" y="145" font-size="9.2" fill="#e2e8f0">single source of truth — thresholds, weights, paths</text>
+<text x="243" y="158.2" font-size="9.2" fill="#e2e8f0">tiers · geometry cutoffs · restraint · gates</text>
+<text x="503" y="180" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,336</text>
+<g filter="url(#ds)"><rect x="524" y="108" width="214" height="80" rx="10" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/></g>
+<text x="541" y="128" font-size="10.2" font-weight="800" fill="#f8fafc">00_02_Project_Utils_FAcDs.py</text>
+<text x="541" y="145" font-size="9.2" fill="#e2e8f0">console &amp; logging · atomic CSV / JSON</text>
+<text x="541" y="158.2" font-size="9.2" fill="#e2e8f0">geometry · Kabsch · figure-style SSOT</text>
+<text x="727" y="180" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~1,135</text>
+<g filter="url(#ds)"><rect x="748" y="108" width="166" height="80" rx="10" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/></g>
+<text x="765" y="128" font-size="10.2" font-weight="800" fill="#f8fafc">00_03_Environment_FAcDs.py</text>
+<text x="765" y="145" font-size="9.2" fill="#e2e8f0">Conda env → PFAS.yml +</text>
+<text x="765" y="158.2" font-size="9.2" fill="#e2e8f0">requirements.txt</text>
+<text x="903" y="180" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~312</text>
+<path d="M570 78 Q470.0 100 370 108" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#vio)"/>
+<path d="M570 78 Q600.5 100 631 108" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#vio)"/>
+<path d="M570 78 Q700.5 100 831 108" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#vio)"/>
+<rect x="40" y="248" width="244" height="178" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="162.0" y="267" font-size="11.5" font-weight="800" fill="#15803d" text-anchor="middle" letter-spacing="0.3">Phase 0 — Ingest</text>
+<g filter="url(#ds)"><rect x="56" y="278" width="212" height="44" rx="10" fill="#15803d" stroke="#4ade80" stroke-width="1.5"/></g>
+<text x="162.0" y="300" font-size="11" font-weight="800" fill="#f0fdf4" text-anchor="middle">Input</text>
+<text x="162.0" y="317" font-size="10" fill="#dcfce7" text-anchor="middle">FASTA + SMILES</text>
+<g filter="url(#ds)"><rect x="56" y="332" width="212" height="84" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
+<text x="73" y="352" font-size="10.4" font-weight="800" fill="#ecfdf5">01_Merge_FAcDs.py</text>
+<text x="73" y="369" font-size="9.2" fill="#d1fae5">merge multi-source FASTA →</text>
+<text x="73" y="382.2" font-size="9.2" fill="#d1fae5">non-redundant set · dedup + QC</text>
+<text x="73" y="395.4" font-size="9.2" fill="#d1fae5">→ merged FASTA</text>
+<text x="257" y="408" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~695</text>
+<rect x="296" y="248" width="804" height="178" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="698.0" y="267" font-size="11.5" font-weight="800" fill="#047857" text-anchor="middle" letter-spacing="0.3">Phase 1 — High-Throughput Screening</text>
+<g filter="url(#ds)"><rect x="312" y="278" width="256" height="134" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
+<text x="329" y="298" font-size="10.4" font-weight="800" fill="#ecfdf5">02_Production_FAcDs.py</text>
+<text x="329" y="315" font-size="9.2" fill="#d1fae5">Boltz-2 GPU co-folding · ColabFold MSA</text>
+<text x="329" y="328.2" font-size="9.2" fill="#d1fae5">aligns each pose to the 3R3U active site</text>
+<text x="329" y="341.4" font-size="9.2" fill="#d1fae5">scores NAC / SN2 geometry at the α-carbon</text>
+<text x="329" y="354.59999999999997" font-size="9.2" fill="#d1fae5">6-tier ladder: elite-angle gate + comp. floor</text>
+<text x="329" y="367.79999999999995" font-size="9.2" fill="#d1fae5">controls FA→2A · DFA→2B · TFA→3 (1 formula)</text>
+<text x="329" y="380.99999999999994" font-size="9.2" fill="#d1fae5">→ ranked + master CSV · best-pose CIFs</text>
+<text x="557" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~7,407</text>
+<g filter="url(#ds)"><rect x="576" y="278" width="256" height="134" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
+<text x="593" y="298" font-size="10.4" font-weight="800" fill="#ecfdf5">03_Validation_Figures_FAcDs.py</text>
+<text x="593" y="315" font-size="9.2" fill="#d1fae5">the judge — 54 panels · 7 themed folders</text>
+<text x="593" y="328.2" font-size="9.2" fill="#d1fae5">tier · AI-quality · geometry · interactions</text>
+<text x="593" y="341.4" font-size="9.2" fill="#d1fae5">BH stats · Ramachandran · 3R3U×FA star</text>
+<text x="593" y="354.59999999999997" font-size="9.2" fill="#d1fae5">multi-model variance · tier separators</text>
+<text x="593" y="367.79999999999995" font-size="9.2" fill="#d1fae5">→ Figure_Enriched_Dataset.csv</text>
+<text x="821" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~11,323</text>
+<g filter="url(#ds)"><rect x="840" y="278" width="252" height="134" rx="10" fill="#047857" stroke="#34d399" stroke-width="1.5"/></g>
+<text x="857" y="298" font-size="10.4" font-weight="800" fill="#ecfdf5">04_Dendrogram_FAcDs.py</text>
+<text x="857" y="315" font-size="9.2" fill="#d1fae5">alignment-free k-mer (k=3)</text>
+<text x="857" y="328.2" font-size="9.2" fill="#d1fae5">UPGMA phylogeny</text>
+<text x="857" y="341.4" font-size="9.2" fill="#d1fae5">interactive D3 tree</text>
+<text x="857" y="354.59999999999997" font-size="9.2" fill="#d1fae5">per-tier · zoom / search</text>
+<text x="1081" y="404" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~1,674</text>
+<rect x="40" y="446" width="244" height="162.39999999999998" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="162.0" y="465" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 2 — Selection &amp; Prep</text>
+<g filter="url(#ds)"><rect x="56" y="476" width="212" height="116.39999999999999" rx="10" fill="#c2410c" stroke="#fb923c" stroke-width="1.5"/></g>
+<text x="73" y="496" font-size="9.9" font-weight="800" fill="#fff7ed">05_TopN_and_PDB_Preparation_FAcDs.py</text>
+<text x="73" y="513" font-size="9.0" fill="#ffedd5">MD-ready cohort (MD_Selected, Step 02)</text>
+<text x="73" y="526.2" font-size="9.0" fill="#ffedd5">Gemmi CIF → PDB</text>
+<text x="73" y="539.4000000000001" font-size="9.0" fill="#ffedd5">PrepWizard 0.15 Å · Jaguar ESP</text>
+<text x="73" y="552.6000000000001" font-size="9.0" fill="#ffedd5">PyMOL / PLIP contact figures</text>
+<text x="73" y="565.8000000000002" font-size="9.0" fill="#ffedd5">pose-drift + 8-residue machinery</text>
+<text x="73" y="579.0000000000002" font-size="9.0" fill="#ffedd5">consolidated Step-05 handover</text>
+<text x="73" y="592.2000000000003" font-size="9.0" fill="#ffedd5">(+ 3R3U×FA control → MD)</text>
+<text x="257" y="584.4" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,099</text>
+<rect x="296" y="446" width="804" height="178" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="698.0" y="465" font-size="11.5" font-weight="800" fill="#1d4ed8" text-anchor="middle" letter-spacing="0.3">Phase 3 — Dynamics &amp; Quantum Mechanics</text>
+<g filter="url(#ds)"><rect x="312" y="476" width="384" height="134" rx="10" fill="#1d4ed8" stroke="#60a5fa" stroke-width="1.5"/></g>
+<text x="329" y="496" font-size="10.4" font-weight="800" fill="#eff6ff">06_Physics_Validation_FAcDs.py</text>
+<text x="329" y="513" font-size="9.2" fill="#dbeafe">explicit-solvent physics for each MD-selected complex</text>
+<text x="329" y="526.2" font-size="9.2" fill="#dbeafe">WaterMap → System Builder → Desmond MD (restraint)</text>
+<text x="329" y="539.4000000000001" font-size="9.2" fill="#dbeafe">SID stability (Cα-RMSD · ligRMSD · T · RMSF)</text>
+<text x="329" y="552.6000000000001" font-size="9.2" fill="#dbeafe">Prime MM-GBSA ΔG per frame → defluor geometry</text>
+<text x="329" y="565.8000000000002" font-size="9.2" fill="#dbeafe">per rank + 3R3U-FA control (distinctly coloured)</text>
+<text x="329" y="579.0000000000002" font-size="9.2" fill="#dbeafe">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
+<text x="685" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~4,493</text>
+<g filter="url(#ds)"><rect x="712" y="476" width="380" height="134" rx="10" fill="#1d4ed8" stroke="#60a5fa" stroke-width="1.5"/></g>
+<text x="729" y="496" font-size="10.4" font-weight="800" fill="#eff6ff">07_MD_QMMM_Defluorination_FAcDs.py</text>
+<text x="729" y="513" font-size="9.2" fill="#dbeafe">turns MD trajectories into a defluorination verdict</text>
+<text x="729" y="526.2" font-size="9.2" fill="#dbeafe">parallel frame / SN2 analysis @ cores-2 · live counter</text>
+<text x="729" y="539.4000000000001" font-size="9.2" fill="#dbeafe">QSite QM/MM barrier ΔE‡ (concurrent, single-thread)</text>
+<text x="729" y="552.6000000000001" font-size="9.2" fill="#dbeafe">NAC dwell · NAC-conditioned MM-GBSA</text>
+<text x="729" y="565.8000000000002" font-size="9.2" fill="#dbeafe">departing-F Mulliken charge → cleavage check</text>
+<text x="729" y="579.0000000000002" font-size="9.2" fill="#dbeafe">→ Defluor_Propensity + Is_Defluorinating verdict</text>
+<text x="1081" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,183</text>
+<path d="M330 212 Q200 232 162 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
+<path d="M810 212 Q760 232 700 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
+<line x1="162" y1="322" x2="162" y2="332" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<path d="M268 374 Q292 368 312 328" fill="none" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<line x1="568" y1="345" x2="576" y2="345" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<line x1="832" y1="345" x2="840" y2="345" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<path d="M360 412 Q300 452 210 476" fill="none" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<line x1="268" y1="541" x2="312" y2="543" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+<line x1="696" y1="543" x2="712" y2="543" stroke="#475569" stroke-width="2.3" marker-end="url(#arrow)"/>
+</svg>
