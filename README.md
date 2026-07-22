@@ -1,6 +1,6 @@
 <div align="center">
 
-# Defluorination of 27 PFAS Compounds by Fluoroacetate Dehalogenase (FAcD)
+<img src="assets/facd_workflow_logo.png" alt="Defluorination of 27 PFAS Compounds by Fluoroacetate Dehalogenase (FAcD) — pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
 **Structure-based mechanistic validation of Fluoroacetate Dehalogenases against 27 PFAS compounds**
 *AI structure prediction · thermodynamic MD · QM/MM frame extraction — fully automated*
@@ -11,12 +11,6 @@
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20CUDA-22C55E?style=for-the-badge&logo=linux&logoColor=white">
 </p>
 
-</div>
-
----
-
-<div align="center">
-<img src="assets/facd_workflow_logo.png" alt="FAcD — PFAS defluorination workflow: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="900">
 </div>
 
 ---
