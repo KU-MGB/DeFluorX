@@ -14,11 +14,11 @@ Date   : 20 July 2026 <───────────────────
   Script        : 01_Merge_FAcDs.py
   Role          : Sequence merger and pre-processing pipeline wrapper.
   Imports from  : 00_02_Project_Utils_FAcDs.py  (clean_spines)
-                  00_01_Project_Config_FAcDs.py  (CFG — PREP_AMBIGUOUS_AA QC, CPU reserve)
+                  00_01_Project_Config_FAcDs.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
-  Writes        : <output>.fasta   — merged, deduplicated sequence set
-                  <output>.log     — inclusion/exclusion statistics
-                  <output>.png     — QC dashboard (throughput + KDE)
+  Writes        : <output>.fasta   - merged, deduplicated sequence set
+                  <output>.log     - inclusion/exclusion statistics
+                  <output>.png     - QC dashboard (throughput + KDE)
   Upstream      : None (standalone data-curation step)
   Downstream    : 02_Production_FAcDs.py → consumes the merged FASTA as Boltz-2 input
 ───────────────────────────────────────────────────────────────────────────────
@@ -30,13 +30,13 @@ Date   : 20 July 2026 <───────────────────
      NCBI standard pipes).
   3. Memory: Input is streamed record-by-record (SeqIO.parse) and only sequence
      hashes + IDs are retained for deduplication, so the footprint scales with the
-     UNIQUE-sequence count, not the raw file size — large FASTAs stream fine.
+     UNIQUE-sequence count, not the raw file size - large FASTAs stream fine.
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
     python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
 
-    (bash multi-line — use a single backslash, not double \\):
+    (bash multi-line - use a single backslash, not double \\):
     python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta \
                        --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
                        --output C_INP_Merged_for_Boltz-2.fasta
@@ -153,7 +153,7 @@ AMBIGUOUS_AA = CFG.PREP_AMBIGUOUS_AA  # Non-standard amino acids for QC
 def setup_logger(output_path: Path) -> logging.Logger:
     """
     Initialises a dual-handler logger (File + Console).
-    Log is saved beside the output FASTA as 00_Merge.log — the same 00_<StepName>.log naming every
+    Log is saved beside the output FASTA as 00_Merge.log - the same 00_<StepName>.log naming every
     step uses, so the log is instantly identifiable across the pipeline.
     """
     log_file = output_path.parent / "00_Merge.log"
@@ -416,7 +416,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax3 = fig.add_subplot(gs[1, :]) # Bottom: KDE
 
     # -------------------------------------------------------------------------------
-    # Step 5.3: Subplot 1 — Pipeline Throughput (Bar Chart)
+    # Step 5.3: Subplot 1 - Pipeline Throughput (Bar Chart)
     # -------------------------------------------------------------------------------
     bar_labels = ["Master", "Secondary", "FINAL\nDATASET"]
     bar_inputs = [s1["total"], s2["total"], total_input]
@@ -473,7 +473,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax1.legend(loc="upper right", frameon=True, fontsize=8, fancybox=True, framealpha=0.9)
 
     # -------------------------------------------------------------------------------
-    # Step 5.4: Subplot 2 — Length Heterogeneity (Violin Plot)
+    # Step 5.4: Subplot 2 - Length Heterogeneity (Violin Plot)
     # -------------------------------------------------------------------------------
     violin_data = [d["stats"]["retained_lengths"] for d in data_map]
     safe_violin_data = [d if len(d) > 0 else [0] for d in violin_data]
@@ -503,7 +503,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax2.grid(axis="y", linestyle=":", alpha=0.5)
 
     # -------------------------------------------------------------------------------
-    # Step 5.5: Subplot 3 — Consolidated Architecture (KDE Plot)
+    # Step 5.5: Subplot 3 - Consolidated Architecture (KDE Plot)
     # -------------------------------------------------------------------------------
     ax3.set_xlabel("Sequence Length (Residues)", fontweight="bold", fontsize=11)
     ax3.set_ylabel("Density", fontweight="bold", fontsize=11)

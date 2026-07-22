@@ -7,9 +7,9 @@
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_FAcDs.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
 #
-# Usage (interactive — default):
+# Usage (interactive - default):
 #   bash 00_00_run_pipeline_FAcDs.sh
-#   → prompted: Fresh or Resume?  (+ optional sudo password — press Enter to skip)
+#   → prompted: Fresh or Resume?  (+ optional sudo password - press Enter to skip)
 #   → runs fully unattended thereafter
 #
 # Run modes:
@@ -34,7 +34,7 @@
 # Schrödinger steps (05-07):
 #   The local job server is started automatically before Step 05; jobserverd does not
 #   survive a reboot, and without it Desmond/WaterMap/MM-GBSA/QSite cannot submit.
-#   An interrupt (Ctrl-C / kill) cancels the detached jobs it launched — those run
+#   An interrupt (Ctrl-C / kill) cancels the detached jobs it launched - those run
 #   outside the pipeline's process group and would otherwise survive.
 #
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -87,7 +87,7 @@ fi
 # The open is probed in a subshell first, for two reasons. `-r /dev/tty` is not a valid test:
 # the node is readable by permission, yet opening it fails with ENXIO when the process has no
 # controlling terminal (cron, setsid, a detached run). And `exec 3</dev/tty 2>/dev/null` must
-# never be used to silence that failure — redirections on a command-less `exec` are PERMANENT,
+# never be used to silence that failure - redirections on a command-less `exec` are PERMANENT,
 # so it would send this shell's stderr to /dev/null for the rest of the run, silently
 # swallowing every `read -p` prompt (they are written to stderr).
 if ( : </dev/tty ) 2>/dev/null; then
@@ -156,7 +156,7 @@ else
 
     echo ""
     echo "  ══════════════════════════════════════════════════════════════════════════════"
-    echo "  FAcDs Pipeline — Run Mode Selection"
+    echo "  FAcDs Pipeline - Run Mode Selection"
     echo "  ══════════════════════════════════════════════════════════════════════════════"
     echo ""
 
@@ -177,7 +177,7 @@ else
                 RESUME_FROM="$_from_step"
                 printf "  ${_C_GREEN}→ Starting from Step %02d; earlier steps will be skipped.${_C_RESET}\n" "$_from_step"
             elif [[ -n "$_from_step" ]]; then
-                echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' — running the full pipeline.${_C_RESET}"
+                echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' - running the full pipeline.${_C_RESET}"
             else
                 echo "  ${_C_GREEN}→ Running the full pipeline (all steps).${_C_RESET}"
             fi
@@ -192,14 +192,14 @@ else
             _DOWNSTREAM_START=1
         else
             echo "  Select mode:"
-            echo "    [F]  Fresh   — start a new prediction run from scratch"
-            echo "    [R]  Resume  — continue from an existing run (default: latest)"
+            echo "    [F]  Fresh   - start a new prediction run from scratch"
+            echo "    [R]  Resume  - continue from an existing run (default: latest)"
             echo ""
             read -r -p "  Your choice [F/R, default=R]: " _mode_choice <&3
             _mode_choice="${_mode_choice:-R}"
         fi
     else
-        echo "  ${_C_RED}${_C_BOLD}No Boltz-2 run directory found — switching to FRESH mode (Step 02 will create one).${_C_RESET}"
+        echo "  ${_C_RED}${_C_BOLD}No Boltz-2 run directory found - switching to FRESH mode (Step 02 will create one).${_C_RESET}"
         echo ""
         _mode_choice="F"   # auto-fresh: do NOT prompt for Fresh/Resume, fall through to the next question
     fi
@@ -207,7 +207,7 @@ else
     case "${_mode_choice^^}" in
         F|FRESH)
             _PIPELINE_MODE="fresh"
-            echo "  Mode: FRESH — a new run directory will be created by Step 02."
+            echo "  Mode: FRESH - a new run directory will be created by Step 02."
             ;;
         R|RESUME)
             _PIPELINE_MODE="resume"
@@ -220,7 +220,7 @@ else
                 if [[ "${_DOWNSTREAM_START:-0}" == "1" ]]; then
                     printf "  ${_C_GREEN}Using run: %s${_C_RESET}\n" "$RUN_ID"
                 else
-                    echo "  Mode: RESUME — auto-selected: ${RUN_ID}"
+                    echo "  Mode: RESUME - auto-selected: ${RUN_ID}"
                 fi
             else
                 echo ""
@@ -234,13 +234,13 @@ else
                    && "$_run_idx" -le "${#_available_runs[@]}" ]]; then
                     RUN_ID="${_available_runs[$((_run_idx-1))]}"
                 else
-                    echo "  Invalid selection — defaulting to latest."
+                    echo "  Invalid selection - defaulting to latest."
                     RUN_ID="${_available_runs[-1]}"
                 fi
                 if [[ "${_DOWNSTREAM_START:-0}" == "1" ]]; then
                     printf "  ${_C_GREEN}Using run: %s${_C_RESET}\n" "$RUN_ID"
                 else
-                    echo "  Mode: RESUME — selected: ${RUN_ID}"
+                    echo "  Mode: RESUME - selected: ${RUN_ID}"
                 fi
             fi
             ;;
@@ -285,7 +285,7 @@ if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && "${_STEP_ASKED:-0
         printf "  ${_C_GREEN}→ Resuming from Step %02d onwards; Steps below %02d will be skipped.${_C_RESET}\n" \
             "$_from_step" "$_from_step"
     else
-        echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' — running the full pipeline.${_C_RESET}"
+        echo "  ${_C_YELLOW}→ Invalid selection '${_from_step}' - running the full pipeline.${_C_RESET}"
     fi
 fi
 
@@ -315,11 +315,11 @@ while (( _TTY_OK )); do
     read -r -s -p "$_SUDO_PROMPT" _sudo_pw <&3 || _sudo_pw=""
     echo ""
     if [[ -z "$_sudo_pw" ]]; then
-        echo "  ${_C_YELLOW}→ No password entered — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
+        echo "  ${_C_YELLOW}→ No password entered - running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
         break
     elif echo "$_sudo_pw" | sudo -S -v 2>/dev/null; then
         SUDO_ENABLED=1
-        echo "  ${_C_GREEN}→ sudo enabled — systemd-oomd will be masked during Steps 06-07.${_C_RESET}"
+        echo "  ${_C_GREEN}→ sudo enabled - systemd-oomd will be masked during Steps 06-07.${_C_RESET}"
         # Keepalive: refresh credential every 60 s for long-running pipelines
         ( while kill -0 $$ 2>/dev/null; do sudo -vn 2>/dev/null; sleep 60; done ) &
         _SUDO_KEEPALIVE_PID=$!
@@ -327,14 +327,14 @@ while (( _TTY_OK )); do
     else
         _sudo_attempt=$(( _sudo_attempt + 1 ))
         if (( _sudo_attempt >= 3 )); then
-            echo "  ${_C_RED}→ Wrong password 3 times (or no sudo access) — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
+            echo "  ${_C_RED}→ Wrong password 3 times (or no sudo access) - running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
             break
         fi
         echo "  ${_C_RED}→ Wrong password. Try again, or press Enter to skip (NORMAL mode).  [attempt ${_sudo_attempt}/3]${_C_RESET}"
     fi
 done
 if (( ! _TTY_OK )); then
-    echo "  ${_C_YELLOW}→ No terminal to prompt on — running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
+    echo "  ${_C_YELLOW}→ No terminal to prompt on - running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
 fi
 unset _sudo_pw
 echo ""
@@ -351,7 +351,7 @@ LOG_FILE="${LOG_DIR}/00_Pipeline_$(date +%Y%m%d_%H%M%S).log"
 
 # Fresh runs stream to a staging log until Step 02 creates the real run directory;
 # _STAGING_SYNC_DEST is then set to the run-dir copy so it can be re-synced after
-# every downstream step (and on exit), keeping the run-dir log complete — not
+# every downstream step (and on exit), keeping the run-dir log complete - not
 # truncated at Step 02. Resume runs already log straight into the run dir.
 _STAGING_SYNC_DEST=""
 _sync_staging_log() {
@@ -381,12 +381,12 @@ _sep="════════════════════════�
 
 # _tee is a thin wrapper around echo: it does NOT itself fork to a file.
 # Terminal/log duplication is handled once, globally, by the `exec > >(tee ...)`
-# redirect installed above — so every echo (and all child-process output) is
+# redirect installed above - so every echo (and all child-process output) is
 # already mirrored to both the terminal and ${LOG_FILE}. The wrapper exists only
 # to give pipeline-progress lines a single, greppable call site.
 _tee() { echo "$@"; }
 
-# Timing registry — parallel arrays
+# Timing registry - parallel arrays
 STEP_NAMES=()
 STEP_TIMES=()
 STEP_STATUS=()
@@ -452,12 +452,12 @@ run_step() {
     elif (( exit_code == WARN_EXIT_CODE )); then
         status="WARN"
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
-        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) — completed with warnings (exit ${exit_code}); pipeline continues."
+        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) - completed with warnings (exit ${exit_code}); pipeline continues."
         _sync_staging_log
     elif (( optional )); then
         status="WARN"
         STEP_NAMES+=("$name"); STEP_TIMES+=("$elapsed"); STEP_STATUS+=("$status")
-        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) — optional step failed (exit ${exit_code}); pipeline continues."
+        _tee "  [WARN] ${name}  ($(_fmt_elapsed $elapsed)) - optional step failed (exit ${exit_code}); pipeline continues."
         _sync_staging_log
     else
         status="FAIL"
@@ -480,13 +480,13 @@ readonly _TT_W_STAT=8
 # Pad to a field width counted in CHARACTERS. `printf '%-Ns'` counts bytes, so a step label
 # holding multi-byte glyphs (the '·' separators in 06, the em dash in 02) pads short and pushes
 # the right-hand border out of alignment. ${#s} is character-aware under a UTF-8 locale.
-_pad_l() {   # $1 text, $2 width — left-aligned
+_pad_l() {   # $1 text, $2 width - left-aligned
     local s="$1" w="$2" n
     n=${#s}
     (( n > w )) && { s="${s:0:w-1}…"; n=$w; }
     printf '%s%*s' "$s" $(( w - n )) ""
 }
-_pad_r() {   # $1 text, $2 width — right-aligned
+_pad_r() {   # $1 text, $2 width - right-aligned
     local s="$1" w="$2" n
     n=${#s}
     (( n > w )) && { s="${s:0:w-1}…"; n=$w; }
@@ -524,10 +524,10 @@ _print_timing_table() {
 
 # ── Conda activation ──────────────────────────────────────────────────────────
 # If the caller already has the PFAS environment active, trust it and skip the
-# activation dance entirely — this avoids aborting on hosts where conda is not a
+# activation dance entirely - this avoids aborting on hosts where conda is not a
 # shell function or lives in a non-standard directory.
 if [[ "${CONDA_DEFAULT_ENV:-}" == "PFAS" ]]; then
-    _tee "  PFAS conda environment already active — activation bypassed."
+    _tee "  PFAS conda environment already active - activation bypassed."
 else
 
 if [[ -z "${CONDA_BASE:-}" ]]; then
@@ -558,7 +558,7 @@ fi   # end conda activation (bypassed when PFAS already active)
 # interrupt (_cancel_schrodinger_jobs).
 
 # Cancel every still-active Schrödinger job this pipeline launched (Desmond MD, WaterMap, System
-# Builder, MM-GBSA). Those jobs run under jobserverd — a separate session — so a `kill -- -PGID` of the
+# Builder, MM-GBSA). Those jobs run under jobserverd - a separate session - so a `kill -- -PGID` of the
 # pipeline's own process group never reaches them; they outlive a Ctrl-C / kill unless cancelled through
 # jsc. Names are the pipeline's own tools (desmond*/watermap*/mmgbsa*); this fires only on interrupt.
 _cancel_schrodinger_jobs() {
@@ -568,7 +568,7 @@ _cancel_schrodinger_jobs() {
     local ids
     ids=$("$jsc" list -j 2>/dev/null | awk '$2 ~ /desmond|watermap|mmgbsa/ {print $1}')
     if [[ -n "$ids" ]]; then
-        _tee "  [cleanup] pipeline interrupted — cancelling background Schrödinger job(s): $(echo $ids | tr '\n' ' ')"
+        _tee "  [cleanup] pipeline interrupted - cancelling background Schrödinger job(s): $(echo $ids | tr '\n' ' ')"
         "$jsc" cancel $ids 2>/dev/null || true
     fi
 }
@@ -576,26 +576,26 @@ _cancel_schrodinger_jobs() {
 # Steps 05-07 drive Schrödinger tools; those that use Job Control (Desmond, WaterMap, Prime MM-GBSA,
 # QSite) submit through the local job server, and without a running jobserverd multisim aborts with
 # 'Local job submission requires a locally running job server'. The daemon does not survive a reboot,
-# so start it here. `local-server-start` is idempotent — a second call re-uses the running daemon
+# so start it here. `local-server-start` is idempotent - a second call re-uses the running daemon
 # rather than spawning another. `jsc list` cannot serve as the probe: it exits 1 merely because no
 # jobs are active.
 _ensure_jobserver() {
     local jsc="${SCHRODINGER:-/opt/schrodinger}/jsc"
     [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null)"
     if [[ -z "$jsc" || ! -x "$jsc" ]]; then
-        _tee "  ${_C_YELLOW}[jobserver] jsc not found — Steps 05-07 will fail to submit jobs.${_C_RESET}"
+        _tee "  ${_C_YELLOW}[jobserver] jsc not found - Steps 05-07 will fail to submit jobs.${_C_RESET}"
         return 0
     fi
     if "$jsc" local-server-status 2>/dev/null | grep -q "RUNNING"; then
         _tee "  [jobserver] local job server already running."
         return 0
     fi
-    _tee "  [jobserver] local job server not running — starting it for Steps 05-07…"
+    _tee "  [jobserver] local job server not running - starting it for Steps 05-07…"
     if "$jsc" local-server-start >/dev/null 2>&1 && \
        "$jsc" local-server-status 2>/dev/null | grep -q "RUNNING"; then
         _tee "  ${_C_GREEN}[jobserver] started.${_C_RESET}"
     else
-        _tee "  ${_C_RED}[jobserver] failed to start — Steps 05-07 will fail to submit jobs.${_C_RESET}"
+        _tee "  ${_C_RED}[jobserver] failed to start - Steps 05-07 will fail to submit jobs.${_C_RESET}"
         _tee "  ${_C_RED}            Try manually: \$SCHRODINGER/jsc local-server-start${_C_RESET}"
     fi
 }
@@ -614,7 +614,7 @@ trap '_sync_staging_log
       true' EXIT
 
 # A Ctrl-C on the terminal (foreground) or a `kill -- -PGID` of a detached run (background) must take
-# the detached job-server jobs down with it. Cancel them FIRST, then exit — the exit runs the EXIT trap
+# the detached job-server jobs down with it. Cancel them FIRST, then exit - the exit runs the EXIT trap
 # above, which restores systemd-oomd and the sudo keepalive. Without this, an interrupted run leaves a
 # Desmond/WaterMap job burning the GPU/CPU under jobserverd.
 trap '_cancel_schrodinger_jobs; exit 130' INT TERM HUP
@@ -648,7 +648,7 @@ run_step "00a  Environment check" \
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
-# 00b runs only on a Fresh run or when an export is missing — a resume re-uses the
+# 00b runs only on a Fresh run or when an export is missing - a resume re-uses the
 # existing PFAS.yml / requirements.txt, so it neither re-runs 00_03 nor dirties git.
 if [[ "${_PIPELINE_MODE}" == "fresh" || ! -f PFAS.yml || ! -f requirements.txt ]]; then
     run_step --optional "00b  Environment export" \
@@ -663,15 +663,15 @@ run_step "01  Merge sequences" \
 
 # ── Step 02: Production (Boltz-2 co-folding) ──────────────────────────────────
 if [[ "$_PIPELINE_MODE" == "resume" ]]; then
-    run_step "02  Production (Boltz-2 scoring — resume)" \
+    run_step "02  Production (Boltz-2 scoring - resume)" \
         python 02_Production_FAcDs.py --resume "$RUN_ID"
 else
-    run_step "02  Production (Boltz-2 scoring — fresh)" \
+    run_step "02  Production (Boltz-2 scoring - fresh)" \
         python 02_Production_FAcDs.py \
             --fasta "${_FRESH_FASTA}" \
             --smi   "${_FRESH_SMI}"
 
-    # Auto-detect the run directory just created by Step 02 — pick the most-recently
+    # Auto-detect the run directory just created by Step 02 - pick the most-recently
     # MODIFIED Boltz-2_* dir (not the lexically last), so a pre-existing dir that sorts
     # later by name is not mistaken for the one Step 02 just made. Still best-effort:
     # a concurrent run in the same folder can race this.
@@ -690,7 +690,7 @@ else
     _real_log_dir="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
     mkdir -p "$_real_log_dir"
     _STAGING_SYNC_DEST="${_real_log_dir}/$(basename "$LOG_FILE")"
-    # The EXIT trap (registered above) already calls _sync_staging_log on exit — do
+    # The EXIT trap (registered above) already calls _sync_staging_log on exit - do
     # NOT register a second EXIT trap here, as it would override the oomd/keepalive
     # cleanup. Per-step re-syncs run via run_step; sync once now for the run dir.
     _sync_staging_log
@@ -723,7 +723,7 @@ if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
         sudo systemctl stop systemd-oomd 2>/dev/null || true
         sudo systemctl mask systemd-oomd.socket 2>/dev/null || true
     else
-        _tee "  [NORMAL MODE] systemd-oomd not masked (no sudo) — Steps 06-07 run unprotected from the OOM-killer."
+        _tee "  [NORMAL MODE] systemd-oomd not masked (no sudo) - Steps 06-07 run unprotected from the OOM-killer."
     fi
 fi
 
@@ -764,7 +764,7 @@ if [[ "$_BG_MODE" -eq 1 ]]; then
     set +m
     disown 2>/dev/null || true
     # The original sudo keepalive monitors the parent shell ($$), which exits on
-    # detach below — re-anchor it to the detached run so credentials stay fresh for
+    # detach below - re-anchor it to the detached run so credentials stay fresh for
     # the whole background run (only relevant when sudo was enabled).
     if [[ "$SUDO_ENABLED" == "1" ]]; then
         kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
@@ -772,13 +772,13 @@ if [[ "$_BG_MODE" -eq 1 ]]; then
         disown 2>/dev/null || true
     fi
     echo ""
-    echo "  Pipeline detached — PID ${_BG_PID}. Safe to close this terminal."
+    echo "  Pipeline detached - PID ${_BG_PID}. Safe to close this terminal."
     echo "  Monitor:  tail -f ${LOG_FILE}"
     echo "  Stop it :  kill -- -${_BG_PID}      # kills the run and its current step"
     echo ""
     exit 0
 else
-    # Foreground: original behaviour — one write to log (ANSI-stripped), one to terminal.
+    # Foreground: original behaviour - one write to log (ANSI-stripped), one to terminal.
     exec > >(tee >(sed -u "$_ANSI_STRIP" >> "$LOG_FILE")) 2>&1
     _run_all_steps
 fi

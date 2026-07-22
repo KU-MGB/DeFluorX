@@ -13,7 +13,7 @@ Date   : 20 July 2026 <───────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 00_03_Environment_FAcDs.py
-  Role          : Infrastructure — environment export and sync.
+  Role          : Infrastructure - environment export and sync.
   Imports from  : None (standalone sys/os/subprocess).
   Reads         : Active conda environment.
   Writes        : PFAS.yml, requirements.txt.
@@ -45,7 +45,7 @@ from pathlib import Path
 
 """
 ConsoleColours is defined locally because this script runs BEFORE the PFAS
-conda environment is guaranteed to exist — importing 00_02_Project_Utils is not
+conda environment is guaranteed to exist - importing 00_02_Project_Utils is not
 safe here. If the canonical definition in 00_03 changes, sync this copy manually
 (the drift assertion in main() guards the two key codes).
 """
@@ -79,7 +79,7 @@ def export_environment():
 
     print(f"Exporting Conda environment to {_yml_path}...")
     try:
-        # Pin the export to the PFAS environment explicitly (-n PFAS) — never the
+        # Pin the export to the PFAS environment explicitly (-n PFAS) - never the
         # ACTIVE env: running this from `base` would otherwise export base and
         # silently overwrite PFAS.yml. --no-builds omits OS-specific build hashes.
         result = subprocess.run(
@@ -170,7 +170,7 @@ def verify_environment() -> None:
     """Verify the installed pipeline packages and HALT if a mandatory one is missing.
 
     This is a non-optional gate (00_00 runs it before Step 01), so a missing boltz/colabfold/MDAnalysis/
-    rdkit/gemmi/torch must fail HERE with a non-zero exit — not print a red ✘ and let the run report PASS,
+    rdkit/gemmi/torch must fail HERE with a non-zero exit - not print a red ✘ and let the run report PASS,
     only to die hours later inside Step 01/02. PyMOL/PLIP are the exception: Step 05 auto-installs them, so
     they are a ⚠, not a failure."""
     print("Verifying installed pipeline packages:")
@@ -200,7 +200,7 @@ def verify_environment() -> None:
     try:
         import torch
         cuda_avail = "CUDA available" if torch.cuda.is_available() else "CUDA NOT available"
-        print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} torch (CUDA)     : {torch.__version__} — {cuda_avail}")
+        print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} torch (CUDA)     : {torch.__version__} - {cuda_avail}")
     except ImportError:
         print(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} torch (CUDA)     : Missing")
         _missing.append("torch")
@@ -232,7 +232,7 @@ def verify_environment() -> None:
             print(f"  {ConsoleColours.WARNING}⚠{ConsoleColours.ENDC} PLIP             : Missing (will be auto-installed in Step 05)")
 
     if _missing:
-        print(f"\n  {ConsoleColours.FAIL}✘ Environment check FAILED — mandatory package(s) missing: "
+        print(f"\n  {ConsoleColours.FAIL}✘ Environment check FAILED - mandatory package(s) missing: "
               f"{', '.join(_missing)}.{ConsoleColours.ENDC} Fix the conda env before running the pipeline.")
         sys.exit(1)
 
@@ -280,7 +280,7 @@ def main():
             assert getattr(ConsoleColours, _code) == getattr(_u.ConsoleColours, _code), \
                 f"ConsoleColours.{_code} drift: update 00_01 to match 00_03"
     except AssertionError as _drift:
-        # A drift is a real (but non-fatal) maintenance issue — warn, don't crash the installer.
+        # A drift is a real (but non-fatal) maintenance issue - warn, don't crash the installer.
         print(f"{ConsoleColours.WARNING}⚠ {_drift}{ConsoleColours.ENDC}")
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         pass
@@ -305,7 +305,7 @@ if __name__ == "__main__":
             f"{_s}s")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  {ConsoleColours.OKGREEN}✔  00_03_Environment_FAcDs.py  —  Pipeline Phase Complete"
+        f"  {ConsoleColours.OKGREEN}✔  00_03_Environment_FAcDs.py  -  Pipeline Phase Complete"
         f"  │  Total Elapsed: {_fmt}{ConsoleColours.ENDC}",
         flush=True,
     )

@@ -18,7 +18,7 @@ Date   : 20 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py
   Role          : Scoring, ranking, and visual reporting of Boltz-2 predictions.
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG — tier colours, vis params)
+  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG - tier colours, vis params)
                   00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
                                                  console_info, console_separator)
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
@@ -77,7 +77,7 @@ Purpose:
 
 -------------------------------------------------------------------------------
 Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
-    [Data — written to 01_Analysis_Data/]
+    [Data - written to 01_Analysis_Data/]
     • 03_Figure_Enriched_Dataset.csv        <-- ranked CSV + figure columns (PCA/UMAP/Pareto/conflict); NOT a rank source
     • 04_ACTION_Rescue_Hidden_Gems.csv      <-- MANUAL REVIEW LIST
     • 06_Statistical_Tests.csv              <-- per-test BH q-values (multiplicity paid once)
@@ -85,7 +85,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 05_Figure_Descriptions.txt            <-- Per-figure description log
     • 00_Validation_Figures.log             <-- Detailed Execution Log
 
-    [Figures — grouped folder-by-folder; each folder numbered in narrative order]
+    [Figures - grouped folder-by-folder; each folder numbered in narrative order]
     ── 02_Ramachandran/ ── backbone-geometry validation of the controls
     • Ramachandran_3R3U_Crystal.png · Ramachandran_{DeHa4,3R3U}_Control.png (+ _vs_Crystal)
 
@@ -174,7 +174,7 @@ Scientific References:
     5. Molecular rendering (optional structure figures):
        - The PyMOL Molecular Graphics System, Schrödinger, LLC. https://pymol.org
     6. All scientific thresholds/criteria plotted here are defined in
-       00_01_Project_Config_FAcDs.py — see that module's Scientific References
+       00_01_Project_Config_FAcDs.py - see that module's Scientific References
        for the underlying primary literature (NAC, Maestro criteria, mech score, etc.).
 ===============================================================================
 """
@@ -219,7 +219,7 @@ import pandas as pd
 import seaborn as sns
 import umap
 import matplotlib
-matplotlib.use("Agg")   # non-interactive backend — renders on headless HPC/GPU nodes (no DISPLAY)
+matplotlib.use("Agg")   # non-interactive backend - renders on headless HPC/GPU nodes (no DISPLAY)
 import matplotlib.pyplot as plt
 import gemmi
 import scipy.stats as _sc_stats
@@ -272,7 +272,7 @@ warnings.filterwarnings("ignore")
 WEIGHTS = CFG.VIS_FALLBACK_WEIGHTS
 
 """
-Tier palette — sourced from CFG.TIER_COLOUR (Okabe-Ito colourblind-safe).
+Tier palette - sourced from CFG.TIER_COLOUR (Okabe-Ito colourblind-safe).
 Local overrides: CFG.TIER_DECOY uses a softer grey for unlabelled entries;
 "Error" is a 03-specific indicator for analytics failures (not in CFG).
 """
@@ -339,7 +339,7 @@ _PVALUES: list = []
 
 
 def _register_p(test: str, panel: str, stat: float, n: int, p: float, **extra) -> None:
-    """Register one test into the family. extra carries effect size, group ns, medians — whatever the
+    """Register one test into the family. extra carries effect size, group ns, medians - whatever the
     test can honestly report. A p-value with no effect size is half a result: at n = 58,056 almost
     anything is 'significant', and the number that decides whether it MATTERS is the effect size."""
     _row = {"test": test, "panel": panel, "statistic": stat, "n": n, "p_raw": p}
@@ -354,11 +354,11 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
     reader to take the paper's central claims on trust. Every claim the ranking rests on is now tested
     explicitly and corrected together:
 
-      · Kruskal-Wallis across tiers for each metric  — does the metric separate the tiers at all?
-      · Mann-Whitney, degraders vs non-degraders     — with rank-biserial r, the effect SIZE. At
+      · Kruskal-Wallis across tiers for each metric  - does the metric separate the tiers at all?
+      · Mann-Whitney, degraders vs non-degraders     - with rank-biserial r, the effect SIZE. At
                                                        n = 58,056 a p-value is nearly free; r is not.
-      · Elite (Tier_1A) vs everything else           — the specific claim the headline makes.
-      · Spearman rho between the ranking metrics     — are the pillars independent, or restating each
+      · Elite (Tier_1A) vs everything else           - the specific claim the headline makes.
+      · Spearman rho between the ranking metrics     - are the pillars independent, or restating each
                                                        other? A screen built on three correlated
                                                        metrics has one metric and two echoes.
 
@@ -419,7 +419,7 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
                 continue
             try:
                 _u, _p = _mw(_a, _b, alternative="two-sided")
-                _register_p(f"Mann-Whitney U — {_lbl}", _m, float(_u), len(_a) + len(_b), float(_p),
+                _register_p(f"Mann-Whitney U - {_lbl}", _m, float(_u), len(_a) + len(_b), float(_p),
                             effect_size=round(_rb(_a, _b, float(_u)), 4),
                             effect_type="rank-biserial r", n_group_a=len(_a), n_group_b=len(_b),
                             median_a=round(float(np.median(_a)), 4),
@@ -457,13 +457,13 @@ def _write_statistical_tests(out_dir):
     from scipy.stats import false_discovery_control
     _df = pd.DataFrame(_PVALUES)
     # A metric can be registered by both the central battery and a figure helper (e.g. the confidence
-    # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once — a
+    # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once - a
     # duplicate would inflate the family denominator and write a repeated row to the CSV.
     # keep="last": on a (test, panel) collision the battery registers AFTER the figure helpers, and its
-    # row carries the effect size and the stricter min-group (≥3) — so the battery's row must win.
+    # row carries the effect size and the stricter min-group (≥3) - so the battery's row must win.
     _df = _df.drop_duplicates(subset=["test", "panel"], keep="last").reset_index(drop=True)
     # A non-finite p (a Kruskal-Wallis on all-identical groups, a zero-variance Spearman) would poison the
-    # q-values for the WHOLE family — false_discovery_control propagates the NaN. Set those aside (recorded
+    # q-values for the WHOLE family - false_discovery_control propagates the NaN. Set those aside (recorded
     # with q_BH = NaN) so the finite tests are corrected among themselves.
     _finite = np.isfinite(pd.to_numeric(_df["p_raw"], errors="coerce").to_numpy(float))
     _df["q_BH"] = np.nan
@@ -545,9 +545,9 @@ def _umap_tier_separation(df, xcol="UMAP_X", ycol="UMAP_Y", tier_col=CFG.COL_TIE
     _register_p("Silhouette label-permutation", "UMAP tier separation", float(s0), int(len(X)), float(p))
     return f"Tier separation in UMAP (silhouette perm-test): {p_str} | s = {s0:.3f}"
 
-# MD-ready cohort — the MD-selected candidate complexes, overlaid as gold stars on tier plots
-# (they may sit inside Tier_1A). The 3R3U × fluoroacetate positive control — the one control taken
-# to MD — is drawn instead as a RED star with a GOLD border (an inversion of the MD-selected star)
+# MD-ready cohort - the MD-selected candidate complexes, overlaid as gold stars on tier plots
+# (they may sit inside Tier_1A). The 3R3U × fluoroacetate positive control - the one control taken
+# to MD - is drawn instead as a RED star with a GOLD border (an inversion of the MD-selected star)
 # so the reference lands as a distinct landmark on any figure that already carries MD-selected stars.
 # All three styles are single-sourced here + from CFG.
 _MD_STAR_KW   = dict(marker="*", s=300, facecolor=CFG.VIS_ACCENT["star"],    edgecolor="black",                    linewidths=1.1, zorder=9)
@@ -560,7 +560,7 @@ def _is_control_mask(df: pd.DataFrame) -> pd.Series:
     return df["is_control"].astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])
 
 def _md_ready_df(df: pd.DataFrame) -> pd.DataFrame:
-    """MD-selected CANDIDATE cohort (controls excluded) — the complexes taken to MD for the study.
+    """MD-selected CANDIDATE cohort (controls excluded) - the complexes taken to MD for the study.
     The 3R3U control is kept out here so it never appears as a generic MD-ready point; it is drawn
     only as its own distinct marker via _control_star_df on the star figures."""
     if "MD_Selected" not in df.columns:
@@ -619,10 +619,10 @@ def _md_ready_stars_cat(ax, df: pd.DataFrame, tier_order, valcol: str):
 
 
 def _auto_label_colour(bg, threshold: float = 0.5) -> str:
-    """The auto-contrast label colour, from utils — one luminance rule for every step's figures."""
+    """The auto-contrast label colour, from utils - one luminance rule for every step's figures."""
     return _utils_mod.auto_label_colour(CFG, bg, threshold)
 
-# Modern Plotting Theme (Publication Quality) — typography and canvas from CFG, via utils.
+# Modern Plotting Theme (Publication Quality) - typography and canvas from CFG, via utils.
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.3)
 _utils_mod.apply_figure_style(CFG)
 
@@ -644,7 +644,7 @@ def console_info(msg: str) -> None:
 
 def _aux_dir(out_dir: Path) -> Path:
     """Subfolder for the non-figure data deliverables (CSV/TXT), keeping the
-    3_Validation_Figures root clutter-free — only figure folders + this one."""
+    3_Validation_Figures root clutter-free - only figure folders + this one."""
     d = out_dir / "01_Analysis_Data"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -714,7 +714,7 @@ def calculate_pareto_fronts(df: pd.DataFrame, objectives: list, maximize: list) 
 
         else:
             """
-            Vectorised dominance check — no Python loop.
+            Vectorised dominance check - no Python loop.
             boe[i,j,m]: subset[j,m] <= subset[i,m]  (j better-or-equal to i on obj m)
             b[i,j,m]:   subset[j,m] <  subset[i,m]  (j strictly better on obj m)
             j dominates i iff all-objectives boe AND any-objective b.
@@ -741,7 +741,7 @@ def calculate_pareto_fronts(df: pd.DataFrame, objectives: list, maximize: list) 
 def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.DataFrame, list[str]]:
     """
     Load the ranked CSV from Step 02 (has Scientific_Rank + the tier/MD_Selected columns the
-    figures key on). Ranked-only: no master-CSV fallback — a missing ranked CSV is a hard error,
+    figures key on). Ranked-only: no master-CSV fallback - a missing ranked CSV is a hard error,
     since every figure axis and the enriched dataset depend on Scientific_Rank.
     """
     # SSOT glob first, wildcard fallback; newest by mtime (a name sort can rank an older file last when the leading number differs).
@@ -768,7 +768,7 @@ def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.Data
     }
     df.rename(columns=col_map, inplace=True)
 
-    # tier_numeric is the target label — it is deliberately NOT an input feature,
+    # tier_numeric is the target label - it is deliberately NOT an input feature,
     # else PCA/UMAP would align their principal axes with the tier and manufacture
     # a circular, guaranteed tier separation (target leakage). It is used only to
     # orient the PC1 sign after projection and to colour points post hoc.
@@ -817,7 +817,7 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
     _ref = CFG.REF_ACTIVE_SITE_MAP
     _keys = [k for k in CFG.ACTIVE_SITE_ROLE_ORDER if k in _ref]
     _adf = pd.read_csv(_aln_csv)
-    if "protein" in _adf.columns:   # controls (…_Control) are excluded — coverage reflects the query set
+    if "protein" in _adf.columns:   # controls (…_Control) are excluded - coverage reflects the query set
         _adf = _adf[~_adf["protein"].astype(str).str.endswith("_Control")].drop_duplicates("protein")
     _missed = {k: [] for k in _keys}
     for _prot, _s in zip(_adf.get("protein", range(len(_adf))), _adf["active_site_mapping"].fillna("")):
@@ -826,7 +826,7 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
         except Exception:
             _m = None
         if not isinstance(_m, dict):
-            # An absent or unparseable mapping produced NO residues — this is the coverage-evidence
+            # An absent or unparseable mapping produced NO residues - this is the coverage-evidence
             # CSV, so count the protein as missed for every role. Skipping the row would let an
             # alignment that mapped nothing read as fully mapped (missing is not zero-missed).
             for k in _keys:
@@ -845,20 +845,20 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
 def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Path, reporter: ReportManager):
     """Multi-objective ranking of complexes.
 
-    Scales the feature matrix (RobustScaler — it centres a zero-IQR column instead of
+    Scales the feature matrix (RobustScaler - it centres a zero-IQR column instead of
     dividing by zero), derives a PCA PC1 score (sign-aligned to tier_numeric), a CFG-weighted
     composite score, Pareto fronts (confidence vs binding probability) and a UMAP
     embedding. Adds the Score/Ensemble/Pareto/UMAP columns to df in place and
     returns it.
     """
-    reporter.section("Step 1/8 — 01_Analysis_Data")
+    reporter.section("Step 1/8 - 01_Analysis_Data")
     reporter.log("  Multi-Objective Ranking (PCA & Pareto)")
 
     x = df[features].dropna()
     '''
     RobustScaler already guards its own zero-IQR case: sklearn's _handle_zeros_in_scale sets a zero
     scale to 1.0 per column, so a constant / heavily-skewed feature is merely centred, never divided by
-    zero — no inf/NaN reaches PCA or UMAP. A whole-matrix StandardScaler would re-scale EVERY column the
+    zero - no inf/NaN reaches PCA or UMAP. A whole-matrix StandardScaler would re-scale EVERY column the
     moment one degenerate column appeared, throwing away the outlier robustness the ranking depends on, so
     RobustScaler is used unconditionally.
     '''
@@ -884,14 +884,14 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
         if corr < 0:
             score_pca = 100.0 - score_pca
             reporter.log(
-                f"  -> PC1 direction: Spearman ρ(PC1, {check_col}) = {corr:.4f} — NEGATIVE."
+                f"  -> PC1 direction: Spearman ρ(PC1, {check_col}) = {corr:.4f} - NEGATIVE."
                 f"  PC1 scores mathematically inverted so high PC1 = higher catalytic quality."
                 f"  [Methods note: PC1 sign chosen by correlation with the input feature "
                 f"  {check_col} (unsupervised); inversion applied when ρ < 0.]"
             )
         else:
             reporter.log(
-                f"  -> PC1 direction: Spearman ρ(PC1, {check_col}) = {corr:.4f} — POSITIVE."
+                f"  -> PC1 direction: Spearman ρ(PC1, {check_col}) = {corr:.4f} - POSITIVE."
                 f"  PC1 preserved (high PC1 = higher catalytic quality, no inversion needed)."
             )
 
@@ -917,12 +917,12 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     if total_w > 0: score_weighted = (score_weighted / total_w) * 100
     df.loc[x.index, "Score_Weighted"] = score_weighted
 
-    # Pareto — a pure confidence-vs-binding front optimises for tight-binding high-confidence
+    # Pareto - a pure confidence-vs-binding front optimises for tight-binding high-confidence
     # poses and promotes catalytically dead competitive inhibitors as "optimal degraders". The
     # front must therefore see a catalytic (NAC-viability) axis. Rather than add a third
     # objective (which forces the O(N²) dense-dominance path → tens of GB on the full frame),
-    # gate the CANDIDATES on catalytic viability first — a mechanistic-score floor (falling back
-    # to the is_degrader flag) — then run the fast 2-objective non-dominated sort on the viable
+    # gate the CANDIDATES on catalytic viability first - a mechanistic-score floor (falling back
+    # to the is_degrader flag) - then run the fast 2-objective non-dominated sort on the viable
     # subset only. Non-viable poses are held off the front (rank 999), so no inhibitor surfaces
     # as an optimal degrader while the O(N log N) scalability is preserved.
     if CFG.COL_CONF in df.columns and "Binding_Probability" in df.columns:
@@ -1195,7 +1195,7 @@ def _tt_draw_stars(ax, pa):
 
 def _tt_draw_thumbnails(fig, ax, pa, imgs):
     fw, fh = fig.get_size_inches()
-    # Show the top CFG.VIS_MAX_THUMBNAILS Tier_1A entries — distribute evenly
+    # Show the top CFG.VIS_MAX_THUMBNAILS Tier_1A entries - distribute evenly
     # between left and right columns.
     n_max = min(len(pa), len(imgs), CFG.VIS_MAX_THUMBNAILS)
     _ax_w = 0.085 if n_max > 5 else _TT_AX_W
@@ -1230,7 +1230,7 @@ def _tt_draw_thumbnails(fig, ax, pa, imgs):
     _y_left  = _ycols(n_left)
     _y_right = _ycols(n_right)
     for local_i, (_, row) in enumerate(pa.head(n_max).iterrows()):
-        # The 3R3U × FA positive control gets a gold border (CFG.VIS_ACCENT["control_edge"]) —
+        # The 3R3U × FA positive control gets a gold border (CFG.VIS_ACCENT["control_edge"]) -
         # deliberately outside the per-entry palette so its thumbnail reads instantly as the control.
         if str(row.get("is_control", "")).strip().lower() in ("true", "1", "1.0", "yes"):
             colour = CFG.VIS_ACCENT["control_edge"]
@@ -1287,7 +1287,7 @@ def _tt_legend_handles(df):
                markerfacecolor=CFG.VIS_ACCENT_DEEP["sun"], markeredgecolor=_TT_ENTRY_COLS[4],
                markersize=11, label=f"{CFG.TIER_TOP} ★ gold (TFA duplicate)"),
     ]
-    # 3R3U × FA positive control — distinct red star / gold border (only when present in the frame)
+    # 3R3U × FA positive control - distinct red star / gold border (only when present in the frame)
     if not _control_star_df(df).empty:
         h.append(Line2D([0],[0], marker="*", color="w",
                         markerfacecolor=CFG.VIS_ACCENT["control"], markeredgecolor=CFG.VIS_ACCENT["control_edge"],
@@ -1304,7 +1304,7 @@ def _tt_legend_handles(df):
 
 def _tt_add_legend(fig, handles):
     fig.legend(handles=handles, loc="lower center",
-               bbox_to_anchor=(0.5, 0.045), ncol=4,   # small gap below the x-axis label — not over it, not far
+               bbox_to_anchor=(0.5, 0.045), ncol=4,   # small gap below the x-axis label - not over it, not far
                title=f"Degrader tier  (★ = {CFG.TIER_TOP} highlighted; ● = scatter background)",
                )
 
@@ -1326,7 +1326,7 @@ def _tt_style(ax, xlabel, ylabel, title=None):
     ax.grid(True, alpha=0.18, color=CFG.VIS_INK["pale"], linewidth=0.5)
 
 
-# ── Figure 13b — SN2 Angle × Confidence + PA Landscape ───────────────────────
+# ── Figure 13b - SN2 Angle × Confidence + PA Landscape ───────────────────────
 def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=[CFG.COL_SN2,CFG.COL_CONF]).copy()
@@ -1334,7 +1334,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         dv["_Y"] = pd.to_numeric(dv[CFG.COL_CONF], errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
         if dv.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('13b')} — no rows with both axes present")
+            reporter.log(f"  ! Skipped: {_fig_path('13b')} - no rows with both axes present")
             return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa[CFG.COL_SN2],      errors="coerce")
@@ -1362,7 +1362,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
         _tt_draw_thumbnails(fig, ax, pax, imgs)
         _tt_style(ax,
-                  "SN2 Attack Angle (°) — higher = near-ideal nucleophilic trajectory",
+                  "SN2 Attack Angle (°) - higher = near-ideal nucleophilic trajectory",
                   "Boltz Model Confidence (AI structural quality, higher = better)",
                   "")
         _tt_add_legend(fig, _tt_legend_handles(dv))
@@ -1371,16 +1371,16 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('13b')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('13b')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
-# ── Figure 05b — Confidence × ipTM + PA Landscape ────────────────────────────
+# ── Figure 05b - Confidence × ipTM + PA Landscape ────────────────────────────
 def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=[CFG.COL_CONF,"iptm"]).copy()
         if dv.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('05b')} — no rows with both confidence and ipTM")
+            reporter.log(f"  ! Skipped: {_fig_path('05b')} - no rows with both confidence and ipTM")
             return
         dv["_X"] = dv[CFG.COL_CONF]; dv["_Y"] = dv["iptm"]
         pax = pa.copy()
@@ -1399,7 +1399,7 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
         _tt_draw_thumbnails(fig, ax, pax, imgs)
         _tt_style(ax,
                   "Boltz Model Confidence (higher = better folding quality)",
-                  "ipTM — Interface Predicted TM-score",
+                  "ipTM - Interface Predicted TM-score",
                   "")
         _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -1407,11 +1407,11 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('05b')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('05b')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
-# ── Figure 14b — Interaction Density × Count + PA Landscape ──────────────────
+# ── Figure 14b - Interaction Density × Count + PA Landscape ──────────────────
 def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
     try:
         dv = df.dropna(subset=["Interaction_Density_Norm","num_interactions"]).copy()
@@ -1419,7 +1419,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         dv["_Y"] = pd.to_numeric(dv["num_interactions"],          errors="coerce")
         dv = dv.dropna(subset=["_X","_Y"])
         if dv.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('14b')} — no rows with both interaction metrics")
+            reporter.log(f"  ! Skipped: {_fig_path('14b')} - no rows with both interaction metrics")
             return
         pax = pa.copy()
         pax["_X"] = pd.to_numeric(pa["Interaction_Density_Norm"], errors="coerce")
@@ -1450,7 +1450,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('14b')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('14b')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -1517,7 +1517,7 @@ _PANEL_FIG_PATHS = {
 
 
 def _fig_path(fig_key: str) -> str:
-    """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.png for skip logs — the folded
+    """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.png for skip logs - the folded
     panels via _PANEL_FIG_PATHS, the main suite via _FIG_MAPPING. Falls back to 'Figure <key>'."""
     if fig_key in _PANEL_FIG_PATHS:
         return _PANEL_FIG_PATHS[fig_key]
@@ -1528,7 +1528,7 @@ def _fig_path(fig_key: str) -> str:
 @contextlib.contextmanager
 def _redirect_savefig(out_dir: Path, reporter):
     """Route each Figure_NN_*.png save to its numbered folder (per _FIG_MAPPING)
-    for the duration of the block, restoring the original savefig on exit — even
+    for the duration of the block, restoring the original savefig on exit - even
     on exception, so a failure mid-suite can never leak the patched savefig into
     later routines or the rest of the process. Target folders are created on entry.
     """
@@ -1573,7 +1573,7 @@ def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
 
 # =============================================================================
 # ADDITIONAL JOURNAL FIGURE TYPES (folded panels, routed through _panel)
-# Seven figure types 03 does not otherwise produce — volcano, Manhattan, swimmer,
+# Seven figure types 03 does not otherwise produce - volcano, Manhattan, swimmer,
 # feature-importance + tier streams, circos, metric network, treemap.
 # Each is a folded panel: fn(df, folder_dir, reporter) that saves folder_dir/NN_name.png,
 # so _panel logs it '  ✔ Saved: folder/NN_name.png' in the owning step's block, exactly like
@@ -1584,7 +1584,7 @@ from matplotlib.patches import Rectangle as _JF_Rect, PathPatch as _JF_PathPatch
 from matplotlib.lines import Line2D as _JF_Line
 from matplotlib.path import Path as _JF_MPath
 
-# All colour, font and DPI values below are SOURCED FROM CFG (single source of truth) — the same
+# All colour, font and DPI values below are SOURCED FROM CFG (single source of truth) - the same
 # palette, fonts and quality every other 03 figure uses. No titles (none is set).
 _JF_TORDER = ["Tier_1A", "Tier_1B", "Tier_2A", "Tier_2B", "Tier_3", "Tier_4", "Tier_5_Decoy"]
 _JF_TCOL = dict(CFG.TIER_COLOUR)                                    # tier palette from CFG
@@ -1602,7 +1602,7 @@ _JF_RC = {"figure.facecolor": "white", "axes.facecolor": "white", "savefig.facec
 _JF_FA = float(CFG.VIS_FONT_ANNOT)          # in-figure annotations (from CFG)
 _JF_FD = float(CFG.VIS_FONT_ANNOT) - 1.0    # dense categorical tick labels (many ligands/metrics)
 _JF_LIGSHORT = {"Fluoroacetate": "FA", "Difluoroacetate": "DFA"}
-# Canonical short PFAS display label — the ONE shortener every figure routes through so ligand
+# Canonical short PFAS display label - the ONE shortener every figure routes through so ligand
 # names read uniformly: strip the "NN_" ordering prefix and collapse the long acid names to
 # FA / DFA / TFA. Display-only; the underlying data columns keep their full values.
 _LIG_SHORT_MAP = {"fluoroacetate": "FA", "monofluoroacetate": "FA", "mono-fluoroacetate": "FA", "mfa": "FA",
@@ -1682,7 +1682,7 @@ def _jf_save(fig, folder_dir, name):
 
 def _jf_fit_fs(ax, cx, cy, dxd, dyd, lines, base, fmin):
     """Largest font (≤ base pt) at which `lines` fit inside the box (data coords cx±dxd/2, cy±dyd/2);
-    returns None when that would fall below fmin — the caller then skips the label rather than render
+    returns None when that would fall below fmin - the caller then skips the label rather than render
     it unreadably small. Sizing uses the box's on-screen extent so it adapts to each rectangle."""
     p0 = ax.transData.transform((cx - dxd / 2.0, cy - dyd / 2.0))
     p1 = ax.transData.transform((cx + dxd / 2.0, cy + dyd / 2.0))
@@ -1696,7 +1696,7 @@ def _jf_fit_fs(ax, cx, cy, dxd, dyd, lines, base, fmin):
 
 
 def _jf_volcano(df, folder_dir, reporter):
-    """Multi-group volcano — per-metric effect size (degrader − non-degrader) vs Mann–Whitney significance."""
+    """Multi-group volcano - per-metric effect size (degrader − non-degrader) vs Mann–Whitney significance."""
     from scipy import stats as _sps
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(9, 5.5)); ax = fig.subplots()
@@ -1712,7 +1712,7 @@ def _jf_volcano(df, folder_dir, reporter):
             # Register into the shared statistical family so these tests are BH-corrected together with
             # the battery and land in 06_Statistical_Tests.csv linked to this figure. Distinct from the
             # battery's Mann-Whitney: that groups by tier membership, this by the is_degrader flag.
-            _register_p(f"Mann-Whitney U — is_degrader — {_jf_ml(c)}",
+            _register_p(f"Mann-Whitney U - is_degrader - {_jf_ml(c)}",
                         "10_Volcano_Metric_Significance", float(_u), int(len(a) + len(b)), float(p),
                         effect_size=round(float(_d), 4), effect_type="Cohen d",
                         n_group_a=int(len(a)), n_group_b=int(len(b)),
@@ -1739,7 +1739,7 @@ def _jf_volcano(df, folder_dir, reporter):
 
 
 def _jf_manhattan(df, folder_dir, reporter):
-    """Manhattan / TWAS — each candidate a locus grouped by ligand; y = rank-based −log10 significance."""
+    """Manhattan / TWAS - each candidate a locus grouped by ligand; y = rank-based −log10 significance."""
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(8.5, 4.5)); ax = fig.subplots()
         d = df.copy(); d["_lg"] = _jf_ligshort(d)
@@ -1797,7 +1797,7 @@ def _jf_importance(df, folder_dir, reporter):
 
 
 def _jf_swimmer(df, folder_dir, reporter):
-    """Swimmer — top 3 candidates per tier (Tier_1A → Tier_5_Decoy); bar = mechanistic score, colour = tier."""
+    """Swimmer - top 3 candidates per tier (Tier_1A → Tier_5_Decoy); bar = mechanistic score, colour = tier."""
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(8, 6.5)); ax = fig.subplots()
         d = df.copy(); d["_lg"] = _jf_ligshort(d); tiers = _jf_tiers(d, d["degrader_tier"])
@@ -1823,7 +1823,7 @@ def _jf_swimmer(df, folder_dir, reporter):
 
 
 def _jf_circos(df, folder_dir, reporter):
-    """Circos / chord — ligand → tier assignment; ribbon width ∝ candidate count."""
+    """Circos / chord - ligand → tier assignment; ribbon width ∝ candidate count."""
     def _bez(ax, a0, a1, color, lw):
         p0 = np.array([np.cos(a0), np.sin(a0)]); p1 = np.array([np.cos(a1), np.sin(a1)])
         ax.add_patch(_JF_PathPatch(_JF_MPath([p0, p0*0.15, p1*0.15, p1],
@@ -1863,7 +1863,7 @@ def _jf_circos(df, folder_dir, reporter):
 
 
 def _jf_network(df, folder_dir, reporter):
-    """Metric co-variation — a circular chord diagram. Metrics sit on a ring; a chord joins any
+    """Metric co-variation - a circular chord diagram. Metrics sit on a ring; a chord joins any
     pair with |Pearson r| ≥ 0.5, coloured by the SIGN of r (red = positive, blue = negative) and
     widened by |r|. Node size ∝ how many strong correlations the metric has; labels sit outside the
     ring so nothing overlaps."""
@@ -1908,7 +1908,7 @@ def _jf_network(df, folder_dir, reporter):
 
 
 def _jf_treemap(df, folder_dir, reporter):
-    """Treemap — candidates by tier × ligand; rectangle area ∝ count, colour = tier (squarified)."""
+    """Treemap - candidates by tier × ligand; rectangle area ∝ count, colour = tier (squarified)."""
     def _sq(sizes, x, y, dx, dy):
         sizes = list(sizes); total = float(sum(sizes))
         if total <= 0:
@@ -1953,11 +1953,11 @@ def _jf_treemap(df, folder_dir, reporter):
 
 
 # =============================================================================
-# STEP 3/8 — 03_Dataset_and_Alignment_Overview
+# STEP 3/8 - 03_Dataset_and_Alignment_Overview
 # =============================================================================
 def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
-    """Folder 03_Dataset_and_Alignment_Overview — coverage, tiers, alignment grades."""
-    reporter.section("Step 3/8 — 03_Dataset_and_Alignment_Overview · coverage, tiers, alignment grades")
+    """Folder 03_Dataset_and_Alignment_Overview - coverage, tiers, alignment grades."""
+    reporter.section("Step 3/8 - 03_Dataset_and_Alignment_Overview · coverage, tiers, alignment grades")
     # --- Figure 01: Active-site residue mapping coverage across all variants ---
     """
     For each of the 8 canonical FAcD catalytic residues, the number of protein variants
@@ -2014,8 +2014,8 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax.axhline(_n01, color="grey", linestyle="--", linewidth=1, zorder=1)
         '''
         Data labels INSIDE each bar: vertical (90°) "count | pct%" anchored at the
-        bar's middle-top and extending downward. Each datum — count, "|" separator and
-        percentage — is drawn as its own segment in a distinct CFG hue; the triple is
+        bar's middle-top and extending downward. Each datum - count, "|" separator and
+        percentage - is drawn as its own segment in a distinct CFG hue; the triple is
         selected by bar-fill luminance (light segments on dark fills, dark on light) and
         carries a contrast halo so every segment stays legible against any role colour.
         '''
@@ -2163,7 +2163,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                             fontweight="bold", color=_tc6)
                 if str(_key6) in _md_models6:
                     """
-                    ONE STAR PER MD-SELECTED COMPLEX. The count is the number of stars — no text
+                    ONE STAR PER MD-SELECTED COMPLEX. The count is the number of stars - no text
                     label, because the mark already carries the whole message: how many of the
                     simulated complexes this diffusion model produced. Wedge borders are left
                     untouched; outlining only the starred wedges reads as a rendering artefact,
@@ -2181,7 +2181,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                                    edgecolor="black", linewidths=0.9, zorder=6)
                 # 3R3U × FA control: red/gold star at the wedge of the model it came from
                 # (drawn even when that model produced no candidate, so the control is never hidden).
-                # Placed at r=0.26 — the empty inner zone, clear of the % autotext (r≈0.6) and the
+                # Placed at r=0.26 - the empty inner zone, clear of the % autotext (r≈0.6) and the
                 # candidate stars (r=0.42) so it never sits on the percentage label.
                 if str(_key6) in _ctrl_models6:
                     _crad6 = 0.26
@@ -2190,7 +2190,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                                    edgecolor=CFG.VIS_ACCENT["control_edge"], linewidths=1.2, zorder=7)
             ax_pie.set_frame_on(False)
 
-        # Gold star on the tier the MD-ready cohort sits in — the bar the pipeline acts on.
+        # Gold star on the tier the MD-ready cohort sits in - the bar the pipeline acts on.
         _md6_bar = _md_ready_df(df)
         if not _md6_bar.empty and CFG.COL_TIER in _md6_bar.columns:
             _md6_tiers = _md6_bar[CFG.COL_TIER].astype(str).value_counts()
@@ -2212,7 +2212,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         plt.savefig(out_dir / "Figure_02_Tier_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
-    # --- Figure 03: Sequence Identity — Histogram (grade bands) overlaid with tier KDE lines ---
+    # --- Figure 03: Sequence Identity - Histogram (grade bands) overlaid with tier KDE lines ---
     """
     Single chart: histogram bars show the overall grade distribution (how many proteins
     per identity band); KDE lines per tier overlay on the same x-axis, revealing whether
@@ -2239,7 +2239,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         fig, ax = plt.subplots(figsize=(13, 7))
         ax2 = ax.twinx()   # secondary y-axis for KDE density
 
-        # Grade band background shading — sourced from CFG § 8.8
+        # Grade band background shading - sourced from CFG § 8.8
         grade_bands = list(CFG.GRADE_BANDS)
         # Per-protein grade counts (one row per unique protein)
         _prot_dedup02 = id_plot.drop_duplicates(subset=[CFG.COL_PROT]) if CFG.COL_PROT in id_plot.columns else id_plot
@@ -2275,7 +2275,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                     edgecolor="white", linewidth=0.4, alpha=0.75, zorder=2)
 
         """
-        Secondary: KDE density line per tier — ridge (joyplot) approach with vertical offsets
+        Secondary: KDE density line per tier - ridge (joyplot) approach with vertical offsets
         Each tier is staggered upward so curves do not overlap (ridge/joyplot style).
         """
         from scipy.stats import gaussian_kde as _gkde
@@ -2350,7 +2350,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax2.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_right"], linewidth=0.55, linestyle="--", alpha=0.20, zorder=0)
 
         _ymax02 = ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 200
-        # Convergence identity is COMPUTED from the data (median identity of the degrader tiers —
+        # Convergence identity is COMPUTED from the data (median identity of the degrader tiers -
         # where the tier distributions actually overlap), not a hard-coded value, and the arrow is
         # anchored to that x so it points at the real convergence, not an arbitrary 60%.
         _deg_t02 = [t for t in CFG.TIER_ORDER if t not in (CFG.TIER_DECOY, CFG.TIER_POOR, "Tier_4")]
@@ -2363,7 +2363,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                         xytext=(min(_conv02 + 24, 80), _ymax02 * 0.82),
                         fontsize=7.0, color=CFG.VIS_INK["soft"], style="italic", ha="left",
                         arrowprops=dict(arrowstyle="->", color=CFG.VIS_INK["ghost"], lw=0.9))
-        # Tier_1A visibility annotation — arrow points to the Tier_1A KDE-curve median
+        # Tier_1A visibility annotation - arrow points to the Tier_1A KDE-curve median
         # (a visible dot), not the near-invisible count bar. Drawn on the KDE axis and
         # lifted above the ridge lines with an opaque box so it never hides behind them.
         _tt_sub02 = id_plot[id_plot[CFG.COL_TIER] == CFG.TIER_TOP]
@@ -2466,7 +2466,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         plt.savefig(out_dir / "Figure_03_Alignment_Grades.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
-    # --- Figure 04: Tier × Alignment Grade — Stacked 100% Horizontal Bar Chart ---
+    # --- Figure 04: Tier × Alignment Grade - Stacked 100% Horizontal Bar Chart ---
     """
     Each tier is a horizontal bar whose width = 100%.  The bar is divided into grade
     bands (I worst → A best) using the same green-to-brown colour ramp as Fig 07,
@@ -2486,7 +2486,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 if _i == 0:               grade_lbls.append(f"{_lb} (<{_hi}%)")
                 elif _i == len(_glab) - 1: grade_lbls.append(f"{_lb} (≥{_lo}%)")
                 else:                      grade_lbls.append(f"{_lb} ({_lo}–{_hi}%)")
-            # Grade colours — sourced from CFG § 8.8
+            # Grade colours - sourced from CFG § 8.8
             grade_colors = dict(CFG.GRADE_COLOUR_FULL)
             f11_df["Grade"] = pd.cut(f11_df[CFG.COL_ID_PCT], bins=grade_cuts,
                                      labels=grade_lbls, right=False)
@@ -2500,7 +2500,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 _chi2_f11, _p_f11, _dof_f11, _ = _chi2_cont(ct11.values)
                 _chi2_str = (f"χ²({_dof_f11}) = {_chi2_f11:.1f},  "
                              f"p {'< 0.001' if _p_f11 < 0.001 else f'= {_p_f11:.3f}'}")
-                _register_p("Chi-square — grade × tier", "11_Grade_by_Tier",
+                _register_p("Chi-square - grade × tier", "11_Grade_by_Tier",
                             float(_chi2_f11), int(ct11.values.sum()), float(_p_f11), dof=int(_dof_f11))
             except Exception:
                 _chi2_str = ""
@@ -2542,7 +2542,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                             linespacing=1.1)
                 left11 = left11 + vals
 
-            # ── Grade bands identical to Fig02 — fixed identity-% positions ──
+            # ── Grade bands identical to Fig02 - fixed identity-% positions ──
             """
             grade_bands = [(lo, hi, col, lbl), ...] with same positions as Fig02.
             Both figures share a 0–100 x-axis so the visual layout matches exactly.
@@ -2551,12 +2551,12 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             _g11_total       = ct11.sum(axis=0)
             _n_total11       = int(ct11.values.sum())
             for lo, hi, col, lbl in grade_bands:
-                # Background shading — same alpha/style as Fig02
+                # Background shading - same alpha/style as Fig02
                 ax.axvspan(lo, hi, alpha=0.20, color=col, zorder=0)
                 # Dashed vertical divider at left boundary (skip x=0)
                 if lo > 0:
                     ax.axvline(lo, color=col, lw=1.0, ls="--", alpha=0.55, zorder=3)
-                # Grade header label at midpoint — same style as Fig02
+                # Grade header label at midpoint - same style as Fig02
                 _mid = (lo + hi) / 2
                 ax.text(_mid, 1.015, f"Grade {lbl}",
                         ha="center", va="bottom", fontsize=_JF_FA, color=col,
@@ -2577,7 +2577,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             for tick, tier in zip(ax.get_yticklabels(), tiers_f11):
                 tick.set_color(TIER_PALETTE.get(tier, "black"))
 
-            # X-axis ticks every 10% — identical to Fig02
+            # X-axis ticks every 10% - identical to Fig02
             ax.set_xlim(0, 100)
             ax.set_xticks(range(0, 101, 10))
             ax.set_xticklabels([f"{v}%" for v in range(0, 101, 10)],
@@ -2592,7 +2592,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             Gold stars mark the MD-selected cohort on its own tier row, positioned at the cumulative
             proportion of the identity grade each complex falls in. The row shows how that tier is
             spread across sequence-identity grades; the star shows where inside that spread the
-            complexes actually taken to MD sit — which is the part of the distribution the downstream
+            complexes actually taken to MD sit - which is the part of the distribution the downstream
             claims rest on.
             """
             _md11 = _md_ready_df(f11_df)
@@ -2602,7 +2602,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 The segments already carry their percentage and count; a star dropped on the row lands
                 on those numbers and obscures the very values it is meant to annotate. Sitting in the
                 gap, the stars point at the segment they belong to without covering anything, and
-                their number carries the count — no text label needed.
+                their number carries the count - no text label needed.
                 """
                 _tier_row11 = {t: bar_y[i] for i, t in enumerate(tiers_f11)}
                 _grades11 = list(ct11.columns)
@@ -2640,7 +2640,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                             _star_seen11 += 1
                 if _star_seen11:
                     from matplotlib.lines import Line2D as _L2D11
-                    # The band below the bottom row is already empty — the legend goes there as it
+                    # The band below the bottom row is already empty - the legend goes there as it
                     # is. Extending the axis to make room would open white space the figure does not
                     # need, which costs more than the legend it houses.
                     ax.legend([_L2D11([], [], marker="*", linestyle="none", markersize=13,
@@ -2659,18 +2659,18 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             plt.savefig(out_dir / "Figure_04_Tier_Grade_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('04')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('04')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
 
 
 # =============================================================================
-# STEP 4/8 — 04_AI_Confidence_Quality
+# STEP 4/8 - 04_AI_Confidence_Quality
 # =============================================================================
 def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs):
-    """Folder 04_AI_Confidence_Quality — Boltz-2 confidence + pTM/ipTM."""
-    reporter.section("Step 4/8 — 04_AI_Confidence_Quality · Boltz-2 confidence + pTM/ipTM")
-    # --- Figure 05: AI Quality — Boltz Confidence (boxes) + pTM & ipTM (lines) overlaid ---
+    """Folder 04_AI_Confidence_Quality - Boltz-2 confidence + pTM/ipTM."""
+    reporter.section("Step 4/8 - 04_AI_Confidence_Quality · Boltz-2 confidence + pTM/ipTM")
+    # --- Figure 05: AI Quality - Boltz Confidence (boxes) + pTM & ipTM (lines) overlaid ---
     """
     Single chart: box plots show per-tier distribution of Boltz Model Confidence (primary
     y-axis). Overlaid connected dot-lines show per-tier median pTM and ipTM on the same
@@ -2682,7 +2682,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
         try:
             fig, ax = plt.subplots(figsize=(13, 7))
 
-            # Quality zone bands — edges/colours from CFG (single source)
+            # Quality zone bands - edges/colours from CFG (single source)
             _cbh, _cba, _cbc = CFG.CONF_BAND_HIGH, CFG.CONF_BAND_ACCEPTABLE, CFG.CONF_BAND_COLOURS
             ax.axhspan(_cbh, 1.01, alpha=0.10, color=_cbc["high"], zorder=0)
             ax.axhspan(_cba, _cbh, alpha=0.09, color=_cbc["acceptable"], zorder=0)
@@ -2690,14 +2690,14 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax.axhline(y=_cbh, color=_cbc["high"], linestyle="--", linewidth=1.3, alpha=0.80, zorder=1)
             ax.axhline(y=_cba, color=_cbc["acceptable"], linestyle=":", linewidth=1.3, alpha=0.80, zorder=1)
             """
-            Zone labels — placed in DATA y-coordinates (get_yaxis_transform) AFTER ylim is set,
+            Zone labels - placed in DATA y-coordinates (get_yaxis_transform) AFTER ylim is set,
             so they land at the correct zone midpoints regardless of the dynamic y-axis range.
             (Labels are defined here as closures and drawn below after ax.set_ylim is called.)
             """
 
             tier_x = {tier: i for i, tier in enumerate(existing_tiers)}
 
-            # Boltz Confidence — box plots (primary, fills the background)
+            # Boltz Confidence - box plots (primary, fills the background)
             if _has_conf and not df.empty:
                 sns.boxplot(data=df, x=CFG.COL_TIER, y=CFG.COL_CONF,
                             order=existing_tiers, palette=TIER_PALETTE, linewidth=1.2,
@@ -2724,7 +2724,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                                 bbox=dict(boxstyle="round,pad=0.2", fc=CFG.VIS_ACCENT_DEEP["rose_edge"],
                                           ec=CFG.VIS_ACCENT["warn"], alpha=0.9, lw=0.8))
 
-            # pTM — connected median line with CI band
+            # pTM - connected median line with CI band
             if _has_ptm:
                 ptm_xs, ptm_meds, ptm_lo, ptm_hi = [], [], [], []
                 iptm_xs, iptm_meds, iptm_lo, iptm_hi = [], [], [], []
@@ -2768,7 +2768,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                 ax.set_ylim(y_lo_f10, 1.01)
             else:
                 y_lo_f10 = 0.0
-            # Broken-axis indicator at y_lo_f10 (axis is truncated — not starting at 0)
+            # Broken-axis indicator at y_lo_f10 (axis is truncated - not starting at 0)
             if y_lo_f10 > 0.01:
                 _bax_kw = dict(transform=ax.transAxes, color=CFG.VIS_INK["dark"], clip_on=False,
                                linewidth=2.2)
@@ -2785,14 +2785,14 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                         fontsize=_JF_FA, color=CFG.VIS_INK["muted"], ha="left", va="bottom",
                         style="italic")
             """
-            Zone labels in DATA coordinates — each label at the midpoint of its
+            Zone labels in DATA coordinates - each label at the midpoint of its
             VISIBLE zone slice (zones clipped to the actual ylim after set_ylim).
             get_yaxis_transform(): x=axes fraction [0,1], y=data coordinates
             """
             _yt10 = ax.get_yaxis_transform()
             _y_top10 = 1.01
             """
-            High confidence zone: 0.90–1.01 — fixed at top-right via transAxes so it is
+            High confidence zone: 0.90–1.01 - fixed at top-right via transAxes so it is
             always visible regardless of ylim and never lands on Tier_1A box bodies.
             """
             # The LABEL below already reads CFG.CONF_BAND_HIGH; the shading must start at the same
@@ -2854,14 +2854,14 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('05')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('05')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # Figure 05b: PA companion (Confidence × ipTM landscape)
     if _tt_has_imgs:
         _fig_05b_tt_ai_quality(df, _pa, _imgs, out_dir, reporter)
 
-    # --- Figure 06: pTM vs ipTM — 2-D Scatter (REDESIGN) ---
+    # --- Figure 06: pTM vs ipTM - 2-D Scatter (REDESIGN) ---
     """
     Each complex is a point: X = pTM (fold confidence), Y = ipTM (interface confidence).
     Colour = degrader tier. The identity diagonal (pTM = ipTM) divides the space:
@@ -2895,9 +2895,9 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
 
             # ── Three coloured zone backgrounds ────────────────────────────────
             """
-            Zone 1 (above diagonal): ipTM > pTM — preferred state, interface well modelled
-            Zone 2 (diagonal band ±0.03): pTM ≈ ipTM — balanced confidence
-            Zone 3 (below diagonal): pTM > ipTM — fold stronger than interface (decoy risk)
+            Zone 1 (above diagonal): ipTM > pTM - preferred state, interface well modelled
+            Zone 2 (diagonal band ±0.03): pTM ≈ ipTM - balanced confidence
+            Zone 3 (below diagonal): pTM > ipTM - fold stronger than interface (decoy risk)
             """
             _diag_pts = np.linspace(_lo18, _hi18, 300)
             from matplotlib.patches import Polygon as _Poly18
@@ -2924,7 +2924,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                     linewidth=0.7, alpha=0.40, zorder=2)
 
             """
-            Zone text — placed BELOW the upper-left legend to avoid overlap.
+            Zone text - placed BELOW the upper-left legend to avoid overlap.
             Legend with ncol=2 is ~2 rows tall; empirically offset to 0.60 axes-y.
             """
             ax.text(0.04, 0.60, "ipTM > pTM\nInterface well-modelled",
@@ -2971,7 +2971,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                                label=None)
 
             """
-            Per-tier median diamonds — NO inline text annotation;
+            Per-tier median diamonds - NO inline text annotation;
             coordinates are embedded in the legend label instead
             """
             from matplotlib.lines import Line2D as _L18
@@ -3004,13 +3004,13 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                                         shrinkA=6, shrinkB=4),
                         bbox=dict(boxstyle="round,pad=0.25", fc="white",
                                   ec=col18, alpha=0.92, linewidth=1.2))
-                # Median coords live in the legend label — no floating text cluttering the plot
+                # Median coords live in the legend label - no floating text cluttering the plot
                 _leg18.append(_L18([0], [0], marker="D", color="w",
                                    markerfacecolor=col18, markeredgecolor="black",
                                    markersize=9, markeredgewidth=1.0,
                                    label=f"{tier}  ◆({mx18:.3f}, {my18:.3f})  n={len(sub18):,}"))
 
-            # Marginal distributions — KDE lines (smoother than histograms)
+            # Marginal distributions - KDE lines (smoother than histograms)
             from scipy.stats import gaussian_kde as _gkde18
             existing_tiers18 = [t for t in existing_tiers if t in f18_df[CFG.COL_TIER].values]
             _kde_x18 = np.linspace(_lo18, _hi18, 300)
@@ -3077,7 +3077,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.setp(ax_top.get_xticklabels(), visible=False)
             plt.setp(ax_right.get_yticklabels(), visible=False)
             # Marginal density panels: top = pTM (shared x), right = ipTM (shared y).
-            # No panel titles — orientation follows the shared 2-D axes.
+            # No panel titles - orientation follows the shared 2-D axes.
             ax_top.set_ylabel("pTM density",  labelpad=2)
             ax_right.set_xlabel("ipTM density",  labelpad=2)
             ax_top.set_axisbelow(True)
@@ -3089,8 +3089,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
 
             ax.set_xlim(_lo18, _hi18)
             ax.set_ylim(_lo18, _hi18)
-            ax.set_xlabel("pTM — Global Fold Confidence  (0–1)", )
-            ax.set_ylabel("ipTM — Interface Confidence  (0–1)", )
+            ax.set_xlabel("pTM - Global Fold Confidence  (0–1)", )
+            ax.set_ylabel("ipTM - Interface Confidence  (0–1)", )
             ax.tick_params(axis="both", labelsize=9)
             ax.grid(True, color=CFG.VIS_INK["grid"], linewidth=0.5, alpha=0.6, zorder=1)
             # Legend: placed in the top KDE marginal (left side) to keep scatter uncluttered
@@ -3103,17 +3103,17 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.savefig(out_dir / "Figure_06_pTM_vs_ipTM_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('06')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('06')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
 
 
 # =============================================================================
-# STEP 5/8 — 05_Catalytic_Geometry_and_Mechanism
+# STEP 5/8 - 05_Catalytic_Geometry_and_Mechanism
 # =============================================================================
 def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs):
-    """Folder 05_Catalytic_Geometry_and_Mechanism — structural + mechanistic geometry."""
-    reporter.section("Step 5/8 — 05_Catalytic_Geometry_and_Mechanism · structural + mechanistic geometry")
+    """Folder 05_Catalytic_Geometry_and_Mechanism - structural + mechanistic geometry."""
+    reporter.section("Step 5/8 - 05_Catalytic_Geometry_and_Mechanism · structural + mechanistic geometry")
     # --- Figure 07: Active Site RMSD vs. Reference Control by Tier ---
     # Column alias detection: try multiple plausible names before skipping
     _rmsd17_aliases = [
@@ -3130,7 +3130,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _rmsd17_col = next((c for c in df.columns if "rmsd" in c.lower()), None)
     if _rmsd17_col is None:
         _rmsd_candidates = [c for c in df.columns if "rmsd" in c.lower() or "active_site" in c.lower()]
-        reporter.log(f"  ! Skipped: {_fig_path('07')} — no RMSD column found. "
+        reporter.log(f"  ! Skipped: {_fig_path('07')} - no RMSD column found. "
                      f"All column names tried: {_rmsd17_aliases}. "
                      f"Partial matches in CSV (containing 'rmsd'/'active_site'): {_rmsd_candidates}. "
                      f"Full column list: {list(df.columns)}")
@@ -3142,7 +3142,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             f17_df["Active_Site_RMSD"] = pd.to_numeric(f17_df["Active_Site_RMSD"], errors="coerce")
             f17_df = f17_df.dropna(subset=["Active_Site_RMSD"])
             """
-            Show ALL data — no percentile clip so small-n tiers (e.g. Tier_1A n=5)
+            Show ALL data - no percentile clip so small-n tiers (e.g. Tier_1A n=5)
             retain every value.  y_ceil caps the display at 4 Å, but is extended if any
             small-n tier has a value beyond that so its dots always land inside the axes.
             """
@@ -3174,7 +3174,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             pct_yellow = ((f17_df["Active_Site_RMSD"] > _re) & (f17_df["Active_Site_RMSD"] <= _ra)).sum() / total_n * 100
             pct_red    = (f17_df["Active_Site_RMSD"] > _ra).sum() / total_n * 100
             fig, ax = plt.subplots(figsize=(12, 7))
-            # Coloured quality zones — colours from CFG (single source); RMSD edges 1.0/2.0 Å
+            # Coloured quality zones - colours from CFG (single source); RMSD edges 1.0/2.0 Å
             _cbc = CFG.CONF_BAND_COLOURS
             ax.axhspan(0.0, _re, alpha=0.13, color=_cbc["high"], zorder=0)   # green  = Excellent
             ax.axhspan(_re, _ra, alpha=0.13, color=_cbc["acceptable"], zorder=0)   # amber  = Acceptable
@@ -3182,12 +3182,12 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             # Zone boundary lines
             ax.axhline(y=_re, color=_cbc["high"], linestyle="--", alpha=0.7, linewidth=1.1)
             ax.axhline(y=_ra, color=_cbc["below"], linestyle="--", alpha=0.7, linewidth=1.1)
-            # Violin plot — uses clipped data so bodies remain within the continuous axis
+            # Violin plot - uses clipped data so bodies remain within the continuous axis
             sns.violinplot(data=f17_plot, x=CFG.COL_TIER, y="Active_Site_RMSD",
                            order=valid_tiers_f17, palette=TIER_PALETTE,
                            inner="quartile", cut=0, linewidth=1.1, ax=ax, zorder=3)
             # Connected median trend across tiers (markers joined by a line; value
-            # labels boxed just below each node) — mirrors the Fig 16 penalty line.
+            # labels boxed just below each node) - mirrors the Fig 16 penalty line.
             _med_xs17, _med_ys17, _med_raw17 = [], [], []
             for _im17, _tier17m in enumerate(valid_tiers_f17):
                 _med17m = f17_df.loc[f17_df[CFG.COL_TIER] == _tier17m,
@@ -3216,7 +3216,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                               size=1.5, jitter=True, ax=ax, zorder=2)
             """
             For tiers with very few data points (≤30), draw individual dots prominently
-            so every value is visible — avoids them being lost inside the violin body
+            so every value is visible - avoids them being lost inside the violin body
             """
             for _i17, _tier17 in enumerate(valid_tiers_f17):
                 _sub17 = f17_plot.loc[f17_plot[CFG.COL_TIER] == _tier17, "Active_Site_RMSD"].dropna()
@@ -3255,7 +3255,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             ax.set_yticklabels([f"{t:.1f}" for t in _y_ticks_f6])
             ax.tick_params(axis="y", labelsize=7)
             ax.set_xlabel("Degrader Tier", )
-            ax.set_ylabel("Active Site RMSD (Å)  — lower = better", )
+            ax.set_ylabel("Active Site RMSD (Å)  - lower = better", )
             ax.text(0.99, 0.99, " ",
                     ha="right", va="top", fontsize=7, color=CFG.VIS_INK["ghost"], style="italic",
                     transform=ax.transAxes)
@@ -3320,7 +3320,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.savefig(out_dir / "Figure_07_ActiveSite_RMSD_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('07')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('07')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 08: Feature Correlation Matrix (Spearman ρ) ---
@@ -3336,7 +3336,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         CFG.COL_ID_PCT:                "SeqID%",
         "SN2_Trajectory_Deviation_A":  "TrajDev",
         "soft_catalytic_score":        "SoftCat",
-        # Mechanistic / chemistry drivers — real matrix cells: their actual pairwise Spearman with
+        # Mechanistic / chemistry drivers - real matrix cells: their actual pairwise Spearman with
         # every other feature.
         "scissile_cf_bde":             "C-F BDE",
         "sn2_backside_occlusion":      "Backside",
@@ -3345,7 +3345,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         "carboxylate_clamp_integrity": "Cbx clamp",
         "mechanistic_score_effective": "Mech.eff",
     }
-    # Map tier_numeric alias — try every plausible name written by different pipeline versions
+    # Map tier_numeric alias - try every plausible name written by different pipeline versions
     for _alias in ["tier_val", "tier_value", "Tier_Score", "tier_score",
                    "Tier_Numeric", "degrader_tier_numeric", "Degrader_Tier_Numeric"]:
         if _alias in df.columns and "tier_numeric" not in df.columns:
@@ -3359,7 +3359,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         from scipy import stats as _sp_stats
 
         """
-        Pairwise-complete Spearman (pandas corr with min_periods) — no median
+        Pairwise-complete Spearman (pandas corr with min_periods) - no median
         imputation. Median imputation inflates tied ranks and biases ρ for features
         with systematic missingness (features observed only for a subset of complexes); pairwise
         deletion uses each pair's jointly observed rows instead.
@@ -3390,7 +3390,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         p_df_f3 = pd.DataFrame(p_mat, index=corr_raw.index, columns=corr_raw.columns)
 
         """
-        This is a SECOND, INDEPENDENT Benjamini-Hochberg family — the feature-correlation matrix — and it
+        This is a SECOND, INDEPENDENT Benjamini-Hochberg family - the feature-correlation matrix - and it
         is not the family written to 06_Statistical_Tests.csv (which corrects the panel tests and the
         statistical battery together). Two families are legitimate: these are different questions asked of
         different hypotheses, and pooling them would inflate m and cost power on both.
@@ -3430,7 +3430,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         """
         Curated feature ORDER grouped by family (replaces the opaque clustering
         reorder). The degradation outcome (Tier) goes first, then each feature
-        family — this makes the two regimes self-evident and lets us draw
+        family - this makes the two regimes self-evident and lets us draw
         labelled separators and spotlight the Tier column below.
         """
         _fam_groups_f7 = [
@@ -3466,7 +3466,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _rho  = corr_raw.loc[_ri, _ci]
                 _pv   = p_adj_df_f7.loc[_ri, _ci]
                 if pd.isna(_rho):
-                    annot_f3.loc[_ri, _ci] = "—"
+                    annot_f3.loc[_ri, _ci] = "-"
                     continue
                 _star = _sig_stars(_pv)
                 annot_f3.loc[_ri, _ci] = f"{_rho:.2f}\n{_star}" if _star else f"{_rho:.2f}"
@@ -3476,7 +3476,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         for _dn in corr_raw.index:
             annot_f3.loc[_dn, _dn] = "1.00"
         """
-        Dendrogram removed — features are reordered by the curated family grouping
+        Dendrogram removed - features are reordered by the curated family grouping
         (_fam_groups_f7 / _ord above), not by clustering. Single-axes heatmap only.
         """
         _, ax_f3 = plt.subplots(figsize=(14, 12.5))
@@ -3487,14 +3487,14 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     cbar_kws={"label": "Spearman ρ  (−1 = perfect negative, +1 = perfect positive)",
                               "shrink": 0.75},
                     ax=ax_f3)
-        # Significance / method key — on top, above the matrix.
+        # Significance / method key - on top, above the matrix.
         ax_f3.text(0.5, 1.03,
                    f"★ p<0.05   ★★ p<0.01   ★★★ p<0.001  (BH FDR, unique pairs)   |   Features grouped by family   |   pairwise-complete Spearman, n ≤ {_n_f3:,}",
                    transform=ax_f3.transAxes, ha="center", va="bottom",
                    fontsize=8, color=CFG.VIS_INK["muted"], style="italic",
                    bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=CFG.VIS_INK["palest"],
                              alpha=0.88, linewidth=0.7))
-        # Labels are short (≤7 chars) — no truncation needed
+        # Labels are short (≤7 chars) - no truncation needed
         ax_f3.set_xticklabels([l.get_text() for l in ax_f3.get_xticklabels()],
                               fontsize=9, rotation=45, ha="right")
         ax_f3.set_yticklabels([l.get_text() for l in ax_f3.get_yticklabels()],
@@ -3529,7 +3529,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _tl7.set_color(_FAM_COL7.get(_fam7, CFG.VIS_INK["near_black"]))
 
         """
-        1) Family separator lines at each group boundary — clipped to the lower
+        1) Family separator lines at each group boundary - clipped to the lower
         (data) triangle so they never run through the empty upper-right area
         that holds the key + take-away note.
         """
@@ -3549,7 +3549,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                            annotation_clip=False)
 
         """
-        3) Spotlight the Tier column — every feature's correlation with the
+        3) Spotlight the Tier column - every feature's correlation with the
         degradation outcome is the question the figure answers.
         """
         if "Tier" in _display_names:
@@ -3562,7 +3562,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         plt.savefig(out_dir / "Figure_08_Feature_Correlations.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
-    # --- Figure 09: Tier Quality Summary — Cleveland Dot Plot (multi-metric) ---
+    # --- Figure 09: Tier Quality Summary - Cleveland Dot Plot (multi-metric) ---
     """
     Each metric occupies a horizontal row; coloured dots show each tier's normalised
     mean score.  A thin grey range line connects the min-to-max dot for that metric,
@@ -3588,7 +3588,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 row = {"Tier": tier}
                 for col in _f08_cols:
                     vals = pd.to_numeric(sub[col], errors="coerce").dropna()
-                    # Mean point estimate — matches the per-dot annotation and the
+                    # Mean point estimate - matches the per-dot annotation and the
                     # mean bootstrap CI (_bsci) drawn for the same tier/metric.
                     row[_f08_metric_map[col]] = float(vals.mean()) if len(vals) else np.nan
                 _f08_rows.append(row)
@@ -3659,7 +3659,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                         else:
                             _f08_ci[(tier, disp)] = None
 
-                # 3 rows × 1 col — pair metrics two per row
+                # 3 rows × 1 col - pair metrics two per row
                 _met_pairs = [(metrics_f08[i*2], metrics_f08[i*2+1] if i*2+1 < n_met else None)
                               for i in range(3)]
                 fig, axes_f08 = plt.subplots(3, 1, figsize=(max(11, n_tier * 1.6 + 3), 9),
@@ -3705,7 +3705,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                             float(np.nanmax(norm_vals)),
                                             colors=CFG.VIS_INK["palest"], linewidth=2.5, zorder=1)
 
-                        # Bootstrap CI bars drawn at base_y (before nudge known) — always visible
+                        # Bootstrap CI bars drawn at base_y (before nudge known) - always visible
                         for nv, rv, col_f08, tier in _dot_data08:
                             _ci08 = _f08_ci.get((tier, metric))
                             if _ci08:
@@ -3775,7 +3775,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                markeredgecolor="black", markeredgewidth=0.8,
                                markersize=10, label=t) for t in tiers_f08]
                 _leg08.append(_L08([0],[0], color="none", linewidth=0,
-                                   label="★ RMSD metrics: inverted — lower RMSD = better score"))
+                                   label="★ RMSD metrics: inverted - lower RMSD = better score"))
                 _leg08.append(_L08([0],[0], color=CFG.VIS_INK["faint"], linewidth=5.5, alpha=0.3,
                                    label="95% bootstrap CI on mean (1 000 resamples)"))
                 if _any_tied08:
@@ -3793,7 +3793,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 plt.savefig(out_dir / "Figure_09_Tier_Quality_DotPlot.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('09')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('09')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 10: Mechanistic State Cross-Tab (Halide Stabilisation × Carboxylate Clamp) ---
@@ -3837,7 +3837,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _mech_missing.append("Carboxylate_Clamp")
         _mech_candidates = [c for c in df.columns
                             if any(k in c.lower() for k in ("halide", "clamp", "carboxyl", "stabil"))]
-        reporter.log(f"  ! Skipped: {_fig_path('10')} — columns not found: {_mech_missing}. "
+        reporter.log(f"  ! Skipped: {_fig_path('10')} - columns not found: {_mech_missing}. "
                      f"Partial matches in CSV: {_mech_candidates}. "
                      f"Full column list: {list(df.columns)}")
     if "Halide_Stabilisation" in df.columns and "Carboxylate_Clamp" in df.columns and CFG.COL_TIER in df.columns:
@@ -3874,7 +3874,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _chi2_09, _p_09, _dof_09, _ = _chi2_f09(_cross_raw.values)
                 _chi2_stat = (f"χ²({_dof_09}) = {_chi2_09:.1f},  "
                               f"p {'< 0.001' if _p_09 < 0.001 else f'= {_p_09:.3f}'}")
-                _register_p("Chi-square — interaction-density band × tier", "19_Interaction_Density_by_Tier",
+                _register_p("Chi-square - interaction-density band × tier", "19_Interaction_Density_by_Tier",
                             float(_chi2_09), int(_cross_raw.values.sum()), float(_p_09), dof=int(_dof_09))
             except Exception:
                 _chi2_stat = ""
@@ -3901,10 +3901,10 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.savefig(out_dir / "Figure_10_Mech_State_CrossTab.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('10')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('10')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
-    # --- Figure 11: Mechanistic Score — Mean±CI dot plot ---
+    # --- Figure 11: Mechanistic Score - Mean±CI dot plot ---
     if CFG.COL_MECH_S in df.columns and CFG.COL_TIER in df.columns:
         from scipy import stats as _scipy_stats
         f13_data = df.dropna(subset=[CFG.COL_MECH_S])
@@ -4000,7 +4000,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                        linestyle="--", alpha=0.65, zorder=2)
             ax.text(0.99, 0.52,
                     f"⚡ All tier means within {max(_means10)-min(_means10):.3f} "
-                    f"— minimal inter-tier separation\n"
+                    f"- minimal inter-tier separation\n"
                     f"(mech-score cluster near {_mean10_all:.3f}; see also Fig 08 tied-metric row)",
                     transform=ax.transAxes, ha="right", va="center", fontsize=8,
                     color=CFG.VIS_ACCENT_DEEP["gold_deep"], fontweight="bold", style="italic",
@@ -4026,14 +4026,14 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
-    # --- Figure 11b: Mechanistic Fingerprint — per-tier catalytic feature profile ---
+    # --- Figure 11b: Mechanistic Fingerprint - per-tier catalytic feature profile ---
     """
     Catalytic "fingerprint" per degrader tier rendered as a radar / spider chart: each
     spoke is a mechanistic feature, each filled polygon a tier, and the radius its tier-mean
     engagement (0–1). Boolean requirements → fraction engaged; the SN2 attack angle is
     normalised (angle / 180°, ideal back-side = 1.0); continuous scores → clipped mean.
     Built from the FAcDs mechanistic-score components (config §5), it shows which catalytic
-    requirements each tier satisfies and how the profile degrades down the tiers —
+    requirements each tier satisfies and how the profile degrades down the tiers -
     complementing the scalar Figure 11 (mech-score mean ± CI).
     """
     _fp_feats = [
@@ -4129,13 +4129,13 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             plt.tight_layout(rect=[0, 0.15, 1, 1])
             plt.savefig(out_dir / "Figure_11b_Mechanistic_Fingerprint.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('11b')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('11b')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
         finally:
             if fig is not None:
                 plt.close(fig)
 
-    # --- Figure 12: SN2 Attack Angle — ECDF by Tier ---
+    # --- Figure 12: SN2 Attack Angle - ECDF by Tier ---
     if CFG.COL_SN2 in df.columns and CFG.COL_TIER in df.columns:
         plot_df = df[df[CFG.COL_SN2] > 0].copy()
         valid_tiers_f14 = [t for t in existing_tiers if t in plot_df[CFG.COL_TIER].values]
@@ -4158,7 +4158,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     rotation=90, zorder=10,
                     transform=ax.get_xaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.68))
-        # ECDF per tier — median value labels are collected here and placed after the
+        # ECDF per tier - median value labels are collected here and placed after the
         # loop in alternating vertical bands so clustered medians never overlap.
         _med_pts = []
         for tier in valid_tiers_f14:
@@ -4188,7 +4188,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                         va="bottom" if _oy > 0 else "top", zorder=7,
                         bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                         arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
-        # MD-ready overlay — the top-performing MD-selected complexes (incl. those inside
+        # MD-ready overlay - the top-performing MD-selected complexes (incl. those inside
         # Tier_1A) marked as gold stars on their own tier's ECDF curve.
         _mdsel14 = plot_df[plot_df.get("MD_Selected", pd.Series(False, index=plot_df.index))
                            .astype(str).str.strip().str.lower().isin(["true", "1", "1.0", "yes"])]
@@ -4226,9 +4226,9 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_xticks([30, 45, 90, 130] + sorted(set(_ecdf_angles)) + [180])
         ax.set_yticks([i/10 for i in range(0, 11)])
         ax.set_yticklabels([f"{i*10}%" for i in range(0, 11)])
-        ax.set_xlabel("SN2 Attack Angle (°)  — 180° = ideal linear nucleophilic back-attack", )
+        ax.set_xlabel("SN2 Attack Angle (°)  - 180° = ideal linear nucleophilic back-attack", )
         ax.set_ylabel("Cumulative Fraction of Complexes in Tier", )
-        # upper left — ECDF lines fan right so top-left is always clear
+        # upper left - ECDF lines fan right so top-left is always clear
         from matplotlib.lines import Line2D as _L11
         _hdr11 = _L11([0],[0], color="none", linewidth=0, label="Tier (●=median)")
         _h11, _l11 = ax.get_legend_handles_labels()
@@ -4338,7 +4338,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none",
                               alpha=0.70, linewidth=0))
 
-        # Start the x-axis at the data, not 0 — only ~0.3% of complexes sit below 2 Å, so a 0-start
+        # Start the x-axis at the data, not 0 - only ~0.3% of complexes sit below 2 Å, so a 0-start
         # opens a wide empty band. Use the 0.5th percentile (robust to the sparse sub-2 Å tail),
         # floored to 0.1 Å; that lands the axis at ~2 Å where the population actually begins.
         _xmin12 = float(pd.to_numeric(plot_df12["Dist_Nucleophile"], errors="coerce").quantile(0.005))
@@ -4348,11 +4348,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_ylim(0, 200)
         ax.set_yticks(range(0, 181, 20))
         # The distance is measured to EACH variant's own mapped catalytic aspartate (Mapped_Nucleophile:
-        # Asp109 / Asp110 / Asp112 / Asp104 …), never a fixed residue number — a FAcD variant's nucleophile
+        # Asp109 / Asp110 / Asp112 / Asp104 …), never a fixed residue number - a FAcD variant's nucleophile
         # can sit a little before or after the reference Asp110. So the axis names the ROLE, not one number.
-        ax.set_xlabel('Mapped catalytic Asp (nucleophile) → Carbon Distance (Å)  — shorter = closer to reaction geometry',
+        ax.set_xlabel('Mapped catalytic Asp (nucleophile) → Carbon Distance (Å)  - shorter = closer to reaction geometry',
                       )
-        ax.set_ylabel("SN2 Attack Angle (°)  — 180° = perfect linear back-attack", )
+        ax.set_ylabel("SN2 Attack Angle (°)  - 180° = perfect linear back-attack", )
         handles12, labels12 = ax.get_legend_handles_labels()
         clean_labels12, clean_handles12 = [], []
         for h12, l12 in zip(handles12, labels12):
@@ -4381,7 +4381,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
 
     # ===========================================================================
-    # Two-criteria tier logic + dead-end feasibility — one 3-panel figure written
+    # Two-criteria tier logic + dead-end feasibility - one 3-panel figure written
     # to the catalytic folder (04). Panel a: Criterion A (active-site integrity,
     # active_site_residues_correct) gates Criterion B (catalytic constellation).
     # Panel b: Criterion-B ECDF separates the tiers (per-tier mean diamonds).
@@ -4403,7 +4403,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _tord = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
             """
             Three INDEPENDENT figures, not one three-panel strip. Each answers its own question, and
-            each carries its own axis labels and legend at a readable size — sharing a strip lets the
+            each carries its own axis labels and legend at a readable size - sharing a strip lets the
             widest panel dictate the size of the others.
             """
             _figa = plt.figure(figsize=(13, 7))
@@ -4443,7 +4443,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             # Shaded per-tier constellation zones (mirrors the SN2-angle ECDF, Fig 12): each zone's
             # lower bound is that tier's TIER_CONSTELLATION_MIN gate, its upper bound the next-higher
             # tier's gate (top capped at 1.0). Each band carries its ≥threshold label and the count of
-            # complexes whose score falls inside it — so the reader sees the gate AND the population.
+            # complexes whose score falls inside it - so the reader sees the gate AND the population.
             _zt_cb  = [CFG.TIER_TOP, CFG.TIER_ORDER[1], CFG.TIER_ORDER[2], CFG.TIER_ORDER[3]]
             _zlo_cb = [CFG.TIER_CONSTELLATION_MIN[t] for t in _zt_cb]
             _zhi_cb = [1.0] + _zlo_cb[:-1]
@@ -4524,7 +4524,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axb.set_xlabel("Catalytic constellation score  (reactive-geometry match, 0–1)", )
             _axb.set_ylabel("Cumulative fraction", )
             """
-            The legend is stacked in one narrow column at the top left — the one corner no ECDF
+            The legend is stacked in one narrow column at the top left - the one corner no ECDF
             crosses, since every tier is still flat at zero below a constellation score of ~0.17.
             Strung out along a single row (one column per tier) the entries would shrink below
             legibility and still collide. The criterion floor carries its own label rather than
@@ -4553,8 +4553,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             ink on the collision and none on the chemistry.
 
             One row per ligand removes the collision by construction. Each ligand is a row; the two
-            criteria are read side by side against their own gate; and the verdict — dead end, or
-            feasible α-attack — is the row's colour. Nothing can overlap, and the question the
+            criteria are read side by side against their own gate; and the verdict - dead end, or
+            feasible α-attack - is the row's colour. Nothing can overlap, and the question the
             figure exists to answer (WHICH criterion killed this ligand) is now answerable at a
             glance: a bar crossing into the shaded zone is the one that failed.
             """
@@ -4568,8 +4568,8 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
             _figc = plt.figure(figsize=(12, 7))
             _gsc = _figc.add_gridspec(1, 2, width_ratios=[1.0, 1.0], wspace=0.06)
-            _axc = _figc.add_subplot(_gsc[0, 0])          # criterion 1 — bond strength
-            _axc2 = _figc.add_subplot(_gsc[0, 1], sharey=_axc)   # criterion 2 — backside access
+            _axc = _figc.add_subplot(_gsc[0, 0])          # criterion 1 - bond strength
+            _axc2 = _figc.add_subplot(_gsc[0, 1], sharey=_axc)   # criterion 2 - backside access
 
             if len(_keep) >= 2:
                 _keep["lig"] = _lig_short_series(_keep[CFG.COL_LIG])
@@ -4580,7 +4580,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _y = np.arange(len(_keep))
                 _cols = [_DEAD if _d else _FEAS for _d in _keep["isdead"]]
 
-                # left — scissile C–F BDE
+                # left - scissile C–F BDE
                 _axc.axvspan(_BDE_MAX, _keep.bde.max() + 2.5, color=_DEAD, alpha=0.07, zorder=0)
                 _axc.hlines(_y, _keep.bde.min() - 2.0, _keep["bde"], color=_cols, lw=1.4, alpha=0.55, zorder=2)
                 _axc.scatter(_keep["bde"], _y, s=110, color=_cols, edgecolor="white", lw=0.8, zorder=3)
@@ -4595,7 +4595,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 for _tl, _cc in zip(_axc.get_yticklabels(), _cols):
                     _tl.set_color(_cc)
 
-                # right — backside steric occlusion
+                # right - backside steric occlusion
                 _axc2.axvspan(_OCC_MAX, max(_keep.occ.max() + 0.35, _OCC_MAX + 0.35),
                               color=_DEAD, alpha=0.07, zorder=0)
                 _axc2.hlines(_y, 0, _keep["occ"], color=_cols, lw=1.4, alpha=0.55, zorder=2)
@@ -4632,12 +4632,12 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
 
 # =============================================================================
-# STEP 6/8 — 06_Ligand_Interactions_and_Chemical_Space
+# STEP 6/8 - 06_Ligand_Interactions_and_Chemical_Space
 # =============================================================================
 def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _imgs, _tt_has_imgs, int_label_map, present_int_cols):
-    """Folder 06_Ligand_Interactions_and_Chemical_Space — interaction profile + chemical space."""
-    reporter.section("Step 6/8 — 06_Ligand_Interactions_and_Chemical_Space · interaction profile + chemical space")
-    # --- Figure 14: Molecular Interaction Profile — Stacked bars (bond types) + F-engagement line ---
+    """Folder 06_Ligand_Interactions_and_Chemical_Space - interaction profile + chemical space."""
+    reporter.section("Step 6/8 - 06_Ligand_Interactions_and_Chemical_Space · interaction profile + chemical space")
+    # --- Figure 14: Molecular Interaction Profile - Stacked bars (bond types) + F-engagement line ---
     """
     Single chart, dual y-axis: stacked bars per tier show the total interaction count and
     its bond-type composition (left y-axis); overlaid connected dot-line shows the fluorine
@@ -4655,7 +4655,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                              gridspec_kw={"width_ratios": [3, 2], "wspace": 0.35})
             ax_r15 = ax.twinx()   # right y-axis for fluorine engagement line
 
-            # Left axis: stacked bar chart — one bar per tier, stacked by bond type
+            # Left axis: stacked bar chart - one bar per tier, stacked by bond type
             if _has_int:
                 tier_int = df.groupby(CFG.COL_TIER)[[present_int_cols[k] for k in present_int_cols]].mean()
                 tier_int = tier_int.reindex([t for t in existing_tiers if t in tier_int.index])
@@ -4702,7 +4702,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
                 ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
                 ax.set_xlabel("Degrader Tier", )
-                ax.set_ylabel("Interaction type proportion  (%)  —  annotation = mean count", )
+                ax.set_ylabel("Interaction type proportion  (%)  -  annotation = mean count", )
 
             # Right axis: Fluorine Engagement Ratio connected line per tier
             if _has_f16:
@@ -4766,7 +4766,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                    rotation=270, labelpad=14, color=CFG.VIS_ACCENT["axis_right"])
                 ax_r15.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_right"], labelsize=9)
                 """
-                Rotated zone labels — left side of figure, written bottom-to-top
+                Rotated zone labels - left side of figure, written bottom-to-top
                 ylim=(0, 1.30): Low midpoint=0.25→0.192; Mid midpoint=0.625→0.481; High midpoint=0.875→0.673
                 """
                 ax_r15.text(0.99, 0.192, "Low engagement (<50%)",
@@ -4816,7 +4816,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                  fancybox=True)
             _leg15.set_zorder(20)
 
-            # Heatmap: tier × bond-type proportion (%) — only when interaction data exist
+            # Heatmap: tier × bond-type proportion (%) - only when interaction data exist
             if _has_int and "tier_int" in dir():
                 import seaborn as _sns13
                 _hm_data = tier_int.T  # bond types as rows, tiers as columns
@@ -4826,7 +4826,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                annot=True, fmt=".0f", annot_kws={"size": 8},
                                linewidths=0.4, linecolor="white",
                                cbar_kws={"label": "Proportion (%)", "shrink": 0.8})
-                ax_hm.set_xlabel("Degrader Tier  —  Interaction Type Proportion (%)", )
+                ax_hm.set_xlabel("Degrader Tier  -  Interaction Type Proportion (%)", )
                 ax_hm.set_ylabel("Interaction Type", )
                 ax_hm.tick_params(axis="x", labelrotation=45, labelsize=8.5)
                 ax_hm.tick_params(axis="y", labelrotation=0,  labelsize=8)
@@ -4838,7 +4838,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('14')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('14')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # Figure 14b: PA companion (interaction profile overlay)
@@ -4863,12 +4863,12 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             ax.axhline(y=0.75, color=CFG.VIS_ACCENT["green"], linestyle="--", alpha=0.6, linewidth=1.1)
             ax.axhline(y=0.50, color=CFG.VIS_ACCENT["amber"], linestyle=":", alpha=0.6, linewidth=1.1)
             ax.set_axisbelow(True)
-            # KDE violin + IQR box overlay (no boxplot — keeps figure clean)
+            # KDE violin + IQR box overlay (no boxplot - keeps figure clean)
             _skipped14 = []   # tiers with too few points for a KDE violin (kept visible via a note)
             for _ti14, tier14 in enumerate(valid_t16):
                 _vals14 = f16_df.loc[f16_df[CFG.COL_TIER] == tier14, "FER"].dropna().values
                 if len(_vals14) < 4:
-                    # Too few complexes for a stable KDE — draw the raw points so the
+                    # Too few complexes for a stable KDE - draw the raw points so the
                     # tier is not silently omitted, and record it for the caption.
                     if len(_vals14):
                         ax.scatter([_ti14] * len(_vals14), _vals14, s=26, zorder=6,
@@ -4947,7 +4947,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             Start-y (axes fraction) = bottom border of each label's OWN zone, so
             every label sits on its category's lower boundary line (va='bottom',
             text rises into its zone). Low's zone bottom coincides with the axes
-            floor, which is expected — High/Moderate now match that anchoring.
+            floor, which is expected - High/Moderate now match that anchoring.
             """
             for (_zy14_start, _ztxt14, _zcol14, _zec14) in [
                 (0.73, f"High engagement (≥{CFG.ENGAGEMENT_BAND_HIGH*100:.0f}%)", CFG.VIS_BAND["high"], CFG.VIS_ACCENT["green"]),
@@ -4967,7 +4967,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             for tick16x, tier16x in zip(ax.get_xticklabels(), valid_t16):
                 tick16x.set_color(TIER_PALETTE.get(tier16x, "black"))
 
-            # Legend — violin + IQR box description
+            # Legend - violin + IQR box description
             from matplotlib.patches import Patch as _P16
             from matplotlib.lines import Line2D as _L16
             _leg16_h = [
@@ -4995,13 +4995,13 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             plt.savefig(out_dir / "Figure_15_Fluorine_Engagement_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('15')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('15')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 16: Catalytic quality vs active-site contact density per tier ---
     """
     Single chart, dual y-axis. The left axis shows the per-tier distribution of catalytic
-    quality as violins — soft_catalytic_score (the continuous SN2-geometry composite),
+    quality as violins - soft_catalytic_score (the continuous SN2-geometry composite),
     which genuinely varies across tiers. The right axis shows the per-tier mean
     active-site contact density (Interaction_Density_Norm) as a connected dot-line, pairing
     catalytic geometry with active-site engagement. Binding Probability is not plotted:
@@ -5098,7 +5098,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             ax_r.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_right"], linewidth=0.55, linestyle="--", alpha=0.18, zorder=0)
             ax_r.set_axisbelow(True)
 
-            # Legend — bottom-left (violins tend to be taller on right)
+            # Legend - bottom-left (violins tend to be taller on right)
             if _has_dens and pip_xs:
                 from matplotlib.lines import Line2D as _Line12
                 _pip_handle = _Line12([0], [0], color=CFG.VIS_ACCENT["vermillion"], linewidth=2.5,
@@ -5113,7 +5113,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             plt.savefig(out_dir / "Figure_16_Catalytic_Quality_vs_Inhibition.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('16')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('16')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 17: Active-site contact density by tier ---
@@ -5214,7 +5214,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                         """
                         The annotation is marked UNCORRECTED. The Benjamini-Hochberg q depends on the
                         whole test family, which is complete only after every figure has run, so no q
-                        exists at draw time — and printing a bare p next to a significance claim reads
+                        exists at draw time - and printing a bare p next to a significance claim reads
                         as though the multiplicity had been accounted for. The corrected q_BH for this
                         exact test is in 06_Statistical_Tests.csv, which is the reportable value.
                         """
@@ -5232,14 +5232,14 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 plt.savefig(out_dir / "Figure_17_ActiveSite_Contact_Density_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
             else:
-                reporter.log(f"  ! Skipped: {_fig_path('17')} — no valid tier groups for Interaction_Density_Norm.")
+                reporter.log(f"  ! Skipped: {_fig_path('17')} - no valid tier groups for Interaction_Density_Norm.")
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('17')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('17')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
     else:
-        reporter.log(f"  ! Skipped: {_fig_path('17')} — column 'Interaction_Density_Norm' or 'degrader_tier' absent.")
+        reporter.log(f"  ! Skipped: {_fig_path('17')} - column 'Interaction_Density_Norm' or 'degrader_tier' absent.")
 
-    # --- Figure 17b: Binding Energetics — Binding Probability (violin) per tier ---
+    # --- Figure 17b: Binding Energetics - Binding Probability (violin) per tier ---
     """
     Per-tier read-out of binding quality. The Binding_Probability distribution is shown
     as a violin (zoomed to where values cluster) with a red median bar per tier. Product
@@ -5265,7 +5265,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 _m = _bedata.loc[_bedata[CFG.COL_TIER] == _t, _be_bind].median()
                 if not np.isnan(_m):
                     _be_mxs.append(_i); _be_mys.append(float(_m))
-            # Single connected median trend (diamonds joined) — no per-violin bars.
+            # Single connected median trend (diamonds joined) - no per-violin bars.
             if len(_be_mxs) >= 2:
                 ax.plot(_be_mxs, _be_mys, color=CFG.VIS_ACCENT["alert"], linewidth=2.2, linestyle="--",
                         alpha=0.9, marker="D", markersize=7, markeredgecolor="black",
@@ -5305,7 +5305,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             _tier_seps(plt.gca())   # consistent tier separators
             plt.savefig(out_dir / "Figure_17b_Binding_Energetics.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('17b')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('17b')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
         finally:
             if fig is not None:
@@ -5316,7 +5316,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         # Degradability landscape: a hexbin over the UMAP chemical space coloured by the MEAN competence
         # per bin, so chemical regions enriched for good degraders light up; the MD-ready / elite hits are
         # overlaid as stars, each with its PyMOL active-site thumbnail in the right margin. The main axes
-        # sit in the middle band and the right margin holds the thumbnails — no tight_layout, it would
+        # sit in the middle band and the right margin holds the thumbnails - no tight_layout, it would
         # fight the margins.
         fig, ax = plt.subplots(figsize=(11, 7.5))
         fig.subplots_adjust(**_TT_MARGINS)
@@ -5357,7 +5357,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
         if not _elite.empty:
             # Each star takes its thumbnail's colour (fill); an elite hit with no thumbnail stays gold.
-            # No ligand labels on the map — the thumbnail box already names protein + ligand.
+            # No ligand labels on the map - the thumbnail box already names protein + ligand.
             for _, _er in _elite.iterrows():
                 # The 3R3U × FA positive control is drawn as the distinct red star / gold border;
                 # candidate hits keep their per-thumbnail tint (so each star matches its own box).
@@ -5386,11 +5386,11 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
 
 # =============================================================================
-# STEP 7/8 — 07_PFAS_Scope_and_Synthesis
+# STEP 7/8 - 07_PFAS_Scope_and_Synthesis
 # =============================================================================
 def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
-    """Folder 07_PFAS_Scope_and_Synthesis — synthesis + publication assembly."""
-    reporter.section("Step 7/8 — 07_PFAS_Scope_and_Synthesis · synthesis + publication assembly")
+    """Folder 07_PFAS_Scope_and_Synthesis - synthesis + publication assembly."""
+    reporter.section("Step 7/8 - 07_PFAS_Scope_and_Synthesis · synthesis + publication assembly")
     # --- Figure 19: Candidate Radar: 18a (top-5 hits) + 18b (one per tier) ---
     _radar_labels = {
         CFG.COL_CONF:   "AI Conf.",
@@ -5438,7 +5438,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         for i in range(len(rows_df)):
             vals  = _scaler_vals.iloc[i].values.flatten().tolist() + [_scaler_vals.iloc[i].values[0]]
             _raw  = str(rows_df.iloc[i][lname_col]) if lname_col else f"Hit {i+1}"
-            # Canonical short label (FA/DFA/TFA, "NN_" prefix stripped) — matches every other figure.
+            # Canonical short label (FA/DFA/TFA, "NN_" prefix stripped) - matches every other figure.
             _clean = _lig_short(_raw)
             tier  = str(rows_df.iloc[i].get(CFG.COL_TIER, ""))
             if label_mode == "rank":
@@ -5508,7 +5508,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
 
             A radar is a per-complex figure: every hit is one polygon, and the reader compares them
             spoke by spoke. That only works for a handful of complexes. Tier_1A now holds ~100
-            members, so drawing the tier would either overplot into an unreadable web or — worse —
+            members, so drawing the tier would either overplot into an unreadable web or - worse -
             silently truncate to an arbitrary top-N and present it as though it were the tier.
 
             The MD-selected cohort is the set this figure is actually about: the few complexes the
@@ -5549,12 +5549,12 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         reporter.log(f"  ! Radar chart skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
-    # --- Figure 20: Dual-Objective Tier Assessment — SN2 Geometry vs AI Confidence ---
+    # --- Figure 20: Dual-Objective Tier Assessment - SN2 Geometry vs AI Confidence ---
     """
     For each tier: the % meeting SN2 ≥ 165° (geometry) against the % meeting
     Boltz_Model_Confidence ≥ 0.75 (AI), which places each tier in the biologically
     meaningful substrate-vs-inhibitor space. Ranking on Binding_Probability cannot
-    do this — it is ~constant at 0.99 across the whole dataset and separates nothing.
+    do this - it is ~constant at 0.99 across the whole dataset and separates nothing.
     """
     if CFG.COL_SN2 in df.columns and CFG.COL_CONF in df.columns:
         try:
@@ -5596,7 +5596,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             _y19 = np.arange(len(_df19))
             _bar_h = 0.25
             """
-            Master container bar per tier — grey track, outline coloured to match
+            Master container bar per tier - grey track, outline coloured to match
             the tier's y-axis label colour. Shorter height leaves clear space
             between adjacent tier groups; outline 70% of previous thickness.
             """
@@ -5604,7 +5604,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             _master_ec19 = [TIER_PALETTE.get(t, CFG.VIS_INK["silver"]) for t in _df19["tier"].tolist()]
             """
             Faint tint of each tier's own colour as the track fill (alpha baked in
-            so the coloured outline stays vivid) — cohesive, not flat grey.
+            so the coloured outline stays vivid) - cohesive, not flat grey.
             """
             _master_fc19 = [_to_rgba19(c, 0.13) for c in _master_ec19]
             ax19L.barh(_y19, 105, height=0.82, color=_master_fc19,
@@ -5617,7 +5617,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                        color=CFG.VIS_ACCENT["vermillion"], alpha=0.80, label=f"Potential inhibitor (SN2<{CFG.INHIBITOR_ANGLE_MAX:.0f}°)", zorder=3)
 
             """
-            Value labels — inside (centred, white) when the bar is wide enough,
+            Value labels - inside (centred, white) when the bar is wide enough,
             else just outside the bar's right end (dark text).
             """
             for _i19, row19 in _df19.iterrows():
@@ -5659,14 +5659,14 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             ax19R.hexbin(_d19[CFG.COL_CONF], _d19[CFG.COL_SN2],
                                   gridsize=40, cmap="Greys", mincnt=1, alpha=0.4, linewidths=0.2, zorder=1)
 
-            # Substrate / inhibitor zone shading — bounds from CFG
+            # Substrate / inhibitor zone shading - bounds from CFG
             ax19R.axhspan(CFG.SUBSTRATE_ANGLE_MIN, 185, color=CFG.VIS_ACCENT["green"], alpha=0.10, zorder=0)
             ax19R.axhspan(0, CFG.INHIBITOR_ANGLE_MAX, color=CFG.VIS_ACCENT["vermillion"], alpha=0.08, zorder=0)
             ax19R.axhline(CFG.SUBSTRATE_ANGLE_MIN, color=CFG.VIS_ACCENT["green"], lw=1.2, ls="--", alpha=0.7, zorder=2)
             ax19R.axhline(CFG.INHIBITOR_ANGLE_MAX, color=CFG.VIS_ACCENT["vermillion"], lw=1.2, ls="--", alpha=0.7, zorder=2)
             ax19R.axvline(CFG.SUBSTRATE_CONF_MIN, color=CFG.VIS_ACCENT["blue"], lw=1.2, ls="--", alpha=0.7, zorder=2)
 
-            # Tier median diamonds with IQR error bars — collect positions first
+            # Tier median diamonds with IQR error bars - collect positions first
             _tier_pts19 = []   # (tier, cx, cy, colour)
             for _t19 in _tiers19:
                 _sub = _d19[_d19[CFG.COL_TIER] == _t19]
@@ -5714,7 +5714,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             ax19R.set_ylabel("SN2 Attack Angle (°)", )
             ax19R.tick_params(axis="both", labelsize=8)
 
-            # Zone / threshold labels — all inside the axes, single line each
+            # Zone / threshold labels - all inside the axes, single line each
             ax19R.text(0.87, 181, "Substrate zone", color=CFG.VIS_BAND["high"], fontsize=7,
                        style="italic", ha="center", va="center")
             ax19R.text(0.87, 8, "Inhibitor zone", color=CFG.VIS_ACCENT_DEEP["orange_hot"], fontsize=7,
@@ -5734,10 +5734,10 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             plt.close(fig19a)
             plt.close(fig19b)
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('20')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('20')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
-    # --- Figure 21: Conflict Composition — 100% Stacked Horizontal Bar per Tier ---
+    # --- Figure 21: Conflict Composition - 100% Stacked Horizontal Bar per Tier ---
     """
     One bar per tier (best → worst on y-axis).  Left portion = favourable categories
     (Consensus High, Hidden Gem); right portion = concerning categories.
@@ -5760,7 +5760,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         _total_rows_f2 = len(df)
         grand_total    = int(df[CFG.COL_TIER].notna().sum())
         pct_f2         = ct_f2.div(tier_n_f2, axis=0).fillna(0) * 100
-        # Detect control cases — generic mask first, then specific 3R3U / DeHa4
+        # Detect control cases - generic mask first, then specific 3R3U / DeHa4
         _ctrl_mask = pd.Series(False, index=df.index)
         for _ctrl_col in ["is_control", "control", "Control", "is_Control"]:
             if _ctrl_col in df.columns:
@@ -5797,7 +5797,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         tier_y_f2   = np.arange(len(tier_rows_f2) - 1, -1, -1)
         bar_h       = 0.60
 
-        # Height: fit bars tightly — no whitespace padding below lowest tier
+        # Height: fit bars tightly - no whitespace padding below lowest tier
         _fh_f2 = max(4.0, len(tier_rows_f2) * 0.65 + 1.8)
         fig_f2, ax_f2 = plt.subplots(figsize=(13, _fh_f2))
         ax_f2.set_facecolor(CFG.VIS_INK["panel"])
@@ -5847,7 +5847,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             tick.set_color(TIER_PALETTE.get(tier, "black"))
 
         ax_f2.set_xlim(0, 100)
-        # Clamp y-range to exactly the number of tiers — prevents blank canvas below
+        # Clamp y-range to exactly the number of tiers - prevents blank canvas below
         ax_f2.set_ylim(-0.55, len(tier_rows_f2) - 0.45)
         ax_f2.set_xlabel("Percentage of complexes within tier  (%)", )
         ax_f2.set_xticks([0, 25, 50, 75, 100])
@@ -5855,7 +5855,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         ax_f2.set_axisbelow(True)
         ax_f2.xaxis.grid(True, alpha=0.30, linestyle=":", color=CFG.VIS_INK["ghost"], zorder=0)
 
-        # Top-right badge: total jobs | tiered count — lifted above the axes frame
+        # Top-right badge: total jobs | tiered count - lifted above the axes frame
         ax_f2.text(0.99, 1.06,
                    f"Total jobs: {_total_rows_f2:,}   |   Tiered: {grand_total:,}",
                    transform=ax_f2.transAxes, ha="right", va="bottom",
@@ -5864,7 +5864,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                              alpha=0.88, linewidth=0.5))
 
         """
-        Section labels — placed INSIDE the chart at the top of the bars so they do not
+        Section labels - placed INSIDE the chart at the top of the bars so they do not
         collide with the "Total jobs | Tiered" badge that floats above the axes frame.
         get_xaxis_transform(): x = data coords (0–100 %), y = axes fraction [0,1].
         """
@@ -5906,7 +5906,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             left_f2_tmp = left_f2_tmp + vals
 
         """
-        Highlight each control complex individually — labelled protein+ligand
+        Highlight each control complex individually - labelled protein+ligand
         (e.g. "DeHa4+TFA"). 6 controls: {3R3U, DeHa4} × {TFA, Fluoroacetate,
         Difluoroacetate}. Stacked vertically per tier row so they never overlap.
         """
@@ -5917,7 +5917,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             if (not _ln or _ln.lower() == "nan") and "job_name" in df.columns:
                 _jn = str(df.at[_idx, "job_name"])
                 _ln = _jn.split("Control_", 1)[1] if "Control_" in _jn else _jn
-            # Canonical short label (FA/DFA/TFA, "NN_" prefix stripped) — matches every other figure.
+            # Canonical short label (FA/DFA/TFA, "NN_" prefix stripped) - matches every other figure.
             return _lig_short(_ln)
 
         _ctrl_specs_f20 = [(_ctrl_3R3U_mask, "3R3U", CFG.VIS_ACCENT_DEEP["red_deep"]),
@@ -5950,7 +5950,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         from matplotlib.patches import Patch as _P02
         _leg02 = [_P02(facecolor=cat_colours_f2.get(c, CFG.VIS_INK["faint"]), edgecolor="white",
                        linewidth=0.5, label=c) for c in present_cats_f2]
-        # Single-row legend below chart — ncol = number of categories so all fit on one line
+        # Single-row legend below chart - ncol = number of categories so all fit on one line
         _leg02_obj = ax_f2.legend(handles=_leg02,
                                   loc="upper center", bbox_to_anchor=(0.5, -0.10),
                                   ncol=len(present_cats_f2),
@@ -5962,11 +5962,11 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         plt.savefig(out_dir / "Figure_21_Conflict_Composition.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
-    # --- Figure 22: Hidden Gems — Slope Chart (SN2 Angle vs AI Confidence) ---
+    # --- Figure 22: Hidden Gems - Slope Chart (SN2 Angle vs AI Confidence) ---
     """
     Each Hidden Gem complex is a lollipop row showing its absolute SN2 attack angle
     (physics metric, left dot) and Boltz Model Confidence (AI metric, right dot).
-    A large gap means strong mechanistic geometry but undervalued by AI — the
+    A large gap means strong mechanistic geometry but undervalued by AI - the
     "hidden gem" story in a single visual stroke.
     """
     _phys_col21_abs = next((c for c in [CFG.COL_SN2, "Scientific_Rank", "Pareto_Rank"] if c in df.columns), None)
@@ -6016,7 +6016,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax21.set_axisbelow(True)
                 ax21.xaxis.grid(True, color=CFG.VIS_INK["tick"], linewidth=0.7, zorder=0)
 
-                # Background zone bands — tertile reference lines
+                # Background zone bands - tertile reference lines
                 ax21.axvspan(0,  33, alpha=0.04, color=CFG.VIS_ACCENT["vermillion"], zorder=0)  # lower third
                 ax21.axvspan(33, 67, alpha=0.03, color=CFG.VIS_ACCENT["amber"], zorder=0)  # middle
                 ax21.axvspan(67, 100, alpha=0.04, color=CFG.VIS_ACCENT["green"], zorder=0)  # top third
@@ -6030,7 +6030,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                     _gap21  = float(row21["_gap21"])
                     _y21    = _gi21
 
-                    # Connecting line — width proportional to |gap|
+                    # Connecting line - width proportional to |gap|
                     _lw21 = np.clip(0.8 + abs(_gap21) / 25, 0.8, 3.5)
                     _lo_x21, _hi_x21 = sorted([_phys21, _ai21])
                     ax21.hlines(_y21, _lo_x21, _hi_x21,
@@ -6089,7 +6089,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax21.set_xticklabels([_tick_lbl_map21[t] for t in _vis_ticks21], fontsize=8.5)
                 ax21.set_ylim(-0.6, _ng21 - 0.4)
 
-                # Zone labels at top — only render those within the visible x-range
+                # Zone labels at top - only render those within the visible x-range
                 _zone_lbls21 = [
                     (16.5,  "Lower third", CFG.VIS_ACCENT["vermillion"], 33),
                     (50.0,  "Middle third", CFG.VIS_BAND["moderate"], 67),
@@ -6138,18 +6138,18 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                             dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close(fig21)
             else:
-                reporter.log(f"  ! Skipped: {_fig_path('22')} — No Hidden Gems found in dataset.")
+                reporter.log(f"  ! Skipped: {_fig_path('22')} - No Hidden Gems found in dataset.")
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('22')} — {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('22')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
-    # --- Figure 23: Category Overlap — Euler / Venn Diagram ---
+    # --- Figure 23: Category Overlap - Euler / Venn Diagram ---
     try:
         """
         Physics-Strong is a TRUE catalytic-geometry axis, independent of model confidence:
         the top tercile of soft_catalytic_score (continuous SN2-geometry composite),
         falling back to mechanistic_score or SN2 angle. Pareto_Rank is deliberately NOT
-        used — it is built from Binding_Probability (near-constant ≈ 0.99) and confidence,
+        used - it is built from Binding_Probability (near-constant ≈ 0.99) and confidence,
         so it would make the Physics circle a second copy of the AI circle.
         """
         _phys_col22 = next((c for c in ["soft_catalytic_score", CFG.COL_MECH_S, CFG.COL_SN2] if c in df.columns), None)
@@ -6239,7 +6239,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                               arrowprops=dict(arrowstyle="->", color=_tt_col22,
                                               lw=1.1, shrinkA=0, shrinkB=3))
 
-            # Primary set labels — uniform size, bold, distinct filled-and-outlined box
+            # Primary set labels - uniform size, bold, distinct filled-and-outlined box
             _main_lbl_kw22 = dict(ha="center", va="center", fontsize=11,
                                   fontweight="bold", linespacing=1.25, zorder=6)
             ax22.text(2.15, 7.25, "Physics-Strong", color=CFG.VIS_ACCENT["blue"], **_main_lbl_kw22,
@@ -6262,7 +6262,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 (5.00, 5.30, _ABC,       CFG.VIS_INK["outline"],    "All three"),
             ]
             """
-            Second-layer region labels — lighter square boxes, name normal / count bold,
+            Second-layer region labels - lighter square boxes, name normal / count bold,
             visually subordinate to the primary set labels above.
             """
             for _rx22, _ry22, _rn22, _rc22, _rl22 in _region_data22:
@@ -6336,9 +6336,9 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         else:
-            reporter.log(f"  ! Skipped: {_fig_path('23')} — requires a catalytic-geometry column (soft_catalytic_score/mechanistic_score/SN2_Attack_Angle), a confidence column, and degrader_tier")
+            reporter.log(f"  ! Skipped: {_fig_path('23')} - requires a catalytic-geometry column (soft_catalytic_score/mechanistic_score/SN2_Attack_Angle), a confidence column, and degrader_tier")
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('23')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('23')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
     _fig23_multitarget(df, out_dir, reporter)
@@ -6382,10 +6382,10 @@ def _mm_nac_lines(ax_d, ax_a):
 
 
 def _mm_variance_by_model(df, out_dir, reporter):
-    """Fig 13 — per-Boltz-model SN2 distance/angle spread by tier (are the 5 models consistent?)."""
+    """Fig 13 - per-Boltz-model SN2 distance/angle spread by tier (are the 5 models consistent?)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log("  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png — variance CSV unavailable.")
+        reporter.log("  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png - variance CSV unavailable.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _models = sorted(str(m) for m in mv["model_name"].dropna().unique())
@@ -6405,9 +6405,9 @@ def _mm_variance_by_model(df, out_dir, reporter):
         if _ax.get_legend():
             _ax.get_legend().remove()
     ax_a.tick_params(axis="x", rotation=30)
-    # Model legend INSIDE the top panel (its upper band is empty — data sits at 2–4.5 Å); no title.
+    # Model legend INSIDE the top panel (its upper band is empty - data sits at 2–4.5 Å); no title.
     # The strict-NAC reference lines are drawn by _mm_nac_lines but sit outside seaborn's hue legend,
-    # so add them explicitly (CFG values, matching the dashed-line colours) — otherwise the lines show
+    # so add them explicitly (CFG values, matching the dashed-line colours) - otherwise the lines show
     # with no key.
     _dl = float(CFG.NAC_DIST_STRICT); _al = float(CFG.NAC_ANGLE_STRICT)
     _h = [Line2D([0], [0], marker="s", ls="", color=_mpal[i % len(_mpal)]) for i in range(len(_models))]
@@ -6425,12 +6425,12 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
     """Shared box+strip of per-model geometry for a high-quality subset (confidence / ipTM ≥ thr)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{num}_{fname}.png — variance CSV unavailable.")
+        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{num}_{fname}.png - variance CSV unavailable.")
         return
     if filt_col in mv.columns:
         mv = mv[pd.to_numeric(mv[filt_col], errors="coerce") >= thr]
     if mv.empty:
-        reporter.log(f"  ! Skipped: {num}_{fname}.png — no rows with {filt_col} ≥ {thr}.")
+        reporter.log(f"  ! Skipped: {num}_{fname}.png - no rows with {filt_col} ≥ {thr}.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _tpal = [TIER_PALETTE.get(t, CFG.VIS_INK["faint"]) for t in _tiers]   # each tier its own CFG colour
@@ -6455,13 +6455,13 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
 
 
 def _mm_variance_conf90(df, out_dir, reporter):
-    """Fig 14 — multi-model geometry variance, confidence ≥ 0.90 subset."""
+    """Fig 14 - multi-model geometry variance, confidence ≥ 0.90 subset."""
     _mm_variance_cut(df, out_dir, reporter, filt_col="confidence_score", thr=0.90,
                      num="14", fname="MultiModel_Geometry_Variance_conf90")
 
 
 def _mm_variance_iptm90(df, out_dir, reporter):
-    """Fig 15 — multi-model geometry variance, ipTM ≥ 0.90 subset."""
+    """Fig 15 - multi-model geometry variance, ipTM ≥ 0.90 subset."""
     _mm_variance_cut(df, out_dir, reporter, filt_col="iptm", thr=0.90,
                      num="15", fname="MultiModel_Geometry_Variance_iptm90")
 
@@ -6476,7 +6476,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
     # ── Companion thumbnail setup (shared by Figs 04b, 12b, 13b, 17b) ─────────
     # Source the PyMOL structure thumbnails from the MD-ready cohort (MD_Selected,
-    # SECTION 18) so only the ~9-10 complexes actually taken to MD are rendered —
+    # SECTION 18) so only the ~9-10 complexes actually taken to MD are rendered -
     # not all Tier_1A. Falls back to the top tier if the flag is absent (older CSV).
     _md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
     if _md_col in df.columns:
@@ -6535,7 +6535,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
             if (out_dir / folder / f"{name}.png").exists():
                 reporter.log(f"  ✔ Saved: {folder}/{name}.png")
         except Exception as _e:                                  # noqa: BLE001
-            reporter.log(f"  ! Skipped: {folder}/{name}.png — {type(_e).__name__}: {_e}")
+            reporter.log(f"  ! Skipped: {folder}/{name}.png - {type(_e).__name__}: {_e}")
             plt.close("all")
 
     _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers)
@@ -6558,7 +6558,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _panel(_jf_swimmer, "07_PFAS_Scope_and_Synthesis", "16_Swimmer_Top_Per_Tier")
     _panel(_jf_circos, "07_PFAS_Scope_and_Synthesis", "17_Circos_Ligand_Tier_Assignment")
 
-    # Step 8/8 — 08_Diagnostic_and_MultiModel_Trends (its own step, last folder on disk)
+    # Step 8/8 - 08_Diagnostic_and_MultiModel_Trends (its own step, last folder on disk)
     _diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
     _diag_dir.mkdir(parents=True, exist_ok=True)
     generate_additional_figures(df, _diag_dir, reporter)
@@ -6642,10 +6642,10 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         )
         top_proteins = protein_summary.head(25).set_index("prot")
 
-        # ── Figure 24a: stacked bar — top-25 proteins ────────────────────────
+        # ── Figure 24a: stacked bar - top-25 proteins ────────────────────────
         fig23a, ax = plt.subplots(figsize=(16, 9))
         """
-        Decoys are NOT degraded — exclude the Tier-5 decoy segment so the bar
+        Decoys are NOT degraded - exclude the Tier-5 decoy segment so the bar
         length is the true count of PFAS actually degraded. This keeps the
         x-axis label honest and makes the breadth ranking visible, instead of
         every bar hitting the panel maximum (full panel = degraders + decoy).
@@ -6696,7 +6696,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, reporter)
 
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('24')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('24')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -6716,7 +6716,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
 
         top_prots = bp.loc[bp["tier"] == top_tier, "prot"].unique()
         if len(top_prots) == 0:
-            reporter.log(f"  ! Skipped: {_fig_path('24b')} — no proteins reached {top_tier}")
+            reporter.log(f"  ! Skipped: {_fig_path('24b')} - no proteins reached {top_tier}")
             return
 
         # Degrader pairs (drop decoy) for the top-tier proteins
@@ -6742,7 +6742,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
 
         """
         Rank proteins: broadest PFAS coverage first (number degraded), then best
-        tier quality (mean tier rank, higher = stronger) — best degrader on top,
+        tier quality (mean tier rank, higher = stronger) - best degrader on top,
         weakest at the bottom.
         """
         order = (deg.assign(_is_top=(deg["tier"] == top_tier).astype(int))
@@ -6812,13 +6812,13 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
         plt.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close(fig)
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('24b')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('24b')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
 def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """
-    Figure 25: Extended Sankey — multiple geometric constraints → final tier.
+    Figure 25: Extended Sankey - multiple geometric constraints → final tier.
     Layout (up to 8 columns): All Complexes (thin) → Nuc Dist → Clamp ARG111 →
     Clamp ARG114 → Acid ASP134 → Base HIS277 → SN2 Angle → Final Tier.
     Columns absent from the data are silently dropped.
@@ -6832,7 +6832,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         d = _utils_mod.standardise_dataframe_tiers(df.copy(), CFG)
         # Drop any stale computed columns so re-assignment never raises "already exists"
         # Duplicate column labels make every subsequent assignment raise "cannot insert X, already
-        # exists" — pandas cannot address a name that resolves to more than one column. Collapse them
+        # exists" - pandas cannot address a name that resolves to more than one column. Collapse them
         # before anything is written.
         d = d.loc[:, ~d.columns.duplicated()].copy()
         for _stale24 in ["g_alpha", "g_nuc", "g_triad", "g_ang", "g_mech",
@@ -6841,7 +6841,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 d.drop(columns=[_stale24], inplace=True)
 
         """
-        Binning — each column mirrors a REAL production tier gate, with cut
+        Binning - each column mirrors a REAL production tier gate, with cut
         points taken straight from CFG (not hand-picked). The five redundant
         per-residue ligand distances are replaced by the actual rule checks:
         nucleophile distance · carboxylate clamp · halide stabilisation ·
@@ -6853,7 +6853,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
         # The score the tier gate actually keys on: raw geometry MINUS the graded chemistry and
         # containment penalties. Binning the raw mechanistic_score would make the column a
-        # non-sequitur — a complex could sit in the top band and still land in a low tier, with the
+        # non-sequitur - a complex could sit in the top band and still land in a low tier, with the
         # penalty that demoted it invisible to the reader.
         _mech_col_24 = ("mechanistic_score_effective"
                         if "mechanistic_score_effective" in d.columns else CFG.COL_MECH_S)
@@ -6863,7 +6863,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         The diagram follows the pipeline's actual decision, so the stream NARROWS: every complex
         enters at the left, each gate eliminates those that fail it, and what survives to the right
         is the MD-selected cohort. The eliminated complexes leave the diagram at the gate that
-        rejected them — they are not re-binned into the next column, which would draw a
+        rejected them - they are not re-binned into the next column, which would draw a
         classification rather than a screen and read as though nothing was ever rejected. The one
         number the figure exists to explain is how the screen gets from 58,056 complexes to a handful
         of MD systems, and that number is only visible if the stream is allowed to narrow.
@@ -6880,7 +6880,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                          np.nan) if "sn2_attack_angle_effective" in d.columns else _num24(CFG.COL_SN2, np.nan)
         _mv24 = _num24(_mech_col_24, np.nan)
 
-        _LOOSE = CFG.TIER_ORDER[3]          # Tier_2B — the loosest degrader rung
+        _LOOSE = CFG.TIER_ORDER[3]          # Tier_2B - the loosest degrader rung
         _gates_24 = [
             ("g_alpha", _sc24 >= 1.0,
              "α-Carbon Attack", "(reactive centre)", CFG.VIS_ACCENT_DEEP["green_alt"], "No α-attack"),
@@ -6896,22 +6896,22 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
         """
         A rejected complex EXITS at the gate that killed it. It is drawn once, as a dead-end node in
-        that gate's column, and then it is gone — no node and no ribbon in any later column, because
+        that gate's column, and then it is gone - no node and no ribbon in any later column, because
         the ribbon loop skips a category that has no node. Carrying a rejected band all the way to
         the right would say the opposite of what the pipeline does: it would show 58,056 complexes
         arriving at the end, which is precisely the impression this figure has to destroy.
 
-        Each gate therefore has exactly two nodes — the survivors, who continue, and the rejects,
-        who stop — and the surviving stream is visibly thinner at every step.
+        Each gate therefore has exactly two nodes - the survivors, who continue, and the rejects,
+        who stop - and the surviving stream is visibly thinner at every step.
         """
         """
-        EVERY complex is tiered — the ladder assigns a tier to all 58,056, including the ones that
+        EVERY complex is tiered - the ladder assigns a tier to all 58,056, including the ones that
         fail a catalytic gate (they land in Tier_3/4/5_Decoy). So the gates do not delete anyone: a
         complex that fails one drops into a FADED 'already rejected' lane, carries on through the
         remaining gate columns in that lane, and still arrives at its real tier. The dead-end node at
         each gate names WHICH gate rejected it and how many.
 
-        The tier column therefore holds all 58,056, distributed across the tiers — which is what the
+        The tier column therefore holds all 58,056, distributed across the tiers - which is what the
         pipeline actually produces. Only the MD-ready cohort continues past it; everything else stops
         at its tier, so the final column is the handful of complexes taken to simulation.
 
@@ -6935,7 +6935,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 + ([_REJLANE24] if (d[_key24] == _REJLANE24).any() else [])
             _stage_cols_24.append((_key24, _ord24, _ttl24, _sub24, _bg24, _rej_lbl24))
 
-        # Every complex carries its real tier — the ladder assigns one to all of them.
+        # Every complex carries its real tier - the ladder assigns one to all of them.
         d["tier_cat"] = d[CFG.COL_TIER].astype(str)
         _tier_ord_24 = [t for t in CFG.TIER_ORDER if (d["tier_cat"] == t).any()]
 
@@ -7000,7 +7000,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             total_h = _BH_24 - _BGAP_24 * max(len(nz) - 1, 0)
             """
             Node heights are scaled against the WHOLE corpus, not against the column's own sum.
-            Every intermediate column holds all 58,056 complexes, so the two agree there — but the
+            Every intermediate column holds all 58,056 complexes, so the two agree there - but the
             final column holds only the MD-selected handful, and normalising it to itself would blow
             4 complexes up to the full height of the figure, drawn exactly as large as the 22,184 of
             Tier_3 beside it. The point of the last column is how FEW survive; it must be a sliver.
@@ -7008,7 +7008,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             total_c = max(_total_j_24, 1)
             """
             Stack TOP-DOWN so the first label in `order` sits at the top of the
-            column (best category on top — Tier_1A, ≤3.0Å, ≥170°, …).
+            column (best category on top - Tier_1A, ≤3.0Å, ≥170°, …).
             """
             pos = {}
             y = _BY0_24 + _BH_24
@@ -7035,7 +7035,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _ha = max(_ha, _mv) if _ha > 0 else _ha
             _hb = max(_hb, _mv) if _hb > 0 else _hb
             """
-            Tuck both ends a hair INTO the node boxes so the junction is flush —
+            Tuck both ends a hair INTO the node boxes so the junction is flush -
             the boxes (higher zorder) cover the overlap, leaving no gap/overflow.
             """
             _pad24 = 0.002
@@ -7081,7 +7081,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             """
             lbl_col = _auto_label_colour(box_color)
             """
-            Show the actual COUNT (not %) — a rare class like Tier_1A (n=8) must
+            Show the actual COUNT (not %) - a rare class like Tier_1A (n=8) must
             read "8", never a rounded "0.0%".
             """
             _cnt_s = f"{int(count):,}"
@@ -7118,7 +7118,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                          int(_ccnt_24.get(_cc24, {}).get(lbl, 0)),
                          _clr_24(_cc24, lbl))
 
-        # ── Column header banners — extra gap so they clear the node content ──
+        # ── Column header banners - extra gap so they clear the node content ──
         _hdr_gap_24 = 0.078   # wider gap → more separation between content and headers
         _hdr_y_24   = _BY0_24 + _BH_24 + _hdr_gap_24
         _hbox_24    = []      # (left, right) x-extent of each header banner
@@ -7146,12 +7146,12 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             ax24.text(_hx + _cbw / 2, _hdr_y_24 + 0.012, _hsub,
                       ha="center", va="center", fontsize=12, color=CFG.VIS_TINT["blue"], zorder=8)
 
-        # ── Flow arrows between headers — anchored exactly at banner edges ────
+        # ── Flow arrows between headers - anchored exactly at banner edges ────
         _ya24 = _hdr_y_24 + 0.030
         for _ci24 in range(_n_cols_24 - 1):
             """
             Tail flush on this banner's right edge, head flush on next banner's
-            left edge — arrow touches both boxes (no gap, matches box shape).
+            left edge - arrow touches both boxes (no gap, matches box shape).
             """
             _x_start = _hbox_24[_ci24][1]
             _x_end   = _hbox_24[_ci24 + 1][0]
@@ -7217,8 +7217,8 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 _so24[s0] = y0a + _rhs
                 _to24[t0] = y0b + _rht
                 """
-                The ribbon's weight follows the complex's fate. A flow that is still ALIVE — leaving a
-                Pass node and not entering a dead end — is drawn in its tier colour at full strength.
+                The ribbon's weight follows the complex's fate. A flow that is still ALIVE - leaving a
+                Pass node and not entering a dead end - is drawn in its tier colour at full strength.
                 A flow that has been rejected, whether it is falling into a dead end now or drifting
                 along in the already-rejected lane, is drawn pale and translucent so it recedes. The
                 reader then follows the surviving candidates without having to read a single label.
@@ -7235,7 +7235,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                          _rc24, _ra24, zorder=2 + _ri)
 
         """
-        No legend or title — the Final Tier column already carries the tier names and colours.
+        No legend or title - the Final Tier column already carries the tier names and colours.
         """
         plt.tight_layout(pad=0.3)
         plt.savefig(out_dir / "Figure_25_Sankey_Workflow.png",
@@ -7243,21 +7243,21 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close(fig24)
 
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('25')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('25')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
 def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
-    """Figure 26a–25e — PFAS chain-length selectivity saved as five separate PNGs."""
+    """Figure 26a–25e - PFAS chain-length selectivity saved as five separate PNGs."""
     try:
         _req25 = ["total_fluorine_count", CFG.COL_SN2, CFG.COL_CONF, CFG.COL_TIER]
         _miss25 = [c for c in _req25 if c not in df.columns]
         if _miss25:
-            reporter.log(f"  ! Skipped: {_fig_path('26')} — missing columns {_miss25}")
+            reporter.log(f"  ! Skipped: {_fig_path('26')} - missing columns {_miss25}")
             return
 
         # MD_Selected is carried through: subsetting to _req25 alone drops it, and the MD stars then
-        # silently never draw — the figure looks finished and is simply missing its point.
+        # silently never draw - the figure looks finished and is simply missing its point.
         _keep25 = _req25 + [c for c in ("MD_Selected", "Control_Ref", "is_control") if c in df.columns]
         _d25 = df[_keep25].copy()
         for _c25 in _req25[:-1]:
@@ -7265,10 +7265,10 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _d25 = _d25.dropna(subset=_req25)
         _d25 = _d25[_d25[CFG.COL_TIER].isin(TIER_ORDER_LOGIC)]
         if len(_d25) < 30:
-            reporter.log(f"  ! Skipped: {_fig_path('26')} — insufficient data after filtering")
+            reporter.log(f"  ! Skipped: {_fig_path('26')} - insufficient data after filtering")
             return
 
-        # PFAS chain-length bins (F-count as proxy: C4≈9F, C6≈13F, C8≈17F, C10≈21F) — from CFG (SSOT)
+        # PFAS chain-length bins (F-count as proxy: C4≈9F, C6≈13F, C8≈17F, C10≈21F) - from CFG (SSOT)
         _f25_bins   = list(CFG.VIS_PFAS_FCOUNT_BINS)
         # Labels paired with CFG.VIS_PFAS_FCOUNT_BINS (co-located in CFG so edits can't drift apart).
         _f25_labels       = list(CFG.VIS_PFAS_SIZE_LABELS)
@@ -7373,7 +7373,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         axA.set_ylabel("SN2 Attack Angle (°)", )
         # One row: the entry count is the tiers plus the rolling median plus the MD stars, so the
         # column count has to include all three or the legend wraps. markerscale shrinks the MD star
-        # to the legend's own scale — the plotted star is deliberately large to be findable in a
+        # to the legend's own scale - the plotted star is deliberately large to be findable in a
         # 55,000-point field, which is the wrong size for a legend swatch.
         _nleg25 = len(axA.get_legend_handles_labels()[0])
         axA.legend(loc="upper left", bbox_to_anchor=(0.0, 1.05),
@@ -7385,7 +7385,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close(fig25a)
 
         """
-        Figure 26b: ONE figure, two stories per chain-length bin — a left
+        Figure 26b: ONE figure, two stories per chain-length bin - a left
         stacked bar (mechanistic outcome) and a right stacked bar (degrader
         tier) placed side by side within each bin group.
         """
@@ -7406,7 +7406,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _xlabels_25 = [_f25_labels_clean[_f25_labels.index(lb)] if lb in _f25_labels else str(lb)
                        for lb in _oc_pct25.index.tolist()]
 
-        # Outcome palette + per-bin colours — sourced from CFG (§ 8.9, § 8.9b).
+        # Outcome palette + per-bin colours - sourced from CFG (§ 8.9, § 8.9b).
         _oc25_colors_b = dict(CFG.OUTCOME_COLOUR)
         _bin_ttlette_25 = list(CFG.PFAS_SIZE_BIN_COLOUR)
         _bin_cols_25 = [_bin_ttlette_25[i % len(_bin_ttlette_25)] for i in range(len(_oc_pct25))]
@@ -7415,7 +7415,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _xB, _wB, _offB = np.arange(len(_oc_pct25)), 0.27, 0.19   # bars 75% of prior width
 
         """
-        Master container bar per x-category (like Fig 19a) — faint bin-coloured
+        Master container bar per x-category (like Fig 19a) - faint bin-coloured
         fill + matching coloured outline, holding both child stacked bars.
         """
         from matplotlib.colors import to_rgba as _to_rgba25
@@ -7488,16 +7488,16 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _ti_h25 = [_P25b(facecolor=TIER_PALETTE.get(t, CFG.VIS_INK["faint"]), edgecolor="white",
                          linewidth=0.5, label=t) for t in _tier_pct25.columns]
         """
-        Two separate, clearly-titled legends so each bar maps to its OWN key —
+        Two separate, clearly-titled legends so each bar maps to its OWN key -
         the left bar and the right bar use different category schemes (and some
         colours coincide), so a single merged legend was ambiguous.
         Both legends on ONE row: outcome (left bar) left-anchored, tier (right
-        bar) right-anchored — saves vertical space.
+        bar) right-anchored - saves vertical space.
         """
         _leg_oc25 = axB.legend(
             handles=_oc_h25, labels=[h.get_label() for h in _oc_h25],
             loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=len(_oc_h25),
-             title="Left bar — mechanistic outcome", 
+             title="Left bar - mechanistic outcome", 
              fancybox=True)
         _leg_oc25.get_title().set_fontweight("bold")
         _leg_oc25._legend_box.align = "left"
@@ -7505,7 +7505,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _leg_ti25 = axB.legend(
             handles=_ti_h25, labels=[h.get_label() for h in _ti_h25],
             loc="lower right", bbox_to_anchor=(1.0, 1.01), ncol=len(_ti_h25),
-             title="Right bar — degrader tier", 
+             title="Right bar - degrader tier", 
              fancybox=True)
         _leg_ti25.get_title().set_fontweight("bold")
         _leg_ti25._legend_box.align = "right"
@@ -7519,10 +7519,10 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         Figure 26c: does FAcDs prefer smaller PFAS? The question is one of CATALYTIC
         competence, not model confidence, so the LEFT axis carries catalytic-competence
         readouts per CARBON-NUMBER group (x = C2…Cn, fluorine counts in parentheses):
-          • soft_catalytic_score (box plots) — the continuous sigmoid composite of
+          • soft_catalytic_score (box plots) - the continuous sigmoid composite of
             nucleophile reach, SN2 angle and triad relay; the distribution of mechanistic
             plausibility at each chain length.
-          • degrader fraction (line) — the share of poses reaching a degrader tier
+          • degrader fraction (line) - the share of poses reaching a degrader tier
             (is_degrader), i.e. the share catalytically competent at that size.
         Boltz model confidence is plotted only as a CONTROL (faint grey median line): it
         measures structure-prediction self-certainty, not catalysis, and declines with
@@ -7537,24 +7537,24 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _smi25 = Path.cwd() / CFG.INPUT_SMILES
         _LP25  = _utils_mod.compute_ligand_properties(_smi25)
         if not _LP25:
-            reporter.log(f"  ! Skipped: {_fig_path('26c')} — ligand SMILES not found ({_smi25})")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} - ligand SMILES not found ({_smi25})")
             raise RuntimeError("ligand properties unavailable")
         _lcol25 = next((c for c in [CFG.COL_LIG, CFG.COL_LIG, "ligand"]
                         if c in df.columns), None)
         if _lcol25 is None:
-            reporter.log(f"  ! Skipped: {_fig_path('26c')} — ligand column not found in data")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} - ligand column not found in data")
             raise RuntimeError("ligand column unavailable")
         """
         Catalytic-competence columns: the continuous soft_catalytic_score (0–1) and the
         per-pose degrader flag. Confidence is the labelled control. mechanistic_score is
-        deliberately not used here — it saturates near 1.0 within the degrader tiers, so
+        deliberately not used here - it saturates near 1.0 within the degrader tiers, so
         it has no spread to show a size trend (it is a gate, not a graded competence axis).
         """
         _soft_c25 = "soft_catalytic_score" if "soft_catalytic_score" in df.columns else None
         _conf_c25 = CFG.COL_CONF if CFG.COL_CONF in df.columns else None
         _deg_c25  = "is_degrader" if "is_degrader" in df.columns else None
         if _soft_c25 is None and _deg_c25 is None:
-            reporter.log(f"  ! Skipped: {_fig_path('26c')} — no catalytic-competence column (soft_catalytic_score / is_degrader)")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} - no catalytic-competence column (soft_catalytic_score / is_degrader)")
             raise RuntimeError("competence column unavailable")
         """
         _d25 was column-subset to numeric requirements (no ligand/score columns);
@@ -7573,7 +7573,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                              .isin(["true", "1", "1.0", "yes"]))
         _d25c = _d25c.dropna(subset=["_nC", "_mw"])
         if _d25c.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('26c')} — no ligand property matches in data")
+            reporter.log(f"  ! Skipped: {_fig_path('26c')} - no ligand property matches in data")
         else:
             _groups25 = sorted(_d25c["_nC"].unique())
             _present25 = set(_d25c[_lcol25].astype(str))
@@ -7608,13 +7608,13 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 _handles25.append(_P25(facecolor=_SOFT_F, edgecolor=_SOFT_C,
                                        label="Soft catalytic score (competence distribution)"))
                 # Explicit legend entry for the in-box line so it is not confused with the
-                # connected mean below — the box centre-line is the MEDIAN, not the mean.
+                # connected mean below - the box centre-line is the MEDIAN, not the mean.
                 from matplotlib.lines import Line2D as _L2D25
                 _handles25.append(_L2D25([0], [0], color=_SOFT_C, lw=1.8,
                                          label="Median (box centre line)"))
 
                 # LEFT axis: connected MEAN of the competence boxes (size trend).
-                # Dark-orange dashed diamonds — deliberately distinct from the purple
+                # Dark-orange dashed diamonds - deliberately distinct from the purple
                 # degrader-fraction line and the green box bodies.
                 _smean25 = [float(np.mean(v)) if len(v) else np.nan for v in _sb]
                 _mln25, = axL.plot(_pos25, _smean25, color=CFG.VIS_RAMP["orange"][2], lw=2.2, ls="--",
@@ -7631,12 +7631,12 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                                  markersize=6, zorder=6, label="Degrader fraction (is_degrader)")
                 _handles25.append(_dln)
 
-            # LEFT axis: Boltz confidence — CONTROL only (not catalytic)
+            # LEFT axis: Boltz confidence - CONTROL only (not catalytic)
             if "_conf" in _d25c.columns:
                 _cmed = [float(np.median(v)) if len(v) else np.nan for v in _grp25("_conf")]
                 _cln, = axL.plot(_pos25, _cmed, color=_CTRL_C, lw=1.6, ls=(0, (5, 3)),
                                  marker="D", markersize=4, alpha=0.85, zorder=4,
-                                 label="Boltz confidence (control — prediction artefact, not catalytic)")
+                                 label="Boltz confidence (control - prediction artefact, not catalytic)")
                 _handles25.append(_cln)
 
             # Competence + degrader fraction carry the size story; molecular weight is not
@@ -7660,7 +7660,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
             """
             Master container bar per carbon group: very light tint + faint border
-            — kept subtle so the box plots stay the visual focus.
+            - kept subtle so the box plots stay the visual focus.
             """
             from matplotlib.colors import to_rgba as _to_rgba25c
             _bin_pal25  = list(CFG.PFAS_SIZE_BIN_COLOUR)
@@ -7684,7 +7684,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             plt.close(fig25c)
 
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('26')} — {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('26')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -7702,19 +7702,19 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     suite does not surface directly: whether each ligand physically fits its pocket
     (active-site volume vs ligand volume, occupancy, fit rate) and how the per-job
     Boltz-2 multi-model agreement (model_degrader_consensus) tracks both confidence
-    and the final degrader tier. They are intentionally diagnostic — sourced from the
+    and the final degrader tier. They are intentionally diagnostic - sourced from the
     pocket-fit columns added by 02_Production (active_site_volume, ligand_volume,
-    pocket_occupancy, fit_ratio, ligand_fits) — and follow the same house style as the
+    pocket_occupancy, fit_ratio, ligand_fits) - and follow the same house style as the
     main figures: CFG palettes, median markers, 95% CI overlays and per-tier n counts.
 
     Each panel is guarded independently so a single missing column or empty subset
     skips only that figure, never the whole folder.
     """
     from scipy import stats as _sc_stats
-    reporter.section("Step 8/8 — 08_Diagnostic_and_MultiModel_Trends · diagnostic + multi-model trends")
+    reporter.section("Step 8/8 - 08_Diagnostic_and_MultiModel_Trends · diagnostic + multi-model trends")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # CFG-sourced colours (single source of truth — config §8).
+    # CFG-sourced colours (single source of truth - config §8).
     _fit_col   = CFG.OUTCOME_COLOUR.get("Substrate", CFG.VIS_ACCENT_DEEP["teal"])
     _nofit_col = CFG.OUTCOME_COLOUR.get("Potential Inhibitor", CFG.VIS_ACCENT_DEEP["orange_deepest"])
 
@@ -7821,13 +7821,13 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                       alpha=0.95, linewidth=1.0),
                             arrowprops=dict(arrowstyle="->", color=_t1c, lw=1.4))
             """
-            Each axis is scaled to ITS OWN data. Forcing a shared limit and an equal aspect — which a
-            y = x boundary line invites — sized the ligand axis by the POCKET volumes: cavities reach
+            Each axis is scaled to ITS OWN data. Forcing a shared limit and an equal aspect - which a
+            y = x boundary line invites - sized the ligand axis by the POCKET volumes: cavities reach
             ~1,700 Å³ while almost every ligand sits below 500 Å³, so two thirds of the panel was
             empty and the data was crushed into a band along the bottom.
 
             The y = x boundary is a locus, not a 45° line: it marks where the ligand exactly fills the
-            cavity, and it remains exactly that under independent scales — it simply becomes steep,
+            cavity, and it remains exactly that under independent scales - it simply becomes steep,
             which is the honest picture when ligands are an order of magnitude smaller than the
             pockets holding them. That is the finding, not a plotting artefact to be hidden by
             padding the axis until the line looks diagonal.
@@ -7884,10 +7884,10 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         """
         TWO coverage measures per carbon number, on one panel:
 
-          · pocket_containment_cavity — the fraction of the ligand the PROTEIN CAVITY encloses,
+          · pocket_containment_cavity - the fraction of the ligand the PROTEIN CAVITY encloses,
             by ray-cast buriedness against every protein heavy atom. Drawn as the VIOLIN: it is the
             full distribution, and its shape is the story (a long low tail = the chain is spilling).
-          · pocket_containment_site8 — the fraction of the ligand inside the contact shell of the
+          · pocket_containment_site8 - the fraction of the ligand inside the contact shell of the
             EIGHT mapped catalytic residues (CFG §2.5, positions taken from the ranked sheet's
             Mapped_* columns, never hardcoded). Drawn as the BOX inside the violin: it is the
             reactive-shell engagement, and its median/IQR is what the tier gate cares about.
@@ -7949,17 +7949,17 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _mcav = [float(np.mean(v)) if len(v) else np.nan for v in _cav_by]
             _ms8 = [float(np.mean(v)) if len(v) else np.nan for v in _s8_by]
             ax.plot(_pos02, _mcav, color=_CAV02, lw=2.2, marker="o", ms=6,
-                    mec="white", mew=0.8, zorder=7, label="Mean — whole-cavity coverage")
+                    mec="white", mew=0.8, zorder=7, label="Mean - whole-cavity coverage")
             ax.plot(_pos02, _ms8, color=CFG.VIS_ACCENT_DEEP["orange_mid"], lw=2.2, ls="--", marker="D", ms=6,
                     mec="white", mew=0.8, zorder=7,
-                    label="Mean — 8-residue active-site coverage")
+                    label="Mean - 8-residue active-site coverage")
 
             from matplotlib.patches import Patch as _P02
             ax.legend(handles=[
                 _P02(facecolor=_CAV02, alpha=0.35, edgecolor=_CAV02,
-                     label="Whole-cavity coverage (violin — full distribution)"),
+                     label="Whole-cavity coverage (violin - full distribution)"),
                 _P02(facecolor=_S802, alpha=0.55, edgecolor=CFG.VIS_RAMP["orange"][4],
-                     label="8-residue active-site coverage (box — median · IQR)"),
+                     label="8-residue active-site coverage (box - median · IQR)"),
                 *ax.get_legend_handles_labels()[0],
             ], loc="lower left",   ncol=2)
 
@@ -8037,7 +8037,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     """
     Per-tier distribution of the Boltz-2 multi-model degrader consensus (fraction
     of the 5 diffusion models that independently called the complex a degrader),
-    with strip overlay, tier mean (diamond), 95% CI bar and median annotation —
+    with strip overlay, tier mean (diamond), 95% CI bar and median annotation -
     the multi-model agreement signal underlying tier assignment.
     """
     try:
@@ -8144,11 +8144,11 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     """
     Two tier-coloured scatter panels relating the AI, geometric and competence signals
     per complex:
-      A. Boltz model confidence (x) vs catalytic competence (y) — whether confident
+      A. Boltz model confidence (x) vs catalytic competence (y) - whether confident
          predictions are also catalytically competent, or whether AI certainty and
          catalysis diverge.
       B. Mechanistic score (x, geometric/machinery quality) vs catalytic competence
-         (y) — whether better active-site geometry translates into higher competence,
+         (y) - whether better active-site geometry translates into higher competence,
          the coupling that drives the within-tier ranking. Both axes are continuous
          0–1 scores, so the relationship reads as a clean cloud + binned-median trend.
     """
@@ -8168,8 +8168,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                _func_lbl, "Catalytic competence score", None))
         if _qc_panels:
             """
-            Both panels plot the SAME quantity on y — the catalytic competence score, on the same
-            0–1 scale — so the axis is drawn once and shared. Repeating an identical scale beside
+            Both panels plot the SAME quantity on y - the catalytic competence score, on the same
+            0–1 scale - so the axis is drawn once and shared. Repeating an identical scale beside
             itself spends horizontal space on nothing and invites the reader to check whether the two
             axes really are the same. Sharing it also locks the two clouds to a common vertical
             reference, which is the only way the panels can honestly be compared by eye.
@@ -8230,12 +8230,12 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
         if fig is not None:
             plt.close(fig)
 
-    # ── Figure 06: Size preference — competence distribution & viability vs ligand size ──
+    # ── Figure 06: Size preference - competence distribution & viability vs ligand size ──
     """
     FAcD is a small-substrate (haloacetate) hydrolase. Single-panel size-preference
     summary in the Figure-26c visual grammar: per-size-bin distribution of the effective
     mechanistic score (green boxes), the connected bin means (dark-orange size trend), the
-    Tier_1A viability floor, and — on the right axis — the catalytic hit-rate (fraction
+    Tier_1A viability floor, and - on the right axis - the catalytic hit-rate (fraction
     reaching Tier_2A+) and the mean pocket_containment_cavity that drives the demotion. The
     reliable size axis is ligand_max_extent against the protein-aware cavity containment, NOT
     the convex-hull pocket_occupancy proxy.
@@ -8282,7 +8282,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 _b.set(facecolor=_SOFT_F, alpha=0.85, edgecolor=_SOFT_C, linewidth=1.0)
             for _w in _bp["whiskers"] + _bp["caps"]:
                 _w.set(color=_SOFT_C, linewidth=1.0)
-            # Connected box means (dark-orange dashed diamonds — the size trend).
+            # Connected box means (dark-orange dashed diamonds - the size trend).
             _mln08, = axL.plot(_pos, _mean, color=CFG.VIS_RAMP["orange"][2], lw=2.2, ls="--", marker="D",
                                markersize=7, markeredgecolor="white", markeredgewidth=0.8,
                                zorder=7, label="Mean effective mechanistic score")
@@ -8330,7 +8330,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     # ── Figure 07: Reactive-centre engagement with the 8 catalytic residues vs size ──
     """
     Why FAcD favours small substrates is NOT that large PFAS cannot reach the catalytic
-    machinery — they can (the reactive carbon still lands within van-der-Waals attack
+    machinery - they can (the reactive carbon still lands within van-der-Waals attack
     distance of the nucleophile). It is that the FULL catalytic constellation cannot fire
     at once: reactive-C→nucleophile contact AND a productive SN2 backside angle AND the
     effective-mechanistic viability floor must hold simultaneously, and that collapses with
@@ -8339,7 +8339,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     productive attack-distance window, over the IQR spread of all eight catalytic-residue
     distances (999-sentinels dropped). Right axis (0–1): the strict 'properly positioned'
     fraction (collapses, tracks the catalytic hit-rate), the loose 'reaches nucleophile'
-    fraction (stays high — necessary, not sufficient), mean effective mechanistic score,
+    fraction (stays high - necessary, not sufficient), mean effective mechanistic score,
     and the CFG.TIER_MECH_MIN floors. Carbon number is computed from the SMILES panel via
     utils.compute_ligand_properties; nothing is hardcoded.
     """
@@ -8393,7 +8393,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                           for g in _grps09]
 
                 fig, axL = plt.subplots(figsize=(15, 8.2))
-                _BAND09 = CFG.VIS_RAMP["purple"][1]     # 8-residue spread — distinct visible violet
+                _BAND09 = CFG.VIS_RAMP["purple"][1]     # 8-residue spread - distinct visible violet
                 axL.fill_between(_pos09, _shlo, _shhi, color=_BAND09, alpha=0.22, zorder=0,
                                  label="8-residue distance spread (IQR)")
                 axL.axhspan(_PROD_LO, _PROD_HI, color=CFG.VIS_ACCENT_DEEP["clover"], alpha=0.10, zorder=0)
@@ -8493,7 +8493,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
 
 def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """
-    Diagnostic 10 — does the diffusion ensemble AGREE about the elite hits?
+    Diagnostic 10 - does the diffusion ensemble AGREE about the elite hits?
 
     Every complex is predicted several times (CFG.BOLTZ_DIFFUSION_SAMPLES independent diffusion
     samples). model_degrader_consensus is the fraction of those samples that independently reach a
@@ -8501,7 +8501,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     property of the protein-ligand pair, or one lucky sample out of five?
 
     This matters more than it looks. The tier is assigned to the single representative pose, so a
-    complex whose consensus is 0.2 got its elite label from ONE sample while four others disagreed —
+    complex whose consensus is 0.2 got its elite label from ONE sample while four others disagreed -
     a coin-flip dressed as a result. If the elite tiers are not consensus-backed, the headline claim
     is a sampling artefact, and the reader is entitled to see that in a figure rather than infer it.
 
@@ -8593,13 +8593,13 @@ Eight panels merged in from the two more_Plots prototypes, each taken from which
 it best (both were rendered and reviewed side by side before selection).
 
 The prototypes define helpers of the SAME NAME with DIFFERENT bodies (_save, _legend_with_stats), and
-each defines a phylogeny figure — of which BOTH are wanted. Everything is therefore namespaced by
+each defines a phylogeny figure - of which BOTH are wanted. Everything is therefore namespaced by
 origin (_xn_ = newer prototype, _xo_ = older) rather than folded into one set of helpers: a shared
 namespace would silently hand one version's figure the other version's helper, and the result would
 look plausible and be wrong.
 
 The prototypes' raw filenames (Figure_1_…, Figure_05C_…, mixed numbering and letter suffixes) are
-replaced by the pipeline's convention — sequential 01-08 with descriptive names.
+replaced by the pipeline's convention - sequential 01-08 with descriptive names.
 """
 
 _xn_STANDARD_AA = {
@@ -8620,8 +8620,8 @@ FAcD attacks with an ASPARTATE and nothing else. The carboxylate's two oxygens a
 can be the nucleophile; WHICH aspartate it is varies by variant, and 02 records that per complex as
 Mapped_Nucleophile in the ranked CSV.
 
-There is no table of candidate residue types here on purpose. A generic ASP/GLU/SER/THR/CYS list — the
-kind a general-purpose structure tool ships with — let a SERINE win the geometry contest on 4 of 30
+There is no table of candidate residue types here on purpose. A generic ASP/GLU/SER/THR/CYS list - the
+kind a general-purpose structure tool ships with - let a SERINE win the geometry contest on 4 of 30
 Tier_4 complexes (SER147, SER149, SER163). A serine hydroxyl is a different enzyme's mechanism. The
 angle reported was geometrically real and mechanistically meaningless, which is the worst kind of wrong:
 it looks like data.
@@ -8737,7 +8737,7 @@ def _xn_geometry_rank(distance_A: float, angle_deg: float) -> Tuple[float, float
 def _xn_compute_sn2_geometry(cif_path: Path, nuc_resnum: int | None = None) -> _xn_GeometryResult:
     """The best SN2 geometry in one model, measured AT THE CATALYTIC NUCLEOPHILE.
 
-    THE NUCLEOPHILE IS ONE RESIDUE. FAcD attacks with an ASPARTATE — the residue 02 mapped for this
+    THE NUCLEOPHILE IS ONE RESIDUE. FAcD attacks with an ASPARTATE - the residue 02 mapped for this
     protein by global alignment (Mapped_Nucleophile: Asp110, Asp112, Asp109 …). Scanning the whole
     protein for whichever ASP/GLU/SER/THR/CYS scores best on distance and angle lets a residue that does
     no catalysis win the contest: measured on the Tier_4 cohort it picked a SERINE in 4 of 30 complexes
@@ -8798,7 +8798,7 @@ def _xn_compute_sn2_geometry(cif_path: Path, nuc_resnum: int | None = None) -> _
     )
 
 def _xn_empty_geometry(status: str) -> _xn_GeometryResult:
-    """The sentinel result for a model with no measurable SN2 geometry — every field NaN, never 0.0."""
+    """The sentinel result for a model with no measurable SN2 geometry - every field NaN, never 0.0."""
     return _xn_GeometryResult(
         sn2_distance_A=math.nan,
         sn2_angle_deg=math.nan,
@@ -8827,7 +8827,7 @@ _ALLOW_VARIANCE_COMPUTE = True
 
 _xn_STRIP_MAX_PER_GROUP = 250
 
-_xn__RNG = np.random.default_rng(int(CFG.ANALYSIS_SEED))   # CFG has no RANDOM_SEED — that branch was always 42
+_xn__RNG = np.random.default_rng(int(CFG.ANALYSIS_SEED))   # CFG has no RANDOM_SEED - that branch was always 42
 
 
 
@@ -8880,7 +8880,7 @@ def _xn__fmt_p(p: float) -> str:
 def _ext_match_03_style(fig) -> None:
     """Bring an extended-analysis panel onto 03's typography before it is written.
 
-    The merged prototypes never set label or tick fonts — they inherited whatever rcParams were in
+    The merged prototypes never set label or tick fonts - they inherited whatever rcParams were in
     force, which in their own sandbox was seaborn's scaled theme and here is 03's. The result is a
     folder whose axis labels are a different size and colour from every other figure in the set, and
     a reader flicking between folders sees two typefaces and wonders which is authoritative.
@@ -8916,7 +8916,7 @@ def _ext_match_03_style(fig) -> None:
         A tier tick takes its TIER'S colour, as it does in every other figure in the set. The tick
         and the box above it then say the same thing twice, in the same language: the reader can go
         from a colour in the plot to a name on the axis without consulting a key. Ticks that are not
-        tier names (a carbon number, a ligand) stay black — colouring them would imply an encoding
+        tier names (a carbon number, a ligand) stay black - colouring them would imply an encoding
         that does not exist.
         """
         for _t in _ax.get_xticklabels():
@@ -8955,7 +8955,7 @@ def _ext_match_03_style(fig) -> None:
 def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
     """Persist a figure as a PNG at the pipeline's publication resolution, then free its memory.
 
-    The DPI comes from CFG.VIS_FIGURE_DPI — the same value every other step renders at, so a
+    The DPI comes from CFG.VIS_FIGURE_DPI - the same value every other step renders at, so a
     sandbox figure and a Step-03 figure are the same physical object at the same scale.
     """
     _ext_match_03_style(fig)
@@ -8968,7 +8968,7 @@ def _xn__panel(ax, letter: str) -> None:
     """No-op: panel letters are not drawn.
 
     No other figure in this set carries an (A)/(B) tag, and a lettering convention that appears in one
-    figure and nowhere else is noise — the reader assumes it means something.
+    figure and nowhere else is noise - the reader assumes it means something.
     """
     return
 
@@ -9009,7 +9009,7 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order, reg_nam
 
     reg_name is the name the test is REGISTERED under (defaults to val_col). Callers that pass a
     renamed working column (e.g. every pillar copied to 'y') must pass the real column here, or all
-    their tests collapse onto one registry key ('Kruskal-Wallis — y across tier') and only the last
+    their tests collapse onto one registry key ('Kruskal-Wallis - y across tier') and only the last
     survives the BH-family dedup."""
     _reg = reg_name or val_col
     groups = [sub.loc[sub[group_col] == t, val_col].dropna().values for t in order]
@@ -9022,9 +9022,9 @@ def _xn__kruskal(sub: pd.DataFrame, group_col: str, val_col: str, order, reg_nam
     n = sum(len(g) for g in groups)
     eps2 = (H - len(groups) + 1) / (n - len(groups)) if n > len(groups) else np.nan
     # Register so this on-panel p pays the same BH multiplicity toll as the battery's tests and appears
-    # in 06_Statistical_Tests.csv — otherwise a reader cannot discover it was run. reg_name keeps the
+    # in 06_Statistical_Tests.csv - otherwise a reader cannot discover it was run. reg_name keeps the
     # call sites (geometry / binding / the four pillars) distinct in the family.
-    _register_p(f"Kruskal-Wallis — {_reg} across {group_col}", "03_Extended_Panels",
+    _register_p(f"Kruskal-Wallis - {_reg} across {group_col}", "03_Extended_Panels",
                 float(H), int(n), float(p),
                 eps_sq=(round(float(eps2), 4) if np.isfinite(eps2) else None))
     return f'Kruskal–Wallis  H = {H:,.0f}   {_xn__fmt_p(p)}   ε² = {eps2:.2f}'
@@ -9059,8 +9059,8 @@ def _xn__gate_lines_distance(ax) -> None:
                    alpha=0.9, zorder=4)
         """
         The rule carries a LETTER, not a sentence. 'Tier_1A ≤3.0 Å' written along its line is wider
-        than the gap between the lines it has to fit into — Tier_1A (3.0 Å) and Tier_2A (3.2 Å) are
-        0.2 Å apart — so whatever it clears, it lands on something else. A single letter fits between
+        than the gap between the lines it has to fit into - Tier_1A (3.0 Å) and Tier_2A (3.2 Å) are
+        0.2 Å apart - so whatever it clears, it lands on something else. A single letter fits between
         them, and the key at the foot of the panel says what each letter means.
         """
         _tag = chr(ord('A') + i)
@@ -9072,7 +9072,7 @@ def _xn__gate_lines_distance(ax) -> None:
                           edgecolor=TIER_PALETTE.get(tier, CFG.VIS_INK["grey"]), linewidth=0.8),
                 zorder=7)
 
-    # The key is NOT drawn here. Two boxes — one naming the tier colours, one naming the gate tags —
+    # The key is NOT drawn here. Two boxes - one naming the tier colours, one naming the gate tags -
     # say two halves of the same thing and cost the panel twice the space. The strings are handed to
     # the caller, which folds them into the single legend.
     ax._gate_keys = _gate_keys
@@ -9096,7 +9096,7 @@ def _xn__gate_lines_angle(ax) -> None:
                           edgecolor=TIER_PALETTE.get(tier, CFG.VIS_INK["grey"]), linewidth=0.8),
                 zorder=7)
 
-    # The key is NOT drawn here. Two boxes — one naming the tier colours, one naming the gate tags —
+    # The key is NOT drawn here. Two boxes - one naming the tier colours, one naming the gate tags -
     # say two halves of the same thing and cost the panel twice the space. The strings are handed to
     # the caller, which folds them into the single legend.
     ax._gate_keys = _gate_keys
@@ -9126,7 +9126,7 @@ def _xn__mean_trend(ax, sub, tiers, val_col, *, group_col='tier', label='Mean (t
     """Connect the per-tier MEANS with a line.
 
     Seven boxes side by side ask the reader to compare seven distributions by eye and infer whether the
-    quantity rises or falls with tier. The trend line states that in one stroke — and it must be the MEAN,
+    quantity rises or falls with tier. The trend line states that in one stroke - and it must be the MEAN,
     not the median already drawn inside each box, or the line would only restate a mark that is there.
     """
     _m = [pd.to_numeric(sub.loc[sub[group_col] == _t, val_col], errors='coerce').mean() for _t in tiers]
@@ -9223,7 +9223,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     before more predictions were added, would be trusted for ever and the uncertainty panels drawn
     from a corpus that is not the corpus.
 
-    Three things are checked — the schema, the coverage, and whether any geometry actually resolved
+    Three things are checked - the schema, the coverage, and whether any geometry actually resolved
     (an all-NaN table is the failure mode this build had, and it looks complete from the outside).
     Whatever it already covers is KEPT: only the complexes missing from it are parsed, so a build
     interrupted at 40,000 of 58,056 resumes from 40,000 rather than starting again.
@@ -9254,16 +9254,16 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
             if _done_ids >= _all_ids:
                 _geo = _prior['sn2_distance_A'].notna().mean()
                 reporter.log(f'  ✔ Found: 01_Analysis_Data/{target.name}  '
-                             f'(complete for all {n_jobs:,} complexes · geometry {_geo:.1%}) — reusing, nothing recomputed.')
+                             f'(complete for all {n_jobs:,} complexes · geometry {_geo:.1%}) - reusing, nothing recomputed.')
                 return target
-            reporter.log(f'  ⧗ Variance CSV covers {len(_done_ids):,}/{n_jobs:,} complexes — '
+            reporter.log(f'  ⧗ Variance CSV covers {len(_done_ids):,}/{n_jobs:,} complexes - '
                          f'resuming; only the {n_jobs - len(_done_ids):,} missing will be parsed.')
 
     job_folders = [p for p in job_folders if p.name not in _done_ids]
     n_jobs = len(job_folders)
 
     """
-    Each complex is measured at ITS OWN catalytic aspartate — the residue 02 mapped for that protein by
+    Each complex is measured at ITS OWN catalytic aspartate - the residue 02 mapped for that protein by
     global alignment. Without it the geometry engine scans the whole protein and can settle on a residue
     that does no catalysis (on Tier_4 it chose a SERINE in 4 of 30), reporting an attack angle that is
     geometrically real and mechanistically meaningless.
@@ -9282,11 +9282,11 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
                 if _m:
                     _nuc_by_job[str(_jn)] = int(_m.group(1))
         except Exception as _e:                                  # noqa: BLE001
-            # There is NO whole-protein fallback — _xn_compute_sn2_geometry refuses without the
+            # There is NO whole-protein fallback - _xn_compute_sn2_geometry refuses without the
             # mapped aspartate, because the fallback scan is what put a serine in the results.
             # Complexes with no mapped nucleophile are SKIPPED, and the message must say so.
             reporter.log(f'  ! Could not read Mapped_Nucleophile ({type(_e).__name__}); '
-                         f'those complexes will be SKIPPED — geometry is measured only at the '
+                         f'those complexes will be SKIPPED - geometry is measured only at the '
                          f'mapped catalytic aspartate, never by a whole-protein scan.')
     _missing_jobs = [p.name for p in job_folders if p.name not in _nuc_by_job]
     _missing = len(_missing_jobs)
@@ -9297,26 +9297,26 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
         # rather than reading as a contradiction of it.
         _missing_prots = {_prot_by_job.get(j) for j in _missing_jobs if _prot_by_job.get(j)}
         _npr = len(_missing_prots) or "?"
-        reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile — these are {_npr} protein '
+        reporter.log(f'  ! {_missing:,} complex(es) have no mapped nucleophile - these are {_npr} protein '
                      f'variant(s) (each × its ligands) whose catalytic aspartate the alignment could not '
-                     f'place; see 01_Active_Site_Residue_Mapping_Coverage. SKIPPED — geometry is measured '
+                     f'place; see 01_Active_Site_Residue_Mapping_Coverage. SKIPPED - geometry is measured '
                      f'only at the mapped catalytic aspartate, never by a whole-protein scan.')
     _tasks = [(p, _nuc_by_job.get(p.name)) for p in job_folders]
 
     """
-    The work is one independent gemmi parse per model CIF — five per complex, tens of thousands of
-    complexes — with no shared state, so it parallelises cleanly across cores. Two cores are left free
+    The work is one independent gemmi parse per model CIF - five per complex, tens of thousands of
+    complexes - with no shared state, so it parallelises cleanly across cores. Two cores are left free
     so the machine stays usable and a GPU job's feeder process is never starved.
     """
     _n_proc = max(1, (_os.cpu_count() or 4) - 2)
-    reporter.log(f'  ⧗ Building 07_Boltz2_MultiModel_QC_Variance.csv — parsing {n_jobs:,} complexes '
+    reporter.log(f'  ⧗ Building 07_Boltz2_MultiModel_QC_Variance.csv - parsing {n_jobs:,} complexes '
                  f'× 5 model CIFs across {_n_proc} cores…')
 
     """
     A three-hour job that prints one line every few thousand complexes is indistinguishable from a
     hung one. The console gets a live counter rewritten in place (\\r) carrying rate and ETA, so the
     run can be watched; the run LOG gets a plain milestone line every 5,000 complexes, because a log
-    file full of carriage returns is unreadable. The counter is only drawn to a terminal — piped to a
+    file full of carriage returns is unreadable. The counter is only drawn to a terminal - piped to a
     file it would be noise.
     """
     _t0 = _time.time()
@@ -9347,7 +9347,7 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     def _flush(rows_so_far: list) -> None:
-        """Write everything resolved so far — the prior rows plus the new ones — atomically.
+        """Write everything resolved so far - the prior rows plus the new ones - atomically.
 
         A build this long must be able to die without losing the hours it already paid for. The write
         goes to a temporary file and is renamed over the target, because rename is atomic within a
@@ -9394,11 +9394,11 @@ def _xn__ensure_multimodel_variance_csv(prod_dir: Path, out_dir: Path, reporter)
                  f"({var_df['complex_id'].nunique():,} complexes · {_n_rows:,} model rows · "
                  f"geometry resolved {_n_geo:,} = {_n_geo / max(1, _n_rows):.1%})")
     if _n_geo == 0:
-        reporter.log('  ! Multi-model variance: NO geometry resolved on any model — the uncertainty '
+        reporter.log('  ! Multi-model variance: NO geometry resolved on any model - the uncertainty '
                      'panels would be empty. Treat this CSV as unusable.')
     elif _n_geom_fail:
         reporter.log(f'    · {_n_geom_fail:,} of {_n_rows:,} model poses ({_n_geom_fail / max(1, _n_rows):.1%}) '
-                     f'had no resolvable SN2 geometry — the mapped aspartate was absent or beyond attack '
+                     f'had no resolvable SN2 geometry - the mapped aspartate was absent or beyond attack '
                      f'range in that model (this includes the no-nucleophile complexes above, × 5 models).')
     return target
 
@@ -9410,21 +9410,21 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     SN2-angle panel (top-right).
 
     Uses the variance CSV's own ``degrader_tier`` column (identical across a
-    complex's 5 models — it is the pipeline's authoritative classification)
+    complex's 5 models - it is the pipeline's authoritative classification)
     rather than re-deriving a tier from raw distance/angle alone. A purely
     geometric re-derivation cannot represent Tier_5_Decoy here: the 02b
     geometry engine only searches for a nucleophile within a 6 A radius
     (``geometry_status == "no_nucleophile_within_6A"`` otherwise), so
-    ``sn2_distance_A`` never exceeds ~6 A in practice — well inside the
+    ``sn2_distance_A`` never exceeds ~6 A in practice - well inside the
     Tier_4 cutoff (8 A). Combined with taking the best of 5 models per
     complex, that made Tier_5_Decoy essentially unreachable even though it
     is a genuine, populated tier in the source data.
     """
     """
-    The production directory sits beside 3_Validation_Figures under the RUN root — not beside the
+    The production directory sits beside 3_Validation_Figures under the RUN root - not beside the
     figure subfolder that out_dir points at. It is taken from the module global the dispatcher sets;
     the fallback walks up from out_dir rather than assuming a fixed depth, because deriving it as
-    out_dir.parent silently yields 3_Validation_Figures/1_Boltz2_Production — a path that cannot
+    out_dir.parent silently yields 3_Validation_Figures/1_Boltz2_Production - a path that cannot
     exist, and the variance CSV is then reported 'unavailable' while the CIFs sit there all along.
     """
     _prod = globals().get("_xn__PROD_DIR") or globals().get("_PROD_DIR")
@@ -9434,7 +9434,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
                       if _c.exists()), out_dir.parent / '1_Boltz2_Production')
     """
     The inter-model uncertainty panels need the per-model variance CSV. Building it from scratch
-    means parsing 5 model CIFs for each of ~58,000 complexes — hours of gemmi. That is a
+    means parsing 5 model CIFs for each of ~58,000 complexes - hours of gemmi. That is a
     deliberate, opt-in job (--variance), not something a figure refresh should trigger silently:
     without the flag, an absent CSV falls through to the two absolute-geometry panels, which
     carry the same tier claim and are drawn from the ranked CSV in seconds.
@@ -9451,16 +9451,16 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         # FAcDs has no per-model variance CSV (needs the 02b reanalysis engine), so the two
         # inter-model uncertainty panels cannot be drawn. Plot the two absolute-geometry panels
         # (nucleophile distance, SN2 attack angle) by tier from the ranked CSV instead.
-        reporter.log('  ! Figure 01C: variance CSV unavailable — plotting geometry-only (nucleophile distance + SN2 angle) from ranked CSV.')
+        reporter.log('  ! Figure 01C: variance CSV unavailable - plotting geometry-only (nucleophile distance + SN2 angle) from ranked CSV.')
         _dist = _xn__nuc_distance(df).where(lambda s: s < 20.0)  # drop ~999/1000 Å "no nucleophile" sentinel
         _ang = _xn__num(df, _xn__col(df, CFG.COL_SN2))
         _tcol = _xn__col(df, CFG.COL_TIER)
         if _tcol is None or _dist.empty or _ang.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('01C')} — geometry columns unavailable.")
+            reporter.log(f"  ! Skipped: {_fig_path('01C')} - geometry columns unavailable.")
             return
         gdf = pd.DataFrame({'tier': df[_tcol].values, 'dist': _dist.values, 'ang': _ang.values}).dropna(subset=['dist', 'ang'])
         if gdf.empty:
-            reporter.log(f"  ! Skipped: {_fig_path('01C')} — no geometry rows.")
+            reporter.log(f"  ! Skipped: {_fig_path('01C')} - no geometry rows.")
             return
         _tiers = [t for t in TIER_ORDER_LOGIC if t in set(gdf['tier'])]
         fig, (axd, axa) = plt.subplots(1, 2, figsize=(_xn_COL_DOUBLE_IN, 0.45 * _xn_COL_DOUBLE_IN))
@@ -9486,7 +9486,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         ONE legend, top-left of panel A: the tier colours AND the gate tags.
 
         The tags mean the same tier in both panels (A = Tier_1A, B = Tier_2A, C = Tier_2B) and differ
-        only in the threshold each panel enforces, so a single entry can carry both — the distance
+        only in the threshold each panel enforces, so a single entry can carry both - the distance
         gate and the angle gate side by side. Two separate boxes stated the tier twice and spent the
         panel's space saying it.
         """
@@ -9517,16 +9517,16 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     try:
         vdf = pd.read_csv(var_path)
     except FileNotFoundError:
-        reporter.log(f"  ! Skipped: {_fig_path('01C')} — could not open {var_path}.")
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} - could not open {var_path}.")
         return
     id_col = next((c for c in ('complex_id', 'job_name') if c in vdf.columns), None)
     if id_col is None or 'sn2_angle_deg' not in vdf.columns or 'sn2_distance_A' not in vdf.columns:
-        reporter.log(f"  ! Skipped: {_fig_path('01C')} — variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} - variance CSV lacks id / 'sn2_distance_A' / 'sn2_angle_deg'.")
         return
     """
     The tier is a property of the COMPLEX, not of a diffusion sample, so it belongs to the ranked sheet
     and not to a per-model table. It is joined in here on the complex id rather than duplicated into
-    every one of the 290,000 model rows — and joining also means an existing variance CSV stays valid
+    every one of the 290,000 model rows - and joining also means an existing variance CSV stays valid
     when the tiering changes, instead of 165 minutes of parsing being thrown away because a column it
     never needed to carry is missing.
     """
@@ -9544,7 +9544,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
             except Exception as _e:                              # noqa: BLE001
                 reporter.log(f"  ! Figure 01C: could not join the tier ({type(_e).__name__}: {_e}).")
     if CFG.COL_TIER not in vdf.columns or vdf[CFG.COL_TIER].notna().sum() == 0:
-        reporter.log(f"  ! Skipped: {_fig_path('01C')} — no degrader_tier available (not in the variance "
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} - no degrader_tier available (not in the variance "
                      "CSV, and the ranked sheet could not supply it).")
         return
     vdf['sn2_distance_A'] = pd.to_numeric(vdf['sn2_distance_A'], errors='coerce')
@@ -9558,10 +9558,10 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         per_complex.append({'complex_id': cid, 'best_geo_tier': g[CFG.COL_TIER].iloc[0], 'abs_distance': float(best_row['sn2_distance_A']), 'abs_angle': float(best_row['sn2_angle_deg']), 'distance_std': float(g['sn2_distance_A'].std(ddof=1)), 'angle_std': float(g['sn2_angle_deg'].std(ddof=1))})
     cdf = pd.DataFrame(per_complex)
     if cdf.empty:
-        reporter.log(f"  ! Skipped: {_fig_path('01C')} — no complexes after geometric tiering.")
+        reporter.log(f"  ! Skipped: {_fig_path('01C')} - no complexes after geometric tiering.")
         return
     # Top row plots the SELECTED (representative) model the pipeline finally reports, taken from the
-    # ranked sheet (df) per complex — not a per-model distance minimum. Falls back to the closest-of-5
+    # ranked sheet (df) per complex - not a per-model distance minimum. Falls back to the closest-of-5
     # only when the ranked geometry columns are unavailable.
     _jc = _xn__col(df, "job_name") or "job_name"
     _dc = _xn__col(df, "Dist_Nucleophile") or "Dist_Nucleophile"
@@ -9591,7 +9591,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     ax_tr.set_ylim(0, 185)
     ax_tr.set_yticks([0, 45, 90, 135, 180])
     # The top and bottom rows share the same tier x-axis; the bottom row already carries the tier names
-    # and their n, so the top row's tick labels only repeat them — suppress them (labels shown once, below).
+    # and their n, so the top row's tick labels only repeat them - suppress them (labels shown once, below).
     for _axt in (ax_tl, ax_tr):
         _axt.tick_params(labelbottom=False)
         _axt.set_xlabel('')
@@ -9603,7 +9603,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         for _c in _ax.collections:
             _c.set_alpha(0.85)
         # The violin's inner quartiles show the SPREAD of the spread; the trend line answers the question
-        # the panel is actually asked — does inter-model disagreement rise or fall with tier?
+        # the panel is actually asked - does inter-model disagreement rise or fall with tier?
         _xn__mean_trend(_ax, cdf, tiers, _y, group_col='best_geo_tier')
         _ax.set_xlabel('Degrader tier')
         _ax.set_ylabel(_lab)
@@ -9667,7 +9667,7 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
         _xn__stat_header(ax, _xn__kruskal(sub, 'tier', 'y', tiers, reg_name=pc))
         _xn__panel(ax, letter)
     # Both rows share the tier x-axis: the top row's tick labels only repeat the bottom row's, and the
-    # tier names + n already sit on the bottom ticks — so suppress the top row's labels and clear every
+    # tier names + n already sit on the bottom ticks - so suppress the top row's labels and clear every
     # x-label (no shared x-label left ⇒ no redundant 'Degrader tier (n below each tier)' supxlabel).
     for _ax in axes[0]:
         _ax.tick_params(labelbottom=False)
@@ -9685,7 +9685,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     tier_col = CFG.COL_TIER if CFG.COL_TIER in df.columns else None
     if not enzyme_col or not ligand_col or (not tier_col):
         if reporter:
-            reporter.log(f"  ! Skipped: {_fig_path('06A')} — required columns missing")
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} - required columns missing")
         return
     df = df[df[ligand_col] != 'Fluoroacetate_Ref']
     df_hm = df[[enzyme_col, ligand_col, tier_col]].copy()
@@ -9695,7 +9695,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     tier1a_enzymes = df_hm.loc[df_hm[tier_col] == CFG.TIER_TOP, enzyme_col].unique()
     if len(tier1a_enzymes) == 0:
         if reporter:
-            reporter.log(f"  ! Skipped: {_fig_path('06A')} — no Tier_1A enzymes found")
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} - no Tier_1A enzymes found")
         return
     tier_rank_map = CFG.TIER_RANK
     df_hm['tier_rank'] = df_hm[tier_col].map(tier_rank_map).fillna(max(tier_rank_map.values()) + 1).astype(int)
@@ -9720,7 +9720,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     ligands = sorted(df_best[ligand_col].unique(), key=_extract_number)
     if not ligands:
         if reporter:
-            reporter.log(f"  ! Skipped: {_fig_path('06A')} — no ligands found")
+            reporter.log(f"  ! Skipped: {_fig_path('06A')} - no ligands found")
         return
 
     def _canonical_ligand_name(raw_name: object) -> str:
@@ -9779,7 +9779,7 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                        markeredgecolor=CFG.VIS_INK["paler"], markersize=9, label='not modelled')
     # ABOVE the heatmap. Below it, the legend has to share a strip with the rotated ligand labels and
     # the x-axis title, and every placement that clears one collides with the other. The top edge is
-    # empty, so the legend sits there — attached to the panel, over nothing.
+    # empty, so the legend sits there - attached to the panel, over nothing.
     ax.legend(handles=handles + [_grey], title='Degradation tier  (cell label = tier)',
               loc='lower center', bbox_to_anchor=(0.5, 1.015), ncol=len(handles) + 1,
               fontsize=CFG.VIS_FONT_LEGEND,  frameon=False)
@@ -9788,8 +9788,8 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # The ELITE catalytic tiers (Tier_1A/1B), split OUT from the rest. This panel family contrasts elite vs
-# rest — a different, deliberately narrower question than the battery's degrader/non-degrader split
-# (CFG.TIER_HIGH_QUALITY, 4 tiers) — and is labelled "Elite vs rest" so the two never collide under one
+# rest - a different, deliberately narrower question than the battery's degrader/non-degrader split
+# (CFG.TIER_HIGH_QUALITY, 4 tiers) - and is labelled "Elite vs rest" so the two never collide under one
 # name. Keeping it at the elite pair preserves the affinity≠catalysis reading: the elite catalytic tiers
 # (the FA/DFA-like near-attack poses) are LOW binding affinity, the high-affinity binders are not elite.
 _xo_ELITE_TIERS = ["Tier_1A", "Tier_1B"]
@@ -9907,14 +9907,14 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     controls = controls or {}
     ba_col = _xo__pillar_col(df, 'Binding_Affinity_Score')
     if ba_col is None:
-        reporter.log(f"  ! Skipped: {_fig_path('02A')} — Binding_Affinity_Score column missing.")
+        reporter.log(f"  ! Skipped: {_fig_path('02A')} - Binding_Affinity_Score column missing.")
         return
     aff_col = _xo__col(df, 'custom_affinity_score', 'Chemical_Affinity_Score', 'custom_affinity_calc')
     pocket_col = _xo__col(df, 'Pocket_Tightness_Score', 'pocket_enclosure_ratio')
     dens_col = _xo__col(df, CFG.COL_IDENS, 'Interaction_Density_Norm', 'interaction_density_calc')
     tiers = _xo__tiers_present(df)
     if not tiers:
-        reporter.log(f"  ! Skipped: {_fig_path('02A')} — no tiers present.")
+        reporter.log(f"  ! Skipped: {_fig_path('02A')} - no tiers present.")
         return
     xpos = {t: i for i, t in enumerate(tiers)}
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -9924,7 +9924,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
 
     """
     The per-tier MEAN affinity, traced across the tiers. The violins carry the distributions;
-    the line carries the point — affinity does NOT order the tiers, and a reader should be able
+    the line carries the point - affinity does NOT order the tiers, and a reader should be able
     to see that without integrating seven shapes by eye.
     """
     _means2 = [float(pd.to_numeric(df.loc[df[CFG.COL_TIER] == _t, ba_col],
@@ -9967,7 +9967,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
             cval_raw = pd.to_numeric(pd.Series([ctrl_row.get(tcol, np.nan)]), errors='coerce').iloc[0]
             if np.isfinite(lo) and np.isfinite(hi) and (hi > lo) and pd.notna(cval_raw):
                 cval_norm = float(np.clip((cval_raw - lo) / (hi - lo), 0, 1))
-                ax.axhline(cval_norm, ls='--', lw=1.4, color=colour, alpha=0.85, zorder=1.5, label=f"{tlabel.split('  (')[0]} — DehH2+FA control = {cval_norm:.2f}")
+                ax.axhline(cval_norm, ls='--', lw=1.4, color=colour, alpha=0.85, zorder=1.5, label=f"{tlabel.split('  (')[0]} - DehH2+FA control = {cval_norm:.2f}")
 
     def _mw_signed(mcol, label):
         if mcol is None or mcol not in df.columns:
@@ -9981,7 +9981,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         # The panel prints the raw p; register it so its q_BH is paid in the same family.
-        _register_p(f"Mann-Whitney U — {label} — Elite (Tier_1A/1B) vs rest",
+        _register_p(f"Mann-Whitney U - {label} - Elite (Tier_1A/1B) vs rest",
                     "08_Binding_Affinity_Metrics", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
@@ -10018,7 +10018,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     rmsd = _xo__col(df, 'Active_Site_RMSD_to_Control')
     tiers = _xo__tiers_present(df)
     if not tiers or (idc is None and evo is None):
-        reporter.log(f"  ! Skipped: {_fig_path('04A')} — necessary columns or tiers missing.")
+        reporter.log(f"  ! Skipped: {_fig_path('04A')} - necessary columns or tiers missing.")
         return
     xpos = {t: i for i, t in enumerate(tiers)}
     deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
@@ -10037,7 +10037,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         U, p = mannwhitneyu(a, b, alternative='two-sided')
         r = 2.0 * U / (len(a) * len(b)) - 1.0
         # The panel prints the raw p; register it so its q_BH is paid in the same family.
-        _register_p(f"Mann-Whitney U — {label} — Elite (Tier_1A/1B) vs rest",
+        _register_p(f"Mann-Whitney U - {label} - Elite (Tier_1A/1B) vs rest",
                     "05_Evolutionary_Phylogeny", float(U), len(a) + len(b), float(p),
                     effect_size_r=round(float(r), 4))
         return (float(p), float(r))
@@ -10086,12 +10086,12 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
 
         The RMSD column also carries a 999.0 sentinel for 'undefined' (max = 999.00 in the ranked sheet).
         Min-max normalising through that sentinel crushes every real value into the bottom of the range,
-        so it is dropped before the scaling rather than clipped after it — a clip to 5 A still lets a
+        so it is dropped before the scaling rather than clipped after it - a clip to 5 A still lets a
         sentinel-derived 5.0 masquerade as a genuinely bad fold.
         """
         # Twin-axis colour coding: the two y-axes carry different quantities (evolutionary score 0–100 on
         # the left, normalised traces 0–1 on the right), so each takes its own CFG colour on its label,
-        # ticks, spine and grid — a reader can then never trace a value onto the wrong scale. The right
+        # ticks, spine and grid - a reader can then never trace a value onto the wrong scale. The right
         # grid is dashed so, where the two colour grids overlap, they stay tellable apart.
         _c_left, _c_right = CFG.VIS_ACCENT["axis_left"], CFG.VIS_ACCENT["axis_right"]
         ax2r = ax2.twinx()
@@ -10208,10 +10208,10 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
         Splitting fluorine count at F≤3 vs F>3 and running Mann-Whitney throws away everything the
         count knows: a difluoro and a perfluorodecyl land in the same bin, the monotonic trend the panel
         is drawn to show is discarded, and the power lost to the binarisation is paid for nothing. The
-        cut point was also arbitrary — no threshold in CFG corresponds to it.
+        cut point was also arbitrary - no threshold in CFG corresponds to it.
 
-        Spearman's rho on the continuous count answers the question the figure asks — does the metric
-        move monotonically with chain length — and reports the DIRECTION and STRENGTH of that move, not
+        Spearman's rho on the continuous count answers the question the figure asks - does the metric
+        move monotonically with chain length - and reports the DIRECTION and STRENGTH of that move, not
         merely whether two arbitrary halves differ. It is registered like every other test, so it joins
         the Benjamini-Hochberg family instead of being a p-value printed on a panel and corrected
         nowhere.
@@ -10254,7 +10254,7 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     """
     The per-tier MEAN, traced across the tiers. A violin shows each tier's shape but leaves the
     reader to compare seven of them by eye; the trend line states the claim the figure exists to
-    make — chain length rises monotonically as the tier falls — in one stroke.
+    make - chain length rises monotonically as the tier falls - in one stroke.
     """
     _means7 = [float(df.loc[df[CFG.COL_TIER] == _t, fcol].mean()) for _t in tiers]
     _xs7 = list(range(len(tiers)))
@@ -10291,8 +10291,8 @@ Each extended panel is filed with the figures it belongs with, not in a holding 
 the phylogeny sits with the cohort overview, the two size panels with the PFAS scope, and so on. The
 number continues the destination folder's existing sequence, so nothing already numbered moves.
 
-The numbering is APPENDED rather than gap-filled. 07_PFAS_Scope_and_Synthesis is missing a 06 — a
-retired figure — and reusing that slot would silently point an old citation at a new figure.
+The numbering is APPENDED rather than gap-filled. 07_PFAS_Scope_and_Synthesis is missing a 06 - a
+retired figure - and reusing that slot would silently point an old citation at a new figure.
 """
 
 
@@ -10305,7 +10305,7 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
     input folder produced by 02_Production; nothing is downloaded here.
     """
     import gemmi
-    reporter.section("Step 2/8 — 02_Ramachandran · Backbone-Geometry Validation")
+    reporter.section("Step 2/8 - 02_Ramachandran · Backbone-Geometry Validation")
     # `out_dir` is already the 02_Ramachandran folder (created in main); use it directly.
     rama_dir = out_dir
     rama_dir.mkdir(parents=True, exist_ok=True)
@@ -10367,7 +10367,7 @@ Why a defined figure can legitimately draw nothing. Keyed by filename; used by t
 skipped figure is reported with its cause instead of a bare absence.
 
 A Hidden Gem is a complex in a high-quality tier whose Boltz-2 confidence is nonetheless below
-CFG.CONFLICT_CONF_HIGH — physics says yes, the AI hedges. When the panel is empty it means no such
+CFG.CONFLICT_CONF_HIGH - physics says yes, the AI hedges. When the panel is empty it means no such
 disagreement exists: on this corpus every surviving elite complex also carries high model confidence,
 so there is nothing to rescue. An empty rescue list is the strong outcome, not a missing figure.
 """
@@ -10393,7 +10393,7 @@ def write_figure_descriptions(out_dir: Path):
     """
     lines = [
         "=" * 80,
-        "BOLTZ-2 VALIDATION FIGURES — DESCRIPTION LOG",
+        "BOLTZ-2 VALIDATION FIGURES - DESCRIPTION LOG",
         "=" * 80,
         "",
         "This file describes every figure saved in this directory.",
@@ -10401,28 +10401,28 @@ def write_figure_descriptions(out_dir: Path):
         "Each entry lists the filename, chart type, axis meanings, and what to look for.",
         "",
         "=" * 80,
-        "PART 1 — DATASET OVERVIEW",
+        "PART 1 - DATASET OVERVIEW",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 01 — Figure_01_Active_Site_Residue_Mapping_Coverage.png",
+        "Figure 01 - Figure_01_Active_Site_Residue_Mapping_Coverage.png",
         "  Title   : Active-site residue mapping coverage across all FAcD variants",
-        "  Type    : Vertical bar chart — one bar per canonical catalytic residue",
+        "  Type    : Vertical bar chart - one bar per canonical catalytic residue",
         "  X-axis  : The 8 canonical FAcD active-site residues, ordered by mechanistic role:",
         "            nucleophile → acid/base catalysis → carboxylate clamp → fluoride pocket",
         "  Y-axis  : Number of variants in which the residue was resolved during alignment",
         "  Colour  : Functional role group (CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR); residues of the",
         "            same role share a colour; dashed line = total variants",
-        "  Companion: 01_Active_Site_Residue_Mapping_Missed.csv — per residue, the",
+        "  Companion: 01_Active_Site_Residue_Mapping_Missed.csv - per residue, the",
         "            sequence IDs that failed to map it (one column per residue).",
         "  Look for: Which catalytic machinery is universally alignable versus divergent.",
         "            The fluoride-pocket residues and the second clamp arm typically map",
-        "            least often — the family diverges most there.",
+        "            least often - the family diverges most there.",
         "",
         "-" * 80,
-        "Figure 02 — Figure_02_Tier_Distribution.png",
+        "Figure 02 - Figure_02_Tier_Distribution.png",
         "  Title   : Distribution of Catalytic Tiers",
-        "  Type    : Vertical bar chart — count + percentage annotations inside bars",
+        "  Type    : Vertical bar chart - count + percentage annotations inside bars",
         f"  X-axis  : Tier name (ordered best→worst: {CFG.TIER_TOP}, {CFG.TIER_ORDER[1]}, {CFG.TIER_ORDER[2]}, Tier_2B, {CFG.TIER_ORDER[4]}, {CFG.TIER_POOR})",
         "  Y-axis  : Count of protein–ligand complexes",
         "  Inset   : Pie chart showing Boltz-2 diffusion model selection frequency (model_0–model_4)",
@@ -10430,19 +10430,19 @@ def write_figure_descriptions(out_dir: Path):
         "            Inset reveals whether one Boltz model dominates (~model_0 ≈ 70%).",
         "",
         "-" * 80,
-        "Figure 03 — Figure_03_Alignment_Grades.png",
-        "  Title   : Sequence Identity Distribution — Alignment Grade Counts + KDE by Tier  [2-panel]",
+        "Figure 03 - Figure_03_Alignment_Grades.png",
+        "  Title   : Sequence Identity Distribution - Alignment Grade Counts + KDE by Tier  [2-panel]",
         "  Panel A : Horizontal bar chart of protein counts per identity grade band",
         "            (Grade A = 90–100% identity → Grade I = <20%); bars labelled with count and %",
-        "  Panel B : Kernel density estimate of sequence identity per tier — filled curves overlaid",
+        "  Panel B : Kernel density estimate of sequence identity per tier - filled curves overlaid",
         "            Vertical dashed lines mark Grade A (>=90%), D (>=60%), F (>=40%) thresholds",
-        "  Look for: Most proteins cluster in Grade D-E (50-70% identity) — evolutionarily distant",
+        "  Look for: Most proteins cluster in Grade D-E (50-70% identity) - evolutionarily distant",
         "            yet sharing the active-site fold. Panel B reveals whether higher-tier proteins",
         "            cluster at higher identity (more conserved sequence) compared to lower tiers.",
         "",
         "-" * 80,
-        "Figure 04 — Figure_04_Tier_Grade_Distribution.png",
-        "  Title   : Tier x Alignment Grade — Stacked 100% Horizontal Bar Chart",
+        "Figure 04 - Figure_04_Tier_Grade_Distribution.png",
+        "  Title   : Tier x Alignment Grade - Stacked 100% Horizontal Bar Chart",
         "  Type    : 100% stacked horizontal bars (one row per tier)",
         "  Y-axis  : Degrader tiers (each row normalised to 100%)",
         "  X-axis  : Grade bands (A [>=90%] to I [<20%]); 10% intervals with pastel background stripes",
@@ -10452,12 +10452,12 @@ def write_figure_descriptions(out_dir: Path):
         "            If Tier_1/Tier_2 rows are dominated by Grade A-C, conservation tracks quality.",
         "",
         "=" * 80,
-        "PART 2 — AI PREDICTION QUALITY",
+        "PART 2 - AI PREDICTION QUALITY",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 05a — Figure_05a_AI_Quality_Assessment.png",
-        "  Title   : AI Quality Assessment — Confidence by Tier + pTM vs. ipTM  [2-panel]",
+        "Figure 05a - Figure_05a_AI_Quality_Assessment.png",
+        "  Title   : AI Quality Assessment - Confidence by Tier + pTM vs. ipTM  [2-panel]",
         "  Panel A : Box plot of Boltz Model Confidence Score per tier (Y-axis zoomed >=0.70)",
         "            Median annotated above each box; green dashed = high (>=0.90); yellow dotted = acceptable (>=0.80)",
         "  Panel B : Scatter of pTM (overall fold confidence) vs. ipTM (interface confidence) per tier",
@@ -10468,7 +10468,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Panel B: best-tier points should sit above the diagonal and cluster top-right.",
         "",
         "-" * 80,
-        "Figure 05b — Figure_05b_TT_AI_Quality_Space.png",
+        "Figure 05b - Figure_05b_TT_AI_Quality_Space.png",
         f"  Title   : {CFG.TIER_TOP} AI Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of pTM vs. ipTM; inset PyMOL structure thumbnails",
         "  Axes    : X = pTM (global fold confidence, 0-1); Y = ipTM (interface confidence, 0-1)",
@@ -10478,11 +10478,11 @@ def write_figure_descriptions(out_dir: Path):
         "            Structure thumbnails show the active-site geometry at a glance.",
         "",
         "-" * 80,
-        "Figure 06 — Figure_06_pTM_vs_ipTM_by_Tier.png",
-        "  Title   : pTM vs. ipTM — 2-D Scatter by Tier",
+        "Figure 06 - Figure_06_pTM_vs_ipTM_by_Tier.png",
+        "  Title   : pTM vs. ipTM - 2-D Scatter by Tier",
         "  Type    : Scatter with diagonal reference line (pTM = ipTM) + coloured deviation zones",
-        "  X-axis  : pTM — overall protein fold confidence (0-1); 1.0 = perfect fold prediction",
-        "  Y-axis  : ipTM — interface confidence (0-1); 1.0 = perfect interface prediction",
+        "  X-axis  : pTM - overall protein fold confidence (0-1); 1.0 = perfect fold prediction",
+        "  Y-axis  : ipTM - interface confidence (0-1); 1.0 = perfect interface prediction",
         "  Diagonal: pTM = ipTM reference; +/-0.03 band; above diagonal = preferred (interface > fold)",
         "  Colour  : Catalytic tier; diamond markers show per-tier median positions",
         "  Zones   : Green band above diagonal = interface-dominant (preferred); red band below = fold-dominant",
@@ -10490,11 +10490,11 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_DECOY} complexes often fall below the diagonal (fold confident, interface uncertain).",
         "",
         "=" * 80,
-        "PART 3 — STRUCTURAL VALIDATION",
+        "PART 3 - STRUCTURAL VALIDATION",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 07 — Figure_07_ActiveSite_RMSD_by_Tier.png",
+        "Figure 07 - Figure_07_ActiveSite_RMSD_by_Tier.png",
         "  Title   : Active Site RMSD vs. Reference Control by Tier",
         "  Type    : Violin + strip plot with coloured quality zones",
         "  X-axis  : Catalytic tier (ordered best to worst)",
@@ -10507,7 +10507,7 @@ def write_figure_descriptions(out_dir: Path):
         "            A flat RMSD profile across tiers confirms fold conservation regardless of tier.",
         "",
         "-" * 80,
-        "Figure 08 — Figure_08_Feature_Correlations.png",
+        "Figure 08 - Figure_08_Feature_Correlations.png",
         "  Title   : Feature Correlation Matrix (Spearman rho) with Significance",
         "  Type    : Triangular heatmap (lower triangle only); pairwise-complete Spearman",
         "  Cells   : Spearman rank correlation coefficient (-1 to +1) + significance stars",
@@ -10515,17 +10515,17 @@ def write_figure_descriptions(out_dir: Path):
         "  Features: 17 metrics grouped by curated family (outcome, catalytic geometry, chemistry /",
         "            mechanism, affinity / seq / rank, binding & confidence). The chemistry / mechanism",
         "            drivers (C-F BDE, Backside, Halide, Compet., Cbx clamp, Mech.eff) are real matrix",
-        "            cells — their actual pairwise Spearman with every other feature. Each family's",
+        "            cells - their actual pairwise Spearman with every other feature. Each family's",
         "            tick labels + bracket are colour-coded.",
         "  Look for: Strong red cells = features that rise and fall together (redundant or causal).",
         "            Strong blue = features that are inversely related.",
-        "            AI Confidence + Binding Prob. cluster together — same underlying signal.",
+        "            AI Confidence + Binding Prob. cluster together - same underlying signal.",
         "            Pareto Rank inverts against physics/AI scores (lower rank = better = higher score).",
         "            Competence + Mech.eff track the Tier outcome; C-F BDE opposes it.",
         "",
         "-" * 80,
-        "Figure 09 — Figure_09_Tier_Quality_DotPlot.png",
-        "  Title   : Tier Quality Summary — Normalised Multi-metric Cleveland Dot Plot",
+        "Figure 09 - Figure_09_Tier_Quality_DotPlot.png",
+        "  Title   : Tier Quality Summary - Normalised Multi-metric Cleveland Dot Plot",
         "  Type    : Horizontal Cleveland dot plot; one metric per row, tiers as coloured dots",
         "  Y-axis  : 6 normalised metrics (0=worst, 1=best within each metric):",
         "            AI Confidence, Mech. Score, Binding Prob., Seq. Identity, SN2 Angle, RMSD (inverted)",
@@ -10536,26 +10536,26 @@ def write_figure_descriptions(out_dir: Path):
         "            Tiers that consistently appear at X=1.0 excel across all dimensions.",
         "",
         "=" * 80,
-        "PART 4 — MECHANISTIC ANALYSIS",
+        "PART 4 - MECHANISTIC ANALYSIS",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 10 — Figure_10_Mech_State_CrossTab.png",
+        "Figure 10 - Figure_10_Mech_State_CrossTab.png",
         "  Title   : Mechanistic State Cross-Tab (Halide Stabilisation x Carboxylate Clamp by Tier)",
-        "  Type    : Heatmap (count + row %) — rows = tiers; columns = mechanistic state combinations",
+        "  Type    : Heatmap (count + row %) - rows = tiers; columns = mechanistic state combinations",
         "  States  : Stabilised/Unstabilised (TRP/TYR aromatic shield) x Clamped/Unclamped (ASP carboxylate)",
         "  Look for: Virtually all complexes across all tiers show Stabilised+Clamped (98-100%).",
         "            This confirms the DEHA4 active-site architecture is robustly conserved.",
         "            Any tier deviating from 100% warrants structural inspection.",
         "",
         "-" * 80,
-        "Figure 11 — Figure_11_Mechanistic_Score_by_Tier.png",
+        "Figure 11 - Figure_11_Mechanistic_Score_by_Tier.png",
         "  Title   : Mechanistic Score by Tier",
         "  Type    : Mean +/- 95% CI dot plot with jittered individual data points behind",
         "  X-axis  : Catalytic tier (ordered best to worst)",
         "  Y-axis  : Mechanistic Score (0-1; CFG-weighted anchor set [nucleophile reach,",
         "            triad relay distances, carboxylate clamp, halide stabilisation] plus a",
-        "            graded SN2 attack-angle term — config §5.1; saturates at 1.0 only for a",
+        "            graded SN2 attack-angle term - config §5.1; saturates at 1.0 only for a",
         "            complete anchor set at an ideal 180 deg trajectory)",
         f"  Zones   : Green (>={CFG.MECH_FP_BAND_STRONG:.2f} = strong), Yellow ({CFG.MECH_FP_BAND_MODERATE:.2f}-{CFG.MECH_FP_BAND_STRONG:.2f} = moderate), Red (<{CFG.MECH_FP_BAND_MODERATE:.2f} = weak)",
         "  Annotations: Large dot = mean; vertical bar = 95% CI; % label = fraction in strong zone",
@@ -10564,8 +10564,8 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_POOR} tier has the widest spread.",
         "",
         "-" * 80,
-        "Figure 12 — Figure_12_SN2_Angle_by_Tier.png",
-        "  Title   : SN2 Attack Angle — Empirical Cumulative Distribution (ECDF) by Tier",
+        "Figure 12 - Figure_12_SN2_Angle_by_Tier.png",
+        "  Title   : SN2 Attack Angle - Empirical Cumulative Distribution (ECDF) by Tier",
         "  Type    : ECDF step plot per tier",
         "  X-axis  : SN2 attack angle (degrees); 180 deg = ideal linear nucleophilic back-attack",
         f"            Vertical dashed lines = tier-specific angle thresholds ({', '.join(f'{v:.0f}' for v in sorted(CFG.TIER_ANGLE_MIN.values()))} deg)",
@@ -10576,7 +10576,7 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR}: curves shifted left. Tier thresholds show what % meet each criterion.",
         "",
         "-" * 80,
-        "Figure 13a — Figure_13a_Mechanism_Geometry_Scatter.png",
+        "Figure 13a - Figure_13a_Mechanism_Geometry_Scatter.png",
         "  Title   : SN2 Attack Angle vs. Nucleophile-Ligand Distance",
         "  Type    : Scatter plot with tier threshold lines and ideal-zone shading",
         "  X-axis  : mapped catalytic Asp (nucleophile, per-variant) to electrophilic carbon distance (Ang); shorter = reaction-ready",
@@ -10586,10 +10586,10 @@ def write_figure_descriptions(out_dir: Path):
         "  Dashed lines: Vertical = distance thresholds per tier; Horizontal = angle thresholds.",
         "  Shading : Green zone = ideal geometry (short distance AND high angle).",
         "  Look for: Tier_1/Tier_2 tier points cluster top-left (short distance + high angle).",
-        f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR} tier points scatter widely — geometry less constrained.",
+        f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR} tier points scatter widely - geometry less constrained.",
         "",
         "-" * 80,
-        "Figure 13b — Figure_13b_TT_Mechanistic_Quality_Space.png",
+        "Figure 13b - Figure_13b_TT_Mechanistic_Quality_Space.png",
         f"  Title   : {CFG.TIER_TOP} Mechanistic Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter; inset PyMOL protein-ligand structure thumbnails",
         "  Axes    : X = SN2_Attack_Angle (degrees, higher = near-ideal); Y = Boltz_Model_Confidence (AI structural quality)",
@@ -10599,13 +10599,13 @@ def write_figure_descriptions(out_dir: Path):
         "            Insets confirm the geometry seen in data is reflected in the 3-D structure.",
         "",
         "=" * 80,
-        "PART 5 — LIGAND INTERACTIONS",
+        "PART 5 - LIGAND INTERACTIONS",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 14a — Figure_14a_Molecular_Interaction_Profile.png",
-        "  Title   : Molecular Interaction Profile — Bond Types + Fluorine Engagement  [2-panel]",
-        "  Panel A : Grouped bar chart — bond type on X-axis, tier as colour hue",
+        "Figure 14a - Figure_14a_Molecular_Interaction_Profile.png",
+        "  Title   : Molecular Interaction Profile - Bond Types + Fluorine Engagement  [2-panel]",
+        "  Panel A : Grouped bar chart - bond type on X-axis, tier as colour hue",
         "            Bond types: H-Bond, Salt Bridge, Halogen, F-Polar, F-Hydrophobic, Hydrophobic",
         "            Y-axis = mean count per complex; bars annotated with count values",
         "  Panel B : Violin plot of Fluorine Engagement Ratio (FER) per tier",
@@ -10617,7 +10617,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Panel B: Tier_1/Tier_2 tiers engage a higher fraction of ligand fluorine.",
         "",
         "-" * 80,
-        "Figure 14b — Figure_14b_TT_Interaction_Quality_Space.png",
+        "Figure 14b - Figure_14b_TT_Interaction_Quality_Space.png",
         f"  Title   : {CFG.TIER_TOP} Interaction Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of interaction density vs. total interactions; inset PyMOL structures",
         "  Axes    : X = Interaction Density Norm (interactions per ligand heavy atom); Y = Total Interactions (num_interactions, all contact types)",
@@ -10626,7 +10626,7 @@ def write_figure_descriptions(out_dir: Path):
         f"  Look for: {CFG.TIER_TOP} stars clustered top-right (dense, numerous active-site contacts).",
         "",
         "-" * 80,
-        "Figure 15 — Figure_15_Fluorine_Engagement_by_Tier.png",
+        "Figure 15 - Figure_15_Fluorine_Engagement_by_Tier.png",
         "  Title   : Fluorine Engagement Ratio by Tier (box + strip + median trend line)",
         "  Type    : Dual-axis (box + strip plot on left; median trend line on right)",
         "  Left axis : Box + strip of Fluorine Engagement Ratio (FER) per tier",
@@ -10637,14 +10637,14 @@ def write_figure_descriptions(out_dir: Path):
         f"            A rising trend line from {CFG.TIER_POOR} to Tier_1A confirms tier-quality tracks F-engagement.",
         "",
         "=" * 80,
-        "PART 6 — BINDING ENERGETICS",
+        "PART 6 - BINDING ENERGETICS",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 16 — Figure_16_Catalytic_Quality_vs_Inhibition.png",
+        "Figure 16 - Figure_16_Catalytic_Quality_vs_Inhibition.png",
         "  Title   : Catalytic quality vs active-site contact density per tier  [dual-axis]",
         "  Panel A : Violin plot of soft_catalytic_score (continuous SN2-geometry composite) per tier",
-        "            A genuinely varying catalytic-quality metric (Binding Probability is omitted — it",
+        "            A genuinely varying catalytic-quality metric (Binding Probability is omitted - it",
         "            saturates near 0.99 across all tiers and carries no per-tier structure)",
         "            Median annotated inside each violin",
         "  Panel B : Connected dot-line of per-tier mean active-site contact density (interaction_density)",
@@ -10654,7 +10654,7 @@ def write_figure_descriptions(out_dir: Path):
         "            assessed downstream by the Step-06 MM-GBSA stage, not here.",
         "",
         "-" * 80,
-        "Figure 17 — Figure_17_ActiveSite_Contact_Density_by_Tier.png",
+        "Figure 17 - Figure_17_ActiveSite_Contact_Density_by_Tier.png",
         "  Title   : Active-site contact density by tier",
         "  Type    : Box + strip plot",
         "  X-axis  : Catalytic tier (ordered best to worst)",
@@ -10665,26 +10665,26 @@ def write_figure_descriptions(out_dir: Path):
         "            assessed downstream by the Step-06 MM-GBSA stage, not here.",
         "",
         "=" * 80,
-        "PART 7 — CHEMICAL SPACE",
+        "PART 7 - CHEMICAL SPACE",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 18a — Figure_18a_Chemical_Space_Map.png",
+        "Figure 18a - Figure_18a_Chemical_Space_Map.png",
         "  Title   : Chemical Space Map (UMAP manifold, competence hexbin)",
         f"  Type    : Hexbin over the UMAP embedding coloured by mean competence per bin; {CFG.TIER_TOP} ★ overlaid, with inset PyMOL active-site thumbnails",
-        "  Axes    : UMAP dimensions 1 & 2 — distances reflect chemical similarity",
+        "  Axes    : UMAP dimensions 1 & 2 - distances reflect chemical similarity",
         "  Colour  : Mean competence score per bin (brighter = more degradable)",
         f"  Markers : ★ = MD-ready / {CFG.TIER_TOP} hits, each ★ tinted to match its own thumbnail's box + arrow; the thumbnail names the protein + ligand and shows its active-site geometry",
         f"  Look for: Bright chemical regions enriched for degraders, with the {CFG.TIER_TOP} stars clustering there.",
         "            Thumbnails reveal the active-site geometry behind each top hit at a glance.",
         "",
         "=" * 80,
-        "PART 8 — MULTI-METRIC SYNTHESIS",
+        "PART 8 - MULTI-METRIC SYNTHESIS",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 19a — Figure_19a_Radar_TopHits.png",
-        f"  Title   : Candidate Radar — Top-5 Hits vs. {CFG.TIER_POOR}-Tier Baseline  [Radar]",
+        "Figure 19a - Figure_19a_Radar_TopHits.png",
+        f"  Title   : Candidate Radar - Top-5 Hits vs. {CFG.TIER_POOR}-Tier Baseline  [Radar]",
         "  Type    : Radar / spider chart with normalised metric spokes (0-1 each)",
         "  Spokes  : 5 normalised metrics: AI Confidence, ipTM, Interaction Density, mean pLDDT, Binding Prob.",
         f"  Lines   : Top-5 best-tier hits (coloured lines) vs. {CFG.TIER_POOR}-tier average baseline (red dashed)",
@@ -10693,22 +10693,22 @@ def write_figure_descriptions(out_dir: Path):
         "            Spokes where baseline and hits overlap = metric does not discriminate.",
         "",
         "-" * 80,
-        "Figure 19b — Figure_19b_Radar_TierReps.png",
-        "  Title   : Candidate Radar — One Representative per Tier  [Radar]",
+        "Figure 19b - Figure_19b_Radar_TierReps.png",
+        "  Title   : Candidate Radar - One Representative per Tier  [Radar]",
         "  Type    : Radar / spider chart; one line per tier (best Boltz confidence per tier selected)",
         "  Spokes  : Same 5 normalised metrics as Figure 19a",
         "  Look for: Which tier consistently achieves the largest polygon (best on all metrics)?",
         "            Which metrics most differentiate tiers (largest gap between lines)?",
         "",
         "-" * 80,
-        "Figure 20a — Figure_20a_Tier_Success_Rates.png",
-        "  Title   : Tier success rates — substrate vs inhibitor geometry",
+        "Figure 20a - Figure_20a_Tier_Success_Rates.png",
+        "  Title   : Tier success rates - substrate vs inhibitor geometry",
         "  Type    : Grouped horizontal bar chart (one tier per row)",
         "  X-axis  : Percentage of complexes (%)",
         f"  Bars    : Substrate (SN2≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° + Conf≥{CFG.SUBSTRATE_CONF_MIN:.2f}); SN2≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° (any conf); Potential inhibitor (SN2<{CFG.INHIBITOR_ANGLE_MAX:.0f}°)",
         "  Look for: Top tiers carry higher substrate-geometry pass rates and lower inhibitor fractions.",
         "",
-        "Figure 20b — Figure_20b_Conf_SN2_Landscape.png",
+        "Figure 20b - Figure_20b_Conf_SN2_Landscape.png",
         "  Title   : Tier medians in Confidence × SN2-angle space",
         "  Type    : Scatter of per-tier median diamonds (IQR error bars) over a hexbin density background",
         "  X-axis  : Boltz Model Confidence",
@@ -10718,8 +10718,8 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Top tiers sit inside the substrate zone, right of the 0.75 confidence threshold.",
         "",
         "-" * 80,
-        "Figure 21 — Figure_21_Conflict_Composition.png",
-        "  Title   : Conflict Category x Tier Composition — Stacked Bar",
+        "Figure 21 - Figure_21_Conflict_Composition.png",
+        "  Title   : Conflict Category x Tier Composition - Stacked Bar",
         "  Type    : Side-by-side stacked bar (absolute counts left, % composition right)",
         f"  X-axis  : Conflict category (Consensus High, Hidden Gem, Ambiguous, Consensus Low, {CFG.TIER_DECOY})",
         "  Y-axis left : Absolute number of complexes in each category x tier combination",
@@ -10733,11 +10733,11 @@ def write_figure_descriptions(out_dir: Path):
         "    Consensus Low   = bottom 50% on both axes",
         "  Look for: Consensus High dominated by Tier_1/Tier_2 tiers = metrics agree.",
         f"            {CFG.TIER_DECOY}s concentrated in {CFG.TIER_POOR}/{CFG.TIER_ORDER[4]} = AI over-confident on weaker candidates.",
-        "            The % panel shows tier composition normalised — compare categories fairly.",
+        "            The % panel shows tier composition normalised - compare categories fairly.",
         "",
         "-" * 80,
-        "Figure 22 — Figure_22_Hidden_Gems_DeepDive.png",
-        f"  Title   : Hidden Gems — Physics-{CFG.TIER_ORDER[4]} / AI-Missed Conflicts",
+        "Figure 22 - Figure_22_Hidden_Gems_DeepDive.png",
+        f"  Title   : Hidden Gems - Physics-{CFG.TIER_ORDER[4]} / AI-Missed Conflicts",
         "  Type    : Horizontal dual-dot lollipop slope chart (only generated if Hidden Gems exist)",
         "  X-axis  : Percentile rank (0-100%; 0 = worst, 100 = best)",
         "  Y-axis  : Each hidden gem complex (sorted by AI rank, best at top)",
@@ -10747,18 +10747,18 @@ def write_figure_descriptions(out_dir: Path):
         "  Background zones: Tertiles (0-33 lower, 33-67 middle, 67-100 top) with colour shading",
         "  Annotations: Delta% label right of rightmost dot; tier-coloured y-axis labels",
         "  Look for: Gems that rank high on physics (left dot far right) but low on AI (right dot left).",
-        "            Wide connecting lines = large AI/physics disagreement — worth manual rescue.",
+        "            Wide connecting lines = large AI/physics disagreement - worth manual rescue.",
         "",
         "-" * 80,
-        "Figure 23 — Figure_23_Category_Overlap_Euler.png",
-        "  Title   : Category Overlap — Euler / Venn Diagram",
+        "Figure 23 - Figure_23_Category_Overlap_Euler.png",
+        "  Title   : Category Overlap - Euler / Venn Diagram",
         f"  Type    : Manual circle patches (3 main circles + {CFG.TIER_TOP} dashed overlay)",
         "  Sets    :",
         "    A (Physics-Strong)  : soft_catalytic_score / mechanistic_score / SN2 angle >= 67th percentile (top tercile catalytic geometry; confidence-independent)",
         "    B (AI-Strong)       : Boltz_Model_Confidence / ipTM / pTM >= 67th percentile (top 33% AI)",
         "    C (Tier-Strong)     : degrader_tier in {" + CFG.TIER_TOP + ", " + CFG.TIER_ORDER[1] + ", " + CFG.TIER_ORDER[2] + "}",
         "  Overlays:",
-        f"    Dashed pink circle  : {CFG.TIER_TOP} — weighted to their position across A/B/C",
+        f"    Dashed pink circle  : {CFG.TIER_TOP} - weighted to their position across A/B/C",
         "    Dotted grey circle  : All-three intersection highlight",
         "    Star markers        : 3R3U and DeHa4 reference controls (positioned in correct region)",
         "  Annotations: 7 region count boxes (count + row %); 4-column legend",
@@ -10767,7 +10767,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Reference controls (3R3U, DeHa4) should land in the A+B+C region.",
         "",
         "-" * 80,
-        "Figure 24a — Figure_24a_Top25_Multitarget_Proteins.png",
+        "Figure 24a - Figure_24a_Top25_Multitarget_Proteins.png",
         "  Type    : Horizontal stacked bar chart (one bar per protein, stacked by tier)",
         "  X-axis  : Number of unique PFAS ligands degraded (best tier per protein–ligand pair)",
         "  Y-axis  : Protein (top 25, ranked by quality-weighted degradation breadth)",
@@ -10775,7 +10775,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Wide bars = broad-spectrum PFAS degraders. Deep-green left stack = top-tier activity across many ligands.",
         "",
         "-" * 80,
-        "Figure 24b — Figure_24b_TopTier_Protein_PFAS_Breakdown.png",
+        "Figure 24b - Figure_24b_TopTier_Protein_PFAS_Breakdown.png",
         f"  Type    : Horizontal stacked bar; one bar per protein that reaches {CFG.TIER_TOP} on ≥1 PFAS",
         "  X-axis  : Number of PFAS degraded (each block = one PFAS ligand)",
         "  Blocks  : Colour = PFAS ligand identity; printed label = that ligand's tier (T1A, T1B, T2A, …)",
@@ -10783,22 +10783,22 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Whether the elite proteins also degrade many OTHER PFAS, and at what tiers (substrate breadth of the best hits).",
         "",
         "-" * 80,
-        "Figure 25 — Figure_25_Sankey_Workflow.png",
-        "  Title   : Sankey Pathway — full FAcD tier-decision rules → Final Tier",
+        "Figure 25 - Figure_25_Sankey_Workflow.png",
+        "  Title   : Sankey Pathway - full FAcD tier-decision rules → Final Tier",
         "  Type    : Flat Sankey (ribbon polygons); node boxes labelled with COUNTS",
         "  Columns : Nuc Distance (CFG cuts) · Carboxylate Clamp (Arg/Lys) ·",
         "            Halide Stabilisation · Triad Geometry (Nuc–Base · Base–Acid) ·",
         "            SN2 Angle · Mechanistic Score · Final Tier",
         f"  Order   : best category on top in every column ({CFG.TIER_TOP}, ≤{CFG.TIER_NUC_DIST['Tier_1A']:.1f} Å, ≥{CFG.TIER_ANGLE_MIN['Tier_1A']:.0f}°, ≥{CFG.MECH_ELITE_HI:.2f})",
         "  Bins    : all cut points sourced from CFG (TIER_NUC_DIST / TIER_ANGLE_MIN /",
-        "            TIER_NB_MAX / TIER_BA_MAX / TIER_MECH_MIN) — match 02_Production gates",
+        "            TIER_NB_MAX / TIER_BA_MAX / TIER_MECH_MIN) - match 02_Production gates",
         "  Ribbons : Width proportional to complex count; coloured by destination tier",
         f"  Look for: {CFG.TIER_TOP} requires ALL rules to pass (tight nuc + clamp + stabilisation",
         f"            + tight triad + ≥{CFG.TIER_ANGLE_MIN['Tier_1A']:.0f}° + mech ≥{CFG.MECH_ELITE_HI:.2f}); the narrowing chain shows the attrition.",
         "",
         "-" * 80,
-        "Figure 26a — Figure_26a_PFAS_Size_Hexbin_Landscape.png",
-        "  Title   : PFAS Chain-Length vs SN2 Geometry — Substrate Preference and Inhibition Risk",
+        "Figure 26a - Figure_26a_PFAS_Size_Hexbin_Landscape.png",
+        "  Title   : PFAS Chain-Length vs SN2 Geometry - Substrate Preference and Inhibition Risk",
         "  Type    : Hexbin density (F-count × SN2 angle) with tier scatter overlay and rolling median",
         "  X-axis  : Total fluorine count (proxy for carbon chain length); ticks every 2 units",
         f"  Y-axis  : SN2 Attack Angle (°); green zone ≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° = substrate; red zone <{CFG.INHIBITOR_ANGLE_MAX:.0f}° = inhibitor",
@@ -10806,8 +10806,8 @@ def write_figure_descriptions(out_dir: Path):
         "            distribution relative to substrate zone.",
         "",
         "-" * 80,
-        "Figure 26b — Figure_26b_PFAS_Size_Composition_Merged.png",
-        "  Title   : Chain-length Composition — Mechanistic Outcome + Degrader Tier (merged)",
+        "Figure 26b - Figure_26b_PFAS_Size_Composition_Merged.png",
+        "  Title   : Chain-length Composition - Mechanistic Outcome + Degrader Tier (merged)",
         "  Type    : Single panel; per chain-length bin a LEFT stacked bar (outcome) and",
         "            a RIGHT stacked bar (degrader tier) side by side.",
         "  Left bar: Substrate (green), Borderline (amber), Reactive low conf (blue),",
@@ -10816,22 +10816,22 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Substrate % peaks at short/medium chains; inhibition risk rises with chain length.",
         "",
         "-" * 80,
-        "Figure 26c — Figure_26c_PFAS_Carbon_Confidence.png",
+        "Figure 26c - Figure_26c_PFAS_Carbon_Confidence.png",
         "  Title   : Catalytic competence vs molecular weight by PFAS carbon number",
-        "  Type    : Dual-axis per carbon-number group — LEFT (0–1): soft_catalytic_score box + degrader fraction line; RIGHT: median MW",
+        "  Type    : Dual-axis per carbon-number group - LEFT (0–1): soft_catalytic_score box + degrader fraction line; RIGHT: median MW",
         "  X-axis  : Carbon number C2…Cn; fluorine counts present per group in parentheses (e.g. C2 (1F, 2F, 3F))",
-        "  Control : Boltz confidence median plotted as a faint grey dashed line — it falls with size as a prediction artefact, NOT catalysis",
-        "  Look for: catalytic competence (soft score / degrader fraction) is roughly flat across chain length, whereas confidence declines with size — i.e. any apparent 'small-molecule preference' from confidence is a prediction artefact, not a catalytic one.",
+        "  Control : Boltz confidence median plotted as a faint grey dashed line - it falls with size as a prediction artefact, NOT catalysis",
+        "  Look for: catalytic competence (soft score / degrader fraction) is roughly flat across chain length, whereas confidence declines with size - i.e. any apparent 'small-molecule preference' from confidence is a prediction artefact, not a catalytic one.",
         "",
         "=" * 80,
-        "BACKBONE GEOMETRY — RAMACHANDRAN (subfolder: Ramachandran/)",
+        "BACKBONE GEOMETRY - RAMACHANDRAN (subfolder: Ramachandran/)",
         "=" * 80,
         "",
         "-" * 80,
-        "Ramachandran_3R3U_Crystal.png — phi/psi of the 3R3U crystal reference.",
-        "Ramachandran_<Control>_Control.png — phi/psi of each Boltz-2 control prediction",
+        "Ramachandran_3R3U_Crystal.png - phi/psi of the 3R3U crystal reference.",
+        "Ramachandran_<Control>_Control.png - phi/psi of each Boltz-2 control prediction",
         "  (DeHa4 and 3R3U sequences against fluoroacetate).",
-        "Ramachandran_<Control>_vs_Crystal.png — control overlaid on the crystal.",
+        "Ramachandran_<Control>_vs_Crystal.png - control overlaid on the crystal.",
         "  Look for: control backbones occupying the same favoured basins as the crystal,",
         "            confirming the predictions reproduce native secondary structure.",
         "",
@@ -10841,29 +10841,29 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "01_Pocket_vs_Ligand_Volume.png",
-        "  Title   : Pocket capacity vs ligand size — steric fit boundary",
+        "  Title   : Pocket capacity vs ligand size - steric fit boundary",
         "  Type    : Scatter (one point per complex), coloured by tier, equal-aspect axes",
         "  X-axis  : Active-site cavity volume (Å³); Y-axis: ligand molecular volume (Å³)",
-        "  Boundary: y = x dashed line — points above it are ligands larger than the pocket",
+        "  Boundary: y = x dashed line - points above it are ligands larger than the pocket",
         "  Look for: ligands sit well below the boundary (occupancy << 1); only the longest",
         "            perfluoro chains approach it. Annotation reports the overfill count.",
         "",
         "-" * 80,
         "02_Pocket_Occupancy_by_Carbon_Number.png",
         "  Title   : Ligand containment by PFAS carbon number",
-        "  Type    : Per carbon group (C2…Cn, fluorine counts in parentheses) — whole-cavity",
+        "  Type    : Per carbon group (C2…Cn, fluorine counts in parentheses) - whole-cavity",
         "            coverage as a violin (full distribution) with the 8-residue active-site",
         "            coverage as a box (median · IQR) inside it; both group means are trended",
         "  Y-axis  : Fraction of the ligand contained (0–1); dashed line at 1.0 = fully contained",
         "  Look for: both measures fall as the chain lengthens, and the active-site box drops",
-        "            faster than the cavity violin — the cavity still holds a long chain after the",
+        "            faster than the cavity violin - the cavity still holds a long chain after the",
         "            catalytic shell has lost it. That divergence is the enzyme's size selectivity.",
         "",
         "-" * 80,
         "  Title   : Catalytic competence vs pocket occupancy",
         "  Type    : Scatter coloured by tier + binned-median trend (red diamonds)",
         "  Axes    : X = pocket occupancy; Y = catalytic competence score",
-        "  Look for: whether competence falls as the cavity crowds — the steric signal that",
+        "  Look for: whether competence falls as the cavity crowds - the steric signal that",
         "            informs the feasibility weighting.",
         "",
         "-" * 80,
@@ -10891,10 +10891,10 @@ def write_figure_descriptions(out_dir: Path):
         "-" * 80,
         "05_Quality_and_Competence_Diagnostics.png",
         "  Title   : Quality & competence diagnostics (2-panel scatter, tier-coloured)",
-        "  Panel A : Boltz model confidence (x) vs catalytic competence (y) — whether confident",
+        "  Panel A : Boltz model confidence (x) vs catalytic competence (y) - whether confident",
         "            predictions are also catalytically competent, or whether the two diverge",
         "  Panel B : Mechanistic score (x, functional quality) vs chemical penalty (y, 1 − feasibility",
-        "            or active-site contact flag) — the functional-vs-flag trade-off per complex",
+        "            or active-site contact flag) - the functional-vs-flag trade-off per complex",
         "  Look for: top-tier complexes clustering at high confidence + high competence (A) and high",
         "            functional score + low penalty (B). Ported from the HADs extra-validation set.",
         "",
@@ -10904,7 +10904,7 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "06_Size_Preference_Containment.png",
-        "  Title   : Size preference — effective mechanistic score vs ligand size",
+        "  Title   : Size preference - effective mechanistic score vs ligand size",
         "  Type    : Per-size-bin distribution + bin means + catalytic hit-rate + mean containment",
         "  Look for: competence falls with ligand size; containment falls with it too. FAcD is a",
         "            small-substrate hydrolase, and this is where that shows.",
@@ -10914,16 +10914,16 @@ def write_figure_descriptions(out_dir: Path):
         "  Title   : Reactive-carbon engagement with the catalytic residues by carbon number",
         "  Type    : Nucleophile-distance box + 8-residue spread + properly-positioned fraction",
         "  Look for: the properly-positioned fraction collapses beyond ~C6 while the ligand is",
-        "            still nominally bound — reach is not engagement.",
+        "            still nominally bound - reach is not engagement.",
         "",
         "-" * 80,
         "08_Model_Agreement.png",
-        "  Title   : Diffusion-sample consensus by tier — are the elite hits reproducible?",
+        "  Title   : Diffusion-sample consensus by tier - are the elite hits reproducible?",
         "  Type    : Consensus distribution per tier (violin + box), per-tier mean, MD-selected starred",
         "  X-axis  : Degrader tier; Y-axis: fraction of diffusion samples independently reaching a",
         "            degrader tier (model_degrader_consensus)",
         "  Look for: whether Tier_1A is consensus-backed. A tier whose hits sit BELOW 0.5 earned",
-        "            its label from a minority of samples — a best-of-N over the diffusion ensemble,",
+        "            its label from a minority of samples - a best-of-N over the diffusion ensemble,",
         "            not a reproducible property of the complex.",
         "",
         "=" * 80,
@@ -10934,12 +10934,12 @@ def write_figure_descriptions(out_dir: Path):
         "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
         "  Title   : Reaction geometry with multi-model uncertainty",
         "  Look for: nucleophile distance and SN2 angle per tier, with the spread across the",
-        "            diffusion samples — a tight tier is a reproducible one.",
+        "            diffusion samples - a tight tier is a reproducible one.",
         "",
         "-" * 80,
         "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.png",
         "  Title   : Binding affinity by tier",
-        "  Look for: affinity does NOT order the tiers — a high-affinity binder that presents the",
+        "  Look for: affinity does NOT order the tiers - a high-affinity binder that presents the",
         "            wrong face to the mapped catalytic aspartate is not a degrader. This figure is the evidence.",
         "",
         "-" * 80,
@@ -10966,15 +10966,15 @@ def write_figure_descriptions(out_dir: Path):
         "-" * 80,
         "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
         "  Title   : Tier_1A proteins x ligands",
-        "  Look for: whether an elite protein is elite for ONE ligand or several — a protein that",
+        "  Look for: whether an elite protein is elite for ONE ligand or several - a protein that",
         "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
         "",
         "-" * 80,
         "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.png",
-        "  Title   : Mechanistic fingerprint — per-tier catalytic feature profile",
+        "  Title   : Mechanistic fingerprint - per-tier catalytic feature profile",
         "  Type    : Radar / spider chart; one feature spoke per axis,",
         "            one tier-coloured filled polygon across them",
-        "  Axes    : Mechanistic features (config §5) — carboxylate head, halide",
+        "  Axes    : Mechanistic features (config §5) - carboxylate head, halide",
         "            stabilisation, carboxylate clamp, SN2 alignment (angle/180°),",
         "            mechanistic score (summary)",
         "  Radius  : Tier-mean engagement 0–1 (boolean requirements → fraction engaged;",
@@ -10985,13 +10985,13 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.png",
-        "  Title   : Binding energetics — binding probability by tier",
+        "  Title   : Binding energetics - binding probability by tier",
         "  Type    : Binding-probability violin per tier (red median bar)",
         "  Look for: how binding probability (sigmoid of interaction density, cross-PAE and",
         "            across tiers. Product inhibition is assessed downstream by the Step-06 MM-GBSA stage.",
         "",
         "=" * 80,
-        "PART 9 — TWO-CRITERIA TIER LOGIC & DEAD-END FEASIBILITY",
+        "PART 9 - TWO-CRITERIA TIER LOGIC & DEAD-END FEASIBILITY",
         "=" * 80,
         "",
         "-" * 80,
@@ -11003,9 +11003,9 @@ def write_figure_descriptions(out_dir: Path):
         "            placed) vs Criterion B (catalytic constellation score) violins per A-bin, with the",
         "            median-B trend and the Tier_1A Criterion-B floor. Top row = share of complexes in",
         "            each A-bin clearing the B-floor.",
-        "  Panel b : Criterion-B ECDF per tier with per-tier mean diamonds (arrowed values) — higher",
+        "  Panel b : Criterion-B ECDF per tier with per-tier mean diamonds (arrowed values) - higher",
         "            tiers shifted right; the constellation cleanly separates the tiers.",
-        "  Panel c : SN2 dead-end chemistry gate — scissile C-F BDE vs backside steric occlusion for the",
+        "  Panel c : SN2 dead-end chemistry gate - scissile C-F BDE vs backside steric occlusion for the",
         "            ligands that actually carry the penalty (plus FA/DFA controls); the shaded quadrant",
         "            is the BDE x occlusion dead-end gate.",
         "  Look for: B clears the floor only once A is complete (a); tier order tracks Criterion B (b);",
@@ -11058,73 +11058,73 @@ def write_figure_descriptions(out_dir: Path):
     lines += [
         "",
         "=" * 80,
-        "PART 8 — ADDITIONAL FIGURE TYPES",
+        "PART 8 - ADDITIONAL FIGURE TYPES",
         "=" * 80,
         "",
         "-" * 80,
-        "Figure — 03_Dataset_and_Alignment_Overview/06_Treemap_Tier_Ligand_Composition.png",
-        "  Type    : Treemap (squarified) — one rectangle per tier × ligand cell",
+        "Figure - 03_Dataset_and_Alignment_Overview/06_Treemap_Tier_Ligand_Composition.png",
+        "  Type    : Treemap (squarified) - one rectangle per tier × ligand cell",
         "  Area    : Number of protein–ligand candidates in that tier for that ligand",
         "  Colour  : Degrader tier (CFG.TIER_COLOUR)",
         "  Look for: Which ligands dominate each tier by volume; the largest blocks are the",
         "            most-populated tier/ligand combinations.",
         "",
         "-" * 80,
-        "Figure — 05_Catalytic_Geometry_and_Mechanism/15_Metric_CoVariation_Network.png",
+        "Figure - 05_Catalytic_Geometry_and_Mechanism/15_Metric_CoVariation_Network.png",
         "  Type    : Force-directed network of the scoring metrics",
         "  Nodes   : Metrics; edges drawn where |Pearson r| ≥ 0.5; node size ∝ degree",
         "  Colour  : Connected component (CFG Okabe-Ito accents)",
-        "  Look for: Clusters of metrics that co-vary — redundant vs. independent signal.",
+        "  Look for: Clusters of metrics that co-vary - redundant vs. independent signal.",
         "",
         "-" * 80,
-        "Figure — 07_PFAS_Scope_and_Synthesis/16_Swimmer_Top_Per_Tier.png",
-        "  Type    : Swimmer (horizontal bars) — top 3 candidates per tier (Tier_1A → Tier_5_Decoy)",
+        "Figure - 07_PFAS_Scope_and_Synthesis/16_Swimmer_Top_Per_Tier.png",
+        "  Type    : Swimmer (horizontal bars) - top 3 candidates per tier (Tier_1A → Tier_5_Decoy)",
         "  X-axis  : Effective mechanistic score;  bar colour = tier (CFG.TIER_COLOUR)",
         "  Markers : ▶ MD-selected, ● degrader (CFG.VIS_ACCENT)",
         "  Look for: The score gradient down the tiers and which representatives were MD-selected.",
         "",
         "-" * 80,
-        "Figure — 07_PFAS_Scope_and_Synthesis/17_Circos_Ligand_Tier_Assignment.png",
+        "Figure - 07_PFAS_Scope_and_Synthesis/17_Circos_Ligand_Tier_Assignment.png",
         "  Type    : Circos / chord diagram",
         "  Arcs    : Ligand → tier assignment; ribbon width ∝ candidate count",
         "  Colour  : Tier (CFG.TIER_COLOUR); grey ticks = ligands",
         "  Look for: Which tiers each ligand feeds, and the dominant ligand→tier flows.",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/10_Volcano_Metric_Significance.png",
-        "  Type    : Volcano plot — one point per scoring metric",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/10_Volcano_Metric_Significance.png",
+        "  Type    : Volcano plot - one point per scoring metric",
         "  X-axis  : Effect size (Cohen's d, degrader − non-degrader)",
         "  Y-axis  : −log10 p (Mann–Whitney, degrader vs non-degrader)",
         "  Colour  : Higher in degraders / lower / n.s. (CFG.VIS_ACCENT + CFG.VIS_INK)",
         "  Look for: Which metrics most separate degraders from non-degraders.",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/11_Manhattan_Candidate_Significance.png",
-        "  Type    : Manhattan plot — one point per candidate, grouped by ligand 'locus'",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/11_Manhattan_Candidate_Significance.png",
+        "  Type    : Manhattan plot - one point per candidate, grouped by ligand 'locus'",
         "  X-axis  : Candidates ordered by ligand;  Y-axis : rank-based −log10 significance",
         "  Colour  : Ligand locus (CFG Okabe-Ito accents); dashed line = p 0.05",
         "  Look for: Ligands with many high-significance candidates rising above the line.",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/12_Feature_Importance_Tier_Streams.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/12_Feature_Importance_Tier_Streams.png",
         "  Type    : Feature-importance bars (left) + tier-composition streamgraph (right)",
         "  Left    : |PC1 loading| per metric (importance); Right : tier stream across ligands",
         "  Colour  : Degrader tier (CFG.TIER_COLOUR)",
         "  Look for: Which metrics drive PC1, and how tier composition varies across ligands.",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png",
         "  Type    : Per-Boltz-model SN2 distance (top) + angle (bottom) box-by-tier",
         "  X-axis  : Degrader tier;  Hue : the 5 Boltz diffusion models;  dashed = strict-NAC references",
         "  Look for: Whether the 5 models agree on the geometry within a tier (tight boxes = consistent).",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/14_MultiModel_Geometry_Variance_conf90.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/14_MultiModel_Geometry_Variance_conf90.png",
         "  Type    : Per-tier SN2 distance/angle box + strip, restricted to confidence ≥ 0.90",
         "  Look for: Does the geometry–tier trend hold when only high-confidence models are kept?",
         "",
         "-" * 80,
-        "Figure — 08_Diagnostic_and_MultiModel_Trends/15_MultiModel_Geometry_Variance_iptm90.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/15_MultiModel_Geometry_Variance_iptm90.png",
         "  Type    : As figure 14 but restricted to ipTM ≥ 0.90 (high interface confidence)",
         "  Look for: Whether the high-interface-confidence subset preserves the per-tier geometry trend.",
         "",
@@ -11135,7 +11135,7 @@ def write_figure_descriptions(out_dir: Path):
 
     """
     Folder 01's figures are named, not numbered, so the numbered blocks above never reach them and the
-    Ramachandran panels — the only structural validation against a crystal in the whole pipeline — went
+    Ramachandran panels - the only structural validation against a crystal in the whole pipeline - went
     undescribed. They are appended here rather than renumbered: the filenames are what the backbone
     validation refers to.
     """
@@ -11146,14 +11146,14 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "-" * 80,
         "02_Ramachandran/Ramachandran_3R3U_Crystal.png",
-        "  Title   : Ramachandran plot — 3R3U crystal structure",
+        "  Title   : Ramachandran plot - 3R3U crystal structure",
         "  Type    : phi/psi scatter over the favoured/allowed contour map",
         "  Look for: the reference. Every Boltz-2 prediction is judged against this distribution.",
         "",
         "-" * 80,
         "02_Ramachandran/Ramachandran_DeHa4_Control.png",
         "02_Ramachandran/Ramachandran_3R3U_Control.png",
-        "  Title   : Ramachandran plot — Boltz-2 control prediction (DeHa4 / 3R3U sequence)",
+        "  Title   : Ramachandran plot - Boltz-2 control prediction (DeHa4 / 3R3U sequence)",
         "  Look for: outliers in the disallowed regions. A prediction with good ipTM but a strained",
         "            backbone has bought its confidence with geometry the protein cannot hold.",
         "",
@@ -11169,8 +11169,8 @@ def write_figure_descriptions(out_dir: Path):
 
     """
     The legend must describe the figures the run actually produced. A figure can be skipped for a
-    legitimate, data-driven reason — the Hidden Gems panel draws nothing when no complex is
-    physics-strong yet AI-doubted — and a legend that still promises it sends the reader to a file
+    legitimate, data-driven reason - the Hidden Gems panel draws nothing when no complex is
+    physics-strong yet AI-doubted - and a legend that still promises it sends the reader to a file
     that is not there. Blocks whose figure is absent are moved to a closing section that says so, and
     why, rather than being silently deleted: 'this figure has no data' is itself a finding.
     """
@@ -11190,7 +11190,7 @@ def write_figure_descriptions(out_dir: Path):
             "=" * 80,
             "",
             "These figures are defined by the pipeline but drew no data on this dataset. That is a",
-            "result, not an omission — the reason is given per figure.",
+            "result, not an omission - the reason is given per figure.",
             "",
         ])
         for _p, _b in _absent:
@@ -11202,7 +11202,7 @@ def write_figure_descriptions(out_dir: Path):
     _stats_path = _write_statistical_tests(out_dir)
     if _stats_path is not None:
         # console_info (not bare print) so this line carries the same 2-space indent as every other
-        # '✔ Saved:' line the reporter emits — otherwise it sits two spaces to the left of the rest.
+        # '✔ Saved:' line the reporter emits - otherwise it sits two spaces to the left of the rest.
         console_info(f"  ✔ Saved: 01_Analysis_Data/{_stats_path.name}")
     return desc_path
 
@@ -11251,7 +11251,7 @@ def main():
     prod_dir = run_ttth / "1_Boltz2_Production"
     out_dir = run_ttth / "3_Validation_Figures"
 
-    # Each numbered figure folder is created lazily — only when its step first writes into it (see
+    # Each numbered figure folder is created lazily - only when its step first writes into it (see
     # _redirect_savefig, _panel, and the Step-2 Ramachandran / Step-8 diagnostic calls). Folders then
     # appear on disk in step order, never pre-created empty ahead of their turn.
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -11277,7 +11277,7 @@ def main():
 
         # Finalise 01_Analysis_Data before the figure steps: build the multi-model variance CSV here
         # (parse the 5 model CIFs per complex) so the whole 01_Analysis_Data set is complete before
-        # Step 2. The geometry panel in Step 5 then only READS this cache — it never rebuilds.
+        # Step 2. The geometry panel in Step 5 then only READS this cache - it never rebuilds.
         if _ALLOW_VARIANCE_COMPUTE:
             reporter.log("")
             reporter.log("  Multi-Model Variance QC")
@@ -11294,7 +11294,7 @@ def main():
             reporter.log(f"  ! Residue-mapping QC skipped: {type(_e).__name__}: {_e}")
 
         # Figures are generated folder-by-folder in narrative order (02 → 08).
-        # 02_Ramachandran — control backbone-geometry validation.
+        # 02_Ramachandran - control backbone-geometry validation.
         rama_dir.mkdir(parents=True, exist_ok=True)   # 02_Ramachandran created at its turn (Step 2)
         generate_ramachandran_figures(prod_dir, rama_dir, reporter)
 
@@ -11307,8 +11307,8 @@ def main():
             if p.is_dir():
                 shutil.rmtree(p)
 
-        # The battery runs after every figure has registered its own tests, so the whole family —
-        # the figures' tests and the battery's — is Benjamini-Hochberg corrected together, once.
+        # The battery runs after every figure has registered its own tests, so the whole family -
+        # the figures' tests and the battery's - is Benjamini-Hochberg corrected together, once.
         # It must run BEFORE write_figure_descriptions, which is what writes the stats CSV out.
         try:
             _statistical_battery(df, reporter)

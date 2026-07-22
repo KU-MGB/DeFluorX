@@ -4,7 +4,7 @@ FAcDs Pipeline  |  MODULE 00_02  |  Shared Utilities
 ===============================================================================
 Canonical source for console styling, logging infrastructure, matplotlib
 spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
-All downstream scripts import from here — never duplicate these definitions.
+All downstream scripts import from here - never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 20 July 2026 <────────────────────────────────────────────────────────
@@ -17,14 +17,14 @@ Date   : 20 July 2026 <───────────────────
                   06_Physics_Validation_FAcDs.py,
                   07_MD_QMMM_Defluorination_FAcDs.py
                   (also referenced by 00_01 for a ConsoleColours drift check)
-  Reads         : (none — pure utility module)
-  Writes        : (none — pure utility module)
+  Reads         : (none - pure utility module)
+  Writes        : (none - pure utility module)
 ───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
 The Critic's Corner: Known Limitations & Failure Points
 -------------------------------------------------------------------------------
-  1. Pure library: no executable entry point and no input validation of its own —
+  1. Pure library: no executable entry point and no input validation of its own -
      callers must pass well-formed arrays/paths.
   2. Geometry helpers assume Cartesian coordinates in Ångström; the MIC routines
      expect a Schrödinger/Desmond frame.box (3×3 or flat-9 vectors), NOT a
@@ -69,16 +69,16 @@ _ANSI_ESCAPE_RE = _re.compile(r"\033\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]")
 
 class ConsoleColours:
     """ANSI terminal colour codes for pipeline console output."""
-    OKGREEN = "\033[92m"   # green   — success / pass
-    WARNING = "\033[93m"   # yellow  — caution
-    FAIL    = "\033[91m"   # red     — error / fail
-    OKBLUE  = "\033[94m"   # blue    — information
-    MAGENTA = "\033[95m"   # magenta — script banners
-    BOLD    = "\033[1m"    # bold    — section headers
-    ENDC    = "\033[0m"    # reset   — end all formatting
+    OKGREEN = "\033[92m"   # green   - success / pass
+    WARNING = "\033[93m"   # yellow  - caution
+    FAIL    = "\033[91m"   # red     - error / fail
+    OKBLUE  = "\033[94m"   # blue    - information
+    MAGENTA = "\033[95m"   # magenta - script banners
+    BOLD    = "\033[1m"    # bold    - section headers
+    ENDC    = "\033[0m"    # reset   - end all formatting
 
 
-# Horizontal separators — choose the weight that matches visual hierarchy.
+# Horizontal separators - choose the weight that matches visual hierarchy.
 SEPARATOR_HEAVY = "═" * 80   # major section boundary  (═══)
 SEPARATOR_LIGHT = "─" * 80   # step / subsection       (───)
 SEPARATOR_DASH  = "-" * 80   # info line / minor break  (---)
@@ -87,7 +87,7 @@ SEPARATOR_DASH  = "-" * 80   # info line / minor break  (---)
 class _ConsoleRuleFilter:
     """A stdout wrapper that collapses consecutive separator rules.
 
-    The logs grow triple rules — ═══ / ─── / ═══ stacked with nothing between them — because a caller
+    The logs grow triple rules - ═══ / ─── / ═══ stacked with nothing between them - because a caller
     prints a rule and then invokes a helper that prints its own. Chasing every call site is endless
     and the next new print re-introduces it, so the rule is enforced where the text is actually
     emitted: a separator that immediately follows another separator, with only blank lines between,
@@ -126,7 +126,7 @@ class _ConsoleRuleFilter:
                 self._pending_rule = (_w, _norm)
                 continue
             if not _bare:
-                # Blank lines inside a rule run do not end it — they are what makes the stacks look
+                # Blank lines inside a rule run do not end it - they are what makes the stacks look
                 # like separate rules when they are not.
                 if self._last_was_rule:
                     continue
@@ -216,14 +216,14 @@ def _strip_ansi(s: str) -> str:
 
 
 def console_title(msg: str, logger: logging.Logger | None = None) -> None:
-    """Bold section header — printed and optionally written to log file."""
+    """Bold section header - printed and optionally written to log file."""
     print(f"\n{ConsoleColours.BOLD}{msg}{ConsoleColours.ENDC}", flush=True)
     if logger:
         logger.info(_strip_ansi(msg))
 
 
 def console_info(msg: str, logger: logging.Logger | None = None) -> None:
-    """Two-space-indented info line — printed and optionally written to log file."""
+    """Two-space-indented info line - printed and optionally written to log file."""
     # Ensure every line of a multi-line message is indented by two spaces.
     for line in str(msg).split("\n"):
         print(f"  {line}", flush=True)
@@ -235,7 +235,7 @@ def console_separator(
     logger: logging.Logger | None = None,
     heavy: bool = False,
 ) -> None:
-    """Horizontal rule — printed and optionally written to log file.
+    """Horizontal rule - printed and optionally written to log file.
 
     Parameters
     ----------
@@ -285,7 +285,7 @@ def print_elapsed(t0: float, script_name: str) -> None:
             f"{_s}s")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  {ConsoleColours.OKGREEN}✔  {script_name}  —  Pipeline Phase Complete"
+        f"  {ConsoleColours.OKGREEN}✔  {script_name}  -  Pipeline Phase Complete"
         f"  │  Total Elapsed: {_fmt}{ConsoleColours.ENDC}",
         flush=True,
     )
@@ -323,7 +323,7 @@ class ReportManager:
         For output the console is already showing in another form. A long job draws a progress bar
         rewritten in place (\\r); a milestone line sent through log() would print on top of it and
         break the bar into a ladder of half-finished lines. The file still gets the milestone, which
-        is where it is wanted — a log full of carriage returns is unreadable, and a console full of
+        is where it is wanted - a log full of carriage returns is unreadable, and a console full of
         milestone lines is a bar that does not work.
         """
         with open(self.path, "a") as f:
@@ -385,7 +385,7 @@ def latest_by_mtime(paths):
     """The newest existing file by modification time, or None.
 
     Selection is by mtime, NOT by name: a name sort ranks on the leading number, so a file with a higher
-    leading digit sorts last even when it is older — which would silently feed a stale file downstream.
+    leading digit sorts last even when it is older - which would silently feed a stale file downstream.
     mtime is prefix-agnostic and always returns the file written last. Callers pass the SSOT glob first
     and a wildcard fallback second, e.g.
         latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV)) or latest_by_mtime(prod.glob("*Ranked*.csv"))
@@ -398,7 +398,7 @@ def latest_by_mtime(paths):
 def write_json_atomic(path, payload: dict) -> None:
     """Write a JSON file so a reader never sees a half-written one.
 
-    The write goes to a temporary file beside the target and is then renamed over it — rename is
+    The write goes to a temporary file beside the target and is then renamed over it - rename is
     atomic within a filesystem, so a run killed mid-write leaves either the old file or the new
     one, never a truncated hybrid another step would parse as truth.
     """
@@ -457,7 +457,7 @@ def clean_spines(ax) -> None:
     Academic-style axes: remove top/right spines, thin the remaining borders.
 
     Canonical replacement for any ``apply_clean_spines`` defined locally in
-    individual scripts — import and call this function instead.
+    individual scripts - import and call this function instead.
     """
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -857,7 +857,7 @@ def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
     b1 =  get_mic_vector(p3, p2, box)
     b2 =  get_mic_vector(p4, p3, box)
     b1_len = np.linalg.norm(b1)
-    if b1_len < 1e-6:          # coincident central atoms (p2 ≡ p3) — dihedral undefined
+    if b1_len < 1e-6:          # coincident central atoms (p2 ≡ p3) - dihedral undefined
         return 0.0
     b1 /= b1_len
     v = b0 - np.dot(b0, b1) * b1
@@ -873,7 +873,7 @@ def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
 
 def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     """
-    Out-of-plane improper dihedral at centre p1 — used to detect transition-state
+    Out-of-plane improper dihedral at centre p1 - used to detect transition-state
     (Walden inversion) flattening of the sp3 electrophilic carbon.
     Ref (Walden inversion): Walden, P. (1896) Ber. Dtsch. Chem. Ges. 29:133–138.
     DOI: https://doi.org/10.1002/cber.18960290127
@@ -897,7 +897,7 @@ def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
         return 0.0
     n /= n_len
     v3_len = np.linalg.norm(v3)
-    if v3_len < 1e-6:          # p4 coincides with the centre p1 — undefined out-of-plane angle
+    if v3_len < 1e-6:          # p4 coincides with the centre p1 - undefined out-of-plane angle
         return 0.0
     cos_theta = np.dot(v3, n) / v3_len
     return 90.0 - np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
@@ -912,7 +912,7 @@ def calculate_burgi_dunitz(nuc_pos, c_pos, o_pos) -> float:
     Bürgi–Dunitz angle (Nucleophile–Carbon–Oxygen) in degrees; ideal ≈ 107° for
     nucleophilic addition at an sp² carbonyl carbon.
 
-    AUXILIARY / REFERENCE metric only — NOT a tier gate. In the FAcD pipeline the
+    AUXILIARY / REFERENCE metric only - NOT a tier gate. In the FAcD pipeline the
     catalytic event is SN2 at the sp³ α-carbon (the backside O–C–F attack angle,
     ideal 180°, is the gating geometry). This BD angle is reported solely as a
     nucleophile-vs-substrate-carboxylate pre-organisation descriptor and MUST be
@@ -1000,16 +1000,16 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
 
     Measures the angle between the Nu–C vector projected onto the R1–C–R2 plane
     and the bisector of R1–C–R2.  Ideal value = 0° (the nucleophile approaches ALONG the
-    bisector — equidistant from both substituents — which minimises steric clash with them.
+    bisector - equidistant from both substituents - which minimises steric clash with them.
     This is a BISECTING arrangement, not an eclipsed one: eclipsing a substituent would
     maximise the clash).
 
-    AUXILIARY / REFERENCE metric only — NOT a tier gate. Reports the in-plane
+    AUXILIARY / REFERENCE metric only - NOT a tier gate. Reports the in-plane
     (lateral) component of the nucleophile approach, complementing the backside
     O–C–F attack angle. Requires TWO well-defined heavy spectator substituents
     (R1, R2) on the attacked carbon; for small substrates whose α-carbon carries
     only hydrogens (often absent in heavy-atom CIF output) the offset is undefined
-    — callers must guard and report NaN rather than a spurious value.
+    - callers must guard and report NaN rather than a spurious value.
 
     Returns 999.0 on numerical failure (degenerate geometry).
     """
@@ -1098,7 +1098,7 @@ def compute_ligand_properties(smiles_file) -> dict:
     Compute per-ligand carbon count (nC), fluorine count (nF) and molecular
     weight (g/mol) directly from a SMILES panel via RDKit.
 
-    The SMILES file is the single source — nothing is hardcoded, so swapping the
+    The SMILES file is the single source - nothing is hardcoded, so swapping the
     ligand set (or proteins) requires no code change. Each line is
     "<SMILES>\\t<name>" (whitespace-separated); blank lines, comment lines (#)
     and entries RDKit cannot parse are skipped silently.
