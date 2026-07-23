@@ -25,8 +25,10 @@ Per run, in phases (all complexes at each phase before the next):
                 read natively from the cms + _trj) is queued to a single CPU worker, and the GPU starts
                 the next rank's MD immediately. The worker drains one rank at a time, so exactly one
                 Prime batch touches the scratch disk at once (no disk contention) while the GPU never
-                idles. A final pass draws the combined MM-GBSA and defluorination cross-rank figures.
-                All figures land in 06_Analysis.
+                idles. A rank's OWN figures (MM-GBSA profile + defluorination geometry) are drawn the
+                moment that rank's post-processing lands, so each rank is readable while the later
+                ranks are still on the GPU; only the cross-rank merged figures wait for the final
+                pass, which needs every rank present. All figures land in 06_Analysis.
 
 MM-GBSA (end-state binding ΔG over the ensemble) is complementary to the QSite QM/MM
 reaction barrier (Step 07): it scores BINDING, not C–F cleavage. The defluorination step adds
@@ -70,9 +72,10 @@ Dependency Map
                   <out>/04_System_Builder/desmond_setup_R_N/desmond_setup_R_N-out.cms
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
-                  <out>/06_Analysis/{Physics_Build_Solvation_QC.png, 00_MMGBSA_Summary.csv,
-                       01_MMGBSA_Combined_AllRanks.png, 00_Defluorination_Combined_AllRanks.png,
-                       Prime-MMGBSA/Prime-MMGBSA_R{N}/Rank_{N}_MMGBSA_Profile_*.png,
+                  <out>/06_Analysis/{00_MMGBSA_Summary.csv, 01_Physics_Build_Solvation_QC.png,
+                       02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png,
+                       Defluorination/00_Defluorination_Combined_AllRanks.png,
+                       Prime-MMGBSA/Prime-MMGBSA_R{N}/01_MMGBSA_Profile.png,
                        Defluorination/Defluorination_R{N}/01_SN2_Attack_Geometry.png … 08_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
@@ -156,6 +159,11 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 import matplotlib.patheffects as pe  # noqa: E402
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import atexit
+import math as _math
+import shutil as _sh
+import signal
 
 """
 CPU usage cap (total cores - 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
@@ -236,7 +244,6 @@ def _open_step_log(physics_dir: Path) -> None:
     try:
         physics_dir.mkdir(parents=True, exist_ok=True)
         _LOG_FH = open(physics_dir / "00_Physics_Validation.log", "w", encoding="utf-8")
-        import atexit
         atexit.register(lambda: _LOG_FH and not _LOG_FH.closed and _LOG_FH.close())
     except Exception:
         _LOG_FH = None
@@ -1562,8 +1569,8 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
         _ps = (_span * 1000.0 * step / max(total, 1)) if _span > 0 else 0.0
         _echo(f"    Sampling       : every {step}th frame → {_scored:,} structures to Prime"
               + (f", one per {_ps:,.0f} ps" if _ps else ""))
-        _echo(f"                     (below the ~0.1–1 ns decorrelation time of a bound pose, so the "
-              f"independent-sample count - and ⟨ΔG_bind⟩ - is unchanged)")
+        _echo("                     (below the ~0.1–1 ns decorrelation time of a bound pose, so the "
+              "independent-sample count - and ⟨ΔG_bind⟩ - is unchanged)")
     else:
         _echo(f"    Sampling       : every frame → {_scored:,} structures to Prime")
     _echo(f"    Shards         : {len(ranges)} × {getattr(CFG, 'MMGBSA_SHARD_FRAMES', 2000):,} frames, "
@@ -1801,7 +1808,6 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     scratch location).
     """
     try:
-        import shutil as _sh
         _probe = os.environ.get("SCHRODINGER_TMPDIR") or "/tmp"
         if not os.path.isdir(_probe):
             _probe = "/tmp"
@@ -2269,9 +2275,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     # shared) - so a ΔG value can be read straight across from one panel to the other.
     ax2.tick_params(labelleft=False, left=True)
     ax2.grid(alpha=0.25, linewidth=0.5)
-
-    _rk = f"{int(rank):02d}" if str(rank).isdigit() else str(rank)
-    out_path = out_dir / f"Rank_{_rk}_MMGBSA_Profile_{job_name}.png"
+    out_path = out_dir / "01_MMGBSA_Profile.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _echo(f"    ✔ Figure       : {out_path.name}")
@@ -2360,11 +2364,11 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     _stroke = [pe.withStroke(linewidth=2.6, foreground=_INK["light"])]
     for i, (m, n) in enumerate(zip(_meds, _nbad)):
         ax1.annotate(f"{m:.1f}", xy=(_x[i], m), xytext=(_x[i] + 0.30, m),
-                     textcoords="data", va="center", ha="left", fontsize=10.5,
+                     textcoords="data", va="center", ha="left", fontsize=CFG.VIS_FONT_AXIS_LABEL,
                      fontweight="bold", color=_cols[i], zorder=9, path_effects=_stroke)
         if n:
             ax1.text(_x[i], _lo - _pad * 0.55, f"{n} outlier{'s' if n > 1 else ''}",
-                     ha="center", fontsize=8, color=_cols[i], fontweight="bold",
+                     ha="center", fontsize=CFG.VIS_FONT_LEGEND, color=_cols[i], fontweight="bold",
                      zorder=9, path_effects=_stroke)
     ax1.set_xticks(_x); ax1.set_xticklabels(_labels)
     ax1.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  per-frame Prime MM-GBSA")
@@ -2400,7 +2404,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     # inverted y-axis and lands the text outside the bar.
     for i, m in enumerate(_meds):
         ax3.text(_x[i], m * 0.5, f"{m:.1f}", ha="center", va="center",
-                 fontsize=11.5, fontweight="bold", color=_INK["dark"], zorder=9,
+                 fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold", color=_INK["dark"], zorder=9,
                  path_effects=[pe.withStroke(linewidth=3.0, foreground=_INK["light"])])
     # Effect size vs the tightest binder - the number that says whether a gap MATTERS.
     """
@@ -2436,23 +2440,23 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     the background would vanish on one of the two.
     """
     _stroke_b = [pe.withStroke(linewidth=2.6, foreground=_INK["light"])]
-    ax3.text(_x[0] + 0.16, _q1[0], "IQR", fontsize=8.2, color=_INK["dark"], fontweight="bold",
+    ax3.text(_x[0] + 0.16, _q1[0], "IQR", fontsize=CFG.VIS_FONT_LEGEND, color=_INK["dark"], fontweight="bold",
              va="center", ha="left", zorder=9, path_effects=_stroke_b)
     if _lo_ci0 == _lo_ci0:
         ax3.text(_x[0] + 0.16, (_lo_ci0 + _hi_ci0) / 2,
-                 f"{getattr(CFG, 'MMGBSA_BOOTSTRAP_CI', 95):.0f}% CI", fontsize=8.2,
+                 f"{getattr(CFG, 'MMGBSA_BOOTSTRAP_CI', 95):.0f}% CI", fontsize=CFG.VIS_FONT_LEGEND,
                  color=_INK["dark"], fontweight="bold", va="center", ha="left", zorder=9,
                  path_effects=_stroke_b)
     if _delta_title:
         ax3.text(0.03, 0.97, _delta_title, transform=ax3.transAxes, va="top", ha="left",
-                 fontsize=7.8, color=_INK["soft"],
+                 fontsize=CFG.VIS_FONT_ANNOT, color=_INK["soft"],
                  bbox=dict(boxstyle="round,pad=0.45", facecolor=_INK["light"],
                            edgecolor=_INK["faint"], linewidth=0.8, alpha=0.93))
     ax3.grid(alpha=0.25, linewidth=0.5, axis="y")
     ax3.invert_yaxis()
 
     # ── Panel 4: time course + cumulative distribution, on one shared ΔG axis ───────────
-    _draw_time_cumulative(ax4, per_job, _cols, ligands, nspf)
+    _draw_time_cumulative(ax4, per_job, _cols, ligands, nspf, controls)
 
     """
     Publication finish: label the panels A/B/C (a reader cites 'panel B', not 'the top-right one'),
@@ -2476,7 +2480,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         for _sp in ("left", "bottom"):
             _ax.spines[_sp].set_linewidth(1.0)
 
-    out_path = out_dir / "01_MMGBSA_Combined_AllRanks.png"
+    out_path = out_dir / "03_MMGBSA_Combined_AllRanks.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _echo(f"  MM-GBSA combined figure saved: {out_path.resolve()}")
@@ -2508,7 +2512,8 @@ def _effective_n(dg: "pd.Series") -> float:
     return float(n / (1.0 + 2.0 * tau))
 
 
-def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: dict) -> None:
+def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: dict,
+                          controls: "set | None" = None) -> None:
     """Draw the time course and the cumulative distribution into ONE axes, on a shared ΔG axis.
 
       • BOTTOM x-axis - simulation time, in CFG.MMGBSA_TIME_WINDOW_NS windows. Solid line with
@@ -2614,6 +2619,26 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
+def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv: Path) -> None:
+    """Draw ONE rank's MM-GBSA profile from an existing CSV - never re-scores.
+
+    A rank is finished the moment its own MD → SID → MM-GBSA has landed, so its profile is readable
+    then; making it wait for the cross-rank Finalise pass would hold a completed rank's figure
+    hostage to every other rank's MD. Only the COMBINED plots, which genuinely need all ranks,
+    belong in Finalise. Both callers route through here so the output path is defined once.
+    """
+    dg = _mmgbsa_dg_series(csv)
+    if dg.empty:
+        return
+    _trj = job_dir / f"{job_name}_trj"
+    _span, _nfr = traj_span_ns(_trj), traj_frame_count(_trj)
+    _nspf = (_span / (_nfr - 1)) if (_span > 0 and _nfr > 1) else 0.0
+    _out = _analysis_dir(md_dir.parent) / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")
+    _rank_fig = _out / f"{_out.name}_R{rank}"
+    _rank_fig.mkdir(parents=True, exist_ok=True)
+    plot_mmgbsa_individual(_rank_fig, job_name, rank, dg, ns_per_frame=_nspf)
+
+
 def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> str:
     """Run + plot MM-GBSA for every completed MD job (idempotent).
 
@@ -2699,12 +2724,10 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
                     _echo(f"    ↳ when         : {_wins}. Failures that CLUSTER in time point at "
                           f"unstable stretches of the trajectory (inspect those frames); failures "
                           f"scattered evenly are ordinary Prime convergence noise.")
-            _echo(f"    Interpretation : GB implicit solvent overstabilises anionic PFAS - compare "
-                  f"ΔG_bind BETWEEN ranks, never as an absolute affinity.")
+            _echo("    Interpretation : GB implicit solvent overstabilises anionic PFAS - compare "
+                  "ΔG_bind BETWEEN ranks, never as an absolute affinity.")
         try:
-            _rank_fig = out_dir / f"{out_dir.name}_R{rank}"      # Prime-MMGBSA/Prime-MMGBSA_R{N}/
-            _rank_fig.mkdir(parents=True, exist_ok=True)
-            plot_mmgbsa_individual(_rank_fig, job_name, rank, dg, ns_per_frame=_nspf)
+            _plot_rank_mmgbsa(md_dir, d, job_name, rank, csv)
         except Exception as e:
             _echo(f"    ✘ per-job plot failed ({e}) - skipped.")
         per_job.append((rank, dg))
@@ -3042,7 +3065,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     axa.set_xlabel(f"% of trajectory within {_DEFL_ENGAGE:.0f} Å of ligand")
     axa.grid(axis="x", alpha=0.3); axa.set_xlim(0, max(vals) * 1.28 + 1)
     for i, v in enumerate(vals):
-        axa.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=8)
+        axa.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=CFG.VIS_FONT_LEGEND)
     crit = [(f"attack distance < {_DEFL_NAC_DIST:.1f} Å", dist_pct, _DEFL_OKABE[0]),
             (f"SN2 angle > {_DEFL_NAC_ANGLE:.0f}°", angle_pct, _DEFL_OKABE[1]),
             ("NAC-competent (both)", nac_pct, _DEFL_GREEN)]
@@ -3050,7 +3073,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     axb2.set_xlabel("% of frames satisfying criterion")
     axb2.grid(axis="x", alpha=0.3); axb2.set_xlim(0, max(max(c[1] for c in crit) * 1.35, 1) + 1)
     for i, c in enumerate(crit):
-        axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=9)
+        axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=CFG.VIS_FONT_TICK)
     fig.tight_layout(); fig.savefig(out / "03_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
 
     # 07 binding vs reactivity (only when MM-GBSA is available for this rank)
@@ -3174,7 +3197,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         top = max([v for v in vals if np.isfinite(v)] or [1])
         for i, v in enumerate(vals):
             if np.isfinite(v):
-                a.text(i, v + top * 0.02, fmt.format(v), ha="center", va="bottom", fontsize=8)
+                a.text(i, v + top * 0.02, fmt.format(v), ha="center", va="bottom", fontsize=CFG.VIS_FONT_LEGEND)
 
     _dgs = [r[5] for r in rows]
     _have_dg = any(np.isfinite(v) for v in _dgs)
@@ -3196,7 +3219,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         ax[3].axhline(0, color=_DEFL_GREY, lw=0.8)
         for i, v in enumerate(_dgs):
             ax[3].text(i, _fin[i], "n/a" if not np.isfinite(v) else f"{v:.1f}", ha="center",
-                       va="bottom" if _fin[i] >= 0 else "top", fontsize=8)
+                       va="bottom" if _fin[i] >= 0 else "top", fontsize=CFG.VIS_FONT_LEGEND)
         _used.append(ax[3])
     else:
         ax[3].axis("off")
@@ -3350,7 +3373,6 @@ def _kill_launched_procs() -> None:
     """Terminate every still-registered LOCAL subprocess (SID, MM-GBSA drivers) and its process group, so a
     killed script leaves none running detached under init. Job-server Prime subjobs are cancelled separately
     by _cancel_launched_jobs. SIGTERM the groups, a short grace, then SIGKILL survivors."""
-    import signal
     procs = [p for p in list(_LAUNCHED_PROCS) if p.poll() is None]
     for _sig in (signal.SIGTERM, signal.SIGKILL):
         for p in procs:
@@ -3376,8 +3398,6 @@ def _install_job_cleanup() -> None:
     SID/thermal_mmgbsa drivers detached under init. The same handlers restore systemd-oomd: the signal path
     re-raises with SIG_DFL and never unwinds the guard's `with`/atexit, so without this a Ctrl-C would leave
     oomd masked and stopped on the host permanently."""
-    import atexit
-    import signal
     atexit.register(_kill_launched_procs)
     atexit.register(_cancel_launched_jobs)
     atexit.register(lambda: _OOMD_GUARD and _OOMD_GUARD.restore())
@@ -4009,7 +4029,6 @@ def _read_physics_qc(entry: dict, dirs: dict) -> "dict | None":
     is the ligand carbon bonded to fluorine - the reactive centre - and the 'crucial' hydration site is
     the WaterMap site nearest that α-carbon. Returns None (never raises) if a file is missing/unreadable.
     """
-    import math as _math
     from schrodinger import structure
     from schrodinger.application.desmond import cms as _cmsmod
     from schrodinger.application.desmond.packages import topo
@@ -4200,7 +4219,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
 
     fig.tight_layout()
     qc_dir = _analysis_dir(out_root)
-    out_path = qc_dir / "Physics_Build_Solvation_QC.png"
+    out_path = qc_dir / "01_Physics_Build_Solvation_QC.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _ok(f"[qc] ✔ physics build/solvation QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
@@ -4370,7 +4389,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
                  f"are restraint-enforced, not spontaneous. The unrestrained SN2 barrier is the Step-07 QM/MM ΔE‡.",
                  ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT - 1, color=CFG.VIS_INK["soft"], wrap=True)
     qc_dir = _analysis_dir(out_root)
-    out_path = qc_dir / "MD_Trajectory_QC.png"
+    out_path = qc_dir / "02_MD_Trajectory_QC.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
@@ -4617,6 +4636,14 @@ def main() -> int:
                             _mg = run_mmgbsa(_jd, _jd.name, _rank_of(_jd.name))   # MM-GBSA (blocking, CPU)
                         if _mg is None:
                             _post_state["warn"] = True
+                        else:
+                            # This rank is complete - draw its own MM-GBSA profile now rather than
+                            # waiting for the cross-rank Finalise pass.
+                            try:
+                                _plot_rank_mmgbsa(md_dir, _jd, _jd.name, _rank, _mg)
+                            except Exception as _exc:
+                                _warn(f"[mmgbsa] R_{_rank} per-rank figure skipped - "
+                                      f"{str(_exc).splitlines()[0]}")
                         with _timed("defluor", _rank):                            # defluorination geometry
                             run_defluorination(_jd, _jd.name, _rank, md_dir, run_root, a.md_ns)
                     except Exception as _exc:

@@ -41,6 +41,11 @@ import sys
 import argparse
 from datetime import datetime
 from pathlib import Path
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import importlib.util as _ilu
+import shutil
+import time as _t
+import time as _time
 
 
 """
@@ -211,7 +216,6 @@ def verify_environment() -> None:
         ver = getattr(pymol, "__version__", "Available")
         print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL            : {ver}")
     except ImportError:
-        import shutil
         p = shutil.which("pymol")
         if p:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL            : Available (binary located)")
@@ -224,7 +228,6 @@ def verify_environment() -> None:
         ver = getattr(plip, "__version__", "Available")
         print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : {ver}")
     except ImportError:
-        import shutil
         p = shutil.which("plip")
         if p:
             print(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP             : Available (binary located)")
@@ -260,7 +263,6 @@ def main():
 
     args = parser.parse_args()
 
-    import time as _t
     _now = _t.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
@@ -273,7 +275,6 @@ def main():
     print(f"{SEPARATOR_HEAVY}\n", flush=True)
 
     try:
-        import importlib.util as _ilu
         _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_FAcDs.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
         for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "BOLD", "ENDC"):
@@ -294,7 +295,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _el = _time.perf_counter() - _t0

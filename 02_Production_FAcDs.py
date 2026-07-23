@@ -370,6 +370,14 @@ except Exception:
 
 import importlib.util as _ilu
 from pathlib import Path as _Path
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor as _TPE
+from scipy.spatial import ConvexHull
+from scipy.spatial.distance import pdist
+import ast
+import time as _t
+import time as _time
 
 def _load_module(name: str, path):
     """Load a Python file as a module using its filesystem path, regardless of filename."""
@@ -1092,7 +1100,6 @@ def save_alignment_cache_final(csv_path: Path):
     file from the summaries guarantees exactly one row per unique protein regardless
     of which jobs ran this session.
     """
-    import ast
     cols = ["active_site_mapping", "align_score", "gap_count", CFG.COL_ID_PCT,
             "nuc_rescue_offset", "nuc_resolution", "protein", "seq_length", "target_sequence"]
     jobs_dir = csv_path.parents[2] / "4_Prediction_Jobs"
@@ -3102,8 +3109,6 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
            "pocket_containment_cavity": 1.0, "pocket_containment_site8": 1.0,
            "ligand_reach": 0.0}
     try:
-        from scipy.spatial import ConvexHull
-        from scipy.spatial.distance import pdist
         _pts = []
         for _k in ("Nuc", "Base", "Acid", "Carb1", "Carb2", "Stab_H", "Stab_W", "Stab_Y"):
             for _a in site_atoms_obj.get(_k, []):
@@ -4329,7 +4334,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             best_complex_dir.mkdir(parents=True, exist_ok=True)
             break
         except OSError:
-            import time as _t; _t.sleep(0.05)
+            _t.sleep(0.05)
 
     # Alignment is protein-level (ligand-independent) - key the file by protein so
     # each variant has exactly one .txt, not one per protein×ligand job.
@@ -5029,7 +5034,6 @@ def rebuild_best_complexes_mirror(runs_dir: Path, run_root: Path) -> int:
     On resume, files that already exist in the destination with the same size
     are skipped (no I/O needed). Actual copies are dispatched via a thread pool
     so the disk is kept saturated. Returns the total CIF count (skipped + copied)."""
-    from concurrent.futures import ThreadPoolExecutor
     dest_dir = run_root / "2_Best_Complexes_CIFs"
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -5220,7 +5224,6 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
                 _tty_write(f"\r   Reading summary JSONs: {n}/{total} ...   \033[K")
                 sys.stdout.flush()
 
-    from concurrent.futures import ThreadPoolExecutor as _TPE
     n_workers = min(max(1, (os.cpu_count() or 4) - 2), total or 1)
     with _TPE(max_workers=n_workers) as ex:
         results = list(ex.map(_load_one, json_files))
@@ -5929,7 +5932,6 @@ def main():
                 except Exception: pass
             _wiped[0] += 1
 
-        from concurrent.futures import ThreadPoolExecutor as _TPE
         _wipe_total = len(_wipe_dirs)
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _wipe_total or 1)) as _wex:
             for _done, _ in enumerate(_wex.map(_wipe_one, _wipe_dirs), 1):
@@ -6328,7 +6330,6 @@ def main():
                     pending_proteins.add(job["protein"])
             return done
 
-        from concurrent.futures import ThreadPoolExecutor as _TPE
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _n_tasks or 1)) as _ex:
             results = list(_ex.map(_audit_job, tasks))
         _tty_write("\r\033[K")
@@ -6394,7 +6395,6 @@ def main():
                     for bad_f in cifs[1:]:
                         try: bad_f.unlink()
                         except Exception: pass
-        from concurrent.futures import ThreadPoolExecutor as _TPE
         _bc_dirs = list(sorted(D_RUNS.iterdir()))
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), len(_bc_dirs) or 1)) as _ex:
             list(_ex.map(_standardize_bc, _bc_dirs))
@@ -6497,7 +6497,6 @@ def main():
                 else:
                     _gpu_only_jobs.append(job)
 
-        from concurrent.futures import ThreadPoolExecutor as _TPE
         with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _n_scan or 1)) as _sex:
             list(_sex.map(_scan_job, tasks))
         _tty_write("\r\033[K")
@@ -7390,11 +7389,11 @@ def main():
         console_info(f"  ┌{'─'*(_tw+2)}┬{'─'*(_lw+2)}┬{'─'*(_cw+2)}┐")
         console_info(f"  │  {'Degrader Tier':<{_tw}}│  {'Library':>{_lw}}│  {'Control':>{_cw}}│")
         console_info(f"  ├{'─'*(_tw+2)}┼{'─'*(_lw+2)}┼{'─'*(_cw+2)}┤")
-        for _t in _tier_order:
-            _c = _ctrl_tiers.get(_t, 0)
-            _l = _lib_tiers.get(_t, 0)
+        for _tier in _tier_order:
+            _c = _ctrl_tiers.get(_tier, 0)
+            _l = _lib_tiers.get(_tier, 0)
             _ccell = f"{_c:,}" if _c else "·"
-            console_info(f"  │  {_t:<{_tw}}│  {f'{_l:,}':>{_lw}}│  {_ccell:>{_cw}}│")
+            console_info(f"  │  {_tier:<{_tw}}│  {f'{_l:,}':>{_lw}}│  {_ccell:>{_cw}}│")
         console_info(f"  ├{'─'*(_tw+2)}┼{'─'*(_lw+2)}┼{'─'*(_cw+2)}┤")
         console_info(f"  │  {'Subtotal':<{_tw}}│  {f'{_lib_total:,}':>{_lw}}│  {f'{_ctrl_total:,}':>{_cw}}│")
         console_info(f"  └{'─'*(_tw+2)}┴{'─'*(_lw+2)}┴{'─'*(_cw+2)}┘")
@@ -7427,7 +7426,6 @@ def main():
         console_info(f"  └{'─'*(_mw+2)}┴{'─'*12}┘")
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _utils_mod.print_elapsed(_t0, "02_Production_FAcDs.py")

@@ -26,7 +26,7 @@
     <line x1="862" y1="250" x2="958" y2="250" marker-end="url(#arrow)"/>
   </g>
 
-  <!-- ============ STAGE 1 — PREDICT (Boltz-2) ============ -->
+  <!-- ============ STAGE 1 - PREDICT (Boltz-2) ============ -->
   <g filter="url(#ds)">
     <circle cx="180" cy="250" r="70" fill="url(#gTeal)"/>
     <!-- stacked protein silhouettes = a library of bacterial FAcD variants -->
@@ -42,7 +42,7 @@
   <text x="180" y="345" font-size="21" font-weight="700" fill="#0c7d5d" text-anchor="middle">Predict</text>
   <text x="180" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Boltz-2 · FAcD variants × PFAS · 5 models</text>
 
-  <!-- ============ STAGE 2 — SCREEN & TIER ============ -->
+  <!-- ============ STAGE 2 - SCREEN & TIER ============ -->
   <g filter="url(#ds)">
     <circle cx="480" cy="250" r="70" fill="url(#gBlue)"/>
     <!-- descending tier bars (funnel 27 -> elite) -->
@@ -54,7 +54,7 @@
   <text x="480" y="345" font-size="21" font-weight="700" fill="#2b6f9e" text-anchor="middle">Screen &amp; Tier</text>
   <text x="480" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">competence-floor tiers</text>
 
-  <!-- ============ STAGE 3 — SIMULATE (MD) ============ -->
+  <!-- ============ STAGE 3 - SIMULATE (MD) ============ -->
   <g filter="url(#ds)">
     <circle cx="780" cy="250" r="70" fill="url(#gAmber)"/>
     <!-- trajectory sine wave -->
@@ -64,7 +64,7 @@
   <text x="780" y="345" font-size="21" font-weight="700" fill="#b9760a" text-anchor="middle">Simulate</text>
   <text x="780" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Desmond MD · 1000 ns</text>
 
-  <!-- ============ STAGE 4 — DEFLUORINATE (QM/MM) ============ -->
+  <!-- ============ STAGE 4 - DEFLUORINATE (QM/MM) ============ -->
   <g filter="url(#ds)">
     <circle cx="1080" cy="250" r="70" fill="url(#gRed)"/>
     <!-- alpha carbon -->

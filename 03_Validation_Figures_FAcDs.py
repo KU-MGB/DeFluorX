@@ -24,13 +24,17 @@ Date   : 25 July 2026 <───────────────────
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
                   (Master CSV written by 02_Production_FAcDs.py; latest file selected)
   Writes        : <Run>/3_Validation_Figures/  (figures grouped folder-by-folder)
-                    02_Ramachandran/                        Ramachandran_*.png
-                    03_Dataset_and_Alignment_Overview/      01_*.png … 04_*.png
-                    04_AI_Confidence_Quality/               01_*.png … 03_*.png
-                    05_Catalytic_Geometry_and_Mechanism/    01_*.png … 10_*.png
-                    06_Ligand_Interactions_and_Chemical_Space/ 01_*.png … 08_*.png
-                    07_PFAS_Scope_and_Synthesis/            01_*.png … 13_*.png
-                    08_Diagnostic_and_MultiModel_Trends/    01_*.png … 09_*.png  (pocket-fit + consensus + competence)
+                    02_Ramachandran/                          Ramachandran_*.png
+                    03_Dataset_and_Alignment_Overview/        01_*.png onward
+                    04_AI_Confidence_Quality/                 01_*.png onward
+                    05_Catalytic_Geometry_and_Mechanism/      01_*.png onward
+                    06_Ligand_Interactions_and_Chemical_Space/ 01_*.png onward
+                    07_PFAS_Scope_and_Synthesis/              01_*.png onward
+                    08_Diagnostic_and_MultiModel_Trends/      01_*.png onward
+                                                              (pocket-fit + consensus + competence)
+                  Every folder numbers its figures from 01 in the order the step draws them;
+                  the authoritative per-figure list is written to 05_Figure_Descriptions.txt
+                  each run, so it can never drift from the code the way a fixed count here would.
                   <Run>/3_Validation_Figures/01_Analysis_Data/03_Figure_Enriched_Dataset.csv
                   <Run>/3_Validation_Figures/01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/01_Analysis_Data/05_Figure_Descriptions.txt
@@ -138,6 +142,8 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 11_PFAS_Size_Hexbin_Landscape.png            <-- Chain-length hexbin + tier scatter + rolling median
     • 12_PFAS_Size_Composition_Merged.png          <-- Per bin: outcome + degrader-tier stacked bars
     • 13_PFAS_Carbon_Confidence.png             <-- Catalytic competence vs MW per carbon group
+    • (folded panels) 14_Chain_Length_by_Tier · 15_Tier1A_Cross_Ligand_Heatmap · 16_Swimmer_Top_Per_Tier · 17_Circos_Ligand_Tier_Assignment
+    • 18_Pocket_Residue_Reaction_Readiness.png     <-- Pocket + 8-residue reaction-readiness per ligand, size-ordered (composite = geometry × 02 competence)
 
     ── 08_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
     • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
@@ -197,7 +203,7 @@ import warnings
 from pathlib import Path
 import contextlib
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 # -------------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
@@ -220,10 +226,64 @@ import seaborn as sns
 import umap
 import matplotlib
 matplotlib.use("Agg")   # non-interactive backend - renders on headless HPC/GPU nodes (no DISPLAY)
+# --- consolidated matplotlib imports (after backend selection) ---
+from matplotlib import font_manager as _fm
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import Normalize as _Norm
+from matplotlib.colors import to_rgba as _rgba08
+from matplotlib.colors import to_rgba as _to_rgba19
+from matplotlib.colors import to_rgba as _to_rgba25
+from matplotlib.colors import to_rgba as _to_rgba25c
+from matplotlib.gridspec import GridSpec as _GS18
+from matplotlib.legend_handler import HandlerTuple as _HT02
+from matplotlib.lines import Line2D as _L08
+from matplotlib.lines import Line2D as _L10
+from matplotlib.lines import Line2D as _L11
+from matplotlib.lines import Line2D as _L15
+from matplotlib.lines import Line2D as _L16
+from matplotlib.lines import Line2D as _L18
+from matplotlib.lines import Line2D as _L1C
+from matplotlib.lines import Line2D as _L21
+from matplotlib.lines import Line2D as _L22
+from matplotlib.lines import Line2D as _L2D
+from matplotlib.lines import Line2D as _L2D08
+from matplotlib.lines import Line2D as _L2D09
+from matplotlib.lines import Line2D as _L2D11
+from matplotlib.lines import Line2D as _L2D25
+from matplotlib.lines import Line2D as _L2Dtc
+from matplotlib.lines import Line2D as _L7
+from matplotlib.lines import Line2D as _Line12
+from matplotlib.lines import Line2D as _Line17b
+from matplotlib.patches import Circle as _Circ22
+from matplotlib.patches import Patch as _P02
+from matplotlib.patches import Patch as _P08
+from matplotlib.patches import Patch as _P09
+from matplotlib.patches import Patch as _P16
+from matplotlib.patches import Patch as _P1C
+from matplotlib.patches import Patch as _P25
+from matplotlib.patches import Patch as _P25b
+from matplotlib.patches import Patch as _P6z
+from matplotlib.patches import Patch as _Patch01
+from matplotlib.patches import Patch as _Patch10
+from matplotlib.patches import Patch as _Patch17b
+from matplotlib.patches import Patch as _Patch22
+from matplotlib.patches import Patch as _PatchA
+from matplotlib.patches import PathPatch as _PathPatch
+from matplotlib.patches import Polygon as _Poly18
+from matplotlib.patches import Rectangle as _Rect17
+from matplotlib.patches import Rectangle as _Rect7
+from matplotlib.patches import Wedge as _Wedge
+from matplotlib.path import Path as _MplPath
+from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator as _MLoc09
+from matplotlib.ticker import MultipleLocator as _MLoc_cb
+import matplotlib as _mpl
+import matplotlib.colors as mcolors
+import matplotlib.patches as _mp
 import matplotlib.pyplot as plt
 import gemmi
 import scipy.stats as _sc_stats
-from scipy.stats import spearmanr, gaussian_kde, chi2_contingency, mannwhitneyu, t as _t_dist
+from scipy.stats import spearmanr, mannwhitneyu, t as _t_dist
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from sklearn.decomposition import PCA
 
@@ -313,7 +373,7 @@ CONFLICT_PALETTE = dict(CFG.CONFLICT_COLOUR)   # sourced from CFG § 8.7
 # Inferential-statistics helpers.
 # Each returns a short annotation string; _stat_box() draws it inside an axis.
 # =============================================================================
-def _stat_box(ax, text, loc="upper right", fontsize=8):
+def _stat_box(ax, text, loc="upper right", fontsize=CFG.VIS_FONT_LEGEND):
     """Draw a boxed statistics annotation inside an axis (no effect if text is empty)."""
     if not text:
         return
@@ -365,7 +425,6 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
     Every test lands in 06_Statistical_Tests.csv with its q_BH, so the multiplicity is paid for once,
     across the whole family, rather than per figure.
     """
-    from scipy.stats import kruskal as _kw, mannwhitneyu as _mw, spearmanr as _sr
 
     _metrics = [c for c in (
         "mechanistic_score_effective", CFG.COL_MECH_S, "competence_score",
@@ -454,7 +513,6 @@ def _write_statistical_tests(out_dir):
     """The whole test family with Benjamini-Hochberg q-values, ranked by q."""
     if not _PVALUES:
         return None
-    from scipy.stats import false_discovery_control
     _df = pd.DataFrame(_PVALUES)
     # A metric can be registered by both the central battery and a figure helper (e.g. the confidence
     # Kruskal-Wallis). Collapse identical (test, panel) rows before BH so one test counts once - a
@@ -479,7 +537,6 @@ def _write_statistical_tests(out_dir):
 
 def _kruskal_by_tier(df, value_col, tier_col=CFG.COL_TIER, tiers=None):
     """Kruskal–Wallis across tiers with epsilon-squared effect size. Returns annotation or ''."""
-    from scipy.stats import kruskal as _kw
     if value_col not in df.columns or tier_col not in df.columns:
         return ""
     order = tiers or [t for t in TIER_ORDER_LOGIC if t in set(df[tier_col].dropna())]
@@ -501,7 +558,6 @@ def _kruskal_by_tier(df, value_col, tier_col=CFG.COL_TIER, tiers=None):
 
 def _wilcoxon_ptm_iptm(df):
     """Paired Wilcoxon signed-rank test of ipTM vs pTM across complexes."""
-    from scipy.stats import wilcoxon as _wil
     if "ptm" not in df.columns or "iptm" not in df.columns:
         return ""
     sub = df.dropna(subset=["ptm", "iptm"])
@@ -808,7 +864,6 @@ def write_residue_mapping_missed_csv(out_dir: Path, reporter) -> None:
     failed to map it → 01_Active_Site_Residue_Mapping_Missed.csv. Written here so the whole
     01_Analysis_Data set is finalised before the figure steps; the Step-3 coverage figure recomputes
     its own bar counts from the same alignment table rather than this CSV."""
-    import json as _json
     _aln_csv = (out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data"
                 / "Active_Site_Alignments" / CFG.FILE_ALIGNMENT_STATS)
     if not _aln_csv.exists():
@@ -1044,7 +1099,6 @@ _TT_FONT_SIZE  = CFG.VIS_TT_FONT_SIZE
 # fall back to the common Linux path, else None (PIL default font is used downstream).
 def _resolve_dejavu_font() -> str | None:
     try:
-        from matplotlib import font_manager as _fm
         return _fm.findfont("DejaVu Sans", fallback_to_default=True)
     except Exception:
         _p = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -1321,7 +1375,7 @@ def _tt_style(ax, xlabel, ylabel, title=None):
     # (figures carry no titles).
     ax.set_xlabel(xlabel,  labelpad=6)
     ax.set_ylabel(ylabel,  labelpad=6)
-    ax.tick_params(labelsize=9)
+    ax.tick_params(labelsize=CFG.VIS_FONT_TICK)
     ax.set_axisbelow(True)
     ax.grid(True, alpha=0.18, color=CFG.VIS_INK["pale"], linewidth=0.5)
 
@@ -1346,7 +1400,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1,
                        extent=[dv["_X"].min(), dv["_X"].max(), ylo, yhi])
         cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
-        cb.set_label("Complex count per bin", fontsize=9.5)
+        cb.set_label("Complex count per bin", fontsize=CFG.VIS_FONT_TICK)
         for tlbl, tcol in [(CFG.TIER_TOP, _TT_STAR_FILL),
                            (CFG.TIER_ORDER[1], TIER_PALETTE[CFG.TIER_ORDER[1]]),
                            (CFG.TIER_ORDER[2], TIER_PALETTE[CFG.TIER_ORDER[2]])]:
@@ -1354,7 +1408,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
             ax.axvline(angle, color=tcol, ls="--", lw=1.6, alpha=0.85, zorder=4)
             ax.text(angle, yhi - 0.001, f"≥{angle:g}° {tlbl.replace('Tier_', '')}", rotation=90,
                     rotation_mode="anchor",
-                    fontsize=7.0, color=tcol, fontweight="bold", va="center", ha="right",
+                    fontsize=CFG.VIS_FONT_ANNOT, color=tcol, fontweight="bold", va="center", ha="right",
                     zorder=7,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", alpha=0.85, ec=tcol,
                               linewidth=0.5))
@@ -1392,7 +1446,7 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1,
                        extent=[xlo,xhi,ylo,yhi])
         cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
-        cb.set_label("Complex count per bin", fontsize=9.5)
+        cb.set_label("Complex count per bin", fontsize=CFG.VIS_FONT_TICK)
         for v, fn in [(dv["_X"].median(), ax.axvline),(dv["_Y"].median(), ax.axhline)]:
             fn(v, color=CFG.VIS_INK["muted"], ls="--", lw=0.9, alpha=0.55, zorder=3)
         _tt_draw_scatter(ax, dv); _tt_draw_stars(ax, pax)
@@ -1432,7 +1486,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
         hb = ax.hexbin(dv["_X"], dv["_Y"], gridsize=60, cmap="YlOrBr",
                        mincnt=1, linewidths=0.15, alpha=0.85, zorder=1)
         cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
-        cb.set_label("Complex count per bin", fontsize=9.5)
+        cb.set_label("Complex count per bin", fontsize=CFG.VIS_FONT_TICK)
         xmed, ymed = dv["_X"].median(), dv["_Y"].median()
         ax.axvline(xmed, color=CFG.VIS_INK["muted"], ls="--", lw=0.9, alpha=0.55, zorder=3)
         ax.axhline(ymed, color=CFG.VIS_INK["muted"], ls="--", lw=0.9, alpha=0.55, zorder=3)
@@ -1532,7 +1586,6 @@ def _redirect_savefig(out_dir: Path, reporter):
     on exception, so a failure mid-suite can never leak the patched savefig into
     later routines or the rest of the process. Target folders are created on entry.
     """
-    import matplotlib
     _orig_plt = plt.savefig
     _orig_fig = matplotlib.figure.Figure.savefig
     def _redirect(fname):
@@ -1583,6 +1636,31 @@ def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
 from matplotlib.patches import Rectangle as _JF_Rect, PathPatch as _JF_PathPatch, Patch as _JF_Patch
 from matplotlib.lines import Line2D as _JF_Line
 from matplotlib.path import Path as _JF_MPath
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import math
+from collections import Counter as _Counter01
+from scipy import stats as _sc_stats12
+from scipy import stats as _scipy_stats
+from scipy import stats as _sp_stats
+from scipy import stats as _sps
+from scipy.stats import chi2_contingency as _chi2_cont
+from scipy.stats import chi2_contingency as _chi2_f09
+from scipy.stats import false_discovery_control
+from scipy.stats import gaussian_kde as _gkde
+from scipy.stats import gaussian_kde as _gkde12a
+from scipy.stats import gaussian_kde as _gkde14
+from scipy.stats import gaussian_kde as _gkde18
+from scipy.stats import kruskal as _kw
+from scipy.stats import kruskal as _kw20
+from scipy.stats import mannwhitneyu as _mw
+from scipy.stats import spearmanr as _sr
+from scipy.stats import wilcoxon as _wil
+import json as _json
+import json as _json01
+import math as _math15
+import math as _math6
+import textwrap as _tw24
+import traceback
 
 # All colour, font and DPI values below are SOURCED FROM CFG (single source of truth) - the same
 # palette, fonts and quality every other 03 figure uses. No titles (none is set).
@@ -1697,7 +1775,6 @@ def _jf_fit_fs(ax, cx, cy, dxd, dyd, lines, base, fmin):
 
 def _jf_volcano(df, folder_dir, reporter):
     """Multi-group volcano - per-metric effect size (degrader − non-degrader) vs Mann–Whitney significance."""
-    from scipy import stats as _sps
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(9, 5.5)); ax = fig.subplots()
         deg = df["is_degrader"] == True; rows = []
@@ -1741,7 +1818,7 @@ def _jf_volcano(df, folder_dir, reporter):
 def _jf_manhattan(df, folder_dir, reporter):
     """Manhattan / TWAS - each candidate a locus grouped by ligand; y = rank-based −log10 significance."""
     with plt.rc_context(_JF_RC):
-        fig = plt.figure(figsize=(8.5, 4.5)); ax = fig.subplots()
+        fig = plt.figure(figsize=(13, 6)); ax = fig.subplots()
         d = df.copy(); d["_lg"] = _jf_ligshort(d)
         d["nlp"] = -np.log10((d["Scientific_Rank"].rank(pct=True)).clip(lower=1e-6))
         d = d.sort_values(["_lg", "Scientific_Rank"]); ligs = list(d["_lg"].unique()); xpos = 0; ticks = []
@@ -1829,7 +1906,6 @@ def _jf_circos(df, folder_dir, reporter):
         ax.add_patch(_JF_PathPatch(_JF_MPath([p0, p0*0.15, p1*0.15, p1],
                      [_JF_MPath.MOVETO, _JF_MPath.CURVE4, _JF_MPath.CURVE4, _JF_MPath.CURVE4]),
                      fc="none", ec=color, lw=lw, alpha=0.5))
-    from matplotlib.patches import Wedge as _Wedge
     _LIG_ARC = CFG.VIS_INK["faint"]          # ligands share ONE neutral arc colour; tiers keep their own
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(8, 8)); ax = fig.subplots(); ax.set_aspect("equal"); ax.axis("off")
@@ -1867,7 +1943,6 @@ def _jf_network(df, folder_dir, reporter):
     pair with |Pearson r| ≥ 0.5, coloured by the SIGN of r (red = positive, blue = negative) and
     widened by |r|. Node size ∝ how many strong correlations the metric has; labels sit outside the
     ring so nothing overlaps."""
-    from matplotlib.colors import Normalize as _Norm
     THR = 0.5
     with plt.rc_context(_JF_RC):
         fig = plt.figure(figsize=(9, 9)); ax = fig.subplots(); ax.set_aspect("equal"); ax.axis("off")
@@ -1898,7 +1973,6 @@ def _jf_network(df, folder_dir, reporter):
             ax.text(1.10 * np.cos(a), 1.10 * np.sin(a), _jf_ml(c),
                     ha="left" if de <= 90 or de >= 270 else "right", va="center",
                     fontsize=_JF_FA, rotation=rot, rotation_mode="anchor")
-        from matplotlib.lines import Line2D as _L15
         ax.legend(handles=[_L15([0], [0], color=_cm(_norm(0.85)), lw=3.2, label="positive correlation"),
                            _L15([0], [0], color=_cm(_norm(-0.85)), lw=3.2, label="negative correlation")],
                   loc="lower center", bbox_to_anchor=(0.5, -0.02), ncol=2, frameon=False,
@@ -1946,7 +2020,7 @@ def _jf_treemap(df, folder_dir, reporter):
             if _fs is not None:   # font sized to the box; skipped when it would be unreadably small
                 ax.text(r["x"]+r["dx"]/2, r["y"]+r["dy"]/2, "\n".join(_lines), ha="center", va="center",
                         fontsize=_fs, color=_text_color(c))
-        ax.legend(handles=[_JF_Patch(color=_JF_TCOL[t], label=t.replace("Tier_", "T").replace("_Decoy", "5-D"))
+        ax.legend(handles=[_JF_Patch(color=_JF_TCOL[t], label=t)
                            for t in _JF_TORDER], ncol=7, fontsize=_JF_FA, loc="upper center",
                   bbox_to_anchor=(0.5, -0.01), handlelength=1)
         _jf_save(fig, folder_dir, "06_Treemap_Tier_Ligand_Composition.png")
@@ -1966,8 +2040,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
     active_site_mapping resolves to a target index. A companion CSV lists, per residue,
     the sequence IDs that failed to map it.
     """
-    import json as _json01
-    from collections import Counter as _Counter01
     _aln_csv = out_dir.parent / "1_Boltz2_Production" / "3_Sequence_Reference_Data" / "Active_Site_Alignments" / CFG.FILE_ALIGNMENT_STATS
     if _aln_csv.exists():
         _aa3 = {"ASP": "Asp", "ARG": "Arg", "HIS": "His", "TRP": "Trp", "TYR": "Tyr"}
@@ -2038,7 +2110,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             _hts01 = []
             for _s01 in _segs01:
                 _probe01 = ax.text(0, 0, _s01, rotation=90, ha="center", va="center",
-                                   fontsize=8, fontweight="bold")
+                                   fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold")
                 _probe01.draw(_renderer01)
                 _hts01.append(_probe01.get_window_extent(_renderer01).height / _ppd01)
                 _probe01.remove()
@@ -2047,11 +2119,11 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             for _s01, _sc01, _h01 in zip(_segs01, _seg_cols01, _hts01):
                 ax.text(i, _acc01 + _h01 / 2.0, _s01,
                         rotation=90, ha="center", va="center",
-                        fontsize=8, fontweight="bold", color=_sc01, zorder=6,
+                        fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold", color=_sc01, zorder=6,
                         path_effects=[pe.withStroke(linewidth=1.4, foreground=_halo01)])
                 _acc01 += _h01 + _gap01
         ax.set_xticks(range(len(_keys)))
-        ax.set_xticklabels(_labels01, fontsize=9)
+        ax.set_xticklabels(_labels01, fontsize=CFG.VIS_FONT_TICK)
         # Each tick label takes its own bar's role colour: the residue, its bar and the legend
         # entry for its mechanistic role then carry one identity the eye can follow.
         for _tl01, _c01 in zip(ax.get_xticklabels(), _colours01):
@@ -2060,7 +2132,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax.set_ylim(0, _n01 * 1.08 if _n01 else 1)
         # Legend: one entry per role group (in mechanistic order) + the all-variants line,
         # laid out as a single row in the top-left.
-        from matplotlib.patches import Patch as _Patch01
         _seen01 = []
         for g in _groups01:
             if g not in _seen01:
@@ -2099,14 +2170,13 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                          f"{pct:.1f}")
             ax.text(xi, cnt + _max_cnt6 * 0.004,
                     f"{cnt:,}\n({_pct_str6}%)",
-                    ha="center", va="bottom", fontsize=9, fontweight="bold", zorder=5)
+                    ha="center", va="bottom", fontsize=CFG.VIS_FONT_TICK, fontweight="bold", zorder=5)
 
         # Y-axis ceiling: round up to the nearest 5000, then add 30% headroom for labels
-        import math as _math6
         _y_ceil6 = _math6.ceil(_max_cnt6 / 5000) * 5000
         ax.set_ylim(0, _y_ceil6 * 1.28)
         ax.set_xticks(bar_x6)
-        ax.set_xticklabels(existing_tiers, rotation=35, ha="right", fontsize=10)
+        ax.set_xticklabels(existing_tiers, rotation=35, ha="right", fontsize=CFG.VIS_FONT_AXIS_LABEL)
         for tick, tier in zip(ax.get_xticklabels(), existing_tiers):
             tick.set_color(TIER_PALETTE.get(tier, "black"))
         ax.set_xlabel("Degrader Tier", )
@@ -2119,7 +2189,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         # against the slice fill), so no separate boxed legend is needed.
         if model_col:
             model_counts = df[model_col].value_counts().sort_index()
-            _pie_colours = list(CFG.VIS_PIE_MODEL_COLOURS)[:len(model_counts)]
+            _pie_colours = list(CFG.VIS_MODEL_COLOUR)[:len(model_counts)]
             _model_labels6 = []
             for raw_key in model_counts.index:
                 raw_name = str(raw_key)
@@ -2205,8 +2275,19 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                     _cbw6 = (bar_x6[1] - bar_x6[0]) if len(bar_x6) > 1 else 0.8
                     _ctrl_star(ax, _xi6 + _cbw6 * 0.28, _yi6 + _y_ceil6 * 0.115, size=330)
                 ax.text(_xi6, _yi6 + _y_ceil6 * 0.155, f"MD-selected\n(n={_n6})",
-                        ha="center", va="bottom", fontsize=7.0, fontweight="bold",
+                        ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, fontweight="bold",
                         color=CFG.VIS_ACCENT["star_edge"], zorder=9)
+
+        # Star key (top-right, inside): the two star types used here and in the model-selection inset -
+        # the identified MD-selected candidates (gold) and the 3R3U x FA positive control (red/gold border).
+        _star_leg6 = [
+            Line2D([0], [0], marker="*", ls="", markersize=13, markerfacecolor=CFG.VIS_ACCENT["star"],
+                   markeredgecolor="black", label="MD-selected (identified)"),
+            Line2D([0], [0], marker="*", ls="", markersize=13, markerfacecolor=CFG.VIS_ACCENT["control"],
+                   markeredgecolor=CFG.VIS_ACCENT["control_edge"], markeredgewidth=1.4,
+                   label="3R3U × FA (positive control)"),
+        ]
+        ax.legend(handles=_star_leg6, loc="upper right", fontsize=CFG.VIS_FONT_LEGEND, framealpha=0.9)
 
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_02_Tier_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -2253,7 +2334,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                               alpha=0.70), zorder=11)
             _cnt_g02 = int((_prot_dedup02[CFG.COL_ALN_G] == lbl).sum())
             ax.text((lo + hi) / 2, 0.952, f"{_cnt_g02}/{_n_total_prot02}", ha="center", va="top",
-                    fontsize=7.0, color=col,
+                    fontsize=CFG.VIS_FONT_ANNOT, color=col,
                     transform=ax.get_xaxis_transform(), zorder=11)
         ax.set_axisbelow(True)
 
@@ -2278,7 +2359,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         Secondary: KDE density line per tier - ridge (joyplot) approach with vertical offsets
         Each tier is staggered upward so curves do not overlap (ridge/joyplot style).
         """
-        from scipy.stats import gaussian_kde as _gkde
         _kde_tiers_valid = [t for t in existing_tiers
                             if len(id_plot[id_plot[CFG.COL_TIER] == t]) >= 10]
         _ridge_step = 0.008   # vertical offset per tier index
@@ -2322,12 +2402,12 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
 
         ax.set_xlim(0, 100)
         ax.set_xticks(range(0, 101, 10))
-        ax.tick_params(axis="x", labelsize=9)
+        ax.tick_params(axis="x", labelsize=CFG.VIS_FONT_TICK)
         # Left axis (count): steel-blue tick labels matching the grey count gridlines
-        ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
+        ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_left"])
         ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
         # Right axis (KDE density): amber tick labels matching the amber density gridlines
-        ax2.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_right"])
+        ax2.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_right"])
         ax2.yaxis.label.set_color(CFG.VIS_INK["near_black"])
         ax.set_xlabel("Sequence Identity to Reference DeHa4 Control  (%)", )
         ax.set_ylabel("Number of Protein–Ligand Complexes  (stacked by tier)", )
@@ -2361,7 +2441,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             ax.annotate(f"Tiers converge\nnear {_conv02:.0f}% identity",
                         xy=(_conv02, _ymax02 * 0.55),
                         xytext=(min(_conv02 + 24, 80), _ymax02 * 0.82),
-                        fontsize=7.0, color=CFG.VIS_INK["soft"], style="italic", ha="left",
+                        fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["soft"], style="italic", ha="left",
                         arrowprops=dict(arrowstyle="->", color=CFG.VIS_INK["ghost"], lw=0.9))
         # Tier_1A visibility annotation - arrow points to the Tier_1A KDE-curve median
         # (a visible dot), not the near-invisible count bar. Drawn on the KDE axis and
@@ -2384,7 +2464,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 zorder=30,
             )
         # Single unified legend: compound handles (bar patch + KDE line with median dot)
-        from matplotlib.lines import Line2D as _L7
         _bar_hdls_02, _bar_lbls_02 = ax.get_legend_handles_labels()
         _unified_handles = []
         _unified_labels  = []
@@ -2405,7 +2484,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         Simpler: build single-entry handles with dual marker using HandlerTuple
         """
         try:
-            from matplotlib.legend_handler import HandlerTuple as _HT02
             _pair_handles = []
             _pair_labels  = []
             for _bh, _bl in zip(_bar_hdls_02, _bar_lbls_02):
@@ -2488,14 +2566,19 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 else:                      grade_lbls.append(f"{_lb} ({_lo}–{_hi}%)")
             # Grade colours - sourced from CFG § 8.8
             grade_colors = dict(CFG.GRADE_COLOUR_FULL)
-            f11_df["Grade"] = pd.cut(f11_df[CFG.COL_ID_PCT], bins=grade_cuts,
+            # right=False makes each band [lo, hi); the top band's label is "≥lo%", so it must INCLUDE
+            # exactly 100% - otherwise the 3R3U self-control (identity_pct == 100.0) falls outside every
+            # band, gets Grade=NaN and its positive-control star is silently dropped. Nudge the top edge.
+            _cut_bins = list(grade_cuts)
+            if _cut_bins and _cut_bins[-1] <= 100:
+                _cut_bins[-1] = _cut_bins[-1] + 1e-6
+            f11_df["Grade"] = pd.cut(f11_df[CFG.COL_ID_PCT], bins=_cut_bins,
                                      labels=grade_lbls, right=False)
             ct11 = pd.crosstab(f11_df[CFG.COL_TIER], f11_df["Grade"])
             ct11 = ct11.reindex(index=[t for t in existing_tiers if t in ct11.index],
                                 columns=grade_lbls, fill_value=0)
             ct11_pct = ct11.div(ct11.sum(axis=1), axis=0).fillna(0) * 100
 
-            from scipy.stats import chi2_contingency as _chi2_cont
             try:
                 _chi2_f11, _p_f11, _dof_f11, _ = _chi2_cont(ct11.values)
                 _chi2_str = (f"χ²({_dof_f11}) = {_chi2_f11:.1f},  "
@@ -2567,13 +2650,13 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 _full_lbl = _g11_lbl_to_full.get(lbl, "")
                 _gn = int(_g11_total.get(_full_lbl, 0))
                 ax.text(_mid, 1.001, f"{_gn:,}/{_n_total11:,}",
-                        ha="center", va="bottom", fontsize=7.0, color=col,
+                        ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, color=col,
                         transform=ax.get_xaxis_transform(), clip_on=False, zorder=11)
 
             # Tier row labels
             _tier_n11 = ct11.sum(axis=1)
             ax.set_yticks(bar_y)
-            ax.set_yticklabels([f"{t}  (n={_tier_n11.loc[t]:,})" for t in tiers_f11], fontsize=9.5)
+            ax.set_yticklabels([f"{t}  (n={_tier_n11.loc[t]:,})" for t in tiers_f11], fontsize=CFG.VIS_FONT_TICK)
             for tick, tier in zip(ax.get_yticklabels(), tiers_f11):
                 tick.set_color(TIER_PALETTE.get(tier, "black"))
 
@@ -2581,7 +2664,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             ax.set_xlim(0, 100)
             ax.set_xticks(range(0, 101, 10))
             ax.set_xticklabels([f"{v}%" for v in range(0, 101, 10)],
-                               fontsize=8, rotation=45, ha="right")
+                               fontsize=CFG.VIS_FONT_LEGEND, rotation=45, ha="right")
             ax.set_xlabel("Proportion of complexes in each sequence identity grade  (%)",
                           )
             ax.set_ylabel("Degrader Tier", labelpad=-8)   # sit closer to the tier tick labels
@@ -2639,7 +2722,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                             _ctrl_star(ax, [_ccx11], [_tier_row11[_ct11] + 0.62], size=260)
                             _star_seen11 += 1
                 if _star_seen11:
-                    from matplotlib.lines import Line2D as _L2D11
                     # The band below the bottom row is already empty - the legend goes there as it
                     # is. Extending the axis to make room would open white space the figure does not
                     # need, which costs more than the legend it houses.
@@ -2651,7 +2733,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
 
             if _chi2_str:
                 ax.text(0.99, 0.01, _chi2_str, transform=ax.transAxes,
-                        ha="right", va="bottom", fontsize=8.5, style="italic",
+                        ha="right", va="bottom", fontsize=CFG.VIS_FONT_LEGEND_TITLE, style="italic",
                         color=CFG.VIS_INK["dark"],
                         bbox=dict(boxstyle="round,pad=0.25", fc="white",
                                   ec=CFG.VIS_INK["palest"], alpha=0.88, linewidth=0.6))
@@ -2711,7 +2793,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                     medians_f10.append(float(med) if not np.isnan(med) else float("nan"))
                     if not np.isnan(med):
                         ax.text(i, med + 0.003, f"{med:.3f}", ha="center", va="bottom",
-                                fontsize=8, color="black", fontweight="bold", zorder=7)
+                                fontsize=CFG.VIS_FONT_LEGEND, color="black", fontweight="bold", zorder=7)
                 # Tier_5_Decoy overconfidence annotation
                 _decoy_vals = [v for t, v in zip(tier_order_f10, medians_f10) if t == CFG.TIER_DECOY]
                 if _decoy_vals and _decoy_vals[0] > 0.95:
@@ -2800,7 +2882,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             _hc_vis_lo10 = max(float(CFG.CONF_BAND_HIGH), y_lo_f10)
             if _hc_vis_lo10 < _y_top10 - 0.005:
                 ax.text(0.01, 0.98, f"High confidence (≥{CFG.CONF_BAND_HIGH:.2f})", color=CFG.VIS_BAND["high"],
-                        fontsize=8, ha="left", va="top", fontweight="bold",
+                        fontsize=CFG.VIS_FONT_LEGEND, ha="left", va="top", fontweight="bold",
                         style="italic", transform=ax.transAxes, zorder=6,
                         bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["green"], ec=CFG.CONF_BAND_COLOURS["high"],
                                   alpha=0.85, linewidth=0.6))
@@ -2810,7 +2892,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             if _acc_vis_hi10 > _acc_vis_lo10 + 0.005:
                 _acc_mid10 = (_acc_vis_lo10 + _acc_vis_hi10) / 2
                 ax.text(0.01, _acc_mid10, f"Acceptable ({CFG.CONF_BAND_ACCEPTABLE:.2f}–{CFG.CONF_BAND_HIGH:.2f})", color=CFG.VIS_BAND["moderate"],
-                        fontsize=8, ha="left", va="center", fontweight="bold",
+                        fontsize=CFG.VIS_FONT_LEGEND, ha="left", va="center", fontweight="bold",
                         style="italic", transform=_yt10, zorder=6,
                         bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["cream"], ec=CFG.CONF_BAND_COLOURS["acceptable"],
                                   alpha=0.85, linewidth=0.6))
@@ -2819,16 +2901,16 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             if _bel_vis_hi10 > y_lo_f10 + 0.005:
                 _bel_mid10 = (y_lo_f10 + _bel_vis_hi10) / 2
                 ax.text(0.01, _bel_mid10, f"Below threshold (<{CFG.CONF_BAND_ACCEPTABLE:.2f})", color=CFG.VIS_ACCENT_DEEP["orange"],
-                        fontsize=8, ha="left", va="center", fontweight="bold",
+                        fontsize=CFG.VIS_FONT_LEGEND, ha="left", va="center", fontweight="bold",
                         style="italic", transform=_yt10, zorder=6,
                         bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["red"], ec=CFG.CONF_BAND_COLOURS["below"],
                                   alpha=0.85, linewidth=0.6))
 
             ax.set_xticks(range(len(existing_tiers)))
-            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=9)
+            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=CFG.VIS_FONT_TICK)
             for _tick10x, _tier10x in zip(ax.get_xticklabels(), existing_tiers):
                 _tick10x.set_color(TIER_PALETTE.get(_tier10x, "black"))
-            ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
+            ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_left"])
             ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
             ax.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_left"], linewidth=0.5, linestyle="-", alpha=0.20, zorder=0)
             ax.set_axisbelow(True)
@@ -2836,7 +2918,6 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax.set_ylabel("AI Quality Score  (Boltz Confidence / pTM / ipTM;  0–1 scale)", )
 
             # Legend: single horizontal row, top-right, above data
-            from matplotlib.patches import Patch as _Patch10
             conf_patch = _Patch10(facecolor=CFG.VIS_INK["pale"], edgecolor="black", linewidth=0.8,
                                   label="Boltz Confidence  (box)")
             handles_f10, labels_f10 = ax.get_legend_handles_labels()
@@ -2882,7 +2963,6 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             _lo18 = max(0.0, float(np.percentile(all_vals18, 0.5)) - 0.01) if len(all_vals18) else 0.0
             _hi18 = min(1.01, float(np.percentile(all_vals18, 99.5)) + 0.01) if len(all_vals18) else 1.01
 
-            from matplotlib.gridspec import GridSpec as _GS18
             fig = plt.figure(figsize=(13, 11))
             _gs18 = _GS18(2, 2, figure=fig,
                           width_ratios=[4, 1], height_ratios=[1, 4],
@@ -2900,7 +2980,6 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             Zone 3 (below diagonal): pTM > ipTM - fold stronger than interface (decoy risk)
             """
             _diag_pts = np.linspace(_lo18, _hi18, 300)
-            from matplotlib.patches import Polygon as _Poly18
             _band = 0.03
             # Zone 1: above diagonal (ipTM > pTM)
             _verts_up = ([(x, x + _band) for x in _diag_pts] +
@@ -2929,7 +3008,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             """
             ax.text(0.04, 0.60, "ipTM > pTM\nInterface well-modelled",
                     transform=ax.transAxes, ha="left", va="top",
-                    fontsize=8.5, color=CFG.VIS_BAND["high"], fontweight="bold", style="italic",
+                    fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=CFG.VIS_BAND["high"], fontweight="bold", style="italic",
                     bbox=dict(boxstyle="round,pad=0.22", fc=CFG.VIS_BAND["high_fill"], ec=CFG.VIS_BAND["high"],
                               alpha=0.80, linewidth=0.7))
             ax.text(0.97, 0.97, "pTM = ipTM\n(±0.03 band)",
@@ -2937,7 +3016,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                     fontsize=_JF_FA, color=CFG.VIS_INK["muted"], style="italic")
             ax.text(0.96, 0.10, "pTM > ipTM\nFold > interface\n(potential decoy)",
                     transform=ax.transAxes, ha="right", va="bottom",
-                    fontsize=8.5, color=CFG.VIS_ACCENT_DEEP["red"], fontweight="bold", style="italic",
+                    fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=CFG.VIS_ACCENT_DEEP["red"], fontweight="bold", style="italic",
                     bbox=dict(boxstyle="round,pad=0.22", fc=CFG.VIS_BAND["low_fill"], ec=CFG.VIS_ACCENT_DEEP["red"],
                               alpha=0.80, linewidth=0.7))
 
@@ -2974,7 +3053,6 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             Per-tier median diamonds - NO inline text annotation;
             coordinates are embedded in the legend label instead
             """
-            from matplotlib.lines import Line2D as _L18
             _leg18 = []
             # Header entries: show both symbol types so the reader knows what each glyph means
             _leg18.append(_L18([0], [0], marker="o", color="w",
@@ -2999,7 +3077,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                         f"{CFG.TIER_TOP}\n(n={len(sub18)}, ★)",
                         xy=(mx18, my18),
                         xytext=(mx18 - 0.035, my18 + 0.015),
-                        fontsize=8, color=col18, fontweight="bold", zorder=12,
+                        fontsize=CFG.VIS_FONT_LEGEND, color=col18, fontweight="bold", zorder=12,
                         arrowprops=dict(arrowstyle="->", color=col18, lw=1.2,
                                         shrinkA=6, shrinkB=4),
                         bbox=dict(boxstyle="round,pad=0.25", fc="white",
@@ -3011,7 +3089,6 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                                    label=f"{tier}  ◆({mx18:.3f}, {my18:.3f})  n={len(sub18):,}"))
 
             # Marginal distributions - KDE lines (smoother than histograms)
-            from scipy.stats import gaussian_kde as _gkde18
             existing_tiers18 = [t for t in existing_tiers if t in f18_df[CFG.COL_TIER].values]
             _kde_x18 = np.linspace(_lo18, _hi18, 300)
             for tier in existing_tiers18:
@@ -3055,7 +3132,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                         f"{CFG.TIER_TOP} ▲",
                         xy=(_peak_ptm_x, _peak_ptm_y),
                         xytext=(_peak_ptm_x + 0.008, _peak_ptm_y * 0.40),
-                        fontsize=7, color=_tt_col_f05, fontweight="bold",
+                        fontsize=CFG.VIS_FONT_ANNOT, color=_tt_col_f05, fontweight="bold",
                         ha="left", zorder=15,
                         arrowprops=dict(arrowstyle="->", color=_tt_col_f05, lw=1.0,
                                         shrinkA=2, shrinkB=2),
@@ -3066,7 +3143,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                         f"{CFG.TIER_TOP} ▲",
                         xy=(_peak_iptm_y, _peak_iptm_x),
                         xytext=(_peak_iptm_y * 0.45, _peak_iptm_x + 0.008),
-                        fontsize=7, color=_tt_col_f05, fontweight="bold",
+                        fontsize=CFG.VIS_FONT_ANNOT, color=_tt_col_f05, fontweight="bold",
                         ha="right", zorder=15,
                         arrowprops=dict(arrowstyle="->", color=_tt_col_f05, lw=1.0,
                                         shrinkA=2, shrinkB=2),
@@ -3082,8 +3159,8 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax_right.set_xlabel("ipTM density",  labelpad=2)
             ax_top.set_axisbelow(True)
             ax_right.set_axisbelow(True)
-            ax_top.tick_params(axis="y", labelsize=7.0)
-            ax_right.tick_params(axis="x", labelsize=7.0)
+            ax_top.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK_DENSE)
+            ax_right.tick_params(axis="x", labelsize=CFG.VIS_FONT_TICK_DENSE)
             for _sp in list(ax_top.spines.values()) + list(ax_right.spines.values()):
                 _sp.set_visible(False)
 
@@ -3091,7 +3168,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             ax.set_ylim(_lo18, _hi18)
             ax.set_xlabel("pTM - Global Fold Confidence  (0–1)", )
             ax.set_ylabel("ipTM - Interface Confidence  (0–1)", )
-            ax.tick_params(axis="both", labelsize=9)
+            ax.tick_params(axis="both", labelsize=CFG.VIS_FONT_TICK)
             ax.grid(True, color=CFG.VIS_INK["grid"], linewidth=0.5, alpha=0.6, zorder=1)
             # Legend: placed in the top KDE marginal (left side) to keep scatter uncluttered
             ax_top.legend(handles=_leg18, loc="upper left", ncol=3,
@@ -3239,7 +3316,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 if len(_out) >= 1:
                     _lbl_col = TIER_PALETTE.get(tier, CFG.VIS_INK["faint"])
                     ax.text(_ti, y_ceil + 0.04, f"+{len(_out)}",
-                            ha="center", va="bottom", fontsize=9.5,
+                            ha="center", va="bottom", fontsize=CFG.VIS_FONT_TICK,
                             color=_lbl_col, fontweight="bold",
                             zorder=30, clip_on=False,
                             bbox=dict(boxstyle="round,pad=0.18", fc="white",
@@ -3253,11 +3330,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _y_ticks_f6 += _y_extra_f6
             ax.set_yticks(_y_ticks_f6)
             ax.set_yticklabels([f"{t:.1f}" for t in _y_ticks_f6])
-            ax.tick_params(axis="y", labelsize=7)
+            ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK_DENSE)
             ax.set_xlabel("Degrader Tier", )
             ax.set_ylabel("Active Site RMSD (Å)  - lower = better", )
             ax.text(0.99, 0.99, " ",
-                    ha="right", va="top", fontsize=7, color=CFG.VIS_INK["ghost"], style="italic",
+                    ha="right", va="top", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["ghost"], style="italic",
                     transform=ax.transAxes)
             # Build two-line x-tick labels: tier name + n / median stats (using unclipped values)
             _xtick_labels17 = []
@@ -3291,13 +3368,12 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _zy = min(_zhi, y_ceil) * 0.98
                 ax.text(len(valid_tiers_f17) - 0.3, _zy,
                         f"n={_zn:,}  {_zlbl}",
-                        ha="center", va="top", fontsize=7.0, color=_zcol, fontweight="bold",
+                        ha="center", va="top", fontsize=CFG.VIS_FONT_ANNOT, color=_zcol, fontweight="bold",
                         rotation=90, zorder=25, clip_on=False,
                         bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=_zcol,
                                   alpha=1.0, linewidth=0.5))
 
             # Zone band legend (top-left) for the shaded quality bands
-            from matplotlib.patches import Patch as _P6z
             _zone_legend = [
                 _P6z(facecolor=CFG.VIS_ACCENT_DEEP["mint_fill"], alpha=0.55, edgecolor="none",
                      label=f"Excellent  (< {CFG.RMSD_BAND_EXCELLENT:g} Å)  {pct_green:.0f}%"),
@@ -3356,7 +3432,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         df["tier_numeric"] = df[CFG.COL_TIER].map(_tier_rank_map)
     corr_cols = [c for c in _corr_col_labels if c in df.columns]
     if len(corr_cols) >= 2:
-        from scipy import stats as _sp_stats
 
         """
         Pairwise-complete Spearman (pandas corr with min_periods) - no median
@@ -3419,7 +3494,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _pv_arr = np.array(_pv_flat_f7)
         # Benjamini-Hochberg from the library rather than a hand-rolled step-up: same correction,
         # one fewer place for an off-by-one in the rank index to hide.
-        from scipy.stats import false_discovery_control
         _adj7 = np.clip(false_discovery_control(np.asarray(_pv_arr, dtype=float), method="bh"), 0, 1)
         p_adj_mat_f7 = np.ones((_n_feat_f7, _n_feat_f7))
         for _k7, (_ii7, _jj7) in enumerate(_pv_idx_f7):
@@ -3491,14 +3565,14 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax_f3.text(0.5, 1.03,
                    f"★ p<0.05   ★★ p<0.01   ★★★ p<0.001  (BH FDR, unique pairs)   |   Features grouped by family   |   pairwise-complete Spearman, n ≤ {_n_f3:,}",
                    transform=ax_f3.transAxes, ha="center", va="bottom",
-                   fontsize=8, color=CFG.VIS_INK["muted"], style="italic",
+                   fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_INK["muted"], style="italic",
                    bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=CFG.VIS_INK["palest"],
                              alpha=0.88, linewidth=0.7))
         # Labels are short (≤7 chars) - no truncation needed
         ax_f3.set_xticklabels([l.get_text() for l in ax_f3.get_xticklabels()],
-                              fontsize=9, rotation=45, ha="right")
+                              fontsize=CFG.VIS_FONT_TICK, rotation=45, ha="right")
         ax_f3.set_yticklabels([l.get_text() for l in ax_f3.get_yticklabels()],
-                              fontsize=9, rotation=90, va="center", ha="right")
+                              fontsize=CFG.VIS_FONT_TICK, rotation=90, va="center", ha="right")
 
         # Colour significance stars: white on dark cells (|ρ|>0.5), dark on light cells
         for _txt_art in ax_f3.texts:
@@ -3512,7 +3586,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     pass
 
         # ── Self-explanatory overlays ─────────────────────────────────────────
-        from matplotlib.patches import Rectangle as _Rect7
         _N7 = len(_display_names)
         _fam_lookup_f7 = {l: g for g, ls in _fam_groups_f7 for l in ls}
         _fams_seq_f7   = [_fam_lookup_f7.get(l, "Other") for l in _display_names]
@@ -3544,7 +3617,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             if not _gi:
                 continue
             ax_f3.annotate(_gname, xy=((min(_gi) + max(_gi) + 1) / 2.0, _N7 + 1.15),
-                           xycoords="data", ha="center", va="top", fontsize=8.5,
+                           xycoords="data", ha="center", va="top", fontsize=CFG.VIS_FONT_LEGEND_TITLE,
                            fontweight="bold", color=_FAM_COL7.get(_gname, CFG.VIS_INK["dark"]),
                            annotation_clip=False)
 
@@ -3749,14 +3822,14 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                 _nv_c = max(0.04, min(1.06, nv))
                                 _y_pos08 = _base_y + _y_nudge08[_di08] + _y_tops08[_ylev08[_di08]]
                                 ax08.text(_nv_c, _y_pos08, f"{rv:.2f}",
-                                          ha="center", va="bottom", fontsize=7.0,
+                                          ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT,
                                           color=col_f08, fontweight="bold", zorder=5,
                                           rotation=90,
                                           bbox=dict(boxstyle="round,pad=0.07", fc="white",
                                                     ec="none", alpha=0.75))
 
                     ax08.set_yticks([i * 1.0 for i in range(len(_row_mets))])
-                    ax08.set_yticklabels(_row_mets, fontsize=10.5)
+                    ax08.set_yticklabels(_row_mets, fontsize=CFG.VIS_FONT_AXIS_LABEL)
                     ax08.set_ylim(-0.5, len(_row_mets) - 0.5 + 0.55)
                     ax08.set_xlim(-0.18, 1.20)
                     ax08.spines[["top", "right"]].set_visible(False)
@@ -3764,12 +3837,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 for _ax08x in axes_f08:
                     _ax08x.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
                     _ax08x.set_xticklabels(["0\n(worst)", "0.25", "0.50", "0.75", "1.0\n(best)"],
-                                           fontsize=8.5)
+                                           fontsize=CFG.VIS_FONT_LEGEND_TITLE)
                 axes_f08[-1].set_xlabel(
                     "Normalised Mean Score per Tier  (0 = worst, 1 = best within metric)",
                     )
 
-                from matplotlib.lines import Line2D as _L08
                 _leg08 = [_L08([0],[0], marker="o", color="w",
                                markerfacecolor=TIER_PALETTE.get(t,CFG.VIS_INK["faint"]),
                                markeredgecolor="black", markeredgewidth=0.8,
@@ -3869,7 +3941,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             cross_pct = cross.div(cross.sum(axis=1), axis=0).fillna(0) * 100
 
             # Chi-square on raw counts
-            from scipy.stats import chi2_contingency as _chi2_f09
             try:
                 _chi2_09, _p_09, _dof_09, _ = _chi2_f09(_cross_raw.values)
                 _chi2_stat = (f"χ²({_dof_09}) = {_chi2_09:.1f},  "
@@ -3885,13 +3956,13 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                         cbar_kws={"label": "% of tier"}, ax=ax19)
             if _chi2_stat:
                 ax19.text(0.99, 0.02, _chi2_stat, transform=ax19.transAxes,
-                          ha="right", va="bottom", fontsize=8.5, style="italic",
+                          ha="right", va="bottom", fontsize=CFG.VIS_FONT_LEGEND_TITLE, style="italic",
                           color=CFG.VIS_INK["dark"],
                           bbox=dict(boxstyle="round,pad=0.25", fc="white",
                                     ec=CFG.VIS_INK["palest"], alpha=0.95, linewidth=0.6))
             ax19.set_xlabel("Mechanistic State", )
             ax19.set_ylabel("Degrader Tier", )
-            ax19.set_xticklabels(ax19.get_xticklabels(), rotation=15, ha="right", fontsize=9)
+            ax19.set_xticklabels(ax19.get_xticklabels(), rotation=15, ha="right", fontsize=CFG.VIS_FONT_TICK)
             # Colour y-tick labels by tier (same palette as all other figures)
             for tick in ax19.get_yticklabels():
                 tier_name = tick.get_text()
@@ -3906,7 +3977,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
     # --- Figure 11: Mechanistic Score - Mean±CI dot plot ---
     if CFG.COL_MECH_S in df.columns and CFG.COL_TIER in df.columns:
-        from scipy import stats as _scipy_stats
         f13_data = df.dropna(subset=[CFG.COL_MECH_S])
         fig, ax = plt.subplots(figsize=(13, 8))
         _mfs, _mfm = CFG.MECH_FP_BAND_STRONG, CFG.MECH_FP_BAND_MODERATE   # CFG single source
@@ -3915,17 +3985,17 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.axhspan(_mfm, _mfs, alpha=0.09, color=_cbc["acceptable"], zorder=0, label="_nolegend_")
         ax.axhspan(0.00, _mfm, alpha=0.08, color=_cbc["below"], zorder=0, label="_nolegend_")
         ax.text(0.99, 0.942, f"Strong zone  (≥{_mfs:.2f})", color=CFG.VIS_BAND["high"],
-                fontsize=8, ha="right", va="center", fontweight="bold",
+                fontsize=CFG.VIS_FONT_LEGEND, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
                 bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["green"], ec=CFG.CONF_BAND_COLOURS["high"],
                           alpha=0.85, linewidth=0.6))
         ax.text(0.99, 0.798, f"Moderate zone  ({_mfm:.2f}–{_mfs:.2f})", color=CFG.VIS_BAND["moderate"],
-                fontsize=8, ha="right", va="center", fontweight="bold",
+                fontsize=CFG.VIS_FONT_LEGEND, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
                 bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["cream"], ec=CFG.CONF_BAND_COLOURS["acceptable"],
                           alpha=0.85, linewidth=0.6))
         ax.text(0.99, 0.435, f"Weak zone  (<{_mfm:.2f})", color=CFG.VIS_ACCENT_DEEP["orange"],
-                fontsize=8, ha="right", va="center", fontweight="bold",
+                fontsize=CFG.VIS_FONT_LEGEND, ha="right", va="center", fontweight="bold",
                 style="italic", transform=ax.transAxes,
                 bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["red"], ec=CFG.CONF_BAND_COLOURS["below"],
                           alpha=0.85, linewidth=0.6))
@@ -3950,7 +4020,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             if tier not in _f10_stats:
                 continue
             _st = _f10_stats[tier]
-            mean_v, ci95, med_v, vals = _st["mean"], _st["ci95"], _st["med"], _st["vals"]
+            mean_v, ci95, vals = _st["mean"], _st["ci95"], _st["vals"]
             ax.plot([i, i], [mean_v - ci95, mean_v + ci95], color="black", linewidth=2.2, zorder=4)
             ax.scatter([i], [mean_v], color=TIER_PALETTE.get(tier, CFG.VIS_INK["faint"]), s=180,
                        zorder=5, edgecolors="black", linewidths=1.2)
@@ -3959,17 +4029,17 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             pct_weak     = (vals < _mfm).sum() / len(vals) * 100
             if pct_strong > 0:
                 ax.text(i, (_mfs + 1.0) / 2, f"{pct_strong:.0f}%", ha="center", va="center",
-                        fontsize=7, color=CFG.VIS_BAND["high"], fontweight="bold", zorder=10,
+                        fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_BAND["high"], fontweight="bold", zorder=10,
                         bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["high"],
                                   alpha=0.75, linewidth=0.5))
             if pct_moderate > 0:
                 ax.text(i, (_mfm + _mfs) / 2, f"{pct_moderate:.0f}%", ha="center", va="center",
-                        fontsize=7, color=CFG.VIS_BAND["moderate"], fontweight="bold", zorder=10,
+                        fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_BAND["moderate"], fontweight="bold", zorder=10,
                         bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["acceptable"],
                                   alpha=0.75, linewidth=0.5))
             if pct_weak > 0:
                 ax.text(i, _mfm / 2, f"{pct_weak:.0f}%", ha="center", va="center",
-                        fontsize=7, color=CFG.VIS_ACCENT_DEEP["orange"], fontweight="bold", zorder=10,
+                        fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_ACCENT_DEEP["orange"], fontweight="bold", zorder=10,
                         bbox=dict(boxstyle="round,pad=0.10", fc="white", ec=CFG.CONF_BAND_COLOURS["below"],
                                   alpha=0.75, linewidth=0.5))
         ax.set_ylim(-0.02, 1.06)
@@ -4002,11 +4072,10 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     f"⚡ All tier means within {max(_means10)-min(_means10):.3f} "
                     f"- minimal inter-tier separation\n"
                     f"(mech-score cluster near {_mean10_all:.3f}; see also Fig 08 tied-metric row)",
-                    transform=ax.transAxes, ha="right", va="center", fontsize=8,
+                    transform=ax.transAxes, ha="right", va="center", fontsize=CFG.VIS_FONT_LEGEND,
                     color=CFG.VIS_ACCENT_DEEP["gold_deep"], fontweight="bold", style="italic",
                     bbox=dict(boxstyle="round,pad=0.15", fc=CFG.VIS_TINT["amber"], ec=CFG.VIS_ACCENT_DEEP["gold"],
                               alpha=0.90, linewidth=0.8), zorder=8)
-        from matplotlib.lines import Line2D as _L10
         _lh10 = [
             _L10([0],[0], marker="o", color="none", markerfacecolor=CFG.VIS_INK["ghost"],
                  markeredgecolor="none", markersize=5, alpha=0.35,
@@ -4018,9 +4087,9 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ]
         _mdh10 = _md_ready_stars_cat(ax, df, existing_tiers, CFG.COL_MECH_S)
         _lh10.extend(_mdh10)
-        ax.legend(handles=_lh10, loc="lower left",
-                   fancybox=True,
-                  ncol=4).set_zorder(20)
+        ax.legend(handles=_lh10, loc="lower left", fancybox=True, ncol=len(_lh10),
+                  fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=1.0,
+                  handletextpad=0.4).set_zorder(20)
         plt.tight_layout()
         _tier_seps(plt.gca())   # consistent vertical tier separators
         plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4111,7 +4180,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _ha_s = "left" if _dx > 0.10 else "right" if _dx < -0.10 else "center"
                 _va_s = "bottom" if _dy > 0.10 else "top" if _dy < -0.10 else "center"
                 ax.text(_ang_s, _lbl_r, _lbl_s, ha=_ha_s, va=_va_s,
-                        fontsize=8.5, fontweight="bold", linespacing=0.95)
+                        fontsize=CFG.VIS_FONT_LEGEND_TITLE, fontweight="bold", linespacing=0.95)
             ax.set_yticks(_fp_rings)
             ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"],
                                color=CFG.VIS_BAND["low"], size=7.5, fontweight="bold")
@@ -4154,7 +4223,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                     fontsize=_JF_FA, color=col, fontweight="bold", transform=ax.get_xaxis_transform())
             _zn11 = int(((plot_df[CFG.COL_SN2] >= lo) & (plot_df[CFG.COL_SN2] < hi)).sum())
             ax.text((lo + hi) / 2, 0.10, f"n={_zn11:,}",
-                    ha="center", va="center", fontsize=7.0, color=col, fontweight="bold",
+                    ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT, color=col, fontweight="bold",
                     rotation=90, zorder=10,
                     transform=ax.get_xaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.68))
@@ -4184,7 +4253,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         for _k, (_mx, _my, _mc) in enumerate(sorted(_med_pts, key=lambda z: z[0])):
             _oy = _band14[_k % len(_band14)]
             ax.annotate(f"{_mx:.0f}°", (_mx, _my), xytext=(0, _oy), textcoords="offset points",
-                        fontsize=8, color=_mc, fontweight="bold", ha="center",
+                        fontsize=CFG.VIS_FONT_LEGEND, color=_mc, fontweight="bold", ha="center",
                         va="bottom" if _oy > 0 else "top", zorder=7,
                         bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                         arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
@@ -4229,7 +4298,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_xlabel("SN2 Attack Angle (°)  - 180° = ideal linear nucleophilic back-attack", )
         ax.set_ylabel("Cumulative Fraction of Complexes in Tier", )
         # upper left - ECDF lines fan right so top-left is always clear
-        from matplotlib.lines import Line2D as _L11
         _hdr11 = _L11([0],[0], color="none", linewidth=0, label="Tier (●=median)")
         _h11, _l11 = ax.get_legend_handles_labels()
         _leg14 = ax.legend(handles=[_hdr11] + _h11, labels=["Tier (●=median)"] + _l11,
@@ -4272,7 +4340,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
         # KDE density overlay per tier (large-n tiers only)
         try:
-            from scipy.stats import gaussian_kde as _gkde12a
             _xi12 = np.linspace(0.1, 4.9, 100)
             _yi12 = np.linspace(5, 180, 100)
             _XX12, _YY12 = np.meshgrid(_xi12, _yi12)
@@ -4323,7 +4390,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             ax.axvline(x=dist, color=col, linestyle="--", alpha=0.65, linewidth=1.2)
             _lbl12 = "/".join(t.replace("Tier_", "") for t in _tiers12)
             ax.text(dist, 182, f"{_lbl12} ≤{dist}Å", color=col,
-                    fontsize=7.0, rotation=90, rotation_mode="anchor",
+                    fontsize=CFG.VIS_FONT_ANNOT, rotation=90, rotation_mode="anchor",
                     ha="left", va="center", alpha=0.95, zorder=7,
                     bbox=dict(boxstyle="round,pad=0.18", fc="white", alpha=0.85, ec=col,
                               linewidth=0.5))
@@ -4333,7 +4400,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             col = TIER_PALETTE.get(tier_key, CFG.VIS_INK["faint"])
             ax.axhline(y=angle, color=col, linestyle=":", alpha=0.65, linewidth=1.2, zorder=1)
             ax.text(0.012, angle + 0.8, f"≥{angle:g}°  {tier_key}", color=col,
-                    fontsize=7.0, ha="left", va="bottom", alpha=0.95, zorder=7,
+                    fontsize=CFG.VIS_FONT_ANNOT, ha="left", va="bottom", alpha=0.95, zorder=7,
                     transform=ax.get_yaxis_transform(),
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none",
                               alpha=0.70, linewidth=0))
@@ -4390,7 +4457,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
     # controls. Column-guarded: an absent column skips the figure rather than failing.
     # ===========================================================================
     try:
-        from matplotlib.lines import Line2D as _L2Dtc
         _need_tc = ["active_site_residues_correct", "catalytic_constellation_score",
                     CFG.COL_TIER, "scissile_cf_bde", "sn2_backside_occlusion",
                     "sn2_dead_end", CFG.COL_LIG]
@@ -4424,11 +4490,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axa.axhline(_BF, ls="--", color=CFG.VIS_ACCENT["bad"], lw=1.6, label=f"Criterion-B floor for Tier_1A ({_BF:g})")
             for _i, _b in enumerate(_abins):
                 _pct = 100.0 * (_sa.loc[_sa["A"].round(3).eq(_b), "B"] >= _BF).mean()
-                _axa.text(_i, 1.03, f"{_pct:.0f}%", ha="center", va="bottom", fontsize=8.5, fontweight="bold", color=CFG.VIS_ACCENT["axis_left"])
+                _axa.text(_i, 1.03, f"{_pct:.0f}%", ha="center", va="bottom", fontsize=CFG.VIS_FONT_LEGEND_TITLE, fontweight="bold", color=CFG.VIS_ACCENT["axis_left"])
             _axa.text(0.015, 0.965, f"Top % = share with B ≥ {_BF:g}", transform=_axa.transAxes,
-                      fontsize=8, color=CFG.VIS_ACCENT["axis_left"], va="top", ha="left", fontweight="bold")
+                      fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_ACCENT["axis_left"], va="top", ha="left", fontweight="bold")
             _axa.set_xticks(range(len(_abins)))
-            _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=8)
+            _axa.set_xticklabels([f"{b:.3g}\n(n={n:,})" for b, n in zip(_abins, _ans)], fontsize=CFG.VIS_FONT_LEGEND)
             for _tla, _cla in zip(_axa.get_xticklabels(), plt.cm.RdYlGn(np.linspace(0.1, 0.9, len(_abins)))):
                 _tla.set_color(_cla)   # each bin's tick label matches its violin colour
             _axa.set_ylim(0, 1.18)
@@ -4455,7 +4521,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                           fontsize=_JF_FA, color=_zc, fontweight="bold", transform=_axb.get_xaxis_transform())
                 _ncb = int(((_score_all_cb >= _lo) & (_score_all_cb < _hi)).sum())
                 _axb.text((_lo + _hi) / 2, 0.10, f"n={_ncb:,}", ha="center", va="center",
-                          fontsize=7.0, color=_zc, fontweight="bold", rotation=90, zorder=10,
+                          fontsize=CFG.VIS_FONT_ANNOT, color=_zc, fontweight="bold", rotation=90, zorder=10,
                           transform=_axb.get_xaxis_transform(),
                           bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.68))
             # ECDF per tier + DKW 95% band + median dot (median labels placed after the loop in
@@ -4479,7 +4545,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             for _k, (_mx, _my, _mc) in enumerate(sorted(_med_cb, key=lambda z: z[0])):
                 _oy = _band_cb[_k % len(_band_cb)]
                 _axb.annotate(f"{_mx:.2f}", (_mx, _my), xytext=(0, _oy), textcoords="offset points",
-                              fontsize=8, color=_mc, fontweight="bold", ha="center",
+                              fontsize=CFG.VIS_FONT_LEGEND, color=_mc, fontweight="bold", ha="center",
                               va="bottom" if _oy > 0 else "top", zorder=7,
                               bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                               arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
@@ -4533,7 +4599,6 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             _axb.legend(loc="upper left", ncol=1)
             # y every 0.1; x-ticks carry the base 0.2 grid PLUS every tier gate + the crystal-grade
             # mark, so each coloured threshold line is read off a labelled tick (0.05 minor between).
-            from matplotlib.ticker import MultipleLocator as _MLoc_cb
             _axb.set_xlim(0.0, 1.0)
             _axb.set_ylim(0.0, 1.06)
             _axb.set_xticks(sorted(set([0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
@@ -4541,7 +4606,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                        + [round(CFG.MECH_ELITE_CONSTELLATION, 2)])))
             _axb.yaxis.set_major_locator(_MLoc_cb(0.1))
             _axb.xaxis.set_minor_locator(_MLoc_cb(0.05))
-            _axb.tick_params(axis="both", which="major", labelsize=8)
+            _axb.tick_params(axis="both", which="major", labelsize=CFG.VIS_FONT_TICK_COMPACT)
             _axb.grid(True, color=CFG.VIS_INK["palest"], linewidth=0.6, alpha=0.75, zorder=0); _axb.set_axisbelow(True)
 
             """
@@ -4587,11 +4652,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _axc.axvline(_BDE_MAX, ls="--", color=_DEAD, lw=1.4)
                 for _yy, _v in zip(_y, _keep["bde"]):
                     _axc.annotate(f"{_v:.1f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
-                                  va="center", fontsize=8, color=CFG.VIS_INK["dark"])
+                                  va="center", fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_INK["dark"])
                 _axc.set_xlim(_keep.bde.min() - 2.0, _keep.bde.max() + 2.5)
                 _axc.set_xlabel(f"Scissile C–F BDE  (kcal/mol)   ·   gate > {_BDE_MAX:g}", )
                 _axc.set_yticks(_y)
-                _axc.set_yticklabels(_keep["lig"], fontsize=9.5, fontweight="bold")
+                _axc.set_yticklabels(_keep["lig"], fontsize=CFG.VIS_FONT_TICK, fontweight="bold")
                 for _tl, _cc in zip(_axc.get_yticklabels(), _cols):
                     _tl.set_color(_cc)
 
@@ -4603,7 +4668,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _axc2.axvline(_OCC_MAX, ls="--", color=_DEAD, lw=1.4)
                 for _yy, _v in zip(_y, _keep["occ"]):
                     _axc2.annotate(f"{_v:.2f}", (_v, _yy), xytext=(7, 0), textcoords="offset points",
-                                   va="center", fontsize=8, color=CFG.VIS_INK["dark"])
+                                   va="center", fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_INK["dark"])
                 _axc2.set_xlim(-0.05, max(_keep.occ.max() + 0.5, _OCC_MAX + 0.5))
                 _axc2.set_xlabel(f"Backside steric occlusion  (Σ vdW, Å)   ·   gate > {_OCC_MAX:g}", )
                 _axc2.tick_params(labelleft=False)
@@ -4692,14 +4757,14 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 # Total mean count label on top (absolute, not the 100% bar height)
                 for xi, tot_abs in zip(bar_x, _row_totals_abs.values):
                     ax.text(xi, 102.0, f"Σ={tot_abs:.0f}",
-                            ha="center", va="bottom", fontsize=8, fontweight="bold", color="black", zorder=4)
+                            ha="center", va="bottom", fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold", color="black", zorder=4)
                 ax.set_xticks(bar_x)
-                ax.set_xticklabels(tier_labels, rotation=35, ha="right", fontsize=9)
+                ax.set_xticklabels(tier_labels, rotation=35, ha="right", fontsize=CFG.VIS_FONT_TICK)
                 ax.set_ylim(0, 115)
                 ax.set_yticks([0, 25, 50, 75, 100])
-                ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
+                ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=CFG.VIS_FONT_TICK)
                 # Left axis: steel-blue tick labels matching the blue gridlines
-                ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
+                ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_left"])
                 ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
                 ax.set_xlabel("Degrader Tier", )
                 ax.set_ylabel("Interaction type proportion  (%)  -  annotation = mean count", )
@@ -4761,10 +4826,10 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                                   ec=CFG.CONF_BAND_COLOURS["acceptable"], alpha=0.94, linewidth=0.5))
                 ax_r15.set_ylim(0, 1.30)
                 ax_r15.set_yticks([0, 0.25, 0.50, 0.75, 1.00])
-                ax_r15.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
+                ax_r15.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=CFG.VIS_FONT_TICK)
                 ax_r15.set_ylabel("Fluorine Engagement Ratio  (interacting F / total F per ligand)",
                                    rotation=270, labelpad=14, color=CFG.VIS_ACCENT["axis_right"])
-                ax_r15.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_right"], labelsize=9)
+                ax_r15.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_right"], labelsize=CFG.VIS_FONT_TICK)
                 """
                 Rotated zone labels - left side of figure, written bottom-to-top
                 ylim=(0, 1.30): Low midpoint=0.25→0.192; Mid midpoint=0.625→0.481; High midpoint=0.875→0.673
@@ -4809,7 +4874,6 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             _all_h15 = handles_bars + handles_line
             _all_l15 = labels_bars + labels_line
             # Single row across the top; if too many items, allow a second row (ncol = ceil/2)
-            import math as _math15
             _ncol15 = len(_all_h15) if len(_all_h15) <= 8 else _math15.ceil(len(_all_h15) / 2)
             _leg15 = ax.legend(_all_h15, _all_l15,
                                loc="upper left", ncol=_ncol15,
@@ -4828,8 +4892,8 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                cbar_kws={"label": "Proportion (%)", "shrink": 0.8})
                 ax_hm.set_xlabel("Degrader Tier  -  Interaction Type Proportion (%)", )
                 ax_hm.set_ylabel("Interaction Type", )
-                ax_hm.tick_params(axis="x", labelrotation=45, labelsize=8.5)
-                ax_hm.tick_params(axis="y", labelrotation=0,  labelsize=8)
+                ax_hm.tick_params(axis="x", labelrotation=45, labelsize=CFG.VIS_FONT_TICK_COMPACT)
+                ax_hm.tick_params(axis="y", labelrotation=0,  labelsize=CFG.VIS_FONT_TICK_COMPACT)
             else:
                 ax_hm.set_visible(False)
 
@@ -4876,7 +4940,6 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                    edgecolors="black", linewidths=0.5)
                     _skipped14.append((tier14, len(_vals14)))
                     continue
-                from scipy.stats import gaussian_kde as _gkde14
                 try:
                     _kde14  = _gkde14(_vals14)
                     _y14    = np.linspace(np.min(_vals14), np.max(_vals14), 200)
@@ -4925,7 +4988,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 med = float(sub16.median())
                 n16 = len(sub16)
                 ax.text(i, med + 0.022, f"med={med:.2f}\nn={n16:,}",
-                        ha="center", va="bottom", fontsize=7.0, fontweight="bold",
+                        ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, fontweight="bold",
                         zorder=7, color=CFG.VIS_INK["near_black"],
                         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=CFG.VIS_INK["palest"],
                                   linewidth=0.6, alpha=0.85))
@@ -4956,20 +5019,18 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             ]:
                 ax.text(0.985, _zy14_start, _ztxt14,
                         ha="center", va="bottom", clip_on=True,
-                        fontsize=7.0, color=_zcol14, style="italic",
+                        fontsize=CFG.VIS_FONT_ANNOT, color=_zcol14, style="italic",
                         fontweight="bold", rotation=90, transform=ax.transAxes,
                         bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=_zec14,
                                   alpha=0.80, linewidth=0.5))
             ax.set_xlabel("Degrader Tier", labelpad=-18)   # lift into the whitespace above the angled tier ticks
             ax.set_ylabel("Fluorine Engagement Ratio  (interacting F / total F)", )
             ax.set_xticks(range(len(valid_t16)))
-            ax.set_xticklabels(valid_t16, rotation=35, ha="right", fontsize=9)
+            ax.set_xticklabels(valid_t16, rotation=35, ha="right", fontsize=CFG.VIS_FONT_TICK)
             for tick16x, tier16x in zip(ax.get_xticklabels(), valid_t16):
                 tick16x.set_color(TIER_PALETTE.get(tier16x, "black"))
 
             # Legend - violin + IQR box description
-            from matplotlib.patches import Patch as _P16
-            from matplotlib.lines import Line2D as _L16
             _leg16_h = [
                 _P16(facecolor=CFG.VIS_INK["ghost"], alpha=0.55, label="KDE violin (per tier)"),
                 _L16([0], [0], color=CFG.VIS_INK["dark"], linewidth=2.5, label="IQR (25–75%)"),
@@ -4988,7 +5049,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 _sk_txt = ", ".join(f"{t} (n={n})" for t, n in _skipped14)
                 ax.text(0.99, 0.015, f"n<4, shown as points (no KDE): {_sk_txt}",
                         transform=ax.transAxes, ha="right", va="bottom",
-                        fontsize=7.0, style="italic", color=CFG.VIS_INK["muted"], zorder=20)
+                        fontsize=CFG.VIS_FONT_ANNOT, style="italic", color=CFG.VIS_INK["muted"], zorder=20)
 
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
@@ -5017,7 +5078,6 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
     _has_dens  = "Interaction_Density_Norm" in df.columns and CFG.COL_TIER in df.columns
     if _has_bind or _has_dens:
         try:
-            from scipy import stats as _sc_stats12
             fig, ax = plt.subplots(figsize=(13, 7))
             ax_r = ax.twinx()   # right y-axis for contact density line
 
@@ -5037,7 +5097,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                         ax.hlines(med, i - 0.22, i + 0.22, colors=CFG.VIS_ACCENT["alert"],
                                   linewidth=2.0, zorder=7, linestyle="-")
                         ax.text(i + 0.25, med, "  " + _qual_fmt.format(med), va="center", ha="left",
-                                fontsize=7, color=CFG.VIS_ACCENT["alert"], fontweight="bold", zorder=8)
+                                fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_ACCENT["alert"], fontweight="bold", zorder=8)
                 # Top extends to 1.0 (0–1 composite) so the upper violin tails are
                 # not clipped; floor keeps the zoomed lower bound.
                 _qtop12 = min(1.0, max(_qhi12 + _qpad12, float(_qv12.max()) + _qpad12))
@@ -5073,21 +5133,21 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                     # Mean annotation
                     for xi, yi in zip(pip_xs, pip_meds):
                         ax_r.text(xi, yi + (max(pip_meds) - min(pip_meds)) * 0.04,
-                                  f"{yi:.2f}", ha="center", va="bottom", fontsize=8,
+                                  f"{yi:.2f}", ha="center", va="bottom", fontsize=CFG.VIS_FONT_LEGEND,
                                   color=CFG.VIS_ACCENT["vermillion"], fontweight="bold", zorder=8)
                 ax_r.set_ylabel("Active-site contact density  (interactions per complex)",
                                  rotation=270, labelpad=14, color=CFG.VIS_ACCENT["vermillion"])
-                ax_r.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["vermillion"], labelsize=9)
+                ax_r.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["vermillion"], labelsize=CFG.VIS_FONT_TICK)
 
             ax.set_xticks(range(len(existing_tiers)))
-            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=9)
+            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=CFG.VIS_FONT_TICK)
             for _tick12x, _tier12x in zip(ax.get_xticklabels(), existing_tiers):
                 _tick12x.set_color(TIER_PALETTE.get(_tier12x, "black"))
             # Left axis (binding prob.): steel-blue labels matching blue gridlines
-            ax.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_left"])
+            ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_left"])
             ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
             # Right axis (contact density): amber labels matching amber gridlines
-            ax_r.tick_params(axis="y", labelsize=9, labelcolor=CFG.VIS_ACCENT["axis_right"])
+            ax_r.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK, labelcolor=CFG.VIS_ACCENT["axis_right"])
             ax_r.yaxis.label.set_color(CFG.VIS_INK["near_black"])
             ax.set_xlabel("Degrader Tier", labelpad=-18)   # lift into the whitespace above the angled tier ticks
 
@@ -5100,7 +5160,6 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
             # Legend - bottom-left (violins tend to be taller on right)
             if _has_dens and pip_xs:
-                from matplotlib.lines import Line2D as _Line12
                 _pip_handle = _Line12([0], [0], color=CFG.VIS_ACCENT["vermillion"], linewidth=2.5,
                                       marker="D", markersize=8,
                                       label="Active-site contact density  (mean ± 95% CI)")
@@ -5166,21 +5225,21 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                     # Adaptive text: white on dark backgrounds, near-black on light ones
                     _txt_col20 = _text_color(_bg_col20)
                     ax.text(i, med, f"{med:.1f}", ha="center", va="center",
-                            fontsize=8.5, fontweight="bold", zorder=7,
+                            fontsize=CFG.VIS_FONT_LEGEND_TITLE, fontweight="bold", zorder=7,
                             color=_txt_col20,
                             bbox=dict(boxstyle="round,pad=0.15", fc=_bg_col20,
                                       ec="white", linewidth=0.6, alpha=0.88))
                 ax.set_xlabel("Degrader Tier", labelpad=-18)   # lift into the whitespace above the angled tier ticks
                 ax.set_ylabel("Active-site contact density  (interactions per complex)", )
                 ax.set_xticks(range(len(valid_t20)))
-                ax.set_xticklabels(valid_t20, rotation=35, ha="right", fontsize=9)
+                ax.set_xticklabels(valid_t20, rotation=35, ha="right", fontsize=CFG.VIS_FONT_TICK)
                 for _tick20x, _tier20x in zip(ax.get_xticklabels(), valid_t20):
                     _tick20x.set_color(TIER_PALETTE.get(_tier20x, "black"))
                 ax.set_axisbelow(True)
                 ax.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_left"], linewidth=0.55, linestyle="-",
                               alpha=0.22, zorder=0)
                 ax.xaxis.grid(False)
-                ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=9)
+                ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=CFG.VIS_FONT_TICK)
                 ax.yaxis.label.set_color(CFG.VIS_INK["near_black"])
                 ax.set_ylim(bottom=0, top=_d_max)
                 # Zone labels parked at the right margin.
@@ -5196,12 +5255,11 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                     ax.text(0.01, 0.055,
                             f"{_n_hidden20:,} complexes > {_d_max:.1f} hidden (axis clamped at p99)",
                             transform=ax.transAxes, ha="left", va="bottom",
-                            fontsize=7, color=CFG.VIS_INK["grey"], style="italic")
+                            fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["grey"], style="italic")
                 ax.legend(loc="upper right")
 
                 # Kruskal-Wallis significance note
                 try:
-                    from scipy.stats import kruskal as _kw20
                     _kw_groups = [f20_df.loc[f20_df[CFG.COL_TIER] == t,
                                              "Interaction_Density_Norm"].dropna().values
                                   for t in valid_t20 if len(f20_df[f20_df[CFG.COL_TIER]==t]) >= 3]
@@ -5223,7 +5281,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                                 f"Kruskal–Wallis {_pstr} uncorrected  (across tiers; "
                                 f"BH q in 06_Statistical_Tests.csv)",
                                 transform=ax.transAxes, ha="left", va="bottom",
-                                fontsize=8, color=CFG.VIS_INK["dark"], style="italic")
+                                fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_INK["dark"], style="italic")
                 except Exception:
                     pass
 
@@ -5274,23 +5332,21 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 _be_span = (_be_hi - _be_lo) if _be_hi > _be_lo else 1.0
                 for _mx, _my in zip(_be_mxs, _be_mys):
                     ax.text(_mx, _my - _be_span * 0.03, f"{_my:.3f}", ha="center", va="top",
-                            fontsize=7.0, fontweight="bold", color=CFG.VIS_ACCENT["alert"], zorder=9,
+                            fontsize=CFG.VIS_FONT_ANNOT, fontweight="bold", color=CFG.VIS_ACCENT["alert"], zorder=9,
                             bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=CFG.VIS_INK["palest"],
                                       linewidth=0.5, alpha=0.85))
             if _be_hi > _be_lo:
                 ax.set_ylim(_be_lo, _be_hi)
             ax.set_ylabel("Binding probability  (sigmoid of interaction density, cross-PAE, confidence)",  color=CFG.VIS_ACCENT["axis_left"])
-            ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=9)
+            ax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], labelsize=CFG.VIS_FONT_TICK)
             ax.set_xticks(range(len(existing_tiers)))
-            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=9)
+            ax.set_xticklabels(existing_tiers, rotation=40, ha="right", fontsize=CFG.VIS_FONT_TICK)
             for _txk, _tt in zip(ax.get_xticklabels(), existing_tiers):
                 _txk.set_color(TIER_PALETTE.get(_tt, "black"))
             ax.set_xlabel("Degrader tier", labelpad=-18)   # lift into the whitespace above the angled tier ticks
             ax.set_axisbelow(True)
             ax.yaxis.grid(True, color=CFG.VIS_ACCENT["axis_left"], linewidth=0.55, alpha=0.20, zorder=0)
             ax.xaxis.grid(False)
-            from matplotlib.patches import Patch as _Patch17b
-            from matplotlib.lines import Line2D as _Line17b
             _lh17b = [
                 _Patch17b(facecolor=CFG.VIS_RAMP["blue"][1], edgecolor=CFG.VIS_ACCENT["axis_left"],
                           label="Binding probability (per-tier violin)"),
@@ -5330,7 +5386,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                            gridsize=45, cmap="viridis", mincnt=1, linewidths=0.15)
             cb = fig.colorbar(hb, ax=ax, fraction=0.025, pad=0.01)
             cb.set_label(f"Mean {_cmetric.replace('_', ' ')} per bin  (brighter = more degradable)",
-                         fontsize=9)
+                         fontsize=CFG.VIS_FONT_TICK)
         else:
             ax.hexbin(_ux, _uy, gridsize=45, cmap="Greys", mincnt=1)
 
@@ -5434,7 +5490,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                       color=CFG.VIS_BAND["low"], linewidth=0.55, alpha=0.45, zorder=1,
                       linestyle="-", solid_capstyle="round")
 
-        import re as _re18
         for i in range(len(rows_df)):
             vals  = _scaler_vals.iloc[i].values.flatten().tolist() + [_scaler_vals.iloc[i].values[0]]
             _raw  = str(rows_df.iloc[i][lname_col]) if lname_col else f"Hit {i+1}"
@@ -5600,7 +5655,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             the tier's y-axis label colour. Shorter height leaves clear space
             between adjacent tier groups; outline 70% of previous thickness.
             """
-            from matplotlib.colors import to_rgba as _to_rgba19
             _master_ec19 = [TIER_PALETTE.get(t, CFG.VIS_INK["silver"]) for t in _df19["tier"].tolist()]
             """
             Faint tint of each tier's own colour as the track fill (alpha baked in
@@ -5629,17 +5683,17 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                         continue
                     if _pct_val >= 12:
                         ax19L.text(_pct_val / 2, _yi + _yo, f"{_pct_val:.0f}%",
-                                   va="center", ha="center", fontsize=7.0,
+                                   va="center", ha="center", fontsize=CFG.VIS_FONT_ANNOT,
                                    color="white", fontweight="bold", zorder=5)
                     else:
                         ax19L.text(_pct_val + 1.0, _yi + _yo, f"{_pct_val:.0f}%",
-                                   va="center", ha="left", fontsize=7.0,
+                                   va="center", ha="left", fontsize=CFG.VIS_FONT_ANNOT,
                                    color=CFG.VIS_INK["dark"], zorder=5)
 
             ax19L.set_yticks(_y19)
             ax19L.set_yticklabels(
                 [f'{r["tier"]}  (n={r["n"]:,})' for _, r in _df19.iterrows()],
-                fontsize=7
+                fontsize=CFG.VIS_FONT_ANNOT
             )
             for tick, tier in zip(ax19L.get_yticklabels(), _df19["tier"].tolist()):
                 tick.set_color(TIER_PALETTE.get(tier, "black"))
@@ -5648,7 +5702,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             ax19L.axvline(50, color=CFG.VIS_INK["faint"], lw=0.7, ls=":", zorder=2.4)
             ax19L.axvline(75, color=CFG.VIS_INK["faint"], lw=0.7, ls=":", zorder=2.4)
             ax19L.set_xlabel("Percentage of complexes (%)", )
-            ax19L.tick_params(axis="x", labelsize=8)
+            ax19L.tick_params(axis="x", labelsize=CFG.VIS_FONT_TICK_COMPACT)
             # Legend: single row, 70% font (7.5→5.25), inside bottom-right
             ax19L.legend(loc="lower right", ncol=3,
                           fancybox=True, fontsize=CFG.VIS_FONT_LEGEND - 1.5)   # shrink to fit within the panel width
@@ -5702,7 +5756,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax19R.annotate(_t19, xy=(_cx, _cy),
                                xytext=(0.83, _laby),
                                ha="right", va="center",
-                               fontsize=7.0, color=_col19, fontweight="bold",
+                               fontsize=CFG.VIS_FONT_ANNOT, color=_col19, fontweight="bold",
                                arrowprops=dict(arrowstyle="-|>", color=_col19, lw=1.3,
                                                mutation_scale=15, shrinkA=3, shrinkB=5,
                                                connectionstyle="arc3,rad=0.12"),
@@ -5712,14 +5766,14 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
 
             ax19R.set_xlabel("Boltz Model Confidence", )
             ax19R.set_ylabel("SN2 Attack Angle (°)", )
-            ax19R.tick_params(axis="both", labelsize=8)
+            ax19R.tick_params(axis="both", labelsize=CFG.VIS_FONT_TICK_COMPACT)
 
             # Zone / threshold labels - all inside the axes, single line each
-            ax19R.text(0.87, 181, "Substrate zone", color=CFG.VIS_BAND["high"], fontsize=7,
+            ax19R.text(0.87, 181, "Substrate zone", color=CFG.VIS_BAND["high"], fontsize=CFG.VIS_FONT_ANNOT,
                        style="italic", ha="center", va="center")
-            ax19R.text(0.87, 8, "Inhibitor zone", color=CFG.VIS_ACCENT_DEEP["orange_hot"], fontsize=7,
+            ax19R.text(0.87, 8, "Inhibitor zone", color=CFG.VIS_ACCENT_DEEP["orange_hot"], fontsize=CFG.VIS_FONT_ANNOT,
                        style="italic", ha="center", va="center")
-            ax19R.text(0.745, 95, f"Conf threshold = {CFG.SUBSTRATE_CONF_MIN:.2f}", color=CFG.VIS_ACCENT["blue"], fontsize=7.0,
+            ax19R.text(0.745, 95, f"Conf threshold = {CFG.SUBSTRATE_CONF_MIN:.2f}", color=CFG.VIS_ACCENT["blue"], fontsize=CFG.VIS_FONT_ANNOT,
                        ha="center", va="center", style="italic", rotation=90)
 
             # Legend: 3 columns, shrunk icons, fixed outside above the top-left corner
@@ -5836,13 +5890,13 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         # Reference line at 50%
         ax_f2.axvline(50, color=CFG.VIS_INK["muted"], linewidth=1.1, linestyle="--", alpha=0.5, zorder=1)
         ax_f2.text(50.5, len(tier_rows_f2) - 0.5, "50%",
-                   va="top", ha="left", fontsize=8, color=CFG.VIS_INK["muted"])
+                   va="top", ha="left", fontsize=CFG.VIS_FONT_LEGEND, color=CFG.VIS_INK["muted"])
 
         # Y-axis labels: tier name + n-count in matching colour
         ax_f2.set_yticks(tier_y_f2)
         ax_f2.set_yticklabels(
             [f"{t}  (n={tier_n_f2.loc[t]:,})" for t in tier_rows_f2],
-            fontsize=10)
+            fontsize=CFG.VIS_FONT_AXIS_LABEL)
         for tick, tier in zip(ax_f2.get_yticklabels(), tier_rows_f2):
             tick.set_color(TIER_PALETTE.get(tier, "black"))
 
@@ -5859,7 +5913,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         ax_f2.text(0.99, 1.06,
                    f"Total jobs: {_total_rows_f2:,}   |   Tiered: {grand_total:,}",
                    transform=ax_f2.transAxes, ha="right", va="bottom",
-                   fontsize=8.5, color=CFG.VIS_INK["dark"], fontweight="bold",
+                   fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=CFG.VIS_INK["dark"], fontweight="bold",
                    bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=CFG.VIS_INK["palest"],
                              alpha=0.88, linewidth=0.5))
 
@@ -5872,13 +5926,13 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             mid_fav = np.mean(fav_pct_f2) / 2
             mid_con = np.mean(fav_pct_f2) + (100 - np.mean(fav_pct_f2)) / 2
             ax_f2.text(mid_fav, 1.015, "▶ Favourable",
-                       ha="center", va="bottom", fontsize=9.5,
+                       ha="center", va="bottom", fontsize=CFG.VIS_FONT_TICK,
                        color=CFG.VIS_ACCENT["green"], fontweight="bold",
                        transform=ax_f2.get_xaxis_transform(),
                        bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=CFG.CONF_BAND_COLOURS["high"],
                                  alpha=0.80, linewidth=0.5))
             ax_f2.text(mid_con, 1.015, "Concerning ◀",
-                       ha="center", va="bottom", fontsize=9.5,
+                       ha="center", va="bottom", fontsize=CFG.VIS_FONT_TICK,
                        color=CFG.VIS_ACCENT["vermillion"], fontweight="bold",
                        transform=ax_f2.get_xaxis_transform(),
                        bbox=dict(boxstyle="round,pad=0.12", fc="white", ec=CFG.CONF_BAND_COLOURS["below"],
@@ -5896,7 +5950,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                     ax_f2.annotate(f"n={int(ni):,}",
                                    xy=(mid_x, yi),
                                    xytext=(mid_x, yi + 0.38),
-                                   ha="center", va="bottom", fontsize=7.0,
+                                   ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT,
                                    color=col_arr, fontweight="bold",
                                    arrowprops=dict(arrowstyle="->", color=col_arr,
                                                    lw=0.7, shrinkB=2),
@@ -5939,7 +5993,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             for (_clbl, _ccol), _off in zip(_items, _offs):
                 ax_f2.annotate(f"◀ {_clbl}", xy=(100, _cy),
                                xytext=(99, _cy + _off),
-                               ha="right", va="center", fontsize=7.0,
+                               ha="right", va="center", fontsize=CFG.VIS_FONT_ANNOT,
                                color=_ccol, fontweight="bold",
                                arrowprops=dict(arrowstyle="->", color=_ccol, lw=0.9,
                                                shrinkA=1, shrinkB=2),
@@ -5947,7 +6001,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                                          ec=_ccol, alpha=0.90, linewidth=0.5),
                                zorder=7)
 
-        from matplotlib.patches import Patch as _P02
         _leg02 = [_P02(facecolor=cat_colours_f2.get(c, CFG.VIS_INK["faint"]), edgecolor="white",
                        linewidth=0.5, label=c) for c in present_cats_f2]
         # Single-row legend below chart - ncol = number of categories so all fit on one line
@@ -6000,7 +6053,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 Sorted by AI rank (best at top) so the "most overlooked" gems sit
                 at the bottom where they are easy to read.
                 """
-                from matplotlib.lines import Line2D as _L21
                 gems_s21 = gems.sort_values("_ai_pct21", ascending=True)  # best at top after invert
                 _ng21 = len(gems_s21)
                 _y_pos21 = np.arange(_ng21)
@@ -6039,15 +6091,15 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
 
                     # Physics dot (blue circle, red outline)
                     ax21.scatter(_phys21, _y21, color=CFG.VIS_ACCENT["blue"], s=130, zorder=4,
-                                 marker="o", edgecolors="red", linewidths=1.2)
+                                 marker="o", edgecolors=CFG.VIS_ACCENT_DEEP["red_bright"], linewidths=1.2)
                     ax21.text(_phys21, _y21 + 0.34, f"{_phys21:.0f}%",
-                              va="bottom", ha="center", fontsize=7.0, color=CFG.VIS_ACCENT["blue"],
+                              va="bottom", ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_ACCENT["blue"],
                               fontweight="bold", zorder=5)
                     # AI dot (golden diamond, no border)
                     ax21.scatter(_ai21, _y21, color=CFG.VIS_ACCENT["amber"], s=130, zorder=4,
                                  marker="D", edgecolors="none")
                     ax21.text(_ai21, _y21 - 0.34, f"{_ai21:.0f}%",
-                              va="top", ha="center", fontsize=7.0, color=CFG.VIS_ACCENT["amber"],
+                              va="top", ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_ACCENT["amber"],
                               fontweight="bold", zorder=5)
 
                     # Value labels just outside the right dot
@@ -6065,7 +6117,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                     else:
                         _gem_labels21.append(f"Hidden Gem {_gi_lbl21 + 1}")
                 ax21.set_yticks(_y_pos21)
-                ax21.set_yticklabels(_gem_labels21, fontsize=8.5)
+                ax21.set_yticklabels(_gem_labels21, fontsize=CFG.VIS_FONT_LEGEND_TITLE)
                 for _tick21, (_, row21) in zip(ax21.get_yticklabels(), gems_s21.iterrows()):
                     _t21 = (row21.get(CFG.COL_TIER, "")
                             if CFG.COL_TIER in gems.columns else "")
@@ -6086,7 +6138,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                                     67: "67th", 80: "80%", 90: "90%", 100: "100%"}
                 _vis_ticks21 = [t for t in _all_tick_vals21 if t <= _x_hi21 + 1]
                 ax21.set_xticks(_vis_ticks21)
-                ax21.set_xticklabels([_tick_lbl_map21[t] for t in _vis_ticks21], fontsize=8.5)
+                ax21.set_xticklabels([_tick_lbl_map21[t] for t in _vis_ticks21], fontsize=CFG.VIS_FONT_LEGEND_TITLE)
                 ax21.set_ylim(-0.6, _ng21 - 0.4)
 
                 # Zone labels at top - only render those within the visible x-range
@@ -6104,7 +6156,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 # Legend
                 _lh21 = [
                     _L21([0],[0], marker="o", color="w", markerfacecolor=CFG.VIS_ACCENT["blue"],
-                         markeredgecolor="red", markeredgewidth=1.2,
+                         markeredgecolor=CFG.VIS_ACCENT_DEEP["red_bright"], markeredgewidth=1.2,
                          markersize=9, label=f"Physics score ({_x21_phys_lbl})"),
                     _L21([0],[0], marker="D", color="w", markerfacecolor=CFG.VIS_ACCENT["amber"],
                          markeredgecolor="none",
@@ -6128,7 +6180,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax21.text(0.99, 0.99,
                           f"Hidden Gems: {n_gems21:,}\nMedian |Δ|: {abs(med_gap21):.1f}%",
                           transform=ax21.transAxes, va="top", ha="right",
-                          fontsize=8.5, color=CFG.VIS_INK["dark"],
+                          fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=CFG.VIS_INK["dark"],
                           bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=CFG.VIS_INK["palest"],
                                     alpha=0.88, linewidth=0.5))
 
@@ -6186,9 +6238,6 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             _BC_not_A = len((_set_B & _set_C) - _set_A)
             _ABC      = len(_set_A & _set_B & _set_C)
 
-            from matplotlib.patches import Circle as _Circ22
-            from matplotlib.patches import Patch as _Patch22
-            from matplotlib.lines import Line2D as _L22
 
             _, ax22 = plt.subplots(figsize=(11, 9))
             ax22.set_aspect("equal")
@@ -6232,7 +6281,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 ax22.annotate(f"{CFG.TIER_TOP}\n(n={_n_PA22:,})",
                               xy=(_tt_cx22 - _r_PA22 * 0.7, _tt_cy22 + _r_PA22 * 0.7),
                               xytext=(_tt_cx22 - 2.2, _tt_cy22 + 1.4),
-                              ha="center", va="bottom", fontsize=8,
+                              ha="center", va="bottom", fontsize=CFG.VIS_FONT_LEGEND,
                               color=_tt_col22, fontweight="bold", zorder=9,
                               bbox=dict(boxstyle="round,pad=0.20", fc=CFG.VIS_RAMP["purple"][0],
                                         ec=_tt_col22, alpha=0.93, linewidth=1.3),
@@ -6240,7 +6289,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                                               lw=1.1, shrinkA=0, shrinkB=3))
 
             # Primary set labels - uniform size, bold, distinct filled-and-outlined box
-            _main_lbl_kw22 = dict(ha="center", va="center", fontsize=11,
+            _main_lbl_kw22 = dict(ha="center", va="center", fontsize=CFG.VIS_FONT_AXIS_LABEL,
                                   fontweight="bold", linespacing=1.25, zorder=6)
             ax22.text(2.15, 7.25, "Physics-Strong", color=CFG.VIS_ACCENT["blue"], **_main_lbl_kw22,
                       bbox=dict(boxstyle="round,pad=0.40", fc=CFG.VIS_RAMP["blue"][0], ec=CFG.VIS_ACCENT["blue"],
@@ -6269,7 +6318,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                 _pct22 = _rn22 / _n22 * 100 if _n22 else 0
                 ax22.text(_rx22, _ry22,
                           f"{_rl22}\n" + r"$\bf{" + f"{_rn22:,}" + r"}$" + f"  ({_pct22:.1f}%)",
-                          ha="center", va="center", fontsize=7,
+                          ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
                           color=_rc22, linespacing=1.35,
                           bbox=dict(boxstyle="square,pad=0.32", fc=CFG.VIS_INK["canvas"], ec=_rc22,
                                     alpha=0.92, linewidth=0.9), zorder=5)
@@ -6389,8 +6438,7 @@ def _mm_variance_by_model(df, out_dir, reporter):
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _models = sorted(str(m) for m in mv["model_name"].dropna().unique())
-    _acc = CFG.VIS_ACCENT
-    _mpal = [_acc[k] for k in ("green", "sky", "blue", "magenta", "amber", "vermillion") if k in _acc]
+    _mpal = list(CFG.VIS_MODEL_COLOUR)                                   # one model palette (SSOT, matches the pie)
     _mpal = (_mpal * (len(_models) // max(1, len(_mpal)) + 1))[:max(1, len(_models))]
     fig, (ax_d, ax_a) = plt.subplots(2, 1, figsize=(13, 8.5), sharex=True)
     sns.boxplot(data=mv, x=CFG.COL_TIER, y="sn2_distance_A", hue="model_name", order=_tiers,
@@ -6557,6 +6605,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _panel(_xn_figure_06a, "07_PFAS_Scope_and_Synthesis", "15_Tier1A_Cross_Ligand_Heatmap")
     _panel(_jf_swimmer, "07_PFAS_Scope_and_Synthesis", "16_Swimmer_Top_Per_Tier")
     _panel(_jf_circos, "07_PFAS_Scope_and_Synthesis", "17_Circos_Ligand_Tier_Assignment")
+    _panel(_xn_fig_reaction_readiness, "07_PFAS_Scope_and_Synthesis", "18_Pocket_Residue_Reaction_Readiness")
 
     # Step 8/8 - 08_Diagnostic_and_MultiModel_Trends (its own step, last folder on disk)
     _diag_dir = out_dir / "08_Diagnostic_and_MultiModel_Trends"
@@ -6586,7 +6635,6 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
 def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Figure 24: Top 25 multi-target proteins (stacked bar)."""
     try:
-        import matplotlib.patches as _mp
 
         d = _utils_mod.standardise_dataframe_tiers(df.copy(), CFG)
         d["tier"] = d[CFG.COL_TIER].astype(str)
@@ -6662,7 +6710,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             )
         ax.set_ylabel("Protein  (top 25, ranked by quality-weighted degradation breadth)",
                       )
-        ax.tick_params(axis="y", labelsize=9)
+        ax.tick_params(axis="y", labelsize=CFG.VIS_FONT_TICK)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_visible(False)
@@ -6673,7 +6721,7 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             pa_cnt = int(bar_data.loc[prot, CFG.TIER_TOP]) \
                      if CFG.TIER_TOP in bar_data.columns else 0
             _lbl = f"{total}" if pa_cnt == 0 else f"{total}  ★×{pa_cnt}"
-            ax.text(total + 0.15, i, _lbl, va="center", fontsize=8.5,
+            ax.text(total + 0.15, i, _lbl, va="center", fontsize=CFG.VIS_FONT_LEGEND_TITLE,
                     color=tier_colors[CFG.TIER_TOP] if pa_cnt > 0 else CFG.VIS_INK["soft"],
                     fontweight="bold" if pa_cnt > 0 else "normal")
         # Legend: only the tiers actually present in the plotted bars, single row.
@@ -6707,8 +6755,6 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
     the segment in short form (T1A, T1B, T2A, …). Reveals whether the elite
     proteins are also broad degraders across the panel."""
     try:
-        import matplotlib as _mpl
-        import matplotlib.patches as _mp
 
         top_tier = CFG.TIER_TOP
         bp = best_pairs.copy()
@@ -6766,7 +6812,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
                 ax.barh(yi, 1.0, left=left, height=_BH, color=col, edgecolor="white",
                         linewidth=0.8, zorder=3)
                 ax.text(left + 0.5, yi, _tshort(r["tier"]), ha="center", va="center",
-                        fontsize=7.0, fontweight="bold", color=_label_col(col), zorder=5)
+                        fontsize=CFG.VIS_FONT_ANNOT, fontweight="bold", color=_label_col(col), zorder=5)
                 _tier_seq.append(r["tier"])
                 left += 1
 
@@ -6786,12 +6832,12 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
 
             ntop = int(order.loc[prot, "_ntop"])
             ax.text(left + 0.25, yi, f"{int(left)}  ★×{ntop}", va="center",
-                    fontsize=8, fontweight="bold",
+                    fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold",
                     color=tier_colors.get(top_tier, CFG.VIS_INK["soft"]))
         ax.set_xlim(-0.35, float(order["_ntot"].max()) + 3.0)
 
         ax.set_yticks(range(len(prots)))
-        ax.set_yticklabels(prots, fontsize=8)
+        ax.set_yticklabels(prots, fontsize=CFG.VIS_FONT_LEGEND)
         ax.invert_yaxis()
         ax.set_xlabel("Number of PFAS degraded  (each block = one PFAS; block label = its tier)",
                       )
@@ -6824,10 +6870,6 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     Columns absent from the data are silently dropped.
     """
     try:
-        from matplotlib.path import Path as _MplPath
-        from matplotlib.patches import PathPatch as _PathPatch
-        import matplotlib.patches as _mp
-        import textwrap as _tw24
 
         d = _utils_mod.standardise_dataframe_tiers(df.copy(), CFG)
         # Drop any stale computed columns so re-assignment never raises "already exists"
@@ -7060,7 +7102,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 ax24.text((x0 + bw_s + x1) / 2,
                           ((y0a + _ha / 2) + (y0b + _hb / 2)) / 2,
                           f"{_pct:.0f}%",
-                          ha="center", va="center", fontsize=14, fontweight="bold",
+                          ha="center", va="center", fontsize=CFG.VIS_FONT_LARGE, fontweight="bold",
                           color="white", zorder=zorder + 1,
                           bbox=dict(boxstyle="round,pad=0.05", fc=color, ec="none", alpha=0.70))
 
@@ -7108,7 +7150,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             facecolor=CFG.VIS_INK["ink_navy"], edgecolor="white", linewidth=1.0, alpha=0.96, zorder=5))
         ax24.text(_xs_24[0] + _bw0_24 / 2, _BY0_24 + _BH_24 / 2,
                   f"All Complexes  {_total_j_24:,}",
-                  ha="center", va="center", fontsize=15, fontweight="bold",
+                  ha="center", va="center", fontsize=CFG.VIS_FONT_LARGE, fontweight="bold",
                   color="white", zorder=6, rotation=90)
 
         # ── Node boxes for columns 1..n_cols-1 ───────────────────────────────
@@ -7141,10 +7183,10 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 boxstyle="round,pad=0,rounding_size=0.005", mutation_aspect=1.0,
                 facecolor=_hbg, edgecolor="none", alpha=0.95, zorder=7))
             ax24.text(_hx + _cbw / 2, _hdr_y_24 + 0.038, _title,
-                      ha="center", va="center", fontsize=14, fontweight="bold",
+                      ha="center", va="center", fontsize=CFG.VIS_FONT_LARGE, fontweight="bold",
                       color="white", zorder=8, linespacing=1.0)
             ax24.text(_hx + _cbw / 2, _hdr_y_24 + 0.012, _hsub,
-                      ha="center", va="center", fontsize=12, color=CFG.VIS_TINT["blue"], zorder=8)
+                      ha="center", va="center", fontsize=CFG.VIS_FONT_LARGE, color=CFG.VIS_TINT["blue"], zorder=8)
 
         # ── Flow arrows between headers - anchored exactly at banner edges ────
         _ya24 = _hdr_y_24 + 0.030
@@ -7307,8 +7349,8 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             gridsize=50, mincnt=1, cmap="YlOrRd", alpha=0.65, zorder=1, linewidths=0.2
         )
         _cb25 = fig25a.colorbar(_hb25, ax=axA, pad=0.01, aspect=30, shrink=0.85)
-        _cb25.set_label("Count per hex", fontsize=9)
-        _cb25.ax.tick_params(labelsize=8)
+        _cb25.set_label("Count per hex", fontsize=CFG.VIS_FONT_TICK)
+        _cb25.ax.tick_params(labelsize=CFG.VIS_FONT_TICK_COMPACT)
         _samp_A25 = _d25.sample(min(3000, len(_d25)), random_state=int(CFG.ANALYSIS_SEED))
         for _t25a in sorted(TIER_ORDER_LOGIC, key=lambda t: t == CFG.TIER_TOP):
             _is_pa25a = (_t25a == CFG.TIER_TOP)
@@ -7349,11 +7391,11 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             axA.scatter([], [], marker="*", s=200, facecolor=CFG.VIS_ACCENT["control"],
                         edgecolor=CFG.VIS_ACCENT["control_edge"], linewidths=1.4, label="3R3U × FA (control)")
         axA.text(0.99, 0.92, f"SUBSTRATE ZONE  (SN2 ≥ {CFG.SUBSTRATE_ANGLE_MIN:.0f}°)",
-                 transform=axA.transAxes, ha="right", va="top", fontsize=9.5,
+                 transform=axA.transAxes, ha="right", va="top", fontsize=CFG.VIS_FONT_TICK,
                  color=CFG.VIS_BAND["high"], fontweight="bold",
                  bbox=dict(facecolor="white", alpha=0.75, edgecolor="none"))
         axA.text(0.99, 0.10, f"POTENTIAL INHIBITOR ZONE  (SN2 < {CFG.INHIBITOR_ANGLE_MAX:.0f}°)",
-                 transform=axA.transAxes, ha="right", va="bottom", fontsize=9.5,
+                 transform=axA.transAxes, ha="right", va="bottom", fontsize=CFG.VIS_FONT_TICK,
                  color=CFG.VIS_ACCENT_DEEP["orange_hot"], fontweight="bold",
                  bbox=dict(facecolor="white", alpha=0.75, edgecolor="none"))
         _bins25 = list(CFG.VIS_PFAS_FCOUNT_BINS)          # [0, 8, 13, 18, 24, inf]
@@ -7418,7 +7460,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         Master container bar per x-category (like Fig 19a) - faint bin-coloured
         fill + matching coloured outline, holding both child stacked bars.
         """
-        from matplotlib.colors import to_rgba as _to_rgba25
         for _xi, _bc in zip(_xB, _bin_cols_25):
             axB.bar(_xi, 104, 0.74, bottom=0, color=_to_rgba25(_bc, 0.10),
                     edgecolor=_bc, linewidth=1.4, zorder=2)
@@ -7444,34 +7485,34 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                     _ymid = _b + _v / 2
                     if _v >= 4:
                         axB.text(xpos[_xi], _ymid, f"{_v:.0f}%", ha="center",
-                                 va="center", fontsize=8.5, color="white",
+                                 va="center", fontsize=CFG.VIS_FONT_LEGEND_TITLE, color="white",
                                  fontweight="bold", zorder=4)
                     elif _v >= 0.8:
                         axB.annotate(f"{_v:.0f}%",
                                      xy=(xpos[_xi] + _esign * _wB / 2, _ymid),
                                      xytext=(xpos[_xi] + _dx, _ymid),
-                                     ha=_ha, va="center", fontsize=8.5,
+                                     ha=_ha, va="center", fontsize=CFG.VIS_FONT_LEGEND_TITLE,
                                      color=_ccol, fontweight="bold", zorder=7,
                                      arrowprops=dict(arrowstyle="-", color=_ccol,
                                                      lw=0.5, shrinkA=1, shrinkB=1))
                 _bot = _bot + _vals
             for _xi, _n in enumerate(ct_df.sum(axis=1).values):
                 axB.text(xpos[_xi], 101.5, f"n={_n:,}", ha="center", va="bottom",
-                         fontsize=7.0, color=_bin_cols_25[_xi], fontweight="bold")
+                         fontsize=CFG.VIS_FONT_ANNOT, color=_bin_cols_25[_xi], fontweight="bold")
 
         _stack_at_25(_xB - _offB, _oc_pct25, _oc_ct25, lambda c: _oc25_colors_b.get(c, CFG.VIS_INK["faint"]), "left")
         _stack_at_25(_xB + _offB, _tier_pct25, _tier_ct25, lambda t: TIER_PALETTE.get(t, CFG.VIS_INK["faint"]), "right")
         # Mini-tags under each paired bar so the two stories are unambiguous
         for _xi, _bc in zip(_xB, _bin_cols_25):
             axB.text(_xi - _offB, -1.5, "outcome", ha="center", va="top",
-                     fontsize=8.5, color=_bc, style="italic", fontweight="bold")
+                     fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=_bc, style="italic", fontweight="bold")
             axB.text(_xi + _offB, -1.5, "tier", ha="center", va="top",
-                     fontsize=8.5, color=_bc, style="italic", fontweight="bold")
+                     fontsize=CFG.VIS_FONT_LEGEND_TITLE, color=_bc, style="italic", fontweight="bold")
 
         axB.set_ylim(0, 108)
         axB.set_xlim(-0.6, len(_oc_pct25) - 0.4)
         axB.set_xticks(_xB)
-        axB.set_xticklabels(_xlabels_25, fontsize=9)
+        axB.set_xticklabels(_xlabels_25, fontsize=CFG.VIS_FONT_TICK)
         for _tk, _bc in zip(axB.get_xticklabels(), _bin_cols_25):
             _tk.set_color(_bc)
         axB.tick_params(axis="x", pad=16)   # room for the outcome/tier mini-tags
@@ -7482,7 +7523,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         axB.yaxis.grid(True, color=CFG.VIS_INK["mist"], linewidth=0.7, zorder=0)
         axB.set_axisbelow(True)
 
-        from matplotlib.patches import Patch as _P25b
         _oc_h25 = [_P25b(facecolor=_oc25_colors_b.get(c, CFG.VIS_INK["faint"]), edgecolor="white",
                          linewidth=0.5, label=c) for c in _oc_pct25.columns]
         _ti_h25 = [_P25b(facecolor=TIER_PALETTE.get(t, CFG.VIS_INK["faint"]), edgecolor="white",
@@ -7531,7 +7571,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         nC/nF/MW are computed on the fly from the SMILES panel via RDKit
         (utils.compute_ligand_properties); nothing is hardcoded.
         """
-        from matplotlib.patches import Patch as _P25
         _smi25 = out_dir.parents[1] / CFG.INPUT_SMILES
         if not _smi25.exists():
             _smi25 = Path.cwd() / CFG.INPUT_SMILES
@@ -7609,7 +7648,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                                        label="Soft catalytic score (competence distribution)"))
                 # Explicit legend entry for the in-box line so it is not confused with the
                 # connected mean below - the box centre-line is the MEDIAN, not the mean.
-                from matplotlib.lines import Line2D as _L2D25
                 _handles25.append(_L2D25([0], [0], color=_SOFT_C, lw=1.8,
                                          label="Median (box centre line)"))
 
@@ -7647,10 +7685,10 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             for _xi, g in zip(_pos25, _groups25):
                 _nmol = int(_d25c[_d25c["_nC"] == g][_lcol25].nunique())
                 axL.text(_xi, 1.075, f"{_nmol} mol", ha="center", va="top",
-                         fontsize=8, fontweight="bold", color=CFG.VIS_INK["dark"], zorder=7)
+                         fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold", color=CFG.VIS_INK["dark"], zorder=7)
 
             axL.set_xticks(_pos25)
-            axL.set_xticklabels(_labels25, fontsize=8)
+            axL.set_xticklabels(_labels25, fontsize=CFG.VIS_FONT_LEGEND)
             axL.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)",
                            )
             axL.set_ylabel("Catalytic competence  (soft score · degrader fraction, 0–1)", )
@@ -7662,7 +7700,6 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             Master container bar per carbon group: very light tint + faint border
             - kept subtle so the box plots stay the visual focus.
             """
-            from matplotlib.colors import to_rgba as _to_rgba25c
             _bin_pal25  = list(CFG.PFAS_SIZE_BIN_COLOUR)
             _grp_cols25 = [_bin_pal25[i % len(_bin_pal25)] for i in range(len(_groups25))]
             for _xi, _gc in zip(_pos25, _grp_cols25):
@@ -7710,12 +7747,10 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     Each panel is guarded independently so a single missing column or empty subset
     skips only that figure, never the whole folder.
     """
-    from scipy import stats as _sc_stats
     reporter.section("Step 8/8 - 08_Diagnostic_and_MultiModel_Trends · diagnostic + multi-model trends")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # CFG-sourced colours (single source of truth - config §8).
-    _fit_col   = CFG.OUTCOME_COLOUR.get("Substrate", CFG.VIS_ACCENT_DEEP["teal"])
+    # CFG-sourced colour (single source of truth - config §8).
     _nofit_col = CFG.OUTCOME_COLOUR.get("Potential Inhibitor", CFG.VIS_ACCENT_DEEP["orange_deepest"])
 
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df.get(CFG.COL_TIER, pd.Series()).unique()]
@@ -7805,7 +7840,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 ax.scatter(_t1a["asv"], _t1a["lv"], s=48, facecolor=_t1c,
                            edgecolors="black", linewidths=0.8, alpha=0.95, zorder=6,
                            label=f"{CFG.TIER_TOP} (highlighted)")
-                from matplotlib.patches import Rectangle as _Rect17
                 _x05, _x95 = _t1a["asv"].quantile([0.05, 0.95])
                 _y05, _y95 = _t1a["lv"].quantile([0.05, 0.95])
                 ax.add_patch(_Rect17((_x05, _y05), _x95 - _x05, _y95 - _y05, fill=False,
@@ -7816,7 +7850,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                             f"(occupancy ≈ {_mocc1:.2f})",
                             xy=(_mx1, _my1), xycoords="data",
                             xytext=(0.50, 0.30), textcoords="axes fraction",
-                            fontsize=8, fontweight="bold", color=_t1c, ha="left", va="top",
+                            fontsize=CFG.VIS_FONT_LEGEND, fontweight="bold", color=_t1c, ha="left", va="top",
                             bbox=dict(boxstyle="round,pad=0.22", fc="none", ec=_t1c,
                                       alpha=0.95, linewidth=1.0),
                             arrowprops=dict(arrowstyle="->", color=_t1c, lw=1.4))
@@ -7846,7 +7880,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _ovf = _ovf_n / len(sub) * 100
             ax.text(0.02, 0.98, f"{_ovf:.1f}% of complexes overfill the pocket "
                     f"(n={_ovf_n:,} above boundary)",
-                    transform=ax.transAxes, ha="left", va="top", fontsize=8.5, style="italic",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=CFG.VIS_FONT_LEGEND_TITLE, style="italic",
                     color=CFG.VIS_ACCENT_DEEP["orange_deepest"], bbox=dict(boxstyle="round,pad=0.18", fc=CFG.VIS_ACCENT_DEEP["peach_fill"],
                     ec=_nofit_col, alpha=0.9, linewidth=0.8))
             # Two-row legend above the axes (tiers + fit boundary); the Spearman ρ/p/n
@@ -7954,7 +7988,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                     mec="white", mew=0.8, zorder=7,
                     label="Mean - 8-residue active-site coverage")
 
-            from matplotlib.patches import Patch as _P02
             ax.legend(handles=[
                 _P02(facecolor=_CAV02, alpha=0.35, edgecolor=_CAV02,
                      label="Whole-cavity coverage (violin - full distribution)"),
@@ -7968,7 +8001,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.axhline(1.0, color=CFG.VIS_INK["shadow"], ls=":", lw=1.1, alpha=0.8)
             ax.text(len(groups) - 0.45, 1.012, "ligand fully contained", ha="right", va="bottom",
                     fontsize=_JF_FA, color=CFG.VIS_INK["shadow"], style="italic")
-            ax.set_xticks(_pos02); ax.set_xticklabels(labels, fontsize=8)
+            ax.set_xticks(_pos02); ax.set_xticklabels(labels, fontsize=CFG.VIS_FONT_LEGEND)
             ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)",
                           )
             ax.set_ylabel("Fraction of the ligand contained  (0–1)", )
@@ -8018,7 +8051,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                         f"hidden (cavity mis-detection)",
                         transform=ax.transAxes, ha="right", va="top", fontsize=_JF_FA,
                         style="italic", color=CFG.VIS_INK["charcoal"])
-            ax.set_xticks(range(len(groups))); ax.set_xticklabels(labels, fontsize=8)
+            ax.set_xticks(range(len(groups))); ax.set_xticklabels(labels, fontsize=CFG.VIS_FONT_LEGEND)
             ax.set_xlabel("PFAS carbon number  (fluorine counts present shown in parentheses)", )
             ax.set_ylabel("Pocket occupancy  (ligand vol / cavity vol)", )
             _tier_seps(ax, len(groups))   # consistent per-carbon separators
@@ -8073,8 +8106,9 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _mdhc = _md_ready_stars_cat(ax, df, tiers, "model_degrader_consensus")
             _lh.extend(_mdhc)
             # Legend above the axes (single row) so it never sits on the top data band.
-            ax.legend(handles=_lh, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=4,
-                        fancybox=True)
+            ax.legend(handles=_lh, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=len(_lh),
+                        fancybox=True, fontsize=CFG.VIS_FONT_LEGEND - 1.0,
+                        columnspacing=1.0, handletextpad=0.4)
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
             _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
@@ -8121,7 +8155,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                     label="Level median")
             ax.set_xticks(_order06)
             ax.set_xticklabels([f"{c:.2g}\n(n={int((sub['cons'] == c).sum()):,})" for c in _levels],
-                               fontsize=8)
+                               fontsize=CFG.VIS_FONT_LEGEND)
             for _tl06, _c06 in zip(ax.get_xticklabels(), _conf_cols):
                 _tl06.set_color(_c06)   # each level's tick label matches its violin colour
             ax.set_xlabel("Multi-model degrader consensus  (fraction of 5 models)", )
@@ -8241,7 +8275,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     the convex-hull pocket_occupancy proxy.
     """
     try:
-        from matplotlib.patches import Patch as _P08
         _ext = _num("ligand_max_extent"); _eff = _num("mechanistic_score_effective")
         _con = _num("pocket_containment_cavity")
         _torder = ["Tier_5_Decoy", "Tier_4", "Tier_3", "Tier_2B", "Tier_2A", "Tier_1B", "Tier_1A"]
@@ -8262,7 +8295,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _cmn = [float(sub.loc[sub["_b"].eq(g), "con"].mean()) for g in _grpo]
 
             fig, axL = plt.subplots(figsize=(15, 6))
-            from matplotlib.colors import to_rgba as _rgba08
             # Horizontal tier-quality zones on the effective-mechanistic-score axis, coloured
             # by CFG.TIER_COLOUR and bounded by the CFG.TIER_MECH_MIN gates (single source of
             # truth). Only Tier_1A/1B (0.85) and Tier_2A (0.70) are mechanistic-score-gated;
@@ -8292,11 +8324,11 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                     (_f2a, f"Tier_2A floor {_f2a:g}", CFG.TIER_COLOUR["Tier_2A"])]:
                 axL.axhline(_fy, ls="--", color=_fc, lw=1.3, zorder=3)
                 axL.text(len(_pos) - 0.55, _fy + 0.012, _flbl, ha="right", va="bottom",
-                         fontsize=8, color=_fc, fontweight="bold", zorder=4)
+                         fontsize=CFG.VIS_FONT_LEGEND, color=_fc, fontweight="bold", zorder=4)
             axL.set_ylim(0.0, 1.06); axL.set_xlim(-0.6, len(_pos) - 0.4)
             axL.set_ylabel("Effective mechanistic score  (box = distribution)", )
             axL.set_xlabel("Ligand max extent (Å)  →  larger", )
-            axL.set_xticks(_pos); axL.set_xticklabels([f"{c:.1f}" for c in _cent], rotation=90, fontsize=8)
+            axL.set_xticks(_pos); axL.set_xticklabels([f"{c:.1f}" for c in _cent], rotation=90, fontsize=CFG.VIS_FONT_LEGEND)
             axL.spines["top"].set_visible(False)
             axL.yaxis.grid(True, color=CFG.VIS_ACCENT_DEEP["leaf"], alpha=0.28, linewidth=0.7, zorder=0)
             axL.set_axisbelow(True)
@@ -8308,7 +8340,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                                markersize=5, zorder=5, label="Mean pocket containment")
             axR.set_ylim(0.0, 1.06); axR.grid(False)
             axR.set_ylabel("Catalytic hit-rate  ·  pocket containment", )
-            from matplotlib.lines import Line2D as _L2D08
             _mln08.set_label("Mean effective mech score")
             _hln08.set_label("Catalytic hit-rate (≥ Tier_2A)")
             _handles08 = [_P08(facecolor=_SOFT_F, edgecolor=_SOFT_C,
@@ -8344,9 +8375,6 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
     utils.compute_ligand_properties; nothing is hardcoded.
     """
     try:
-        from matplotlib.patches import Patch as _P09
-        from matplotlib.lines import Line2D as _L2D09
-        from matplotlib.ticker import MultipleLocator as _MLoc09
         _D8_09 = ["Dist_Nucleophile", "Dist_Base", "Dist_Acid", "Dist_Clamp1", "Dist_Clamp2",
                   "Dist_Stabiliser_H", "Dist_Stabiliser_W", "Dist_Stabiliser_Y"]
         _lcol09 = next((c for c in [CFG.COL_LIG, CFG.COL_LIG, "ligand"] if c in df.columns), None)
@@ -8417,7 +8445,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 axL.yaxis.set_major_locator(_MLoc09(0.25))
                 axL.set_ylabel("Reactive-carbon → catalytic-residue distance (Å)", )
                 axL.set_xlabel("PFAS carbon number  →  larger ligand", )
-                axL.set_xticks(_pos09); axL.set_xticklabels([f"C{int(g)}" for g in _grps09], fontsize=8)
+                axL.set_xticks(_pos09); axL.set_xticklabels([f"C{int(g)}" for g in _grps09], fontsize=CFG.VIS_FONT_LEGEND)
                 axL.spines["top"].set_visible(False)
                 axL.yaxis.grid(True, color=CFG.VIS_RAMP["blue"][2], alpha=0.28, lw=0.6, zorder=0)   # left (Å) grid
                 axL.set_axisbelow(True)
@@ -8547,7 +8575,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         ax.text(len(_t10) - 0.45, 0.51, "majority of samples agree", ha="right", va="bottom",
                 fontsize=_JF_FA, color=CFG.VIS_INK["grey"], style="italic")
         ax.set_xticks(_pos10)
-        ax.set_xticklabels(_t10, rotation=30, ha="right", fontsize=9)
+        ax.set_xticklabels(_t10, rotation=30, ha="right", fontsize=CFG.VIS_FONT_TICK)
         for _tk, _t in zip(ax.get_xticklabels(), _t10):
             _tk.set_color(TIER_PALETTE.get(_t, "black"))
         ax.set_ylim(0, 1.18)
@@ -9490,8 +9518,6 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         gate and the angle gate side by side. Two separate boxes stated the tier twice and spent the
         panel's space saying it.
         """
-        from matplotlib.patches import Patch as _P1C
-        from matplotlib.lines import Line2D as _L1C
         _h = [_P1C(facecolor=TIER_PALETTE.get(_t, CFG.VIS_INK["faint"]), alpha=0.85,
                    edgecolor=CFG.VIS_INK["outline"], linewidth=0.7, label=_t)
               for _t in _tiers]
@@ -9585,11 +9611,16 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
     (ax_tl, ax_tr), (ax_bl, ax_br) = axes
     _xn__tier_boxstrip(ax_tl, cdf, tiers, _top_d, f'Nucleophile distance  (Å)\n{_sfx}', group_col='best_geo_tier')
     _xn__gate_lines_distance(ax_tl)
-    ax_tl.set_ylim(1.5, max(5.5, float(np.nanmax(cdf[_top_d])) * 1.02))   # 1.5 Å floor (no data below) → ~5.5 Å so the full scatter shows
+    # 1.5 Å floor (no data below); top at 8 Å so the Tier_4/5 box + whiskers have headroom while the
+    # extreme long tail (~17 Å) is still kept off-axis (matches the geometry-only fallback path).
+    ax_tl.set_ylim(1.5, max(8.0, float(np.nanpercentile(cdf[_top_d], 99)) * 1.05))
     _xn__tier_boxstrip(ax_tr, cdf, tiers, _top_a, f'SN2 attack angle  (°)\n{_sfx}', group_col='best_geo_tier')
     _xn__gate_lines_angle(ax_tr)
-    ax_tr.set_ylim(0, 185)
-    ax_tr.set_yticks([0, 45, 90, 135, 180])
+    # SN2 angle data begins ~45°; start the axis just below the lowest value so the empty 0-45° band does
+    # not push the boxes into the top half of the panel.
+    _amin_tr = float(np.nanmin(pd.to_numeric(cdf[_top_a], errors="coerce")))
+    ax_tr.set_ylim(max(0.0, _amin_tr - 5.0), 185)
+    ax_tr.set_yticks([45, 90, 135, 180])
     # The top and bottom rows share the same tier x-axis; the bottom row already carries the tier names
     # and their n, so the top row's tick labels only repeat them - suppress them (labels shown once, below).
     for _axt in (ax_tl, ax_tr):
@@ -9676,10 +9707,187 @@ def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
         _tier_seps(_ax)   # consistent tier separators
     _xn__save(fig, out_dir, _xn_FIG_NAMES['pillars'], reporter)
 
+# =============================================================================
+# 07 - Pocket + 8-residue reaction-readiness, aggregated per ligand (size-ordered)
+#   Composite = geometry_readiness (pocket fit + proximity to the 8 catalytic residues + SN2 angle +
+#   model confidence) GATED by reaction feasibility. Feasibility is taken DIRECTLY from 02_Production's
+#   competence_score (its own C-F BDE / beta-fluorine / occlusion term) and used AS-IS - nothing is
+#   re-penalised here. All colours/fonts/DPI come from CFG (SSOT).
+# =============================================================================
+_RR_SITES = {
+    "Nucleophile": "Dist_Nucleophile", "Base": "Dist_Base", "Acid": "Dist_Acid",
+    "Clamp1": "Dist_Clamp1", "Clamp2": "Dist_Clamp2",
+    "Stab_His": "Dist_Stabiliser_H", "Stab_Trp": "Dist_Stabiliser_W", "Stab_Tyr": "Dist_Stabiliser_Y",
+}
+_RR_D_CONTACT, _RR_D_FAR, _RR_SENTINEL = 3.5, 8.0, 990.0     # proximity: full at <=contact, zero at >=far
+_RR_W = dict(coverage=0.35, angle=0.25, fit=0.20, conf=0.20)  # geometry_readiness weights (sum 1)
+_RR_TOP_N = 30
+_RR_FAMILY_ACCENT = {"acetate": "green", "carboxylate": "blue", "sulfonate": "magenta", "ether": "vermillion"}
+
+
+def _rr_num(df: pd.DataFrame, col: str) -> pd.Series:
+    """Numeric column with the 999 sentinel (>=990) blanked to NaN; missing column -> all NaN."""
+    if col not in df.columns:
+        return pd.Series(np.nan, index=df.index)
+    return pd.to_numeric(df[col], errors="coerce").mask(lambda s: s >= _RR_SENTINEL)
+
+
+def _rr_prox(d: pd.Series) -> pd.Series:
+    """Distance (Å) -> 0-1 proximity; NaN (sentinel / not engaged) -> 0."""
+    return ((_RR_D_FAR - d) / (_RR_D_FAR - _RR_D_CONTACT)).clip(0.0, 1.0).fillna(0.0)
+
+
+def _rr_occ(o: pd.Series) -> pd.Series:
+    """Occupancy adequacy tent: too empty and overflow both score low; a substrate-sized fill scores 1."""
+    o = o.fillna(0.0)
+    return np.minimum((o / 0.10).clip(0, 1), (1.0 - (o - 0.80) / 0.80).clip(0, 1))
+
+
+def _rr_scores(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-complex sub-scores + geometry_readiness, feasibility (=02 competence_score) and composite."""
+    out = pd.DataFrame(index=df.index)
+    prox = {k: _rr_prox(_rr_num(df, c)) for k, c in _RR_SITES.items()}
+    for k, v in prox.items():
+        out[f"prox_{k}"] = v
+    out["residue_coverage"] = pd.concat(prox.values(), axis=1).mean(axis=1)
+    cav = _rr_num(df, "pocket_containment_cavity").fillna(0).clip(0, 1)
+    s8 = _rr_num(df, "pocket_containment_site8").fillna(0).clip(0, 1)
+    pen = _rr_num(df, "containment_penalty").fillna(0).clip(0, 1)
+    occ = _rr_occ(_rr_num(df, "pocket_occupancy"))
+    out["pocket_fit"] = (0.6 * (0.5 * cav + 0.5 * s8) + 0.4 * occ - 0.5 * pen).clip(0, 1)
+    ang = _rr_num(df, "sn2_attack_angle_effective")
+    if ang.isna().all():
+        ang = _rr_num(df, "SN2_Attack_Angle")
+    out["angle_score"] = ((ang - 90.0) / 90.0).clip(0, 1).fillna(0)
+    iptm = _rr_num(df, "iptm").clip(0, 1)
+    asp = _rr_num(df, "active_site_plddt")
+    asp = (asp / 100.0).clip(0, 1) if asp.max() and asp.max() > 1.5 else asp.clip(0, 1)
+    out["confidence"] = pd.concat([iptm, asp], axis=1).mean(axis=1).fillna(0)
+    out["geometry_readiness"] = (_RR_W["coverage"] * out["residue_coverage"] + _RR_W["angle"] * out["angle_score"]
+                                 + _RR_W["fit"] * out["pocket_fit"] + _RR_W["conf"] * out["confidence"])
+    # feasibility straight from 02_Production's competence_score, used AS-IS (no added penalty).
+    out["feasibility"] = _rr_num(df, "competence_score").fillna(0).clip(0, 1)
+    out["composite"] = out["geometry_readiness"] * out["feasibility"]
+    return out
+
+
+def _rr_short(lig) -> str:
+    s = re.sub(r"^\d+_", "", str(lig))
+    return CFG.VIS_LIGAND_SHORT.get(s.lower(), s)
+
+
+def _rr_family(lig) -> str:
+    s = re.sub(r"^\d+_", "", str(lig)).lower()
+    if s in ("fluoroacetate", "difluoroacetate", "tfa", "trifluoroacetate"):
+        return "acetate"
+    if any(t in s for t in ("genx", "adona", "c6o4", "ftoh")):
+        return "ether"
+    if s.endswith("s") or "sulfon" in s:
+        return "sulfonate"
+    return "carboxylate"
+
+
+def _xn_fig_reaction_readiness(df: pd.DataFrame, out_dir: Path, reporter) -> None:
+    """Pocket + 8-residue reaction-readiness per ligand, ordered by molecular size (4 panels).
+
+    composite = geometry_readiness × feasibility, feasibility = 02_Production competence_score used as-is.
+    Shows whether readiness falls off with PFAS size: big PFAS keep geometry but lose feasibility.
+    """
+    if "Ligand_Name" not in df.columns or "competence_score" not in df.columns:
+        return
+    m = df.join(_rr_scores(df))
+    m["_lig"] = df["Ligand_Name"].astype(str)
+    m["_vol"] = pd.to_numeric(df.get("ligand_volume"), errors="coerce")
+    comp_cols = ["residue_coverage", "pocket_fit", "angle_score", "confidence",
+                 "geometry_readiness", "feasibility", "composite"]
+    agg = m.groupby("_lig").agg(vol=("_vol", "mean"), composite_std=("composite", "std"),
+                                **{c: (c, "mean") for c in comp_cols}).reset_index()
+    if agg["vol"].isna().all() or len(agg) < 3:
+        return
+    agg["short"] = agg["_lig"].map(_rr_short)
+    agg["colour"] = agg["_lig"].map(lambda l: CFG.VIS_ACCENT[_RR_FAMILY_ACCENT[_rr_family(l)]])
+    agg = agg.sort_values("vol").reset_index(drop=True)
+    rho, pval = spearmanr(agg["vol"], agg["composite"])
+
+    cmap = LinearSegmentedColormap.from_list("rr_blue", list(CFG.VIS_RAMP["blue"]))
+    _INK = CFG.VIS_INK
+    fa, fl, ft, fx = CFG.VIS_FONT_ANNOT, CFG.VIS_FONT_LEGEND, CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
+
+    fig = plt.figure(figsize=(18, 11))
+    gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.0], hspace=0.18, wspace=0.24)
+
+    # top-left (wide): mean composite vs molecular size, with trend + Spearman.
+    axA = fig.add_subplot(gs[0, 0:2])
+    axA.errorbar(agg["vol"], agg["composite"], yerr=agg["composite_std"], fmt="none",
+                 ecolor=_INK["silver"], elinewidth=0.8, capsize=2, zorder=1)
+    axA.scatter(agg["vol"], agg["composite"], c=agg["colour"], s=95, edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
+    for _, r in agg.iterrows():
+        axA.annotate(r["short"], (r["vol"], r["composite"]), fontsize=fa - 1, rotation=90,
+                     xytext=(0, 10), textcoords="offset points", ha="center", va="bottom")
+    z = np.polyfit(agg["vol"], agg["composite"], 1)
+    xs = np.linspace(agg["vol"].min(), agg["vol"].max(), 50)
+    axA.plot(xs, np.polyval(z, xs), "--", color=_INK["mid"], lw=1.3, zorder=2)
+    axA.text(0.02, 0.97, f"Spearman ρ(size, composite) = {rho:.2f},  p = {pval:.1e}",
+             transform=axA.transAxes, ha="left", va="top", fontsize=fl,
+             bbox=dict(boxstyle="round", fc="white", ec=_INK["paler"], alpha=0.92))
+    axA.set_xlim(40, 500)
+    axA.xaxis.set_major_locator(MultipleLocator(50))
+    axA.set_xlabel("Molecular size  -  mean ligand volume (Å³)", fontsize=fx)
+    axA.set_ylabel("Mean composite reaction-readiness  (mean ± SD)", fontsize=fx)
+    axA.grid(alpha=0.25)
+
+    # top-right: mean composite per ligand, ordered by PFAS size (smallest at top). No legend.
+    axB = fig.add_subplot(gs[0, 2])
+    y = np.arange(len(agg))
+    axB.barh(y, agg["composite"], xerr=agg["composite_std"], color=agg["colour"],
+             edgecolor=_INK["dark"], linewidth=0.4, error_kw=dict(elinewidth=0.7, ecolor=_INK["grey"], capsize=1.5))
+    axB.set_yticks(y); axB.set_yticklabels(agg["short"], fontsize=ft - 1.5)
+    axB.invert_yaxis()
+    axB.set_xlabel("Mean composite reaction-readiness", fontsize=fx)
+    axB.set_ylabel("ligand, sorted by PFAS size (small → large)", fontsize=fx)
+    axB.set_xlim(0, max(0.5, agg["composite"].max() * 1.15))
+
+    # bottom-left: top-N individual complexes by composite, coloured by 02 degrader tier.
+    axD = fig.add_subplot(gs[1, 0])
+    top = m.sort_values("composite", ascending=False).head(_RR_TOP_N).reset_index(drop=True)
+    yc = np.arange(len(top))
+    labels = [f"#{int(rr['Scientific_Rank']) if str(rr.get('Scientific_Rank', '')).replace('.0', '').isdigit() else rr.get('Scientific_Rank', '')} {_rr_short(rr['_lig'])}"
+              for _, rr in top.iterrows()]
+    tcols = [CFG.TIER_COLOUR.get(str(t), _INK["silver"]) for t in top.get("degrader_tier", pd.Series([""] * len(top)))]
+    axD.barh(yc, top["composite"], color=tcols, edgecolor=_INK["dark"], linewidth=0.4)
+    axD.set_yticks(yc); axD.set_yticklabels(labels, fontsize=ft - 2.5)
+    axD.invert_yaxis()
+    axD.set_xlim(0, top["composite"].max() * 1.15)
+    axD.set_xlabel("Composite reaction-readiness", fontsize=fx)
+    axD.set_ylabel(f"Top {_RR_TOP_N} individual complexes by composite  (any tier)", fontsize=fx)
+    _tiers = [t for t in CFG.TIER_ORDER if t in set(top.get("degrader_tier", pd.Series(dtype=str)))]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=CFG.TIER_COLOUR.get(t, _INK["silver"])) for t in _tiers]
+    if handles:
+        axD.legend(handles, [t.replace("Tier_", "") for t in _tiers], ncol=max(1, len(_tiers)),
+                   fontsize=fl, loc="lower right", framealpha=0.92, handlelength=1.0, columnspacing=1.0, handletextpad=0.4)
+
+    # bottom-right: per-ligand component heatmap, columns ordered by molecular size.
+    axC = fig.add_subplot(gs[1, 1:3])
+    names = ["Coverage", "Pocket fit", "Angle", "Confidence", "FEASIBILITY", "COMPOSITE"]
+    hcols = ["residue_coverage", "pocket_fit", "angle_score", "confidence", "feasibility", "composite"]
+    H = agg[hcols].to_numpy(dtype=float)
+    im = axC.imshow(H.T, aspect="auto", cmap=cmap, vmin=0, vmax=1)
+    axC.grid(False)   # 03's global style enables a grid; a heatmap must not draw gridlines through its cells
+    axC.set_xticks(range(len(agg))); axC.set_xticklabels(agg["short"], rotation=45, ha="right", fontsize=ft - 1.5)
+    axC.set_yticks(range(len(names))); axC.set_yticklabels(names, fontsize=ft)
+    for i in range(H.shape[0]):
+        for j in range(H.shape[1]):
+            axC.text(i, j, f"{H[i, j]:.2f}", ha="center", va="center",
+                     fontsize=fa - 2, color="white" if H[i, j] > 0.55 else _INK["dark"])
+    axC.axhline(3.5, color="white", lw=2); axC.axhline(4.5, color="white", lw=2)
+    axC.set_xlabel("ligand, ordered by molecular size (small → large)", fontsize=fx)
+    fig.colorbar(im, ax=axC, fraction=0.012, pad=0.01).set_label("mean sub-score (0-1)", fontsize=fl)
+
+    _xo__save(fig, out_dir, "18_Pocket_Residue_Reaction_Readiness.png", reporter)
+
+
 def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
     """Create Tier_1A enzyme × ligand heatmap for lab validation targets."""
-    import matplotlib.colors as mcolors
-    import re
     enzyme_col = CFG.COL_PROT if CFG.COL_PROT in df.columns else next((c for c in df.columns if c.lower() == 'job_name'), None)
     ligand_col = CFG.COL_LIG if CFG.COL_LIG in df.columns else next((c for c in df.columns if c.lower() in ('ligand', 'ligand_name')), None)
     tier_col = CFG.COL_TIER if CFG.COL_TIER in df.columns else None
@@ -9874,7 +10082,6 @@ def _xo__legend_with_stats(ax, handles, labels, stat_lines, loc, ncol=1):
     down the side of the panel and start covering the data they describe; two or three columns give
     the same information in a fraction of the height. Font, size, box transparency and spacing all
     inherit apply_figure_style's rcParams, so this legend matches every other legend in the set."""
-    from matplotlib.lines import Line2D as _L2D
     _blank = lambda: _L2D([], [], linestyle='', marker='', color='none')
     h = list(handles) + [_blank()] + [_blank() for _ in stat_lines]
     l = list(labels) + [''] + list(stat_lines)
@@ -9918,8 +10125,6 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
         return
     xpos = {t: i for i, t in enumerate(tiers)}
     fig, ax = plt.subplots(figsize=(10, 6))
-    deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
-    non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
     sns.violinplot(data=df, x=CFG.COL_TIER, y=ba_col, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE, legend=False, cut=0, inner='box', ax=ax, zorder=2)
 
     """
@@ -10000,8 +10205,6 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     ax.set_ylabel('Binding_Affinity_Score / normalised components (0–1)')
     _tier_seps(ax)   # consistent tier separators
     ax.set_ylim(0, y_top)
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch as _PatchA
     handles, labels = ax.get_legend_handles_labels()
     handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='BA_Score (violin)')] + handles
     labels = ['BA_Score (violin)'] + labels
@@ -10021,8 +10224,6 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         reporter.log(f"  ! Skipped: {_fig_path('04A')} - necessary columns or tiers missing.")
         return
     xpos = {t: i for i, t in enumerate(tiers)}
-    deg_idx = [xpos[t] for t in tiers if t in _xo_ELITE_TIERS]
-    non_idx = [xpos[t] for t in tiers if t not in _xo_ELITE_TIERS]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
 
     def _mw_signed_p1(mcol, label):
@@ -10152,8 +10353,6 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         ax2.set_axisbelow(True)
         ax2.grid(True, axis='y', color=_c_left, alpha=CFG.VIS_GRID_ALPHA,
                  linewidth=CFG.VIS_GRID_LINEWIDTH, linestyle='-')
-        from matplotlib.lines import Line2D
-        from matplotlib.patches import Patch as _PatchA
         handles, labels = ax2.get_legend_handles_labels()
         handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='Evolutionary_Fingerprint_Score (violin)')] + handles
         labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
@@ -10248,9 +10447,6 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     sns.violinplot(data=df, x=CFG.COL_TIER, y=fcol, order=tiers, hue=CFG.COL_TIER, palette=TIER_PALETTE if 'TIER_PALETTE' in globals() else None, legend=False, cut=0, inner='box', ax=ax)
     degrader_tiers = [t for t in tiers if t in _xo_ELITE_TIERS] if '_xo_ELITE_TIERS' in globals() else [t for t in tiers if t in ['Tier_1A', 'Tier_1B']]
     non_degrader_tiers = [t for t in tiers if t not in degrader_tiers]
-    xpos = {t: i for i, t in enumerate(tiers)}
-    deg_idx = [xpos[t] for t in degrader_tiers]
-    non_idx = [xpos[t] for t in non_degrader_tiers]
     """
     The per-tier MEAN, traced across the tiers. A violin shows each tier's shape but leaves the
     reader to compare seven of them by eye; the trend line states the claim the figure exists to
@@ -10275,12 +10471,12 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
                     float(stat), int(n1 + n2), float(p),
                     effect_size_r=float(r), n_degrader=int(n1), n_non_degrader=int(n2),
                     median_degrader=float(df_deg.median()), median_non_degrader=float(df_non.median()))
-        p_str = f'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
+        p_str = 'p < 0.001' if p < 0.001 else f'p = {p:.3f}'
         # Marked uncorrected: the BH family closes only after every figure has run, so no q exists at
         # draw time. The corrected q_BH is in 06_Statistical_Tests.csv. One line, top-left: three
         # stacked lines in the top-right corner sit over the widest violins.
         ax.text(0.015, 0.97, f'Mann-Whitney U · {p_str} uncorrected · effect size r = {r:.2f}',
-                transform=ax.transAxes, ha='left', va='top', fontsize=8.5,
+                transform=ax.transAxes, ha='left', va='top', fontsize=CFG.VIS_FONT_LEGEND_TITLE,
                 bbox=dict(facecolor='white', alpha=0.85, edgecolor=CFG.VIS_INK["palest"], linewidth=0.6,
                           boxstyle='round,pad=0.3'))
     _xo__save(fig, out_dir, '14_Chain_Length_by_Tier.png', reporter)
@@ -10823,6 +11019,24 @@ def write_figure_descriptions(out_dir: Path):
         "  Control : Boltz confidence median plotted as a faint grey dashed line - it falls with size as a prediction artefact, NOT catalysis",
         "  Look for: catalytic competence (soft score / degrader fraction) is roughly flat across chain length, whereas confidence declines with size - i.e. any apparent 'small-molecule preference' from confidence is a prediction artefact, not a catalytic one.",
         "",
+        "-" * 80,
+        "07_PFAS_Scope_and_Synthesis/18_Pocket_Residue_Reaction_Readiness.png",
+        "  Title   : Pocket + 8-residue reaction-readiness, aggregated per ligand and ordered by size  [4-panel]",
+        "  Composite: geometry_readiness (pocket fit + proximity to the 8 catalytic residues + SN2 angle +",
+        "             model confidence) GATED by reaction feasibility. Feasibility is 02_Production's",
+        "             competence_score (C-F BDE + beta-fluorine + occlusion) used AS-IS - nothing re-penalised",
+        "             here. composite = geometry_readiness × feasibility (both 0-1).",
+        "  Top-left : mean composite vs molecular size (mean ligand volume, Å³), one point per ligand, ±SD,",
+        "             linear trend + Spearman rho(size, composite) inset; ligand family from CFG.VIS_ACCENT.",
+        "  Top-right: mean composite per ligand, bars ordered by PFAS size (smallest at top).",
+        "  Bottom-L : top 30 individual complexes by composite, coloured by 02 degrader tier (CFG.TIER_COLOUR).",
+        "  Bottom-R : per-ligand heatmap of the components (Coverage, Pocket fit, Angle, Confidence, FEASIBILITY,",
+        "             COMPOSITE), columns ordered by molecular size; CFG.VIS_RAMP blue ramp.",
+        "  Look for : FA / DFA (small acetates) top the composite; the big PFAS keep geometry (fit / coverage /",
+        "             angle / confidence) high yet lose FEASIBILITY, so COMPOSITE collapses - FAcD stays",
+        "             accurately docked on large PFAS but their scissile C-F cannot break. TFA / sulfonates",
+        "             follow 02's competence_score, not any judgement added by this figure.",
+        "",
         "=" * 80,
         "BACKBONE GEOMETRY - RAMACHANDRAN (subfolder: Ramachandran/)",
         "=" * 80,
@@ -11320,7 +11534,6 @@ def main():
 
     except Exception as e:
         print(f"\n[CRITICAL ERROR] Pipeline Failed: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

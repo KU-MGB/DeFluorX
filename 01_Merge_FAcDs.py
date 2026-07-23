@@ -127,6 +127,8 @@ from Bio import SeqIO
 CFG supplies only PREP_AMBIGUOUS_AA for QC (no geometric thresholds used here).
 """
 import importlib.util as _ilu
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import time as _time
 
 def _load_module(name: str, path: Path):
     if not path.exists():
@@ -435,9 +437,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
              edgecolor="black", linewidth=0.8, label="Final Retained")
 
     ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(bar_labels, fontweight="bold", fontsize=10)
+    ax1.set_yticklabels(bar_labels, fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
     ax1.invert_yaxis()
-    ax1.set_xlabel("Number of Sequences", fontweight="bold", fontsize=9)
+    ax1.set_xlabel("Number of Sequences", fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
     # No Title for density
 
     # --- Smart Annotation Logic ---
@@ -454,23 +456,23 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
         # Priority 1: Inside the Kept Bar (Contrasting White Text)
         if kp > width_threshold:
              ax1.text(kp - (max_val*0.02), i, label_text, va="center", ha="right",
-                      fontsize=9, fontweight="bold", color="white")
+                      fontsize=CFG.VIS_FONT_TICK, fontweight="bold", color="white")
 
         # Priority 2: Inside the Input Bar (Dark Text)
         elif inp > (kp + width_threshold):
              ax1.text(kp + (max_val*0.02), i, label_text, va="center", ha="left",
-                      fontsize=9, fontweight="bold", color=PALETTE["Total"])
+                      fontsize=CFG.VIS_FONT_TICK, fontweight="bold", color=PALETTE["Total"])
 
         # Priority 3: Outside (Dark Text)
         else:
              ax1.text(inp + (max_val*0.02), i, label_text, va="center", ha="left",
-                      fontsize=9, fontweight="bold", color=PALETTE["Total"])
+                      fontsize=CFG.VIS_FONT_TICK, fontweight="bold", color=PALETTE["Total"])
 
     apply_clean_spines(ax1)
     ax1.spines["left"].set_visible(False)
     ax1.tick_params(axis="y", length=0)
 
-    ax1.legend(loc="upper right", frameon=True, fontsize=8, fancybox=True, framealpha=0.9)
+    ax1.legend(loc="upper right", frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
 
     # -------------------------------------------------------------------------------
     # Step 5.4: Subplot 2 - Length Heterogeneity (Violin Plot)
@@ -493,8 +495,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                     medianprops=dict(color="black", linewidth=1.5))
 
     ax2.set_xticks([0, 1])
-    ax2.set_xticklabels(["Master", "Secondary"], fontweight="bold", fontsize=9)
-    ax2.set_ylabel("Length (AA)", fontweight="bold", fontsize=9)
+    ax2.set_xticklabels(["Master", "Secondary"], fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
+    ax2.set_ylabel("Length (AA)", fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
 
     for i, tick in enumerate(ax2.get_xticklabels()):
         tick.set_color(data_map[i]["colour"])
@@ -505,8 +507,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     # -------------------------------------------------------------------------------
     # Step 5.5: Subplot 3 - Consolidated Architecture (KDE Plot)
     # -------------------------------------------------------------------------------
-    ax3.set_xlabel("Sequence Length (Residues)", fontweight="bold", fontsize=11)
-    ax3.set_ylabel("Density", fontweight="bold", fontsize=11)
+    ax3.set_xlabel("Sequence Length (Residues)", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax3.set_ylabel("Density", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
 
     if len(all_lengths) > 5:
         min_x, max_x = min(all_lengths), max(all_lengths)
@@ -537,7 +539,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 
                 mean_val = np.mean(all_lengths)
                 ax3.axvline(mean_val, color=PALETTE["Total"], linestyle="-", linewidth=0.8, alpha=0.6)
-                ax3.text(mean_val, max(y_total)*1.02, f"Mean: {mean_val:.1f}", ha="center", fontsize=9, color=PALETTE["Total"])
+                ax3.text(mean_val, max(y_total)*1.02, f"Mean: {mean_val:.1f}", ha="center", fontsize=CFG.VIS_FONT_TICK, color=PALETTE["Total"])
 
                 # Comprehensive Statistics Box
                 stats_text = (
@@ -551,13 +553,13 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                     f"Skewness : {skew(all_lengths):.2f}"
                 )
                 ax3.text(0.98, 0.95, stats_text, transform=ax3.transAxes, va="top", ha="right",
-                         fontsize=10, fontfamily="monospace",
+                         fontsize=CFG.VIS_FONT_AXIS_LABEL, fontfamily="monospace",
                          bbox=dict(facecolor="white", edgecolor=PALETTE["box_edge"], boxstyle="round,pad=0.6", alpha=0.95))
 
             except Exception as e:
                 logger.debug(f"Skipped KDE plot for combined data due to math error: {e}")
 
-        ax3.legend(loc="upper right", bbox_to_anchor=(0.82, 1.0), frameon=False, fontsize=10)
+        ax3.legend(loc="upper right", bbox_to_anchor=(0.82, 1.0), frameon=False, fontsize=CFG.VIS_FONT_AXIS_LABEL)
     else:
         ax3.text(0.5, 0.5, "Insufficient data for Density Plot", ha="center", transform=ax3.transAxes)
 
@@ -689,7 +691,6 @@ def main():
     logger.info("──────────────────────────────────────────────────────────────────────")
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _utils_mod.print_elapsed(_t0, "01_Merge_FAcDs.py")

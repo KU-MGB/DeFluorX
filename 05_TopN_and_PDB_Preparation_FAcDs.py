@@ -126,6 +126,9 @@ import math
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend; must be set before pyplot import
+# --- consolidated matplotlib imports (after backend selection) ---
+from matplotlib.ticker import MultipleLocator
+import matplotlib.pyplot as plt
 import matplotlib.patches as _mpatches
 from matplotlib.patches import FancyBboxPatch as _FancyBboxPatch
 from matplotlib.figure import Figure
@@ -152,6 +155,10 @@ import gemmi
 Filenames begin with digits and cannot be imported with standard `import`.
 """
 import importlib.util as _ilu
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+from collections import Counter as _Counter
+import re as _re
+import select as _select
 
 def _load_module(name: str, path: Path):
     if not path.exists():
@@ -633,7 +640,6 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     """
     if not geom_rows:
         return None
-    import matplotlib.pyplot as plt
     _utils_mod.apply_figure_style(CFG)
 
     df = pd.DataFrame(geom_rows)
@@ -724,7 +730,6 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
                     markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=1.3, zorder=5)
             # The value rides BEYOND the arrowhead, in the direction of travel, so it can never sit on
             # top of the gate line the arrow is crossing.
-            _pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012 if ax.get_xlim()[1] > ax.get_xlim()[0] else 0.0
             _dir = 1 if _b >= _a else -1
             # Endpoint value + the signed minimisation drift (RAW→minimised), e.g. "177.0 (+3)".
             ax.annotate(f"{_b:.1f} ({dfmt.format(_b - _a)})", xy=(_b, _i), xytext=(9 * _dir, 0),
@@ -833,7 +838,6 @@ def load_machinery_map(prod_dir: Path) -> dict:
     protonation-relevant roles. The extra five (the fluoride stabiliser, the two carboxylate
     clamps, the two aromatic-cradle residues) are read only for the machinery-engagement figure,
     never for protonation, so they live in their own loader rather than widening the anchor map."""
-    import re as _re
     _rank = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or sorted(prod_dir.glob("*_Ranked_*.csv"))
     if not _rank:
         return {}
@@ -934,9 +938,6 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
             or _is_reference_control(r["job"])]
     if not rows:
         return None
-    import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D as _Line2D
-    import matplotlib.patches as _mpatches
     _utils_mod.apply_figure_style(CFG)
 
     _react = float(CFG.NAC_DIST_STRICT)
@@ -1021,7 +1022,6 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     ax.set_xlim(-0.7, _n - 0.3)
     ax.set_ylim(_ymin, _ymax)
     ax.set_ylabel("Distance to mechanistic partner  (Å)", )
-    from matplotlib.ticker import MultipleLocator
     ax.yaxis.set_major_locator(MultipleLocator(0.2))     # finer gridlines for reading the tight spread
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
@@ -1604,7 +1604,6 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     """
     if not summary_rows:
         return None
-    import matplotlib.pyplot as plt
     _utils_mod.apply_figure_style(CFG)
 
     df = pd.DataFrame(summary_rows)
@@ -1667,7 +1666,6 @@ def load_catalytic_anchor_map(prod_dir: Path) -> dict:
     Lets the identity guard anchor on each homolog's actual aligned positions -
     robust to insertions/deletions - instead of a static ±window around the
     canonical reference numbers. Returns {job_name: {"Nuc"/"Acid"/"Base": int}}."""
-    import re as _re
     rank_csvs = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or sorted(prod_dir.glob("*_Ranked_*.csv"))
     if not rank_csvs:
         return {}
@@ -1758,7 +1756,6 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     Use the most common non-zero offset (consensus across Nuc/Acid/Base);
     fall back to 0 when all three agree on the reference numbering.
     """
-    from collections import Counter as _Counter
     offsets = [o for o in (nuc_offset, acid_offset, base_offset) if o is not None and o != 0]
     offset = _Counter(offsets).most_common(1)[0][0] if offsets else 0
 
@@ -1973,10 +1970,9 @@ METADATA_CACHE: dict = {}
 def load_metadata(ext_dir: Path):
     """Populates METADATA_CACHE from any *_Scientific_Data.csv found under ext_dir."""
     try:
-        import pandas as pd
-        for csv in sorted(ext_dir.rglob("*_Scientific_Data.csv")):
+        for _csv_path in sorted(ext_dir.rglob("*_Scientific_Data.csv")):
             try:
-                df = pd.read_csv(csv)
+                df = pd.read_csv(_csv_path)
                 for _, row in df.iterrows():
                     jn = str(row.get("job_name", ""))
                     if jn:
@@ -2371,7 +2367,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
                     for _k, (_lw, _ls, _sd) in CFG.INTERACTION_DIAGRAM_STYLE.items()}
     # Distance-label pill: text + edge in the interaction colour, on a white fill (derived, not a
     # second hand-picked palette).
-    _DIST_COL = {_k: (_itype_col[_k], "#FFFFFF", _itype_col[_k])
+    _DIST_COL = {_k: (_itype_col[_k], CFG.VIS_INK["white"], _itype_col[_k])
                  for _k in ("hbond", "arom_hbond", "halogen", "salt", "water")}
 
     # Dynamic axis bounds - zoom in when few residues to eliminate blank space
@@ -2399,11 +2395,11 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
     ax.set_ylim(_ylo, _yhi)
 
     # Binding pocket background
-    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color="#EAF2FF", zorder=0, alpha=0.6))
-    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color="#AED6F1", fill=False,
+    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color=CFG.INTERACTION_DIAGRAM_CHROME["pocket_fill"], zorder=0, alpha=0.6))
+    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color=CFG.INTERACTION_DIAGRAM_CHROME["pocket_edge"], fill=False,
                             linewidth=1.2, linestyle="--", zorder=0, alpha=0.4))
-    ax.text(0, -3.7, "Binding Pocket", ha="center", fontsize=7.5,
-            color="#85929E", style="italic", zorder=1)
+    ax.text(0, -3.7, "Binding Pocket", ha="center", fontsize=CFG.VIS_FONT_ANNOT,
+            color=CFG.INTERACTION_DIAGRAM_CHROME["annotation"], style="italic", zorder=1)
 
     # Interaction lines
     name2idx = {a["name"]: i for i, a in enumerate(lig)}
@@ -2421,7 +2417,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
             mx, my = (lap[0]+rpos[0])/2, (lap[1]+rpos[1])/2
             tc, fc, ec = _DIST_COL.get(itype, ("#555","#EEE","#999"))
             ax.text(mx, my, f"{c['dist']:.1f} Å",
-                    fontsize=8.5, ha="center", va="center", fontweight="bold",
+                    fontsize=CFG.VIS_FONT_LEGEND_TITLE, ha="center", va="center", fontweight="bold",
                     color=tc,
                     bbox=dict(fc=fc, ec=ec, alpha=0.88,
                               boxstyle="round,pad=0.22", linewidth=0.8),
@@ -2434,7 +2430,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
             if np.linalg.norm(a["pos"] - b["pos"]) < CFG.LIG_COVALENT_BOND_DIST:
                 p1, p2 = lig_2d[i], lig_2d[j]
                 ax.plot([p1[0], p2[0]], [p1[1], p2[1]],
-                        color="#2C3E50", lw=2.8, solid_capstyle="round",
+                        color=CFG.VIS_INK["ink_deep"], lw=2.8, solid_capstyle="round",
                         zorder=4, alpha=0.85)
 
     # Ligand atoms
@@ -2445,14 +2441,14 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
         ax.add_patch(_mpatches.Circle(xy, r, color=col, zorder=5, ec="white", lw=1.4))
         if a["elem"] not in ("C",):
             ax.text(xy[0], xy[1], a["elem"],
-                    ha="center", va="center", fontsize=7.0,
+                    ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
                     color="white", fontweight="bold", zorder=6)
 
     # Residue boxes
     bw, bh = 1.5, 0.68
     for c in contacts:
         rpos  = res_2d[c["key"]]
-        col   = _IM_RES_COLORS.get(c["resname"], "#717D7E")
+        col   = _IM_RES_COLORS.get(c["resname"], CFG.INTERACTION_DIAGRAM_CHROME["residue_default"])
         label = f"{c['resname']} {c['resnum']}"
         itype = c.get("itype", "contact")
         _BADGE = {
@@ -2467,17 +2463,17 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
             badge = f"contact ({c['quality']})"
         ax.add_patch(_FancyBboxPatch(
             (rpos[0]-bw/2+0.04, rpos[1]-bh/2-0.04), bw, bh,
-            boxstyle="round,pad=0.1", facecolor="#C0C0C0",
+            boxstyle="round,pad=0.1", facecolor=CFG.INTERACTION_DIAGRAM_CHROME["label_box"],
             alpha=0.22, zorder=5, linewidth=0))
         ax.add_patch(_FancyBboxPatch(
             (rpos[0]-bw/2, rpos[1]-bh/2), bw, bh,
             boxstyle="round,pad=0.1", facecolor=col,
             edgecolor="white", linewidth=1.6, alpha=0.95, zorder=6))
         ax.text(rpos[0], rpos[1]+0.10, label,
-                ha="center", va="center", fontsize=9.5,
+                ha="center", va="center", fontsize=CFG.VIS_FONT_TICK,
                 fontweight="bold", color="white", zorder=7)
         ax.text(rpos[0], rpos[1]-0.18, badge,
-                ha="center", va="center", fontsize=7,
+                ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
                 color="white", alpha=0.9, zorder=7)
 
     # Unified legend (bottom, one block). Every swatch reads the SAME source the diagram drew from:
@@ -2509,7 +2505,7 @@ def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
               bbox_to_anchor=(_cx_data, _y_legend_top),
               bbox_transform=ax.transData,
                frameon=True,
-              edgecolor="#CCCCCC",
+              edgecolor=CFG.VIS_INK["palest"],
               title=f'{"PLIP interactions" if mode=="plip" else "Interactions"}  |  Residue type  |  Ligand atoms',
               )
 
@@ -3662,7 +3658,6 @@ def topn_extraction_phase(args):
     # -------------------------------------------------------------------------------
     # Step 5.6: Tier / MD-ready selection
     # -------------------------------------------------------------------------------
-    import select as _select
 
     TIER_ORDER = CFG.TIER_ORDER
 

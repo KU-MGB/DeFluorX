@@ -59,6 +59,23 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+from datetime import datetime as _dt
+from pathlib import Path as _P
+from pathlib import Path as _Path
+import json
+import math
+import os
+import pandas as pd
+import sys as _sys
+import uuid
+import matplotlib
+matplotlib.use("Agg")  # headless backend before pyplot
+# --- consolidated matplotlib imports ---
+import matplotlib.colors as _mc
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 
 _ANSI_ESCAPE_RE = _re.compile(r"\033\[[0-9;]*[mKABCDEFGHJKSTfhilmnprsu]")
 
@@ -148,7 +165,6 @@ class _ConsoleRuleFilter:
 
 def install_console_rule_filter() -> None:
     """Collapse stacked separator rules for the rest of this process's output."""
-    import sys as _sys
     if not isinstance(_sys.stdout, _ConsoleRuleFilter):
         _sys.stdout = _ConsoleRuleFilter(_sys.stdout)
 
@@ -302,8 +318,6 @@ class ReportManager:
     """
     def __init__(self, log_path, header, separator=SEPARATOR_LIGHT,
                  rule_width=80, log_fn=None):
-        from pathlib import Path as _Path
-        from datetime import datetime as _dt
         self.path = _Path(log_path)
         self.separator = separator
         self._log_fn = log_fn if log_fn is not None else console_info
@@ -352,7 +366,6 @@ def apply_figure_style(cfg) -> None:
     carry the hierarchy. Weight is spent only where a label must survive being read against a filled
     bar, and that is set at the call site, not here.
     """
-    import matplotlib.pyplot as plt
     plt.rcParams.update({
         "font.family": "sans-serif",
         "font.sans-serif": list(cfg.VIS_FONT_FAMILY),
@@ -390,7 +403,6 @@ def latest_by_mtime(paths):
     and a wildcard fallback second, e.g.
         latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV)) or latest_by_mtime(prod.glob("*Ranked*.csv"))
     """
-    from pathlib import Path as _P
     _ps = [_P(p) for p in paths if _P(p).exists()]
     return max(_ps, key=lambda p: p.stat().st_mtime) if _ps else None
 
@@ -402,8 +414,6 @@ def write_json_atomic(path, payload: dict) -> None:
     atomic within a filesystem, so a run killed mid-write leaves either the previous file or the new
     one, never a truncated hybrid another step would parse as truth.
     """
-    import json, os, uuid
-    from pathlib import Path as _Path
     path = _Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Per-process/per-call unique temp name: a fixed "<file>.tmp" would let two workers writing the same
@@ -420,8 +430,6 @@ def atomic_write_csv(df, path, **to_csv_kwargs) -> None:
     renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the previous file
     or the complete new one, never a truncated hybrid a downstream step would parse as truth.
     """
-    import os, uuid
-    from pathlib import Path as _Path
     path = _Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Per-process/per-call unique temp name (see write_json_atomic) so concurrent writers to one path
@@ -440,7 +448,6 @@ def auto_label_colour(cfg, bg, threshold: float = 0.5) -> str:
     bar must stay legible whatever colour that bar happens to take, and hardcoding white works
     until the first pale fill.
     """
-    import matplotlib.colors as _mc
     try:
         r, g, b = _mc.to_rgb(bg)
     except Exception:
@@ -463,7 +470,7 @@ def clean_spines(ax) -> None:
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(0.8)
     ax.spines["bottom"].set_linewidth(0.8)
-    ax.tick_params(direction="out", length=4, width=0.8, labelsize=10)
+    ax.tick_params(direction="out", length=4, width=0.8)
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
 
@@ -483,7 +490,6 @@ def compute_ramachandran_angles(st) -> list[tuple[str, int, float, float]]:
     so a modelled chain break, gap or insertion does not emit a spurious dihedral. All
     polymer chains in the model are processed.
     """
-    import math
     import gemmi
     _PEPTIDE_CN_MAX = 1.5   # Å  C(i-1)–N(i) upper bound for a real peptide bond
     angles = []
@@ -545,7 +551,6 @@ def _rama_stats(angles: list[tuple]) -> dict[str, Any]:
 
 def _draw_rama_background(ax) -> None:
     """Draw the standard alpha/beta/L region backgrounds on a Ramachandran axes."""
-    import matplotlib.pyplot as plt
     fav_c = "#dcedc8" # light green
     all_c = "#fff9c4" # light yellow
 
@@ -573,9 +578,6 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                                  critical_res: dict[int, tuple[str, str]] = None,
                                  dpi: int = 300) -> None:
     """Save a side-by-side comparison Ramachandran PNG."""
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    import matplotlib.lines as mlines
 
     plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"]})
 
@@ -628,19 +630,20 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                f"Allowed   {st['counts']['Allowed']:<4} {allowed_pct:<8}\n"
                f"Outlier   {st['counts']['Outlier']:<4} {out_pct:<8}\n"
                f"Total     {st['total']:<4} {tot_pct:<8}")
-        ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=9,
+        ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=plt.rcParams["xtick.labelsize"],
                 va="top", ha="right", multialignment="left", family="monospace",
                 bbox=dict(fc="#ffffff", alpha=0.10, ec="#bdbdbd", boxstyle="round,pad=0.4"))
 
         ax.set_xlim(-180, 180)
         ax.set_ylim(-180, 180)
         ax.set_aspect("equal")
-        ax.set_xlabel("φ (phi) °", fontsize=11, fontweight="500")
-        ax.set_ylabel("ψ (psi) °", fontsize=11, fontweight="500")
-        ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
+        ax.set_xlabel("φ (phi) °", fontweight="500")
+        ax.set_ylabel("ψ (psi) °", fontweight="500")
+        ax.text(0.02, 0.98, label, transform=ax.transAxes, ha="left", va="top",
+                fontsize=plt.rcParams["xtick.labelsize"], fontweight="bold")   # in-axes identity label, not a figure title
         ax.set_xticks(range(-180, 181, 60))
         ax.set_yticks(range(-180, 181, 60))
-        ax.tick_params(labelsize=9)
+        ax.tick_params()
         ax.grid(True, linestyle=":", alpha=0.6, color="#9e9e9e", zorder=1)
 
     favoured_p = mpatches.Patch(color="#2e7d32", label="Favoured")
@@ -667,10 +670,9 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     all_handles = [favoured_p, allowed_p, outlier_p, gen_m, gly_m, pro_m] + crit_handles
 
     fig.legend(handles=all_handles,
-               loc="upper center", ncol=len(all_handles), fontsize=9, frameon=True,
+               loc="upper center", ncol=len(all_handles), fontsize=plt.rcParams["xtick.labelsize"], frameon=True,
                bbox_to_anchor=(0.5, -0.005), columnspacing=0.8, handletextpad=0.4)
 
-    fig.suptitle("Ramachandran Comparison", fontsize=15, fontweight="bold", y=1.05)
     fig.tight_layout()
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
@@ -678,7 +680,6 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
 
 def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str, dpi: int = 300) -> None:
     """Save a single-structure Ramachandran plot PNG."""
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(6, 6))
     _draw_rama_background(ax)
     if angles:
@@ -694,17 +695,18 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
                   f"Allowed  {stats['pct']['Allowed']:.1f}%  ({stats['counts']['Allowed']})\n"
                   f"Outlier   {stats['pct']['Outlier']:.1f}%  ({stats['counts']['Outlier']})\n"
                   f"Total: {stats['total']} residues")
-    ax.text(0.98, 0.98, legend_txt, transform=ax.transAxes, fontsize=8,
+    ax.text(0.98, 0.98, legend_txt, transform=ax.transAxes, fontsize=plt.rcParams["legend.fontsize"],
             va="top", ha="right", family="monospace",
             bbox=dict(fc="white", alpha=0.7, ec="#cccccc", boxstyle="round,pad=0.3"))
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
-    ax.set_xlabel("φ (phi) °", fontsize=11)
-    ax.set_ylabel("ψ (psi) °", fontsize=11)
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_xlabel("φ (phi) °")
+    ax.set_ylabel("ψ (psi) °")
+    ax.text(0.02, 0.98, title, transform=ax.transAxes, ha="left", va="top",
+            fontsize=plt.rcParams["xtick.labelsize"], fontweight="bold")   # in-axes identity label, not a figure title
     ax.set_xticks(range(-180, 181, 60))
     ax.set_yticks(range(-180, 181, 60))
-    ax.tick_params(labelsize=9)
+    ax.tick_params()
     fig.tight_layout()
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
@@ -1062,7 +1064,6 @@ def standardise_dataframe_tiers(df, cfg):
     df  : pd.DataFrame containing a 'degrader_tier' column.
     cfg : CFG dataclass instance.
     """
-    import pandas as pd
     col = cfg.COL_TIER
     if col not in df.columns:
         return df

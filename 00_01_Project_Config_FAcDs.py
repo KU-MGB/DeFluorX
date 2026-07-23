@@ -135,6 +135,10 @@ Scientific References:
 """
 
 from dataclasses import dataclass, field
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import math
+import math as _math
+import multiprocessing
 
 
 @dataclass(frozen=True)
@@ -168,15 +172,6 @@ class CFG:
     # SECTION 1: PROJECT IDENTITY & BOLTZ-2 PREDICTION ENGINE  (Step 02)
     # ===============================================================================
     PROJECT_NAME: str   = "PFAS-27"   # project identifier (used in CLI banners, e.g. Step 06)
-    """
-    Pipeline version - the single source of truth every step reports and every run stamps into its
-    outputs. A result is only reproducible if the code that produced it can be named, and a bare
-    timestamp cannot do that: two runs on the same day can straddle a change to the tier gates.
-    Bump the MINOR component when a change moves the numbers (a gate, a weight, a metric definition)
-    and the PATCH component for anything that cannot.
-    """
-    PIPELINE_VERSION: str = "2.1.0"   # 2.1.0 - protein-aware pocket containment, attacking-oxygen NAC, BDE elite ceiling, multiplicity-corrected Šidák, active-site pLDDT gate
-
     # -------------------------------------------------------------------------------
     # Step 1.1: Executable & model
     # -------------------------------------------------------------------------------
@@ -1053,7 +1048,6 @@ class CFG:
     must be declared as an assumption in any manuscript that quotes the effective angle.
     """
     def sn2_effective_angle(self, angle: float, scissile_f_count: int = 1) -> float:
-        import math
         _n = max(1, int(scissile_f_count))
         if _n == 1:
             return float(angle)
@@ -1160,7 +1154,6 @@ class CFG:
         mechanistic_score_effective (§5.2b). Floored at 0,
         rounded to 2 dp.
         """
-        import math
         s = 0.0
         if d_nuc <= self.NAC_DIST_STRICT:        s += self.MECH_W_NUC
         if dist_nuc_base <= self.MECH_NB_GATE:   s += self.MECH_W_NB
@@ -1280,7 +1273,6 @@ class CFG:
         """
         if (not scissile_is_alpha) or (not head_is_carboxylate):
             return 0.0
-        import math
         def _closer(x, lo, hi):
             if hi <= lo: return 0.0
             return max(0.0, min(1.0, (hi - x) / (hi - lo)))
@@ -1629,7 +1621,7 @@ class CFG:
     # -------------------------------------------------------------------------------
     TIER_COLOUR: dict = field(default_factory=lambda: {
         "Tier_1A": "#009E73",   # green
-        "Tier_1B": "#56B4E9",   # sky blue
+        "Tier_1B": "#7B3FBF",   # violet
         "Tier_2A":    "#0072B2",   # blue
         "Tier_2B":    "#CC79A7",   # pink
         "Tier_3":      "#E69F00",   # orange
@@ -1989,14 +1981,24 @@ class CFG:
     """
     QSITE_IMPVERSION: str   = "huge"         # Jaguar &gen impversion (memory/architecture tier; tune per cluster). igeopt=1 (relaxed scan) and mmqm=1 (QM/MM) are required mode flags for this calculation and stay fixed in the writer.
     QSITE_RUN: bool         = True
-    QSITE_PROCS: int        = 10             # CPUs per QSite job (qsite -PARALLEL). Jaguar's SCF
-                                            # scales usefully to ~8-16 cores; 3 concurrent jobs at 10
-                                            # leaves headroom on a 32-core box
+    QSITE_PROCS: int        = 1              # CPUs per QSite job (qsite -PARALLEL). The QM engine is
+                                            # SINGLE-THREADED for these frozen-cut QM regions - measured
+                                            # at ~100% of ONE core regardless of -PARALLEL N, which only
+                                            # spawns idle helpers. Throughput comes from running many
+                                            # scans CONCURRENTLY (QSITE_RAM_* below), not from -PARALLEL.
+    """
+    QSite concurrency budget. Each Jaguar QM job holds ~QSITE_RAM_PER_JOB_GB resident, so the number of
+    scans that may run at once is min(total_cpu - PREP_CPU_RESERVE, RAM budget). The RAM budget mirrors
+    the MM-GBSA planner: free RAM plus a slice of free SWAP, times a headroom fraction. Counting swap lets
+    the CPU cap bind rather than the RAM cap, so the QM/MM phase reaches total_cpu-2 busy cores; a QM job
+    whose working set spills to swap runs at disk speed, which is the accepted trade for utilisation.
+    """
+    QSITE_RAM_PER_JOB_GB: float   = 1.5      # resident set of one Jaguar QM/MM scan
+    QSITE_RAM_HEADROOM_FRAC: float = 1.00    # fraction of (free RAM + counted swap) the QM/MM phase may occupy; 1.0 = use it all, so the CPU cap binds
+    QSITE_RAM_SWAP_FRAC: float    = 1.0      # fraction of FREE SWAP added to the budget; 1.0 = use it all
     QSITE_PROGRESS_INTERVAL_SEC: int = 20    # heartbeat cadence while a QSite job runs (live progress, prevents "frozen" look)
     # --- Step 10.1: Post-scan QM/MM plotting / rendering (Step 07 figures) ---
     HARTREE_TO_KCAL: float  = 627.509474     # Eh → kcal mol⁻¹ (relative scan energies)
-    QSITE_MAESTRO_RENDER: bool = True        # render reactant/TS/product QM-region images via headless Maestro (best-effort; degrades gracefully if no $SCHRODINGER/display)
-    QSITE_RENDER_TIMEOUT_SEC: int = 600      # hard timeout for each headless Maestro render call
 
     # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
     QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 scans only the single best frame, which reports a lower bound rather than an ensemble
@@ -2006,8 +2008,6 @@ class CFG:
     # (Phase B) is the expensive quantum step: running it SEQUENTIALLY, one job at a time at the
     # full CPU allowance (cores − 2), lands the first barrier in ~1 day (testable early, fail-fast)
     # instead of many under-resourced parallel jobs that all surface a failure a week later.
-    SN2_PARALLEL: bool     = True            # Phase A - analyse ranks concurrently with one live multi-rank progress line
-    QSITE_SEQUENTIAL: bool = True            # Phase B - run QSite jobs one after another, each at cores − 2
     QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap.
     """
     The QM/MM system around the reaction centre. The droplet is the MM shell the QSite job keeps
@@ -2172,7 +2172,6 @@ class CFG:
 
     @property
     def GLOBAL_MAX_WORKERS(self) -> int:
-        import multiprocessing
         return max(1, multiprocessing.cpu_count() - self.PREP_CPU_RESERVE)
     PROC_BATCH_SIZE: int         = 2000   # max futures submitted at once - caps peak memory
     PROC_HEADER_CHECK_LINES: int =   30   # lines to scan when reading a PDB header tag
@@ -2216,14 +2215,28 @@ class CFG:
     SCORE_PCA_NEUTRAL: float       = 50.0   # the neutral PCA score assigned when PCA cannot run
                                             # (mid-scale of 0-100 - never a silent zero)
     VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
+    VIS_FONT_LARGE: float       = 14.0   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
     VIS_FONT_AXIS_LABEL: float  = 11.0   # x/y axis labels - plain weight
     VIS_FONT_TICK: float        = 9.0    # tick labels
+    VIS_FONT_TICK_COMPACT: float = 8.0   # tick labels on a crowded axis (many categories/rotated labels)
+    VIS_FONT_TICK_DENSE: float  = 7.0    # tick labels on a very dense axis (per-complex rows, colourbars)
     VIS_FONT_LEGEND: float      = 8.0    # legend entries (one size for every figure, every step)
     VIS_FONT_LEGEND_TITLE: float = 8.5   # legend title (one size everywhere; slightly above the entries)
     VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
     VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
+    VIS_GRID_COLOUR_EMPHASIS: str = "#BFBFBF"
+    """
+    One distinct hue per catalytic-machinery series on the active-site dynamics panel. The same
+    colour carries a series' time-trace, its violin and its inline residue label, so the eye can
+    follow one residue across all three representations. Maximally separated hues - these bands sit
+    close together and a sequential ramp would make neighbours unreadable.
+    """
+    VIS_ACTIVE_SITE_COLOUR: tuple = (
+        "#E6194B", "#3CB44B", "#4363D8", "#F58231", "#911EB4", "#42D4F4",
+        "#F032E6", "#469990", "#9A6324", "#800000", "#000075",
+    )  # darker grid for the axis a reader tracks against (e.g. the frame/time X-axis of a time series); paired with VIS_GRID_COLOUR on the other axis
     VIS_LEGEND_FRAME_ALPHA: float = 0.65   # semi-transparent legend box - the data behind it stays visible
     # Legend spacing, in font-size units, applied via apply_figure_style so every figure in every step
     # shares one legend layout. Set here, never at the call site (see [[cfg-single-source-of-truth]]).
@@ -2368,6 +2381,17 @@ class CFG:
         "water":      "#5DADE2",
         "pistack":    "#2471A3",
         "pication":   "#7D3C98",
+    })
+    """
+    Chrome of the ligand-interaction diagram: the parts that are not an interaction type. Kept here
+    so a restyle of the diagram is one edit, the same rule the figure palette follows everywhere else.
+    """
+    INTERACTION_DIAGRAM_CHROME: dict = field(default_factory=lambda: {
+        "pocket_fill":      "#EAF2FF",   # binding-pocket disc, filled
+        "pocket_edge":      "#AED6F1",   # binding-pocket disc, outline
+        "annotation":       "#85929E",   # italic in-figure notes
+        "residue_default":  "#717D7E",   # residue with no type-specific colour
+        "label_box":        "#C0C0C0",   # residue label box face
     })
     INTERACTION_DIAGRAM_STYLE: dict = field(default_factory=lambda: {
         "hbond":       (2.2, (0, (6, 3)),        True),
@@ -2610,10 +2634,11 @@ class CFG:
     VIS_MAX_THUMBNAILS: int = 10   # max structure thumbnails embedded in a quality-space panel (top-N by Scientific_Rank)
     VIS_RADAR_MAX_HITS: int = 10   # max series plotted on a radar / spider chart (top-N by ranking key)
     # Slice colours for the model-selection pie inset (Figure 02); one per Boltz model index.
-    VIS_PIE_MODEL_COLOURS: list = field(default_factory=lambda: [
-        "#8ECFC9", "#A5C8E1", "#FABEBE", "#FFF4B8", "#C9E8C4",
-        "#F8C8A8", "#D5C8E8", "#B8D4E8",
-    ])
+    VIS_MODEL_COLOUR: list = field(default_factory=lambda: [
+        "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD",
+        "#8C564B", "#E377C2", "#7F7F7F",
+    ])   # model_0..4 diffusion-sample palette - ONE set everywhere models are coloured (pie, by-model
+         # box plots); saturated qualitative colours, models labelled M0-M4 so they read by label/position
     '''
     Bar value-label segment colours (Figure 01): count, "|" separator and percentage
     are drawn in three distinct hues so each datum reads separately. Two variants keyed
@@ -2877,6 +2902,20 @@ class CFG:
         "ASH", "GLH", "CYM", "CYX", "LYN", "TYM",
     })
     PREP_AMBIGUOUS_AA: set = field(default_factory=lambda: set("BXZJOU"))
+
+    """
+    Three-letter → one-letter residue code, including the force-field protonation variants that
+    PREP_STANDARD_AA already recognises. Figures name a mapped catalytic residue as one letter plus
+    its position (e.g. ASP110 → D110); the POSITION always comes from the ranked sheet's Mapped_*
+    column for that homolog, never from a literal in the plotting code.
+    """
+    AA_THREE_TO_ONE: dict = field(default_factory=lambda: {
+        "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLU": "E", "GLN": "Q",
+        "GLY": "G", "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F",
+        "PRO": "P", "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+        "HID": "H", "HIE": "H", "HIP": "H", "HSE": "H", "HSD": "H", "HSP": "H",
+        "ASH": "D", "GLH": "E", "CYM": "C", "CYX": "C", "LYN": "K", "TYM": "Y",
+    })
     PREP_MAX_AMBIGUOUS_PCT: float = 5.0   # %  sequence rejected if ambiguous-residue fraction exceeds this
 
     # -------------------------------------------------------------------------------
@@ -3316,7 +3355,6 @@ class CFG:
         edit that breaks one of these couplings fails loudly at import rather than silently
         drifting apart. Assertions, plus the derived file-name globs built from the CSV STEMs at the end.
         """
-        import math as _math
         _isclose = lambda a, b: _math.isclose(float(a), float(b), abs_tol=1e-9)
         # Re-typed literals that must track their documented source value.
         assert _isclose(self.SOFT_NB_MIDPOINT, self.THRESHOLD_TRIAD_NB), "SOFT_NB_MIDPOINT must equal THRESHOLD_TRIAD_NB"

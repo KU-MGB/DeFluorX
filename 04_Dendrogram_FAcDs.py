@@ -115,6 +115,8 @@ from Bio import SeqIO
 # Step 1.3: Pipeline modules (00_01) via importlib
 # -------------------------------------------------------------------------------
 import importlib.util as _ilu
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import time as _time
 
 def _load_module(name: str, path: Path):
     if not path.exists():
@@ -1667,7 +1669,6 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 """
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _utils_mod.print_elapsed(_t0, "04_Dendrogram_FAcDs.py")

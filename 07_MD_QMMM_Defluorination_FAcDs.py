@@ -41,12 +41,15 @@ Date   : 25 July 2026 <───────────────────
                   <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
                     - <Name>_NAC_Data.csv          (per-frame geometry + DT)
-                    - <Name>_NAC_Dashboard.png     (2-panel figure)
+                    - 01_<Name>_NAC_Dashboard.png  (2-panel figure)
+                    - 02_<Name>_Active_Site_Dynamics.png  (all catalytic distances: time-traces + violin bank + NAC dwell)
+                    - 03_<Name>_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
+                    - 04_<Name>_MMGBSA_Trace.png          (per-frame ΔG_bind with rolling mean and ±1 SD)
                     - <Name>_Ideal_Final.maegz      (best frame for QSite)
                     - <Name>_QSite_SN2/            (primary QM/MM scan) + _QSite_SN2_f<frame>/ (extra ensemble frames)
-                    - <Name>_QSite_Reaction_Profile.png   (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
-                    - <Name>_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
-                    - <Name>_Machinery_Engagement.png     (per-residue distance to the warhead C + contact occupancy)
+                    - 07_<Name>_QSite_Reaction_Profile.png (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
+                    - 05_<Name>_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
+                    - 06_<Name>_Machinery_Engagement.png  (per-residue distance to the warhead C + contact occupancy)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
@@ -62,6 +65,25 @@ Date   : 25 July 2026 <───────────────────
                   05_TopN_and_PDB_Preparation_FAcDs.py → provides ranked structures & IDs
                   02_Production_FAcDs.py         → master CSV with alignment maps
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
+
+  Run behaviour : Resume by default. A rank whose per-frame table (<Name>_NAC_Data.csv), statistics
+                  (<Name>_MD_Stats.json) and QM/MM output are all present is NOT recomputed: the
+                  figures are redrawn from the stored data (seconds) and the run moves on. A rank
+                  whose scans have not finished still takes the full path, because the frame pass is
+                  what produces the QM/MM frame candidates. --force recomputes everything.
+                  Frame/SN2 analysis runs one worker per rank; the trajectory read dominates it, so
+                  the phase is I/O-bound and does not scale with cores. QM/MM instead runs many
+                  SINGLE-THREADED scans concurrently - the QSite engine is 1 core/job regardless of
+                  -PARALLEL (CFG.QSITE_PROCS = 1) - capped by min(total_cpu - PREP_CPU_RESERVE, RAM
+                  budget), where the budget counts free RAM plus free swap (CFG.QSITE_RAM_PER_JOB_GB,
+                  QSITE_RAM_HEADROOM_FRAC, QSITE_RAM_SWAP_FRAC). Concurrent scans available =
+                  ranks × CFG.QSITE_N_FRAMES, so that product - not the core count - sets occupancy.
+                  The SN2 attack angle is the multiplicity-corrected CFG.sn2_effective_angle (identity
+                  for one scissile C-F, Šidák-deflated for DFA/TFA), so 07 stays in lock-step with the
+                  Step-02 tiering rather than gating on a raw geometric angle.
+                  systemd-oomd masking is self-repairing: a sentinel records that this pipeline masked
+                  it, so a killed run is repaired at the next start and the signal handlers restore it
+                  on Ctrl+C. A socket masked by the user (no sentinel) is left untouched.
 ────────────────────────────────────────────────────────────────────────────────
 
 # ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -189,8 +211,8 @@ Scientific references
 """
 
 import sys
+import json
 import os
-import shutil
 
 # =============================================================================
 # SCHRÖDINGER BOOTSTRAP
@@ -241,6 +263,8 @@ from collections import defaultdict
 
 import matplotlib
 matplotlib.use('Agg')
+# --- consolidated matplotlib imports (after backend selection) ---
+from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
@@ -249,6 +273,7 @@ import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator
+from matplotlib.colors import BoundaryNorm
 
 try:
     from rich.console import Console as _RichConsole
@@ -392,6 +417,13 @@ logger    = None  # Initialised in main()
 # =============================================================================
 
 import threading
+# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+import atexit as _atexit
+import glob as _glob
+import re as _re
+import signal as _signal
+import time as _time
+import traceback as _tb
 thread_logger = threading.local()
 
 _strip_ansi = getattr(_utils_mod, '_strip_ansi', lambda x: x)
@@ -430,8 +462,17 @@ def console_info(msg: str) -> None:
 def _mask_oomd_at_start():
     """Prompt for the (optional) sudo password up front and mask systemd-oomd, so the memory-heavy
     QSite QM/MM phase near the end of the run is not OOM-killed. Prompting at the START lets the user
-    walk away - the run stays unattended. Returns a restore callable (registered with atexit). If sudo
-    is unavailable or skipped, the run proceeds unprotected (NORMAL mode). No-op when not on a TTY."""
+    walk away - the run stays unattended. Returns a restore callable. If sudo is unavailable or
+    skipped, the run proceeds unprotected (NORMAL mode). No-op when not on a TTY.
+
+    Self-repairing. Masking is a change to SYSTEM state that outlives the process, and an interrupted
+    run cannot be relied on to undo it: Ctrl+C lands on the conda wrapper while it waits on the
+    re-exec'd Schrodinger child, so the child can die before its exit handler completes and leaves
+    systemd-oomd stopped and its socket masked. A sentinel file records that THIS pipeline did the
+    masking, so the next run detects the leftover and repairs it before masking again. The sentinel
+    also keeps the repair honest - a socket masked by the user for their own reasons is left alone,
+    because no sentinel accompanies it. The restore is idempotent and is wired to the signal handlers
+    as well as atexit."""
     if not sys.stdin.isatty():
         return lambda: None
     console_info("OPTIONAL - protect this run from the Linux out-of-memory killer.")
@@ -452,15 +493,37 @@ def _mask_oomd_at_start():
         while not _stop.wait(60):
             _sp.run(["sudo", "-vn"], capture_output=True)
     threading.Thread(target=_keepalive, daemon=True).start()
-    console_info("  Masking systemd-oomd - restored automatically when Step 07 exits.")
+    def _unmask():
+        _sp.run(["sudo", "systemctl", "unmask", "systemd-oomd.socket"], capture_output=True)
+        _sp.run(["sudo", "systemctl", "start", "systemd-oomd"], capture_output=True)
+        try:
+            _OOMD_SENTINEL.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+    if _OOMD_SENTINEL.exists():          # a previous run died before undoing its own mask
+        console_info("  Previous Step-07 run left systemd-oomd masked - repairing before masking again.")
+        _unmask()
+
+    console_info("  Masking systemd-oomd - restored when Step 07 exits (and repaired on the next run "
+                 "if this one is killed).")
     _sp.run(["sudo", "systemctl", "stop", "systemd-oomd"], capture_output=True)
     _sp.run(["sudo", "systemctl", "mask", "systemd-oomd.socket"], capture_output=True)
+    try:
+        _OOMD_SENTINEL.parent.mkdir(parents=True, exist_ok=True)
+        _OOMD_SENTINEL.write_text(f"{os.getpid()}\n")
+    except OSError:
+        pass                              # the sentinel is a convenience, never a hard requirement
 
     def _restore():
         _stop.set()
         console_info("Restoring systemd-oomd services...")
-        _sp.run(["sudo", "systemctl", "unmask", "systemd-oomd.socket"], capture_output=True)
-        _sp.run(["sudo", "systemctl", "start", "systemd-oomd"], capture_output=True)
+        _unmask()
+
+    global _OOMD_RESTORE
+    _OOMD_RESTORE = _restore
     return _restore
 
 
@@ -1011,7 +1074,6 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         """
         _nb = min(int(CFG.MD_EQUIL_BLOCKS), max(2, len(_t) // 2))
         _bs = len(_t) // _nb
-        _tb = _t[:_nb * _bs].reshape(_nb, _bs).mean(axis=1)
         _vb = _V[:_nb * _bs].reshape(_nb, _bs).mean(axis=1)
 
         """
@@ -1280,7 +1342,6 @@ def load_triad_mapping(csv_path: Path) -> dict:
             # Short keywords (<=4 chars) match only as a whole underscore/space token,
             # so 'ang' cannot hit 'range', 'dist' cannot hit 'distribution', and 'prob'
             # cannot hit 'problem'. Longer keywords keep substring matching.
-            import re as _re
             for k in keywords:
                 kl = k.lower()
                 for col in df.columns:
@@ -1386,16 +1447,24 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax1.set_ylim(0, 180); ax1.set_xlim(left=0)
         
         # Legend moved to bottom right and contains zones
-        ax1.legend(handles=[
+        _p1_handles = [
             Line2D([0], [0], color=_C['warhead'], linestyle='--', lw=2.5,
                    label=f'Relaxed Dist < {THRESHOLD_RELAXED_NAC_DIST}Å'),
             Line2D([0], [0], color=_C['tail'], linestyle='--', lw=2.5,
                    label=f'Relaxed Angle > {THRESHOLD_RELAXED_NAC_ANGLE}°'),
             Patch(facecolor=_C['zone_relaxed'], alpha=0.3, label='Relaxed S_N2 Zone'),
             Patch(facecolor=_C['zone_strict'], alpha=0.4, label='Strict S_N2 Zone'),
-        ], loc='lower right', frameon=True,
-           edgecolor=_C['legend_edge'], fancybox=True, fontsize=CFG.VIS_FONT_LEGEND)
-           
+        ]
+        ax1.legend(handles=_p1_handles, loc='lower left', bbox_to_anchor=(0.01, 0.01),
+                   ncol=2, frameon=True, columnspacing=0.6, handletextpad=0.3, handlelength=1.2,
+                   borderpad=0.4, edgecolor=_C['legend_edge'], fancybox=True,
+                   fontsize=CFG.VIS_FONT_ANNOT)
+
+        # X-axis grid darker than Y so the reaction-coordinate (distance) reads clearly; Y keeps the
+        # default light grid. Both colours are CFG SSOT (VIS_GRID_COLOUR_EMPHASIS / VIS_GRID_COLOUR).
+        ax1.grid(axis='x', color=CFG.VIS_GRID_COLOUR_EMPHASIS, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.9, zorder=0)
+        ax1.grid(axis='y', color=CFG.VIS_GRID_COLOUR, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=CFG.VIS_GRID_ALPHA, zorder=0)
+
         cbar = plt.colorbar(sc, ax=ax1, pad=0.02)
         cbar.set_label("Simulation Frame (Time)", rotation=270, labelpad=15)
         clean_spines(ax1)
@@ -1419,11 +1488,13 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
             ax2.axhline(CFG.MECH_CRADLE_RADIUS, color=_C['tail'], linestyle=':', linewidth=1.5, alpha=0.7)
 
         data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
-        ax2.set_ylim(1.5, max(12.0, data_max * 1.4))
+        ax2.set_ylim(1.5, max(8.0, data_max * 1.05))
         ax2.set_xlabel("Simulation frame")
         ax2.set_ylabel("Active-site anchoring - interaction distance (Å)")
         ax2.legend(loc='upper right', frameon=True,
                    edgecolor=_C['legend_edge'], fancybox=True, fontsize=CFG.VIS_FONT_LEGEND)
+        ax2.grid(axis='x', color=CFG.VIS_GRID_COLOUR_EMPHASIS, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.9, zorder=0)
+        ax2.grid(axis='y', color=CFG.VIS_GRID_COLOUR, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=CFG.VIS_GRID_ALPHA, zorder=0)
         clean_spines(ax2)
 
         summary_text = (
@@ -1632,7 +1703,7 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     ax.set_ylabel("SN2 case (ligand · Scientific_Rank)")
     ax.tick_params(axis="x", labelrotation=0)
     ax.tick_params(axis="y", labelrotation=0)
-    plt.setp(ax.get_yticklabels(), fontsize=8)
+    plt.setp(ax.get_yticklabels(), fontsize=CFG.VIS_FONT_LEGEND)
 
     out_path = out_dir / "04_Comparative_Residue_Engagement.png"
     with warnings.catch_warnings():
@@ -1656,7 +1727,6 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     """
     sns.set_theme(style="whitegrid", context="paper")
     apply_figure_style(CFG)
-    from matplotlib.colors import to_rgba
 
     df_plot = df_master.sort_values('Scientific_Rank', ascending=True).copy()
 
@@ -1712,22 +1782,22 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
                 # Value label (in solid black)
                 if val >= 8.0:
                     ax.text(val - 1.0, y + offset, f'{val:.1f}%',
-                            ha='right', va='center', fontsize=7.0, fontweight='bold',
+                            ha='right', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
                             color='black', zorder=4)
                 else:
                     ax.text(val + 0.5, y + offset, f'{val:.1f}%',
-                            ha='left', va='center', fontsize=7.0, fontweight='bold',
+                            ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
                             color='black', zorder=4)
             else:
                 # Value label for 0% (in solid black)
                 ax.text(0.5, y + offset, "0.0%",
-                        ha='left', va='center', fontsize=7.0, fontweight='bold',
+                        ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
                         color='black', zorder=4)
 
     ax.set_yticks(y_positions)
     ax.set_yticklabels(
         [format_job_label(r['Job_Name'], r['Scientific_Rank']) for _, r in df_plot.iterrows()],
-        fontsize=10.5, fontweight='bold')
+        fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight='bold')
     ax.set_xlim(0, 105)
     ax.set_ylim(-0.65, n_rows - 0.35)
     ax.invert_yaxis()
@@ -1752,15 +1822,15 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 
     hdr_y = -0.45
     ax_ann.text(0.10, hdr_y, 'WM ΔG\n(kcal/mol)', ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
+                 fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.30, hdr_y, 'WM_N\n(stable)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
+                 fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.50, hdr_y, 'min d_NAC\n(Å)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
+                 fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.72, hdr_y, 'avg a_NAC\n(°)',     ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
+                 fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
     ax_ann.text(0.92, hdr_y, 'DT\n(n)',            ha='center', va='center',
-                 fontsize=7.0, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
+                 fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold', color=CFG.VIS_MD_PALETTE["text_dark"])
 
     for i, (_, row) in enumerate(df_plot.iterrows()):
         y    = y_positions[i]
@@ -1789,20 +1859,19 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
                    else (CFG.VIS_MD_PALETTE["marginal"] if (ang_str != 'N/A' and float(ang) > CFG.SN2_ANGLE_MARGINAL_MIN)
                    else CFG.VIS_MD_PALETTE["fail"]))
 
-        ax_ann.text(0.10, y, wm_str,   ha='center', va='center', fontsize=8,
+        ax_ann.text(0.10, y, wm_str,   ha='center', va='center', fontsize=CFG.VIS_FONT_LEGEND,
                     color=CFG.VIS_MD_PALETTE["text_dark"], fontweight='bold')
-        ax_ann.text(0.30, y, wmn_str,  ha='center', va='center', fontsize=8,
+        ax_ann.text(0.30, y, wmn_str,  ha='center', va='center', fontsize=CFG.VIS_FONT_LEGEND,
                     color=CFG.VIS_MD_PALETTE["accent_blue"], fontweight='bold')
-        ax_ann.text(0.50, y, dist_str, ha='center', va='center', fontsize=8,
+        ax_ann.text(0.50, y, dist_str, ha='center', va='center', fontsize=CFG.VIS_FONT_LEGEND,
                     color=dist_col,  fontweight='bold')
-        ax_ann.text(0.72, y, ang_str,  ha='center', va='center', fontsize=8,
+        ax_ann.text(0.72, y, ang_str,  ha='center', va='center', fontsize=CFG.VIS_FONT_LEGEND,
                     color=ang_col,   fontweight='bold')
-        ax_ann.text(0.92, y, dt_str,   ha='center', va='center', fontsize=8,
+        ax_ann.text(0.92, y, dt_str,   ha='center', va='center', fontsize=CFG.VIS_FONT_LEGEND,
                     color=CFG.VIS_MD_PALETTE["accent_purple"], fontweight='bold')
 
 
     # ── Legend ────────────────────────────────────────────────────────────────
-    from matplotlib.patches import Patch
     legend_handles = [
         Patch(facecolor=CFG.VIS_MD_PALETTE["slate"], edgecolor='none', label='Pocket Retention'),
         Patch(facecolor=CFG.VIS_MD_PALETTE["triad"], edgecolor='none', label='Triad Integrity (Total)'),
@@ -1879,16 +1948,16 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
             ax.axvline(Y, color=_C["gate_line"], ls="--", lw=1.2, zorder=1)
             ax.text(_xhi * 0.98, _ylo + (Z - _ylo) * 0.5,
                     f"defluorination-competent\n(dwell ≥ {Y:g} ns, ΔE‡ ≤ {Z:g})",
-                    ha="right", va="center", fontsize=8, color=_C["gate_text"], style="italic")
+                    ha="right", va="center", fontsize=CFG.VIS_FONT_LEGEND, color=_C["gate_text"], style="italic")
         sc = ax.scatter(x, y, s=_sz, c=(_col if _col.notna().any() else _C["scatter"]),
                         cmap="viridis", vmin=0, vmax=1, edgecolor=_C["edge"],
                         linewidth=0.8, alpha=0.92, zorder=5)
         for xi, yi, lab in zip(x, y, d["_label"]):
-            ax.annotate(str(lab), (xi, yi), fontsize=7, xytext=(4, 4),
+            ax.annotate(str(lab), (xi, yi), fontsize=CFG.VIS_FONT_ANNOT, xytext=(4, 4),
                         textcoords="offset points", zorder=6)
         if _col.notna().any():
             cb = fig.colorbar(sc, ax=ax, pad=0.02)
-            cb.set_label("Defluorination propensity  (log-scaled, best = 1)", fontsize=9)
+            cb.set_label("Defluorination propensity  (log-scaled, best = 1)", fontsize=CFG.VIS_FONT_TICK)
         ax.set_xlabel("Catalytic persistence - longest continuous strict-NAC dwell (ns)")
         ax.set_ylabel(ylab)
         clean_spines(ax)
@@ -1900,7 +1969,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
             fig.text(0.5, 0.005,
                      "NAC dwell measured under the Step-06 ligand positional restraint - persistence is "
                      "restraint-sustained, not spontaneous; the QM/MM ΔE‡ is the unrestrained turnover arbiter.",
-                     ha="center", va="bottom", fontsize=7.5, color="0.45", wrap=True)
+                     ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, color="0.45", wrap=True)
         out_path = out_dir / "05_Defluorination_Landscape.png"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -2164,7 +2233,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.legend(handles=hdl, loc="upper right", fontsize=_f_leg, frameon=True)
 
         out_path = (out_dir / "06_MMGBSA_Decomposition_AllRanks.png" if merged
-                    else rr[0]["dir"] / f"{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
+                    else rr[0]["dir"] / f"05_{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -2337,7 +2406,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
-                    else rr[0]["dir"] / f"{rr[0]['job']}_Machinery_Engagement.png")
+                    else rr[0]["dir"] / f"06_{rr[0]['job']}_Machinery_Engagement.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -2785,7 +2854,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         f"molchg={qm_charge}",            # QM-region net charge (authoritative - see per-step patch in run_qsite)
         f"dftname={CFG.QSITE_FUNCTIONAL}",
         "mmqm=1",                         # enable QM/MM
-        "impversion=huge",
+        f"impversion={CFG.QSITE_IMPVERSION}",   # memory/architecture tier (CFG SSOT)
         f"vshift={CFG.QSITE_SCF_VSHIFT:g}",    # SCF level shift (stabilises convergence)
         f"maxit={int(CFG.QSITE_SCF_MAXIT)}",   # max SCF iterations
         f"iacc={int(CFG.QSITE_SCF_IACC)}",     # SCF accuracy grid (1 = robust/fast)
@@ -2880,42 +2949,64 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     _total    = max(1, int(getattr(CFG, "QSITE_SCAN_NSTEPS", 1)))
     _log_path = qsite_dir / f"{jobname}.log"
 
+    _user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+
     def _scan_done():
+        # QSite runs on the job server: the LIVE log sits in /tmp/<user>/jobs/<jobid>/<jobname>.log and is
+        # copied back to qsite_dir only when the job finishes, so reading the launch dir during the run
+        # always sees nothing. Read the newest live copy (fall back to the launch dir), counting geometry-
+        # optimisation convergences - one per completed scan point of the QSITE_SCAN_NSTEPS-point scan.
+        _cands = _glob.glob(f"/tmp/{_user}/jobs/*/{jobname}.log") if _user else []
+        _cands.append(str(_log_path))
+        _cands = [p for p in _cands if os.path.isfile(p)]
+        if not _cands:
+            return None
         try:
-            txt = _log_path.read_text(errors="ignore")
+            txt = open(max(_cands, key=os.path.getmtime), errors="ignore").read()
         except OSError:
             return None
-        for _m in ("Scan point", "scan point", "Geometry optimization has converged"):
-            _n = txt.count(_m)
-            if _n:
-                return _n
-        return None
+        _n = txt.count("Geometry optimization has converged") or txt.count("converged")
+        return min(_n, _total) if _n else None
 
+    # Register BEFORE launch so an interrupt during submission still finds the job to kill.
+    _register_qsite_job(jobname)
     try:
         proc = _sp.Popen(cmd, cwd=str(qsite_dir),
                          stdout=_sp.DEVNULL, stderr=_sp.STDOUT)
     except Exception as e:
+        _unregister_qsite_job(jobname)
         console_info(f"    {ConsoleColours.FAIL}[Rank {rank}] QSite launch failed: {e}{ConsoleColours.ENDC}")
         return False
 
     _t0 = time.time()
+    _last_done, _last_emit = -1, 0.0
     while proc.poll() is None:
         time.sleep(_interval)
         _elapsed = time.time() - _t0
         _done = _scan_done()
+        # Emit only when a scan point completes (the count advances) or every ~2 min as a keep-alive -
+        # NOT every _interval tick. This turns hundreds of identical "running…" lines into one line per
+        # completed scan point, each carrying real k/N progress. One \r line per rank on a terminal (the
+        # lock keeps parallel ranks from interleaving); appended lines off-tty (the log file).
+        if _done == _last_done and (time.time() - _last_emit) < 120:
+            continue
+        _last_done, _last_emit = _done, time.time()
         if _done is not None:
             _pct  = min(100, int(100 * _done / _total))
             _fill = _pct // 5
             _bar  = "#" * _fill + "-" * (20 - _fill)
-            # Linear ETA from the scan points already converged; shown only once at least one point is
-            # done and the scan is not finished, so an idle start or a completed scan prints no estimate.
+            # Linear ETA from the scan points already converged; shown only while the scan is mid-flight.
             _eta  = (f" | ETA ~{_elapsed * (_total - _done) / _done / 60:.1f} min"
                      if 0 < _done < _total else "")
-            print(f"  [Rank {rank}] QSite {jobname}: [{_bar}] {_done}/{_total} pts "
-                  f"({_pct}%) | {_elapsed / 60:.1f} min{_eta}", flush=True)
+            _msg = (f"  [Rank {rank}] QSite {jobname[:38]}: [{_bar}] {_done}/{_total} pts "
+                    f"({_pct}%) | {_elapsed / 60:.1f} min{_eta}")
         else:
-            print(f"  [Rank {rank}] QSite {jobname}: running… {_elapsed / 60:.1f} min elapsed",
-                  flush=True)
+            _msg = f"  [Rank {rank}] QSite {jobname[:38]}: starting… {_elapsed / 60:.1f} min"
+        with _PROGRESS_LOCK:
+            if sys.stdout.isatty():
+                sys.stdout.write(f"\r{_msg}\033[K"); sys.stdout.flush()
+            else:
+                print(_msg, flush=True)
 
     _rc = proc.returncode
     _elapsed = time.time() - _t0
@@ -2935,6 +3026,8 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                          f"reaction coordinate: {_reason}{ConsoleColours.ENDC}")
     except Exception:
         pass
+    # Finished (server-side job already gone): drop it so a later clean exit kills nothing.
+    _unregister_qsite_job(jobname)
     return True
 
 
@@ -3221,6 +3314,277 @@ def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
                                "F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta")}
 
 
+# ────────────────────────────────────────────────────────────────────────────
+#  § 9.4  Trajectory-level figures: active-site dynamics, free-energy
+#         landscapes and the per-frame MM-GBSA trace
+# ────────────────────────────────────────────────────────────────────────────
+"""
+Three per-rank figures drawn from the same per-frame table the dashboard uses, so a completed MD
+can be read without waiting for the QM/MM stage. Every distance series is paired with the ranked
+sheet's Mapped_* column, so residue identity AND position are resolved for the homolog actually
+simulated - a figure never names a residue from a literal.
+
+_ACTIVE_SITE_SERIES extends _ENGAGE_ROLES (the eight distances to the warhead carbon) with the two
+catalytic-relay pairs and the tail-fluorine cradle distance. Triad_NB / Triad_BA are deliberately
+excluded: they are the same residue pairs as the DT relays under a min-heavy-atom convention, and
+plotting both would put two different values for one pair on a single axis.
+"""
+_ACTIVE_SITE_SERIES = [(c, short, m) for c, _grp, short, m in _ENGAGE_ROLES] + [
+    ("DT_Nuc_Base_A",      "Nuc–Base relay",  ("Mapped_Nucleophile", "Mapped_Base")),
+    ("DT_Base_Acid_A",     "Base–Acid relay", ("Mapped_Base", "Mapped_Acid")),
+    ("Tail_Cradle_Dist_A", "Tail–cradle",     None),      # ligand fluorine, not a residue
+]
+
+
+def _residue_code(row, mapped) -> str:
+    """Mapped_* cell → one-letter code + position ('ASP110' → 'D110'); a pair → 'D110–H280'.
+
+    mapped is None for the tail-cradle distance, whose partner is the ligand fluorine.
+    """
+    def _one(col):
+        cell = str(row.get(col, "") or "").strip() if hasattr(row, "get") else ""
+        if len(cell) < 4:
+            return ""
+        return f"{CFG.AA_THREE_TO_ONE.get(cell[:3].upper(), cell[:3])}{cell[3:].strip()}"
+    if mapped is None:
+        return "lig F"
+    if isinstance(mapped, tuple):
+        a, b = (_one(m) for m in mapped)
+        return f"{a}–{b}" if a and b else ""
+    return _one(mapped)
+
+
+def _active_site_series(df: pd.DataFrame, row) -> list:
+    """[(column, role label with residue, residue code, colour)] ordered closest-to-warhead first."""
+    out = []
+    for col, short, mapped in _ACTIVE_SITE_SERIES:
+        if col in df.columns and df[col].notna().any():
+            res = _residue_code(row, mapped)
+            out.append([col, f"{short} ({res})" if res else short, res,
+                        float(np.median(df[col].dropna()))])
+    out.sort(key=lambda q: q[3])
+    pal = list(CFG.VIS_ACTIVE_SITE_COLOUR)
+    return [[c, lab, res, pal[i % len(pal)]] for i, (c, lab, res, _m) in enumerate(out)]
+
+
+def generate_active_site_dynamics(df: pd.DataFrame, row, output_path: Path) -> None:
+    """One panel, one interatomic-distance axis: every catalytic distance as a time-trace, the same
+    series as a violin+box+median bank in the right margin, and NAC pass occupancy in a reserved
+    lane below the data so it can never be read as a distance.
+
+    The distances are stratified - each pair sits in its own band - so the traces do not cross and a
+    series can be named in the left margin instead of costing a legend entry.
+    """
+    with PLOT_LOCK:
+        apply_figure_style(CFG)
+        _C, _INK = CFG.DEFLUOR_FIG_COLOUR, CFG.VIS_INK
+        series = _active_site_series(df, row)
+        if not series:
+            return
+        ns_per_frame = float(CFG.PHYS_MD_NS) / max(1.0, float(CFG.PHYS_MD_FRAMES))
+        t = df["Frame"].to_numpy() * ns_per_frame
+        T = float(t.max()); w = max(1, len(df) // 200)
+        data = [df[c].dropna().to_numpy() for c, _, _, _ in series]
+        _lo = min(d.min() for d in data)
+        _hi = max(np.nanpercentile(d, 99.5) for d in data)
+
+        fig, ax = plt.subplots(figsize=(18, 8.5))
+        _top = float(round(_hi))                      # end on a whole number so the top tick is labelled
+        ax.set_ylim(_lo - 1.35, _top)
+
+        starts = []
+        for (c, _lab, res, col) in series:
+            sm = df[c].rolling(w, min_periods=1).mean()
+            ax.plot(t, sm, color=col, lw=1.4, alpha=0.9, zorder=3)
+            starts.append([float(sm.iloc[0]), col, res])
+
+        # violin + box + median bank in the right margin, same order and colours as the traces
+        bank0, span = T * 1.05, T * 0.27
+        slot = span / len(series)
+        xpos = [bank0 + slot * (i + 0.5) for i in range(len(series))]
+        vp = ax.violinplot(data, positions=xpos, widths=slot * 0.85, showextrema=False)
+        for b, (_c, _l, _r, col) in zip(vp["bodies"], series):
+            b.set_facecolor(col); b.set_alpha(0.8); b.set_edgecolor(_INK["white"]); b.set_linewidth(0.5)
+        ax.boxplot(data, positions=xpos, widths=slot * 0.30, showfliers=False, patch_artist=True,
+                   medianprops=dict(color=_INK["white"], lw=1.2),
+                   boxprops=dict(facecolor=_INK["dark"], alpha=0.5, edgecolor="none"),
+                   whiskerprops=dict(color=_INK["faint"], lw=0.9),
+                   capprops=dict(color=_INK["faint"], lw=0.9))
+        for (c, lab, _res, col), x in zip(series, xpos):
+            ax.text(x, ax.get_ylim()[0] + 0.05, lab, rotation=90, va="bottom", ha="center",
+                    fontsize=CFG.VIS_FONT_ANNOT, color=col)
+        for i in range(1, len(series)):               # per-column separators, Step 03 style
+            ax.axvline(bank0 + slot * i, color=_INK["mid"], linestyle=":", alpha=0.5,
+                       linewidth=1.0, zorder=0)
+        ax.axvline(T * 1.025, color=_INK["paler"], lw=1.0, zorder=2)
+
+        ax.axhline(CFG.NAC_DIST_RELAXED, color=_INK["dark"], ls="--", lw=1.5, zorder=6,
+                   label=f"NAC reach {CFG.NAC_DIST_RELAXED} Å (Nuc→C)")
+
+        # pass occupancy in a reserved lane BELOW the data
+        ax.axhline(_lo - 0.62, color=_INK["palest"], lw=0.8, zorder=2)
+        rug_handles = []
+        for key, lab, col, y in (("NAC_Geom_Pass",   "Relaxed NAC", _C["zone_relaxed"], _lo - 0.80),
+                                 ("NAC_Strict_Pass", "Strict NAC",  _C["zone_strict"],  _lo - 1.00),
+                                 ("Catalytic_Pass",  "Catalytic (triad+)", _C["warhead"], _lo - 1.20)):
+            if key in df.columns:
+                hits = t[df[key].to_numpy() == 1]
+                ax.scatter(hits, np.full(len(hits), y), s=3, marker="|", color=col,
+                           alpha=0.6, zorder=5)
+                rug_handles.append(Line2D([0], [0], linestyle="none", marker="|", markersize=11,
+                                          markeredgewidth=2.6, color=col, label=lab))
+        ax.text(-T * 0.012, _lo - 1.00, "NAC\npass", ha="right", va="center",
+                fontsize=CFG.VIS_FONT_ANNOT, color=_INK["ghost"])
+
+        # each trace named in the left margin, in its own colour, nudged apart so none collide
+        ax.set_xlim(-T * 0.10, bank0 + span)
+        gap = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.026
+        starts.sort(key=lambda q: q[0])
+        for i in range(1, len(starts)):
+            if starts[i][0] - starts[i - 1][0] < gap:
+                starts[i][0] = starts[i - 1][0] + gap
+        for y, col, res in starts:
+            ax.text(-T * 0.022, y, res, color=col, ha="right", va="center",
+                    fontsize=CFG.VIS_FONT_ANNOT, zorder=6)
+
+        ax.set_yticks(np.arange(np.floor(_lo), _top + 0.01, 1.0))
+        ax.set_xticks(np.arange(0, T + 1, 200))
+        ax.set_xticklabels([f"{int(v)}" for v in np.arange(0, T + 1, 200)])
+        ax.set_xlabel("Simulation time (ns)"); ax.set_ylabel("Interatomic distance (Å)")
+        _xc, _yc = _C["tail"], CFG.VIS_ACCENT["green"]
+        ax.xaxis.label.set_color(_xc); ax.tick_params(axis="x", colors=_xc)
+        ax.yaxis.label.set_color(_yc); ax.tick_params(axis="y", colors=_yc)
+        ax.grid(axis="x", color=_xc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
+        ax.grid(axis="y", color=_yc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
+
+        _rr = (f"Reaction-ready {df['Catalytic_Pass'].mean() * 100:.2f}% of frames"
+               if "Catalytic_Pass" in df.columns else None)
+        hdl, _ = ax.get_legend_handles_labels()
+        hdl = ([Patch(facecolor="none", edgecolor="none", label=_rr)] if _rr else []) + hdl + rug_handles
+        _xl, _xr = ax.get_xlim()
+        leg = ax.legend(hdl, [h.get_label() for h in hdl], loc="upper right",
+                        bbox_to_anchor=((T - _xl) / (_xr - _xl), 0.995), ncol=len(hdl),
+                        fontsize=CFG.VIS_FONT_LEGEND, frameon=True, framealpha=0.92,
+                        handlelength=1.2, handletextpad=0.4, columnspacing=0.8, borderpad=0.5)
+        if _rr:
+            leg.get_texts()[0].set_fontweight("bold")
+        clean_spines(ax)
+        plt.savefig(output_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+        plt.close(fig)
+
+
+def _fel_grid(x, y, bins: int = 45):
+    """2D histogram → free energy G = −kT ln P (kcal/mol), minimum shifted to zero."""
+    m = np.isfinite(x) & np.isfinite(y)
+    x, y = x[m], y[m]
+    H, xe, ye = np.histogram2d(x, y, bins=bins, density=True)
+    H[H == 0] = np.min(H[H > 0]) * 0.01                       # avoid log(0) in empty bins
+    G = -CFG.GAS_CONSTANT_KCAL * CFG.MD_EQUIL_TARGET_T * np.log(H)
+    G -= G.min()
+    X, Y = np.meshgrid((xe[:-1] + xe[1:]) / 2, (ye[:-1] + ye[1:]) / 2)
+    return X, Y, G.T
+
+
+def _fel_surface(ax, X, Y, G, xlabel: str, ylabel: str, cmap, norm, cap: float) -> None:
+    ax.plot_surface(X, Y, G, cmap=cmap, norm=norm, rcount=G.shape[0], ccount=G.shape[1],
+                    linewidth=0, antialiased=True)
+    ax.set_xlabel(xlabel, labelpad=12); ax.set_ylabel(ylabel, labelpad=12)
+    ax.set_zlim(0, cap); ax.view_init(elev=28, azim=-125)
+    ax.set_zlabel("")     # mplot3d places the automatic z-label off-canvas on one panel
+    ax.text2D(0.012, 0.55, "Free energy (kcal/mol)", transform=ax.transAxes, rotation=90,
+              va="center", ha="center", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+
+
+def generate_free_energy_landscapes(df: pd.DataFrame, output_path: Path) -> None:
+    """Two free-energy surfaces in one figure, on one shared discrete energy scale.
+
+    Left  - the reaction coordinates the mechanism rests on (nucleophile approach × attack angle),
+            so a basin sitting away from the NAC corner IS the explanation for a low viability.
+    Right - essential dynamics: PCA of the catalytic-geometry feature set, which answers whether the
+            bound state is one conformational well or several.
+    """
+    with PLOT_LOCK:
+        apply_figure_style(CFG)
+        d = df[df["Post_Equilibration"] == 1] if "Post_Equilibration" in df.columns else df
+        if len(d) < 50:
+            return
+        Xr, Yr, Gr = _fel_grid(d["NAC_Distance_A"].to_numpy(), d["NAC_Angle_Deg"].to_numpy())
+
+        feats = [c for c, _s, _m in _ACTIVE_SITE_SERIES if c in d.columns] + \
+                [c for c in ("NAC_Distance_A", "NAC_Angle_Deg") if c in d.columns]
+        M = d[feats].to_numpy(float)
+        M = M[np.isfinite(M).all(axis=1)]
+        Z = (M - M.mean(0)) / (M.std(0) + 1e-9)
+        _U, S, Vt = np.linalg.svd(Z - Z.mean(0), full_matrices=False)
+        pcs = Z @ Vt[:2].T
+        var = (S ** 2 / (S ** 2).sum())[:2] * 100
+        Xp, Yp, Gp = _fel_grid(pcs[:, 0], pcs[:, 1])
+
+        # one discrete kcal/mol scale for BOTH surfaces, so a single legend serves them
+        cap = float(max(np.nanpercentile(Gr, 92), np.nanpercentile(Gp, 92)))
+        nlev = max(4, int(np.ceil(cap))); cap = float(nlev)
+        levels = np.arange(0, nlev + 1)
+        Gr, Gp = np.minimum(Gr, cap), np.minimum(Gp, cap)
+        cmap = plt.get_cmap("nipy_spectral", nlev)
+        norm = BoundaryNorm(levels, cmap.N)
+
+        fig = plt.figure(figsize=(16.0, 7.6))
+        gs = gridspec.GridSpec(1, 2, wspace=-0.02, left=0.075, right=0.995, top=0.965, bottom=0.06)
+        axL = fig.add_subplot(gs[0], projection="3d")
+        _fel_surface(axL, Xr, Yr, Gr, "Nuc → ligand distance (Å)", "Attack angle O–C–F (°)",
+                     cmap, norm, cap)
+        axR = fig.add_subplot(gs[1], projection="3d")
+        _fel_surface(axR, Xp, Yp, Gp, f"PC1 ({var[0]:.0f}% var)", f"PC2 ({var[1]:.0f}% var)",
+                     cmap, norm, cap)
+        swatches = [Patch(facecolor=cmap(i), edgecolor=CFG.VIS_INK["white"], linewidth=0.4,
+                          label=f"{int(levels[i])}–{int(levels[i + 1])}") for i in range(nlev)]
+        fig.legend(handles=swatches, loc="upper center", bbox_to_anchor=(0.5, 0.945), ncol=nlev,
+                   frameon=True, fontsize=CFG.VIS_FONT_LEGEND, title="Free energy (kcal/mol)",
+                   columnspacing=0.9, handlelength=1.3, handletextpad=0.4)
+        plt.savefig(output_path, dpi=int(CFG.VIS_FIGURE_DPI))     # explicit margins set above
+        plt.close(fig)
+
+
+def generate_mmgbsa_trace(mg: pd.DataFrame, output_path: Path) -> None:
+    """Per-frame MM-GBSA ΔG_bind over the trajectory: the raw samples, a rolling mean and the ±1 SD
+    band, so an equilibration drift is visible rather than hidden inside a single ensemble mean.
+    """
+    dgc = CFG.MMGBSA_DG_COLUMN if CFG.MMGBSA_DG_COLUMN in mg.columns else \
+        next((c for c in mg.columns if re.search(r"dg.?bind", c, re.I)), None)
+    if dgc is None or "Frame" not in mg.columns:
+        return
+    with PLOT_LOCK:
+        apply_figure_style(CFG)
+        _C, _INK = CFG.DEFLUOR_FIG_COLOUR, CFG.VIS_INK
+        y = pd.to_numeric(mg[dgc], errors="coerce")
+        x = pd.to_numeric(mg["Frame"], errors="coerce")
+        mean, sd = float(y.mean()), float(y.std())
+        w = max(1, len(y) // 200)
+
+        fig, ax = plt.subplots(figsize=(13, 5.4))
+        ax.plot(x, y, color=_C["warhead"], lw=0.6, alpha=0.22)
+        ax.plot(x, y.rolling(w, min_periods=1).mean(), color=_C["warhead"], lw=2.0,
+                label=f"ΔG$_{{bind}}$ (rolling mean, {w} frames)")
+        ax.axhline(mean, color=_INK["dark"], ls="--", lw=1.4, label=f"mean {mean:.2f} kcal/mol")
+        ax.axhspan(mean - sd, mean + sd, color=_INK["paler"], alpha=0.18,
+                   label=f"±1 SD ({sd:.2f})")
+        ax.set_xlabel("Simulation frame"); ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)")
+        ax.set_xlim(x.min(), x.max() + (x.max() - x.min()) * 0.012)
+        _xc, _yc = _C["tail"], CFG.VIS_ACCENT["green"]
+        ax.xaxis.label.set_color(_xc); ax.tick_params(axis="x", colors=_xc)
+        ax.yaxis.label.set_color(_yc); ax.tick_params(axis="y", colors=_yc)
+        ax.grid(axis="x", color=_xc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
+        ax.grid(axis="y", color=_yc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
+        hdl, lab = ax.get_legend_handles_labels()
+        leg = ax.legend(hdl, lab, loc="upper left", ncol=len(lab), fontsize=CFG.VIS_FONT_LEGEND,
+                        frameon=True, framealpha=0.92, columnspacing=0.8, handletextpad=0.4,
+                        title=f"{len(y):,} frames scored")
+        leg.get_title().set_fontsize(CFG.VIS_FONT_ANNOT)
+        clean_spines(ax)
+        plt.savefig(output_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+        plt.close(fig)
+
+
 def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict) -> None:
     """The direct 'did it defluorinate' figure: the QM/MM potential-energy surface
     along the SN2 reaction coordinate (Nu_O···C compression), with the activation
@@ -3252,10 +3616,10 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 ax.scatter([x[-1]], [y[-1]], s=90, color=_C["product"], zorder=5, label="product")
                 ax.annotate(f"ΔE‡ = {profile.get('QSite_Barrier_kcal', float('nan')):.1f} kcal/mol",
                             (x[_imax], y[_imax]), xytext=(6, 8), textcoords="offset points",
-                            fontsize=9, color=_C["ts"], fontweight="bold")
+                            fontsize=CFG.VIS_FONT_TICK, color=_C["ts"], fontweight="bold")
                 ax.annotate(f"ΔE_rxn = {profile.get('QSite_dErxn_kcal', float('nan')):.1f}",
                             (x[-1], y[-1]), xytext=(6, -12), textcoords="offset points",
-                            fontsize=9, color=_C["product"], fontweight="bold")
+                            fontsize=CFG.VIS_FONT_TICK, color=_C["product"], fontweight="bold")
                 ax.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product",
                               fontweight="bold")
                 ax.set_ylabel("Relative QM/MM energy (kcal/mol)")
@@ -3274,12 +3638,12 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 _scf = profile.get("scissile_f_label", "scissile C–F")
                 if _fq_final is not None and _fq_final <= CFG.QSITE_F_CHARGE_CLEAVED:
                     ax.text(0.5, 0.02, f"C–F CLEAVED - {_scf} F → {_fq_final:+.2f} e (free fluoride)",
-                            transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
+                            transform=ax.transAxes, ha="center", va="bottom", fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold",
                             color=_C["product"],
                             bbox=dict(boxstyle="round,pad=0.3", fc=_C["cleaved_bg"], ec=_C["product"], alpha=0.95))
                 elif _fq_final is not None:
                     ax.text(0.5, 0.02, f"C–F intact - {_scf} F charge {_fq_final:+.2f} e (bond not broken)",
-                            transform=ax.transAxes, ha="center", va="bottom", fontsize=10, fontweight="bold",
+                            transform=ax.transAxes, ha="center", va="bottom", fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold",
                             color=_C["ts"],
                             bbox=dict(boxstyle="round,pad=0.3", fc=_C["intact_bg"], ec=_C["ts"], alpha=0.95))
                 ax.legend(loc="upper left")
@@ -3328,27 +3692,69 @@ _QSITE_PROCS = CFG.QSITE_PROCS
 # mutates the shared cms_model stays sequential; only the independent Jaguar subprocesses run in
 # parallel. Total concurrent scans is capped by both this semaphore and the number of QM/MM jobs
 # actually available (ranks x QSITE_N_FRAMES).
+_FORCE_RECOMPUTE = False   # --force: recompute a rank even when its outputs exist
+# Records that THIS pipeline masked systemd-oomd, so a killed run is repaired on the next start.
+_OOMD_SENTINEL = Path.home() / ".cache" / "facds_step07_oomd_masked"
+_OOMD_RESTORE = None       # set by _mask_oomd_at_start; also called from the signal handlers
 _QSITE_SEM = threading.Semaphore(1)   # reassigned in main() to the concurrency cap
+
+# Orphan cleanup. `qsite -WAIT` submits to the Schrodinger job server (jobserverd), which spawns the
+# real QM/MM work (run_qsite -> run_jaguar_backend -> jexec -> scf) in ITS OWN session, not as children
+# of this script. Killing the driver - or Ctrl+C on this script - therefore leaves the scans running.
+# Track every live jobname; on interrupt/exit kill any process whose cmdline carries that jobname
+# (pkill -f: the jobname is unique per rank+ligand and appears on every server-side process), plus a
+# best-effort jobcontrol cancel. pkill is the lever that actually works - jobcontrol frequently cannot
+# message a job once its driver has died ("cannot send kill message"). Jobs that finish normally are
+# unregistered first, so a clean exit kills nothing.
+_QSITE_ACTIVE_JOBS: "set[str]" = set()
+_QSITE_JOBS_LOCK = threading.Lock()
+
+def _register_qsite_job(jobname: str) -> None:
+    with _QSITE_JOBS_LOCK:
+        _QSITE_ACTIVE_JOBS.add(jobname)
+
+def _unregister_qsite_job(jobname: str) -> None:
+    with _QSITE_JOBS_LOCK:
+        _QSITE_ACTIVE_JOBS.discard(jobname)
+
+def _kill_qsite_job(jobname: str) -> None:
+    """Terminate every server-side process (driver, backend, jexec, scf) carrying this jobname."""
+    try:
+        _sp.run(["pkill", "-TERM", "-f", jobname], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=10)
+    except Exception:
+        pass
+
+def _kill_all_qsite_jobs() -> None:
+    with _QSITE_JOBS_LOCK:
+        _jobs = list(_QSITE_ACTIVE_JOBS)
+    for _j in _jobs:
+        _kill_qsite_job(_j)
 
 
 def _qsite_concurrency() -> int:
-    """Concurrent single-threaded QSite scans to run: min(cores-2, RAM budget). Each Jaguar QM
-    job needs ~1.5 GB; keep 60% of MemAvailable for QSite so the MD/analysis keep headroom."""
-    cores = max(1, (os.cpu_count() or 4) - 2)
-    ram_cap = cores
+    """Concurrent single-threaded QSite scans: min(total_cpu - reserve, RAM budget).
+
+    The RAM budget mirrors the MM-GBSA planner - free RAM (MemAvailable) plus a slice of free SWAP,
+    times a headroom fraction, divided by the resident set of one Jaguar QM job. Counting swap is what
+    lets the CPU cap bind instead of the RAM cap, so the QM/MM phase can reach total_cpu-2 busy cores.
+    Every number comes from CFG; a job whose working set spills to swap runs at disk speed, which is
+    the accepted trade for utilisation (lower QSITE_RAM_SWAP_FRAC toward 0 if it thrashes).
+    """
+    cores = max(1, (os.cpu_count() or 4) - int(getattr(CFG, "PREP_CPU_RESERVE", 2)))
+    _gb = lambda key: next((int(l.split()[1]) / 1024.0 / 1024.0
+                            for l in open("/proc/meminfo") if l.startswith(key)), 0.0)
     try:
-        with open("/proc/meminfo") as _f:
-            _avail_kb = next(int(_l.split()[1]) for _l in _f if _l.startswith("MemAvailable"))
-        ram_cap = max(1, int((_avail_kb / 1024.0 / 1024.0) * 0.60 / 1.5))
+        _budget = ((_gb("MemAvailable:")
+                    + max(0.0, float(CFG.QSITE_RAM_SWAP_FRAC)) * _gb("SwapFree:"))
+                   * float(CFG.QSITE_RAM_HEADROOM_FRAC))
+        ram_cap = max(1, int(_budget / max(0.1, float(CFG.QSITE_RAM_PER_JOB_GB))))
     except Exception:
-        pass
+        ram_cap = cores
     return max(1, min(cores, ram_cap))
-# Serialises multi-line progress prints from parallel rank threads so lines never interleave.
+
+
+# Serialises the in-place \r progress lines from parallel rank threads so they never interleave.
 _PROGRESS_LOCK = threading.Lock()
-# True only when a single rank is processed (e.g. the --ranks 1 test): the per-frame counter
-# then updates in place with a carriage return; with multiple parallel ranks it appends
-# throttled lines instead (in-place \r from concurrent threads would garble).
-_PROGRESS_CR = False
 
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
@@ -3404,6 +3810,108 @@ def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
 # NAC geometry + Dream-Team tracking + WaterMap/EAF/MM-GBSA integration + QM/MM
 # frame selection, producing the per-rank NAC_Data.csv, dashboards, and stats row.
 # -----------------------------------------------------------------------------
+def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
+                             job_out_dir: Path, rank: int) -> None:
+    """The per-rank figures that need only the frame table - drawn on a fresh run and on a resume.
+
+    None of them depend on the QM/MM stage, so a finished MD is readable while QSite is still
+    scanning or when it is switched off. Residue identity comes from `row` (the ranked sheet's
+    Mapped_* columns for THIS homolog), never from a literal.
+    """
+    print(f"  [Rank {rank}] Generating trajectory figures...", flush=True)
+    generate_individual_dashboard(
+        df_res, job_name, job_out_dir / f"01_{job_name}_NAC_Dashboard.png", stats)
+    generate_active_site_dynamics(
+        df_res, row, job_out_dir / f"02_{job_name}_Active_Site_Dynamics.png")
+    generate_free_energy_landscapes(
+        df_res, job_out_dir / f"03_{job_name}_Free_Energy_Landscapes.png")
+    _md_root = job_out_dir.parent.parent / "6_Physics_Validation" / "05_MD_Simulations"
+    _cands = [d for d in (_md_root / f"desmond_md_job_R_{rank}",) if d.is_dir()]
+    _mmg_csv = [q for d in _cands for q in sorted(d.glob("*mmgbsa*.csv"))]
+    if _mmg_csv:
+        generate_mmgbsa_trace(pd.read_csv(_mmg_csv[0]),
+                              job_out_dir / f"04_{job_name}_MMGBSA_Trace.png")
+
+
+def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
+                           n_attempted: int, stats: dict) -> None:
+    """Parse every QM/MM scan folder and fold the result into `stats`.
+
+    Split out so it serves both paths: a fresh run (folders just scanned) and a resume (folders found
+    on disk from an earlier run). Parsing is seconds of work, so a completed rank is re-read rather
+    than re-scanned, and the reaction-profile figure is always redrawn from the parsed data.
+    """
+    _barriers, _derxns = [], []
+    for _k, _fold in enumerate(folds):
+        _res = parse_qsite_barrier(_fold, job_name)
+        _b = _res.get("QSite_Barrier_kcal")
+        if _b == _b:   # not NaN → a barrier was parsed
+            _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
+        if _k == 0:
+            # Primary frame: full reaction profile (PES + departing-fluoride
+            # charge) → the direct "did it defluorinate" figure + F-charge cols.
+            _prof = parse_qsite_profile(_fold, job_name)
+            plot_qsite_reaction_profile(
+                job_out_dir / f"07_{job_name}_QSite_Reaction_Profile.png", job_name, rank, _prof)
+            for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
+                stats[_fk] = _prof.get(_fk, np.nan)
+    if _barriers:
+        '''
+        The reported barrier is the RATE-WEIGHTED ENSEMBLE barrier,
+
+            ΔE‡_ens = −RT · ln ⟨ exp(−ΔE‡ᵢ / RT) ⟩ ,
+
+        not the minimum over the scored frames. A minimum is an extreme-value statistic, not a
+        property of the ensemble: its downward bias grows with the number of frames that happened
+        to parse, so a candidate with four failed scans and one lucky low barrier would outrank a
+        candidate with five consistent ones. The bias compounds with the frame SELECTION that
+        precedes this, which already favours the most TS-like geometry - taking a minimum
+        afterwards maximises the same quantity twice and reports the result as a barrier.
+
+        The exponential average is the right correction because it is what the RATE actually
+        averages: the observable is ⟨k⟩ ∝ ⟨exp(−ΔE‡/RT)⟩, and inverting that gives the effective
+        barrier the ensemble would exhibit. It is well behaved at both limits - for frames of
+        equal barrier it returns that barrier exactly, and when one frame lies far below the rest
+        it returns approximately min + RT·ln(N), i.e. it re-applies precisely the penalty that
+        the best-of-N search removed. ΔE_rxn is averaged with the SAME Boltzmann weights, so the
+        two halves of the verdict describe one ensemble rather than one frame each.
+
+        The minimum is still reported, as QSite_Barrier_Min_kcal, and the number of frames that
+        were ATTEMPTED is recorded next to the number that were SCORED - a silent parse failure
+        is otherwise indistinguishable from a frame that was never run.
+        '''
+        _RT_q  = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+        _b_arr = np.asarray(_barriers, dtype=float)
+        _d_arr = np.asarray(_derxns,   dtype=float)
+        # Shift by the minimum before exponentiating: exp(-ΔE/RT) underflows for ΔE ≳ 200 kcal,
+        # and the shift cancels exactly in the log, so this is algebra, not an approximation.
+        _b_min = float(np.min(_b_arr))
+        _w     = np.exp(-(_b_arr - _b_min) / _RT_q)
+        _b_ens = _b_min - _RT_q * float(np.log(np.mean(_w)))
+        _wsum  = float(np.sum(_w))
+        _d_ens = float(np.sum(_w * _d_arr) / _wsum) if _wsum > 0 else float(np.mean(_d_arr))
+
+        stats["QSite_Barrier_kcal"]        = round(_b_ens, 2)   # rate-weighted ensemble ΔE‡
+        stats["QSite_Barrier_Min_kcal"]    = round(_b_min, 2)   # most accessible single frame
+        stats["QSite_Barrier_Mean_kcal"]   = round(float(np.mean(_b_arr)), 2)
+        stats["QSite_Barrier_SD_kcal"]     = (round(float(np.std(_b_arr, ddof=1)), 2)
+                                              if len(_b_arr) > 1 else np.nan)
+        stats["QSite_dErxn_kcal"]          = round(_d_ens, 2)
+        stats["QSite_N_Frames_Scored"]     = int(len(_b_arr))
+        stats["QSite_N_Frames_Attempted"]  = int(n_attempted)
+
+        _sd_txt = ("n/a" if len(_b_arr) < 2
+                   else f"{stats['QSite_Barrier_SD_kcal']:.1f}")
+        print(f"  [Rank {rank}] QM/MM ΔE‡(ensemble) = {_b_ens:.1f} kcal/mol "
+              f"(min {_b_min:.1f}, mean {stats['QSite_Barrier_Mean_kcal']:.1f} ± {_sd_txt}, "
+              f"scored {len(_b_arr)}/{n_attempted} frames) | "
+              f"ΔE_rxn = {stats['QSite_dErxn_kcal']:.1f} kcal/mol", flush=True)
+        if len(_b_arr) < n_attempted:
+            console_info(f"    [!] {n_attempted - len(_b_arr)} of {n_attempted} QM/MM frame(s) did not "
+                         f"yield a barrier - the ensemble average is over the {len(_b_arr)} that did.")
+
+
+
 def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        master_out_dir: Path, lig_resname: str, stride: int,
                        triad_override: dict = None,
@@ -3467,6 +3975,40 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     job_out_dir = master_out_dir / f"Rank_{rank}_{_dir_label}"
     job_out_dir.mkdir(parents=True, exist_ok=True)
     console_info(f"Processing Rank {rank} [Stride={stride}]: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}")
+
+    """
+    Resume. Streaming a 100,000-frame trajectory is the expensive part of this step and its full
+    result is already on disk - the per-frame table and the statistics JSON - so a rank whose frame
+    pass AND QM/MM scans have completed is not recomputed. Figures are cheap (seconds) and are always
+    redrawn, so a plotting change is picked up without re-reading a trajectory. The guard is
+    deliberately strict: it requires the QM/MM folders to hold parsed output (or QSite to be off), so
+    a rank whose scans never ran still takes the full path, which is what produces the frame
+    candidates those scans need. --force ignores all of this and recomputes.
+    """
+    _csv_done   = job_out_dir / f"{job_name}_NAC_Data.csv"
+    _stats_done = job_out_dir / f"{job_name}_MD_Stats.json"
+    if not _FORCE_RECOMPUTE and _csv_done.is_file() and _stats_done.is_file():
+        _folds_done = ([job_out_dir / f"{job_name}_QSite_SN2"]
+                       + sorted(job_out_dir.glob(f"{job_name}_QSite_SN2_f*")))
+        _folds_done = [f for f in _folds_done if f.is_dir()]
+        _scans_ready = (not _QSITE_RUN) or (bool(_folds_done)
+                                            and all(any(f.glob("*.out")) for f in _folds_done))
+        if _scans_ready:
+            try:
+                df_res = pd.read_csv(_csv_done)
+                with open(_stats_done) as _fh:
+                    stats = {k: (np.nan if v is None else v) for k, v in json.load(_fh).items()}
+                console_info(f"    [Rank {rank}] Resume - reusing {_csv_done.name} "
+                             f"({len(df_res):,} frames); redrawing figures only.")
+                _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
+                if _folds_done:
+                    _collect_qsite_results(job_out_dir, job_name, rank,
+                                           _folds_done, len(_folds_done), stats)
+                print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
+                return stats
+            except Exception as _exc:
+                console_info(f"    [Rank {rank}] Resume failed ({str(_exc).splitlines()[0]}) - "
+                             f"recomputing from the trajectory.")
 
     # ── Load trajectory ────────────────────────────────────────────────────────
     # First try flat lookup (single-stage jobs: *-out.cms and *_trj at folder root).
@@ -3820,8 +4362,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _done_c    = _ce
             _rate_c    = _done_c / _elapsed_c if _elapsed_c > 1e-6 else 0.0
             _eta_c     = int((_nf - _done_c) / _rate_c) if _rate_c > 0.0 else 0
-            print(f"  [Rank {rank}] Processing: {_done_c}/{_nf} frames ({_rate_c:.0f} fr/s, ETA ~{_eta_c}s)", flush=True)
-            console_info(
+            console_info(     # file log only; the terminal carries the single \r frame counter below
                 f"  Chunk {_ci + 1}/{_n_chunks}: {_done_c}/{_nf} frames "
                 f"({_rate_c:.0f} fr/s, ETA ~{_eta_c}s)"
             )
@@ -3848,17 +4389,24 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # ===============================================================================
     # Live progress cadence: ~100 updates across the trajectory (never every frame).
     _prog_step = max(1, _nf // 100)
+    _t_prog = time.time()
     for _fi, f_idx, _p, box, frame_t in _iter_frames():
-        # Live per-rank frame counter - "Processing: Rank_N: k/total frames (pct%)".
-        # In place (\r) for a single rank; throttled appended lines when ranks run parallel.
+        # Live per-rank frame counter - one refreshing "Processing: Rank_N: k/total (pct%, fr/s, ETA)"
+        # line. In place (\r) on a terminal (the lock keeps parallel ranks from interleaving); an
+        # appended line off-tty so the redirected log stays readable.
         if (_fi % _prog_step == 0) or (_fi + 1 == _nf):
             _pct_fr = int(100 * (_fi + 1) / _nf) if _nf else 100
-            _msg_fr = f"  Processing: Rank_{rank}: {_fi + 1:,}/{_nf:,} frames ({_pct_fr}%)"
+            _el_fr = time.time() - _t_prog
+            _rate_fr = (_fi + 1) / _el_fr if _el_fr > 1e-6 else 0.0
+            _eta_fr = int((_nf - _fi - 1) / _rate_fr) if _rate_fr > 0 else 0
+            _msg_fr = (f"  Processing: Rank_{rank}: {_fi + 1:,}/{_nf:,} frames "
+                       f"({_pct_fr}%, {_rate_fr:.0f} fr/s, ETA ~{_eta_fr}s)")
             with _PROGRESS_LOCK:
-                if _PROGRESS_CR and sys.stdout.isatty():
-                    print(f"\r{_msg_fr}   ", end="", flush=True)
+                if sys.stdout.isatty():
+                    sys.stdout.write(f"\r{_msg_fr}\033[K")
                     if _fi + 1 == _nf:
-                        print(flush=True)
+                        sys.stdout.write("\n")
+                    sys.stdout.flush()
                 else:
                     print(_msg_fr, flush=True)
 
@@ -3966,7 +4514,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                         _dots = np.dot(_vf_v, _v_cn) / (_lf_v * _n_cn)
                         _angs = np.degrees(np.arccos(np.clip(_dots, -1.0, 1.0)))
                         _bi   = int(np.argmax(_angs))
-                        max_ang        = float(_angs[_bi])
+                        # Multiplicity-corrected effective SN2 angle - the SAME transform Step 02 tiering
+                        # uses (CFG.sn2_effective_angle): identity for a single scissile C-F (fluoroacetate),
+                        # Šidák-deflated when the α-carbon bears several equivalent C-F bonds (DFA/TFA), so
+                        # 07's NAC gate/stats stay in lock-step with 02/03 rather than reading a raw angle.
+                        max_ang        = CFG.sn2_effective_angle(float(_angs[_bi]), len(_bonded_f))
                         best_f_idx = _bonded_f[int(np.where(_bond_mask)[0][_bi])]
 
         # ── Tail anchor: fluorine to halide cradle ────────────────────────────
@@ -4466,9 +5018,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     write_json_atomic(_stats_path, {k: _plain(v) for k, v in stats.items()})
     console_info(f"    Per-job statistics saved : {_stats_path.name}")
 
-    print(f"  [Rank {rank}] Generating dashboard chart...", flush=True)
-    generate_individual_dashboard(
-        df_res, job_name, job_out_dir / f"{job_name}_NAC_Dashboard.png", stats)
+    _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
 
     if ideal_frame_idx != -1:
         # Top-N pre-organised NAC frames for QM/MM: the ensemble barrier (min/mean/σ)
@@ -4545,76 +5095,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         elif not _QSITE_RUN:
             for _fold_r in _folds:
                 console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) - inputs in {_fold_r.name}")
-        # PHASE 3 - parse every selected frame (freshly run or cached), sequentially.
-        _barriers, _derxns = [], []
-        for _k, _cand in enumerate(_sel):
-            _fold = _folds[_k]
-            _res = parse_qsite_barrier(_fold, job_name)
-            _b = _res.get("QSite_Barrier_kcal")
-            if _b == _b:   # not NaN → a barrier was parsed
-                _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
-            if _k == 0:
-                # Primary frame: full reaction profile (PES + departing-fluoride
-                # charge) → the direct "did it defluorinate" figure + F-charge cols.
-                _prof = parse_qsite_profile(_fold, job_name)
-                plot_qsite_reaction_profile(
-                    job_out_dir / f"{job_name}_QSite_Reaction_Profile.png", job_name, rank, _prof)
-                for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
-                    stats[_fk] = _prof.get(_fk, np.nan)
-        if _barriers:
-            '''
-            The reported barrier is the RATE-WEIGHTED ENSEMBLE barrier,
-
-                ΔE‡_ens = −RT · ln ⟨ exp(−ΔE‡ᵢ / RT) ⟩ ,
-
-            not the minimum over the scored frames. A minimum is an extreme-value statistic, not a
-            property of the ensemble: its downward bias grows with the number of frames that happened
-            to parse, so a candidate with four failed scans and one lucky low barrier would outrank a
-            candidate with five consistent ones. The bias compounds with the frame SELECTION that
-            precedes this, which already favours the most TS-like geometry - taking a minimum
-            afterwards maximises the same quantity twice and reports the result as a barrier.
-
-            The exponential average is the right correction because it is what the RATE actually
-            averages: the observable is ⟨k⟩ ∝ ⟨exp(−ΔE‡/RT)⟩, and inverting that gives the effective
-            barrier the ensemble would exhibit. It is well behaved at both limits - for frames of
-            equal barrier it returns that barrier exactly, and when one frame lies far below the rest
-            it returns approximately min + RT·ln(N), i.e. it re-applies precisely the penalty that
-            the best-of-N search removed. ΔE_rxn is averaged with the SAME Boltzmann weights, so the
-            two halves of the verdict describe one ensemble rather than one frame each.
-
-            The minimum is still reported, as QSite_Barrier_Min_kcal, and the number of frames that
-            were ATTEMPTED is recorded next to the number that were SCORED - a silent parse failure
-            is otherwise indistinguishable from a frame that was never run.
-            '''
-            _RT_q  = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
-            _b_arr = np.asarray(_barriers, dtype=float)
-            _d_arr = np.asarray(_derxns,   dtype=float)
-            # Shift by the minimum before exponentiating: exp(-ΔE/RT) underflows for ΔE ≳ 200 kcal,
-            # and the shift cancels exactly in the log, so this is algebra, not an approximation.
-            _b_min = float(np.min(_b_arr))
-            _w     = np.exp(-(_b_arr - _b_min) / _RT_q)
-            _b_ens = _b_min - _RT_q * float(np.log(np.mean(_w)))
-            _wsum  = float(np.sum(_w))
-            _d_ens = float(np.sum(_w * _d_arr) / _wsum) if _wsum > 0 else float(np.mean(_d_arr))
-
-            stats["QSite_Barrier_kcal"]        = round(_b_ens, 2)   # rate-weighted ensemble ΔE‡
-            stats["QSite_Barrier_Min_kcal"]    = round(_b_min, 2)   # most accessible single frame
-            stats["QSite_Barrier_Mean_kcal"]   = round(float(np.mean(_b_arr)), 2)
-            stats["QSite_Barrier_SD_kcal"]     = (round(float(np.std(_b_arr, ddof=1)), 2)
-                                                  if len(_b_arr) > 1 else np.nan)
-            stats["QSite_dErxn_kcal"]          = round(_d_ens, 2)
-            stats["QSite_N_Frames_Scored"]     = int(len(_b_arr))
-            stats["QSite_N_Frames_Attempted"]  = int(len(_sel))
-
-            _sd_txt = ("n/a" if len(_b_arr) < 2
-                       else f"{stats['QSite_Barrier_SD_kcal']:.1f}")
-            print(f"  [Rank {rank}] QM/MM ΔE‡(ensemble) = {_b_ens:.1f} kcal/mol "
-                  f"(min {_b_min:.1f}, mean {stats['QSite_Barrier_Mean_kcal']:.1f} ± {_sd_txt}, "
-                  f"scored {len(_b_arr)}/{len(_sel)} frames) | "
-                  f"ΔE_rxn = {stats['QSite_dErxn_kcal']:.1f} kcal/mol", flush=True)
-            if len(_b_arr) < len(_sel):
-                console_info(f"    [!] {len(_sel) - len(_b_arr)} of {len(_sel)} QM/MM frame(s) did not "
-                             f"yield a barrier - the ensemble average is over the {len(_b_arr)} that did.")
+        _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel), stats)
 
     print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats
@@ -4686,6 +5167,9 @@ def main():
                         help="Path to master CSV (auto-detected if omitted)")
     parser.add_argument("--workers", type=int, default=None,
                         help="Number of parallel workers (default: auto-detect based on CPU cores)")
+    parser.add_argument("--force", action="store_true",
+                        help="Recompute every rank from the trajectory even when its per-frame table "
+                             "and QM/MM output already exist (default: reuse them, redraw figures).")
     parser.add_argument("--no-run-qsite", action="store_true",
                         help="Only write QSite .in/.mae inputs; do not launch the QSite executable.")
     parser.add_argument("--qsite-procs", type=int, default=None,
@@ -4693,18 +5177,38 @@ def main():
     args = parser.parse_args()
 
     # QSite execution policy: CFG default, overridable per-run from the CLI.
-    global _QSITE_RUN, _QSITE_PROCS, _PROGRESS_CR, _QSITE_SEM
+    global _QSITE_RUN, _QSITE_PROCS, _QSITE_SEM, _FORCE_RECOMPUTE
+    _FORCE_RECOMPUTE = bool(args.force)
     _QSITE_RUN = CFG.QSITE_RUN and not args.no_run_qsite
-    # QSite QM/MM (Impact main1h) is single-threaded here, so -PARALLEL >1 only spawns idle
-    # helpers: default 1 proc per job, and instead run many scans concurrently (below).
-    _QSITE_PROCS = args.qsite_procs if args.qsite_procs is not None else 1
+    # The QM engine is single-threaded (CFG.QSITE_PROCS = 1): -PARALLEL >1 only spawns idle helpers,
+    # so throughput comes from running many scans concurrently (see _qsite_concurrency).
+    _QSITE_PROCS = args.qsite_procs if args.qsite_procs is not None else int(CFG.QSITE_PROCS)
     _QSITE_SEM = threading.Semaphore(_qsite_concurrency())
     console_info(f"QSite concurrency: up to {_qsite_concurrency()} single-threaded QM/MM scans in "
                  f"parallel (cores-2 vs RAM cap), {_QSITE_PROCS} proc/job")
 
     # Optional sudo up front so the run is fully unattended (systemd-oomd masked for the QSite phase).
-    import atexit as _atexit
     _atexit.register(_mask_oomd_at_start())
+
+    # Kill orphaned QSite job-server scans when THIS process dies. atexit covers a normal exit /
+    # unhandled exception; the signal handlers cover Ctrl+C (SIGINT) and `kill` (SIGTERM), which do
+    # not run atexit on their own. Only jobs still mid-run are registered, so a clean finish is a
+    # no-op. A detached run (screen still alive, python still running) never triggers this - correct:
+    # the jobs die only when the python that owns them dies, not when a terminal detaches.
+    _atexit.register(_kill_all_qsite_jobs)
+    def _sig_cleanup(_signum, _frame):
+        _kill_all_qsite_jobs()
+        if _OOMD_RESTORE is not None:     # Ctrl+C must not leave systemd-oomd masked
+            try:
+                _OOMD_RESTORE()
+            except Exception:
+                pass
+        raise KeyboardInterrupt if _signum == _signal.SIGINT else SystemExit(130)
+    for _sig in (_signal.SIGINT, _signal.SIGTERM):
+        try:
+            _signal.signal(_sig, _sig_cleanup)
+        except (ValueError, OSError):
+            pass   # not main thread / unsupported - atexit still covers it
 
     raw_dir  = args.run_dir or args.dir or "."
     work_dir = _resolve_work_dir(raw_dir)
@@ -4800,8 +5304,6 @@ def main():
     # serialised separately, so it cannot oversubscribe). Explicit --workers overrides.
     _cores_budget  = max(1, (os.cpu_count() or 4) - 2)
     _n_workers     = args.workers if args.workers is not None else max(1, min(len(_rank_list), _cores_budget))
-    # Single rank → in-place \r frame counter; multiple parallel ranks → throttled append lines.
-    _PROGRESS_CR   = (len(_rank_list) == 1)
 
     console_info(f"  Effective Stride : {args.stride}{' (all frames)' if args.stride == 1 else f' (1-in-{args.stride})'}")
     console_separator()
@@ -4930,7 +5432,8 @@ def main():
         return r, _log_lines, res
 
     console_info(f"Parallel workers : {_n_workers} (of {len(_rank_list)} ranks) - "
-                 f"frame/SN2 analysis parallel @ cores-2={_cores_budget}; QSite QM/MM serialised (1 at a time)")
+                 f"frame/SN2 analysis parallel @ cores-2={_cores_budget}; QSite QM/MM up to "
+                 f"{_qsite_concurrency()} scans concurrent (single-threaded engine, 1 core/job)")
     print(flush=True)
 
     _failed_ranks: list  = []
@@ -4953,7 +5456,6 @@ def main():
                 _failed_ranks.append(_r)
                 _completed_count += 1
                 console_info(f"{ConsoleColours.FAIL}[!] Rank {_r} failed: {_exc}{ConsoleColours.ENDC}")
-                import traceback as _tb
                 _tb.print_exc()
         if sys.stdout.isatty():
             print("\n", flush=True)
@@ -5177,7 +5679,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import time as _time
     _t0 = _time.perf_counter()
     main()
     _utils_mod.print_elapsed(_t0, "07_MD_QMMM_Defluorination_FAcDs.py")
