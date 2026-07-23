@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 July 2026 <────────────────────────────────────────────────────────
+Date   : 25 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_FAcDs.py
@@ -1847,6 +1847,14 @@ class CFG:
     Disclosed as a methodological restraint: it MAINTAINS the reactive complex for MM-GBSA / QM/MM;
     it does not by itself prove spontaneous binding - that is what a separate UNrestrained run (or a
     lower force constant) tests. Set MD_RESTRAIN_LIGAND = False for the original free MD.
+
+    Reading the resulting RMSD: this is restraint-ENFORCED, not spontaneous. The 5.0 kcal/mol/Å²
+    positional spring on the ligand heavy atoms (backbone 2.0) is exactly what produces a flat
+    ~0.3-0.8 Å ligand RMSD - a stiff harmonic restraint always yields that signature, so a low, flat
+    RMSD here is evidence the restraint held, NOT that the pose is spontaneously stable. The restraint
+    applies a corrective force every timestep (it is continuous, not a discrete count of "catches");
+    its work is quantified by the restraint potential energy ½·k·Σ|r_i − r_i^ref|² = ½·k·N·RMSD²,
+    which stays a few kcal/mol here (a light, constant tension), never a hard yank.
     """
     MD_RESTRAIN_LIGAND: bool        = True   #      hold the ligand in the pocket through the whole production run
     MD_RESTRAIN_LIG_FORCE_K: float  = 5.0    # kcal/mol/Å²  ligand heavy-atom positional restraint (res.ptype LIG)
@@ -3196,8 +3204,8 @@ class CFG:
     MMGBSA_READER_RAM_BASE_GB: float = 3.6          # reader RSS before any frames are read
     MMGBSA_READER_RAM_PER_1K_FRAMES_GB: float = 0.36  # reader RSS growth per 1000 frames read
     MMGBSA_PRIME_RAM_GB: float = 1.8                # measured peak RSS of ONE Prime subjob
-    MMGBSA_RAM_HEADROOM_FRAC: float = 0.85          # fraction of free RAM the run may occupy
-    MMGBSA_RAM_SWAP_FRAC: float = 0.0               # fraction of FREE SWAP added to the RAM budget; 0 = physical only (Prime on swap thrashes to disk and risks OOM kills - raise only deliberately)
+    MMGBSA_RAM_HEADROOM_FRAC: float = 0.90          # fraction of the (free RAM + free swap) budget the run may occupy; 0.90 keeps the RAM cap from binding before the CPU cap so the planner reaches total_cpu-2 busy cores
+    MMGBSA_RAM_SWAP_FRAC: float = 1.0               # fraction of FREE SWAP added to the RAM budget. 1.0 = use ALL free swap so the shard planner packs the most concurrent Prime shards and drives the CPU post-processing to total_cpu-2 (fastest). Prime working set that spills onto swap pages to disk (slower per shard) and raises OOM risk - deliberate: user opted for maximum utilisation over caution. Lower toward 0 if it thrashes/OOM-kills.
     MMGBSA_SHARD_SUBDIR: str = "_MMGBSA_Shards"   # per-shard logs and Prime outputs live here, out of the job folder's glob path
     """
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.
