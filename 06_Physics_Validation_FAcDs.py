@@ -18,6 +18,10 @@ Per run, in phases (all complexes at each phase before the next):
                 buffer, OPLS4), auto-neutralise + 0.15 M NaCl, then write the ESP charges
                 into the built .cms force field and HARD-VERIFY (→ 04_System_Builder).
   4. MD       - Desmond MD (relax + NPT production) → 05_MD_Simulations, pipelined GPU→CPU per rank.
+                The ligand + backbone pose restraint spans the FINAL relaxation stage and all of
+                production (not production alone): the stock relaxation's last stage runs unrestrained,
+                which would let the substrate relax out of the near-attack docked pose before
+                production's restraint engages, so it is injected there too (see _md_msj).
                 Each rank's MD runs on the GPU; the instant it lands and its files settle, that rank's
                 Extraction (unpack the production _trj/.ene) → SID (event_analysis + analyze_simulation
                 → *_SID-out.eaf) → Prime MM-GBSA (thermal_mmgbsa → per-frame ΔG_bind) → defluorination
@@ -156,6 +160,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.colors as _mcolors  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 import matplotlib.patheffects as pe  # noqa: E402
@@ -278,11 +283,14 @@ def _close_bar() -> None:
 
 
 def _worker_progress(msg: str) -> None:
-    """Emit a CPU-worker progress line (extraction / SID / MM-GBSA) as a full logged line. The MD
-    heartbeat owns the live \r bar on the main thread; the worker runs concurrently, so its progress
-    is printed as whole lines (visible on the terminal AND written to the log) rather than a second \r
-    line that the MD bar would overwrite."""
-    _echo(f"  [PROGRESS] {msg}")
+    """Refresh the shared single \r progress line from a CPU worker (extraction / SID / MM-GBSA).
+
+    Uses the same one-line \r bar as the MD heartbeat (_progress_line), so a long SID or MM-GBSA read
+    updates IN PLACE instead of scrolling a new line every tick. When a CPU worker and the GPU MD
+    heartbeat run concurrently they share that one line (serialised by _CONSOLE_LOCK): the line shows
+    whichever ticked last. Terminal only - never the log, so the log keeps only the phase start/finish
+    lines, not thousands of progress ticks."""
+    _progress_line(msg)
 
 
 def _echo(msg: str = "") -> None:
@@ -704,7 +712,8 @@ class Heartbeat:
         _worker_progress(msg)
 
     def _end_line(self) -> None:
-        """No live \r line to close - progress is emitted as whole lines."""
+        """Close the shared \r progress line at phase change / completion (newline)."""
+        _close_bar()
 
     def _latest_frame(self, text: str) -> int:
         """Largest last-match across all configured patterns (phase-tolerant)."""
@@ -2788,6 +2797,20 @@ _DEFL_MUTE = CFG.VIS_INK["mid"]              # zero-reference line
 _DEFL_GRID_X = CFG.VIS_INK["faint"]          # neutral grey gridlines (never a data-line colour)
 _DEFL_GRID_Y = CFG.VIS_INK["faint"]          # neutral grey gridlines (never a data-line colour)
 _DEFL_AXTXT = CFG.VIS_INK["near_black"]       # axis labels + tick values (black)
+_DEFL_TEXT_MAX_LUM = float(getattr(CFG, "VIS_TEXT_MAX_LUM", 0.42))   # bar colour used as TEXT darkened to at most this luminance (CFG SSOT)
+
+
+def _readable(colour, max_lum: float = _DEFL_TEXT_MAX_LUM) -> str:
+    """A bar's own colour, darkened toward its hue until it reads on white - so the same colour can name
+    the bar's y-label AND its value without a light hue (yellow, sky, amber) vanishing. Colours already
+    dark enough (blue, vermillion, green, near-black) are returned unchanged. Relative luminance is
+    linear in a uniform RGB scale, so one factor both lowers it to the target and preserves the hue."""
+    r, g, b = _mcolors.to_rgb(colour)
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    if lum <= max_lum or lum == 0.0:
+        return _mcolors.to_hex((r, g, b))
+    k = max_lum / lum
+    return _mcolors.to_hex((r * k, g * k, b * k))
 _DEFL_NAC_DIST = float(getattr(CFG, "DEFLUOR_NAC_DIST_A", 3.5))      # Od...C(alpha) near-attack distance
 _DEFL_NAC_ANGLE = float(getattr(CFG, "DEFLUOR_NAC_ANGLE_DEG", 150.0))  # Od-C(alpha)-F in-line attack angle
 _DEFL_ENGAGE = float(getattr(CFG, "DEFLUOR_ENGAGE_A", 4.0))          # residue engaged with ligand within this
@@ -3016,64 +3039,120 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.7)
         ax.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.7); ax.set_axisbelow(True)
 
-    # 01 attack geometry
+    # 01 attack geometry - dual axis, each axis LABEL + tick VALUES coloured to its own trace so the two
+    # solid traces are named by their axes; a single bottom-right row legend carries only the reference
+    # markers (the two dashed NAC cut-offs + the NAC-competent verdict). Robust to both regimes: a
+    # collapsed pose (~0 % NAC, distance high / angle low) and a held near-attack pose (high NAC, distance
+    # low / angle high) both read correctly.
+    _axlab = float(CFG.VIS_FONT_AXIS_LABEL)
     fig, ax1 = plt.subplots(figsize=(11, 4.6))
-    l1, = ax1.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
-    ax1.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.5)
-    ax1.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT); ax1.set_ylabel("attack distance (Å)", color=_DEFL_AXTXT, labelpad=2)
-    ax1.tick_params(axis="y", labelcolor=_DEFL_AXTXT); ax1.set_ylim(0, attack.max() * 1.05)
-    ax1.set_xticks(np.arange(0, total_ns + 1, 50)); ax1.set_yticks(np.arange(0, attack.max() * 1.05, 4))
-    ax1.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
-    # black axis labels + values, neutral grey grid (distinct from every coloured data line).
+    ax1.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
+    _cut_d = ax1.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.55)
+    ax1.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
+    ax1.set_ylabel(f"ASP{R['nuc']} Oδ···Cα attack distance (Å)", color=_DEFL_OKABE[0], labelpad=3, fontsize=_axlab)
+    # unit ticks over a 0-based range that always spans the data AND the cut-off (a lone 0/4 was the bug).
+    _top = float(np.ceil(max(float(np.nanmax(attack)), _DEFL_NAC_DIST)))
+    ax1.set_ylim(0, _top); ax1.set_yticks(np.arange(0, _top + 0.001, 1))
+    ax1.set_xticks(np.arange(0, total_ns + 1, 50))
+    ax1.tick_params(axis="y", labelcolor=_DEFL_OKABE[0]); ax1.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
     ax1.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.5)
     ax1.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.5); ax1.set_axisbelow(True)
     ax2 = ax1.twinx()
-    l2, = ax2.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
-    ax2.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.5)
-    ax2.set_ylabel("SN2 attack angle (°)", color=_DEFL_AXTXT, labelpad=2)
-    ax2.tick_params(axis="y", labelcolor=_DEFL_AXTXT); ax2.set_ylim(0, 180)
-    b = ax1.fill_between(t, 0, ax1.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=0.18, step="mid")
-    ax1.legend([l1, l2, b], [f"ASP{R['nuc']} Oδ···Cα distance", "Oδ–Cα–F attack angle",
-               f"NAC-competent ({nac_pct:.1f}%)"], loc="upper right", ncol=3, framealpha=_FA, fontsize=_LF)
+    ax2.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
+    _cut_a = ax2.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.6)
+    ax2.set_ylabel("Oδ–Cα–F backside attack angle (°)", color=_DEFL_OKABE[1], labelpad=3, fontsize=_axlab)
+    ax2.set_ylim(0, 180); ax2.set_yticks(np.arange(0, 181, 30)); ax2.tick_params(axis="y", labelcolor=_DEFL_OKABE[1])
+    _band = ax1.fill_between(t, 0, ax1.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=0.18, step="mid")
+    # The two solid traces are named by their coloured axis labels; the legend carries only the reference
+    # markers - the two dashed NAC cut-offs and the NAC-competent verdict - as one bottom-right row. The
+    # dashed-line + band handles come straight from the artists, so no proxy imports are needed. Put it on
+    # ax2 (the twin, drawn last) with a high zorder so it sits ON TOP of both traces, not under the angle
+    # line the way an ax1 legend would.
+    _leg = ax2.legend([_cut_d, _cut_a, _band],
+                      [f"NAC distance ≤ {_DEFL_NAC_DIST:.1f} Å", f"in-line attack ≥ {_DEFL_NAC_ANGLE:.0f}°",
+                       f"NAC-competent ({nac_pct:.1f}%)"],
+                      loc="lower right", ncol=3, framealpha=_FA, fontsize=_LF,
+                      handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+    _leg.set_zorder(20)
     fig.tight_layout(); fig.savefig(out / "01_SN2_Attack_Geometry.png", dpi=_dpi); plt.close(fig)
 
-    # 02 cradle + clamp
+    # 02 cradle + clamp - no legend: each residue is named horizontally in the left-margin gap, coloured
+    # to its own trace, at that trace's starting level. The residue label identifies the line, so the
+    # legend is redundant. Residue names come from the trace keys (mapped per homolog), never hardcoded.
+    # When two traces start at the same level (ARG111/ARG114 in the clamp panel) the labels are nudged
+    # apart in y so they never overlap.
     _cmax = float(np.nanmax([np.nanmax(d) for d in cradle_d.values()])) * 1.05
     _lmax = float(np.nanmax([np.nanmax(d) for d in clamp_d.values()])) * 1.05
+    _lblf = float(CFG.VIS_FONT_TICK_DENSE)
+
+    def _edge_labels(ax, entries, ymax):
+        """Write each (label, colour, start_y) horizontally in the left gap, right-aligned just left of
+        the first frame and min-separated in y so neighbours never overlap."""
+        _xp = -total_ns * 0.006
+        _sep = ymax * 0.05
+        _ent = sorted(entries, key=lambda e: e[2])
+        _ys = [e[2] for e in _ent]
+        for _i in range(1, len(_ys)):
+            if _ys[_i] - _ys[_i - 1] < _sep:
+                _ys[_i] = _ys[_i - 1] + _sep
+        for (_lab, _col, _), _y in zip(_ent, _ys):
+            ax.text(_xp, min(_y, ymax * 0.98), _lab, ha="right", va="center",
+                    color=_col, fontsize=_lblf, clip_on=False)
+
+    def _start_level(d):
+        return float(np.nanmean(d[:max(1, len(d) // 50)]))   # avg of the first ~2 % of frames
+
     fig, (axt, axb) = plt.subplots(2, 1, figsize=(11, 7.4), sharex=True)
+    _lab_top = []
     for (k, d), c in zip(cradle_d.items(), _DEFL_OKABE):
-        axt.plot(t, d, lw=0.8, color=c, label=f"F···{k}")
+        axt.plot(t, d, lw=0.8, color=c)
+        _lab_top.append((f"F···{k}", c, _start_level(d)))
     axt.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
     axt.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT); axt.set_ylim(0, _cmax)
     axt.set_yticks(np.arange(0, _cmax, 4)); axt.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axt)
-    axt.legend(loc="upper right", ncol=5, fontsize=_LF, framealpha=_FA, columnspacing=CFG.VIS_LEGEND_COLUMNSPACING, handlelength=CFG.VIS_LEGEND_HANDLELENGTH)
+    _edge_labels(axt, _lab_top, _cmax)
+    _lab_bot = []
     for (k, d), c in zip(clamp_d.items(), [_DEFL_OKABE[4], _DEFL_OKABE[2]]):
-        axb.plot(t, d, lw=0.8, color=c, label=f"{k} → carboxylate")
+        axb.plot(t, d, lw=0.8, color=c)
+        _lab_bot.append((k, c, _start_level(d)))
     axb.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
     axb.set_ylabel("Arg NHx ··· carboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
     axb.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
     axb.set_ylim(0, _lmax); axb.set_yticks(np.arange(0, _lmax, 4))
     axb.set_xticks(np.arange(0, total_ns + 1, 50))
     axb.tick_params(axis="y", labelcolor=_DEFL_AXTXT); axb.tick_params(axis="x", labelcolor=_DEFL_AXTXT); _dgrid(axb)
-    axb.legend(loc="upper right", ncol=2, fontsize=_LF, framealpha=_FA)
+    # Widen the left gap (shared via sharex) so the horizontal residue labels sit clear of the data AND
+    # of the y-tick numbers; the widest label ("F···TRP156") measures ~67 ns, so 8 % of the axis is the
+    # tightest room that still clears it.
+    axt.set_xlim(-total_ns * 0.08, total_ns * 1.005)
+    _edge_labels(axb, _lab_bot, _lmax)
     fig.tight_layout(); fig.savefig(out / "02_Fluoride_Cradle_and_Carboxylate_Clamp.png", dpi=_dpi); plt.close(fig)
 
-    # 03 reactive summary
+    # 03 reactive summary - each bar's y-tick label AND its value (written just right of the bar, never
+    # inside) take that bar's colour, so residue/criterion, bar and number all read as one coloured unit.
     fig, (axa, axb2) = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw={"width_ratios": [1.7, 1]})
     names = list(occ.keys()); vals = [occ[k] for k in names]
-    axa.barh(names, vals, color=_DEFL_OKABE[:len(names)]); axa.invert_yaxis()
+    _cols_a = list(_DEFL_OKABE[:len(names)])
+    _txt_a = [_readable(c) for c in _cols_a]   # bars keep the bright hue; label/value text is legible
+    axa.barh(names, vals, color=_cols_a); axa.invert_yaxis()
     axa.set_xlabel(f"% of trajectory within {_DEFL_ENGAGE:.0f} Å of ligand")
     axa.grid(axis="x", alpha=0.3); axa.set_xlim(0, max(vals) * 1.28 + 1)
-    for i, v in enumerate(vals):
-        axa.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=CFG.VIS_FONT_LEGEND)
+    for _lbl, _col in zip(axa.get_yticklabels(), _txt_a):
+        _lbl.set_color(_col)
+    for i, (v, _col) in enumerate(zip(vals, _txt_a)):
+        axa.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=CFG.VIS_FONT_LEGEND, color=_col)
     crit = [(f"attack distance < {_DEFL_NAC_DIST:.1f} Å", dist_pct, _DEFL_OKABE[0]),
             (f"SN2 angle > {_DEFL_NAC_ANGLE:.0f}°", angle_pct, _DEFL_OKABE[1]),
             ("NAC-competent (both)", nac_pct, _DEFL_GREEN)]
-    axb2.barh([c[0] for c in crit], [c[1] for c in crit], color=[c[2] for c in crit]); axb2.invert_yaxis()
+    _cols_b = [c[2] for c in crit]
+    _txt_b = [_readable(c) for c in _cols_b]
+    axb2.barh([c[0] for c in crit], [c[1] for c in crit], color=_cols_b); axb2.invert_yaxis()
     axb2.set_xlabel("% of frames satisfying criterion")
     axb2.grid(axis="x", alpha=0.3); axb2.set_xlim(0, max(max(c[1] for c in crit) * 1.35, 1) + 1)
-    for i, c in enumerate(crit):
-        axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=CFG.VIS_FONT_TICK)
+    for _lbl, _col in zip(axb2.get_yticklabels(), _txt_b):
+        _lbl.set_color(_col)
+    for i, (c, _col) in enumerate(zip(crit, _txt_b)):
+        axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=CFG.VIS_FONT_TICK, color=_col)
     fig.tight_layout(); fig.savefig(out / "03_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
 
     # 07 binding vs reactivity (only when MM-GBSA is available for this rank)
@@ -3093,8 +3172,11 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.axvline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.6, label=f"attack cutoff {_DEFL_NAC_DIST} Å")
         ax.set_ylim(_lo * 1.1, 5.0)
         _xa = attack[m]
-        ax.set_xticks(np.arange(np.floor(_xa.min() / 2) * 2, np.ceil(_xa.max()) + 1, 2))
-        ax.tick_params(axis="x", rotation=90)
+        # 0.5-Å ticks, horizontal: a step of 2 left only "2" and "4" on the axis, and the 90° rotation
+        # was needless for short numbers.
+        _x0 = np.floor(float(_xa.min()) * 2) / 2
+        _x1 = np.ceil(float(_xa.max()) * 2) / 2
+        ax.set_xticks(np.arange(_x0, _x1 + 0.01, 0.5))
         ax.set_xlabel("attack distance (Å)")
         ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
         ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
@@ -3266,27 +3348,39 @@ def _build_msj(lig_indices: str) -> str:
     )
 
 
+def _restraint_block() -> str:
+    """The ligand + backbone positional restraint (Desmond `restrain`), or '' when MD_RESTRAIN_LIGAND
+    is off. One definition, used by BOTH the final relaxation stage and production so the near-attack
+    docked pose is held continuously from equilibration into production.
+
+    Positionally restrain the ligand heavy atoms so a small substrate cannot diffuse out of the pocket
+    (the escape artefact) or relax out of the reactive geometry, plus a gentle backbone anchor so the
+    protein does not translate/tumble in the box and drag the ligand restraint off the moving site.
+    Proven msj syntax (cf. $SCHRODINGER .../data/desmond/kinetics_membrane_md.msj production stage).
+    """
+    if not getattr(CFG, "MD_RESTRAIN_LIGAND", False):
+        return ""
+    _lig_res = getattr(CFG, "LIGAND_RESNAME_ASSERT", "LIG")
+    return (
+        f'  restrain = [\n'
+        f'    {{atom = "asl: (res.ptype {_lig_res}) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_LIG_FORCE_K}}}\n'
+        f'    {{atom = "asl: (backbone) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_BB_FORCE_K}}}\n'
+        f'  ]\n'
+    )
+
+
 def _md_production(time_ps: float, interval_ps: float) -> str:
     """MD production stage appended to the Desmond relaxation protocol (minimise + staged NVT/NPT
     equilibration with restraints, then production). NPT at MD_EQUIL_TARGET_T / PHYS_MD_PRESSURE_BAR,
     RESPA PHYS_MD_TIMESTEP_PS, energies every PHYS_MD_ENESEQ_PS ps - all from CFG §17b.
+
+    The ligand + backbone restraint (`_restraint_block`) is ON for production; the same block is also
+    injected into the final relaxation stage by `_md_msj`, so the docked catalytic pose is held from
+    equilibration onward rather than being allowed to collapse just before production begins.
     """
     temp = CFG.MD_EQUIL_TARGET_T                                   # one temperature for MD + MM-GBSA
     dt = " ".join(str(x) for x in CFG.PHYS_MD_TIMESTEP_PS)
-    # Ligand-retention restraints kept ON through production (Desmond `restrain` block, CFG §9.2b):
-    # positionally restrain the ligand heavy atoms so a small substrate cannot diffuse out of the
-    # pocket (the escape artefact), plus a gentle backbone anchor so the protein does not translate/
-    # tumble in the box and drag the ligand restraint off the moving site. Proven msj syntax (cf.
-    # $SCHRODINGER .../data/desmond/kinetics_membrane_md.msj production stage). Off → original free MD.
-    _restrain = ""
-    if getattr(CFG, "MD_RESTRAIN_LIGAND", False):
-        _lig_res = getattr(CFG, "LIGAND_RESNAME_ASSERT", "LIG")
-        _restrain = (
-            f'  restrain = [\n'
-            f'    {{atom = "asl: (res.ptype {_lig_res}) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_LIG_FORCE_K}}}\n'
-            f'    {{atom = "asl: (backbone) and not (atom.ele H)" force_constant = {CFG.MD_RESTRAIN_BB_FORCE_K}}}\n'
-            f'  ]\n'
-        )
+    _restrain = _restraint_block()
     return (
         f'\nsimulate {{\n'
         f'  title       = "Production MD"\n'
@@ -3337,18 +3431,58 @@ def _cancel_launched_jobs() -> None:
     names = set(_LAUNCHED_JOBS)
     try:
         out = subprocess.run([f"{SCHRO}/jsc", "list", "-j"], capture_output=True, text=True, timeout=30).stdout
+        # Match a registered job AND its stage subjobs: multisim runs the MD as stage subjobs named
+        # "<jobname>_<stage>" (production is the last), so cancelling only the exact parent name misses
+        # the detached stage that is actually on the GPU. Prefix-match catches "desmond_md_job_R_8_7".
+        ids = [p[0] for ln in out.splitlines()
+               if len(p := ln.split()) >= 2 and (p[1] in names or any(p[1].startswith(n + "_") for n in names))]
+        if ids:
+            _echo(f"\n  {_C.WARNING}[cleanup] script exiting - cancelling {len(ids)} running job(s): "
+                  f"{', '.join(sorted(names))}{_C.ENDC}")
+            subprocess.run([f"{SCHRO}/jsc", "cancel", *ids], timeout=90)
     except Exception:
-        return
-    ids = [p[0] for ln in out.splitlines()
-           if len(p := ln.split()) >= 2 and p[1] in names]
-    if not ids:
+        pass   # jsc unreachable → still fall through to the direct Desmond process-tree kill below
+    _kill_desmond_jobs(names)
+
+
+def _kill_desmond_jobs(names: "set[str]") -> None:
+    """Force-terminate any Desmond MD process chain still on the GPU for a job THIS run launched.
+
+    multisim hands the MD to jobserverd, which runs it under its own `job_supervisord` re-parented to
+    init - so killing the 06 process (and its multisim parent) orphans `gdesmond` on the GPU, and a
+    `jsc cancel` on the parent name does not always reach the detached stage subjob. Belt-and-braces:
+    match running processes by one of THIS run's registered jobnames in their command line and kill the
+    process group by explicit PID. Only names the run registered are matched (never a bare pattern that
+    could hit a concurrent run's identically-named job), and only the Desmond executables - never an
+    arbitrary process. NOTE: this runs from the SIGINT/SIGTERM/SIGHUP handler and atexit; a `kill -9`
+    (SIGKILL) on 06 is uncatchable and will still orphan the job - use Ctrl-C or `kill` for a clean stop."""
+    md_names = [n for n in names if n.startswith("desmond_md_job_")]
+    if not md_names:
         return
     try:
-        _echo(f"\n  {_C.WARNING}[cleanup] script exiting - cancelling {len(ids)} running job(s): "
-              f"{', '.join(sorted(names))}{_C.ENDC}")
-        subprocess.run([f"{SCHRO}/jsc", "cancel", *ids], timeout=90)
+        out = subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=15).stdout
     except Exception:
-        pass
+        return
+    _exes = ("gdesmond", "desmond_driver", "job_supervisord", "chorus_multijob")
+    victims = []
+    for ln in out.splitlines():
+        parts = ln.strip().split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit() and any(e in parts[1] for e in _exes) \
+                and any(n in parts[1] for n in md_names):
+            victims.append(int(parts[0]))
+    if not victims:
+        return
+    for _sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in victims:
+            try:
+                os.killpg(os.getpgid(pid), _sig)
+            except (ProcessLookupError, PermissionError):
+                try:
+                    os.kill(pid, _sig)
+                except (ProcessLookupError, PermissionError):
+                    pass
+        if _sig is signal.SIGTERM:
+            time.sleep(2)
 
 
 def _run_tracked(cmd: list, *, cwd=None, stdout=None, stderr=None, check: bool = False):
@@ -3666,7 +3800,26 @@ def _md_msj(time_ps: float, interval_ps: float) -> str:
     if not relax or not Path(relax).exists():
         raise RuntimeError("desmond_npt_relax.msj not found - refusing to run production on an "
                            "unequilibrated box (equilibration must precede production).")
-    return Path(relax).read_text() + _md_production(time_ps=time_ps, interval_ps=interval_ps)
+    relax_text = Path(relax).read_text()
+
+    # The stock relaxation releases ALL restraints in its final "NPT and no restraints" stage. With the
+    # ligand unrestrained for that stage, the substrate relaxes out of the near-attack docked pose
+    # (Boltz/PrepWizard place Oδ···Cα in-line at ~170°; the classical OPLS4 minimum is a side-on ~90°
+    # contact) BEFORE production's restraint engages, so production then locks the collapsed pose and
+    # every downstream frame - including the Step-07 QM/MM starting geometry - is non-reactive. Inject
+    # the production restraint block into that final stage so the ligand pose is held continuously from
+    # equilibration into production. The stage title is the marker; if a Schrödinger update renames it,
+    # fail loudly rather than silently run the collapsing protocol.
+    _rblock = _restraint_block()
+    if _rblock:
+        _title_re = re.compile(r'(title\s*=\s*")NPT and no restraints([^"]*")')
+        if not _title_re.search(relax_text):
+            raise RuntimeError("desmond_npt_relax.msj: final unrestrained stage not found by title - "
+                               "cannot inject the ligand pose restraint; refusing to run the pose-"
+                               "collapsing relaxation protocol.")
+        relax_text = _title_re.sub(rf'\g<1>NPT with ligand + backbone pose restraint\g<2>\n{_rblock.rstrip()}',
+                                   relax_text, count=1)
+    return relax_text + _md_production(time_ps=time_ps, interval_ps=interval_ps)
 
 
 def _extract_with_progress(tgz: Path, wd: Path, members: list, label: str) -> None:

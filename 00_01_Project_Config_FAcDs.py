@@ -2223,6 +2223,7 @@ class CFG:
     VIS_FONT_LEGEND: float      = 8.0    # legend entries (one size for every figure, every step)
     VIS_FONT_LEGEND_TITLE: float = 8.5   # legend title (one size everywhere; slightly above the entries)
     VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
+    VIS_TEXT_MAX_LUM: float     = 0.42   # a bar/line colour reused as TEXT is darkened to at most this relative luminance so a light hue (yellow, sky, amber) stays legible on white
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
     VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
