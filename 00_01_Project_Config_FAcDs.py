@@ -3173,6 +3173,7 @@ class CFG:
     band shows.
     """
     DEFLUOR_COMPONENT_MIN_KCAL: float = 0.5     # an MM-GBSA term is plotted only if it reaches this
+    DEFLUOR_COMPONENT_ALWAYS: tuple = ("Covalent",)   # these MM-GBSA terms are always shown, even below the cutoff (Covalent tracks bond formation, so its near-zero value is itself the signal)
                                                 # magnitude in at least one candidate; below it the
                                                 # term is numerically dead and the box is empty
     DEFLUOR_COMPONENT_TICK_KCAL: float = 5.0    # ΔG axis tick step: the components span 60 down to

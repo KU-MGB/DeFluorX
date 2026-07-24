@@ -1695,7 +1695,7 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     sns.heatmap(
         _matrix, ax=ax, cmap=_cmap, vmin=_contact, vmax=_outer,
         annot=True, fmt=".1f", annot_kws={"fontsize": CFG.VIS_FONT_ANNOT},
-        linewidths=0.6, linecolor="white",
+        linewidths=0.6, linecolor=CFG.VIS_INK["white"],
         cbar_kws={"label": f"Mean distance to warhead C in strict-NAC frames (Å)\n"
                            f"{_contact:g} = reactive contact · {_outer:g} = electrostatic limit"},
     )
@@ -2178,6 +2178,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
         must stay. The omitted terms are named under the panel with their largest magnitude: an
         empty box is noise, but a silently deleted term is a lie.
         """
+        _always = set(getattr(CFG, "DEFLUOR_COMPONENT_ALWAYS", ()))   # shown even below the cutoff
         keep, dropped = [], []
         for t in _MMGBSA_TERMS:
             mx = 0.0
@@ -2188,7 +2189,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
                     v = vals.get(t)
                     if v is not None and v == v:
                         mx = max(mx, abs(v))
-            (keep if mx >= _min_kcal else dropped).append((t, mx))
+            (keep if (mx >= _min_kcal or t in _always) else dropped).append((t, mx))
         terms = [t for t, _ in keep]
         if not terms:
             plt.close(fig)
@@ -3366,22 +3367,25 @@ excluded: they are the same residue pairs as the DT relays under a min-heavy-ato
 plotting both would put two different values for one pair on a single axis.
 """
 _ACTIVE_SITE_SERIES = [(c, short, m) for c, _grp, short, m in _ENGAGE_ROLES] + [
-    ("DT_Nuc_Base_A",      "Nuc–Base relay",  ("Mapped_Nucleophile", "Mapped_Base")),
-    ("DT_Base_Acid_A",     "Base–Acid relay", ("Mapped_Base", "Mapped_Acid")),
+    ("DT_Nuc_Base_A",      "Nuc–Base",  ("Mapped_Nucleophile", "Mapped_Base")),
+    ("DT_Base_Acid_A",     "Base–Acid", ("Mapped_Base", "Mapped_Acid")),
     ("Tail_Cradle_Dist_A", "Tail–cradle",     None),      # ligand fluorine, not a residue
 ]
 
 
-def _residue_code(row, mapped) -> str:
-    """Mapped_* cell → one-letter code + position ('ASP110' → 'D110'); a pair → 'D110–H280'.
-
-    mapped is None for the tail-cradle distance, whose partner is the ligand fluorine.
+def _residue_code(row, mapped, three: bool = False) -> str:
+    """Mapped_* cell → residue code + position. three=False gives the one-letter code ('ASP110' →
+    'D110') used inside the violin labels; three=True keeps the full three-letter code ('ASP110') for
+    the left-margin trace labels. A pair → 'D110–H280' / 'ASP110–HIS280'; mapped is None for the
+    tail-cradle distance, whose partner is the ligand fluorine.
     """
     def _one(col):
         cell = str(row.get(col, "") or "").strip() if hasattr(row, "get") else ""
         if len(cell) < 4:
             return ""
-        return f"{CFG.AA_THREE_TO_ONE.get(cell[:3].upper(), cell[:3])}{cell[3:].strip()}"
+        _num = cell[3:].strip()
+        return f"{cell[:3].upper()}{_num}" if three \
+            else f"{CFG.AA_THREE_TO_ONE.get(cell[:3].upper(), cell[:3])}{_num}"
     if mapped is None:
         return "lig F"
     if isinstance(mapped, tuple):
@@ -3395,8 +3399,9 @@ def _active_site_series(df: pd.DataFrame, row) -> list:
     out = []
     for col, short, mapped in _ACTIVE_SITE_SERIES:
         if col in df.columns and df[col].notna().any():
-            res = _residue_code(row, mapped)
-            out.append([col, f"{short} ({res})" if res else short, res,
+            res1 = _residue_code(row, mapped)               # one-letter, inside the violin label
+            res3 = _residue_code(row, mapped, three=True)   # three-letter + position, for the left margin
+            out.append([col, f"{short} ({res1})" if res1 else short, res3,
                         float(np.median(df[col].dropna()))])
     out.sort(key=lambda q: q[3])
     pal = list(CFG.VIS_ACTIVE_SITE_COLOUR)
@@ -3472,8 +3477,9 @@ def generate_active_site_dynamics(df: pd.DataFrame, row, output_path: Path) -> N
         ax.text(-T * 0.012, _lo - 1.00, "NAC\npass", ha="right", va="center",
                 fontsize=CFG.VIS_FONT_ANNOT, color=_INK["ghost"])
 
-        # each trace named in the left margin, in its own colour, nudged apart so none collide
-        ax.set_xlim(-T * 0.10, bank0 + span)
+        # each trace named in the left margin, in its own colour, nudged apart so none collide. The
+        # gap holds the three-letter residue codes (widest is a relay pair, e.g. "HIS280–ASP134").
+        ax.set_xlim(-T * 0.12, bank0 + span)
         gap = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.026
         starts.sort(key=lambda q: q[0])
         for i in range(1, len(starts)):

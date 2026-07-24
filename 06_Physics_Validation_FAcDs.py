@@ -80,7 +80,7 @@ Dependency Map
                        02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png,
                        Defluorination/00_Defluorination_Combined_AllRanks.png,
                        Prime-MMGBSA/Prime-MMGBSA_R{N}/01_MMGBSA_Profile.png,
-                       Defluorination/Defluorination_R{N}/01_SN2_Attack_Geometry.png … 08_Figure_Descriptions.txt}
+                       Defluorination/Defluorination_R{N}/01_SN2_Attack_Geometry.png … 07_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
@@ -3028,7 +3028,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     hdr += ["protein_Rg", "lig_com_disp", "mmgbsa_dG_bind"]; cols += [rg, com, dG]
     for _lab in comp:
         hdr.append("mmgbsa_" + _lab); cols.append(comp[_lab])
-    np.savetxt(out / "06_Defluorination_Geometry.csv", np.column_stack(cols),
+    np.savetxt(out / "05_Defluorination_Geometry.csv", np.column_stack(cols),
                delimiter=",", header=",".join(hdr), comments="")
 
     # ── figures (black axis labels/values, neutral grey grid, CFG colours/DPI) ──────────
@@ -3182,30 +3182,9 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
         fig.tight_layout(); fig.savefig(out / "04_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
 
-    # 08 MM-GBSA energy-component decomposition - the binding DRIVERS, and whether the
-    # near-attack (reactive) frames gain the right stabilisation vs the rest.
-    if comp:
-        _finite = np.isfinite(dG)
-        if _finite.sum() >= 4:            # drop Prime blown-up minimisations before averaging
-            _q1c, _q3c = np.percentile(dG[_finite], [25, 75])
-            _ok = _finite & (dG >= _q1c - 3.0 * (_q3c - _q1c))
-        else:
-            _ok = _finite
-        _react = (nac if nac.any() else (attack <= np.percentile(attack, 10)))
-        _near, _rest = _react & _ok, (~_react) & _ok
-        _lbls = list(comp.keys())
-        _nv = [np.nanmean(comp[l][_near]) if _near.any() else np.nan for l in _lbls]
-        _rv = [np.nanmean(comp[l][_rest]) if _rest.any() else np.nan for l in _lbls]
-        _x = np.arange(len(_lbls)); _w = 0.4
-        fig, ax = plt.subplots(figsize=(11, 5.2))
-        ax.bar(_x - _w / 2, _nv, _w, color=_DEFL_GREEN, label=f"near-attack ({_cond_label})")
-        ax.bar(_x + _w / 2, _rv, _w, color=_DEFL_GREY, label="other frames")
-        ax.axhline(0, color=_DEFL_MUTE, lw=0.8)
-        ax.set_xticks(_x); ax.set_xticklabels(_lbls, rotation=30, ha="right")
-        ax.set_ylabel("mean ΔG contribution (kcal/mol)  ·  relative-only")
-        ax.grid(axis="y", alpha=0.3)
-        ax.legend(loc="upper right", ncol=2, fontsize=_LF, framealpha=_FA)
-        fig.tight_layout(); fig.savefig(out / "05_MMGBSA_Components.png", dpi=_dpi); plt.close(fig)
+    # The MM-GBSA energy-component decomposition (reactive vs rest) is drawn once, in Step 07's
+    # per-rank MMGBSA_NAC_Decomposition figure, from the same per-frame Prime terms; the per-component
+    # columns are still written to the geometry CSV below so 07 (or any reader) can decompose them.
 
     # ── run log + figure-description file ─────────────────────────────────────────────
     log = [f"FAcD defluorination MD analysis - Rank {rank}",
@@ -3225,16 +3204,16 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         log.append("MM-GBSA ΔG_bind: not available for this rank")
     log.append("per-residue engagement occupancy:")
     log += [f"  {name:16s} {v:5.1f}%" for name, v in occ.items()]
-    (out / "07_Analysis_Log.log").write_text("\n".join(log) + "\n")
-    (out / "08_Figure_Descriptions.txt").write_text(
+    (out / "06_Analysis_Log.log").write_text("\n".join(log) + "\n")
+    (out / "07_Figure_Descriptions.txt").write_text(
         f"FAcD Defluorination MD Analysis - Rank {rank} · {nfr} frames · {total_ns:.0f} ns\n"
         f"01 SN2 attack geometry (Oδ···Cα distance + Oδ-Cα-F angle; green = NAC-competent)\n"
         f"02 fluoride cradle (F···stabilisers) + carboxylate clamp (Arg···carboxylate)\n"
         f"03 reactive summary (per-residue engagement + NAC criterion decomposition)\n"
         f"04 binding vs reactivity (MM-GBSA ΔG_bind vs attack distance; only if MM-GBSA present)\n"
-        f"05 MM-GBSA component decomposition (Coulomb/vdW/Hbond/Lipo/GB/SA…): near-attack vs other frames\n"
-        f"06 per-frame geometry CSV (geometry + mmgbsa_dG_bind + per-component terms)\n"
-        f"07 run log · 08 this figure-description file\n")
+        f"05 per-frame geometry CSV (geometry + mmgbsa_dG_bind + per-component terms; the MM-GBSA\n"
+        f"   component decomposition itself is Step 07's MMGBSA_NAC_Decomposition figure)\n"
+        f"06 run log · 07 this figure-description file\n")
     _dg_note = f" · ΔG {mmgbsa_median:.0f}" if np.isfinite(mmgbsa_median) else ""
     _echo(f"    ✔ Defluor      : NAC {nac_pct:.1f}% · attack min {attack.min():.2f} Å{_dg_note} → {out.name}/")
     return out
@@ -3251,7 +3230,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         return
     rows = []
     for d in sorted(root.glob("Defluorination_R*"), key=lambda p: _natural_rank(p)):
-        csv = d / "06_Defluorination_Geometry.csv"
+        csv = d / "05_Defluorination_Geometry.csv"
         if not csv.is_file():
             continue
         try:
