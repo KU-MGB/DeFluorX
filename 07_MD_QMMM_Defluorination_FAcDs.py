@@ -2980,17 +2980,20 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     # back to elapsed-time only when no markers are present yet.
     _interval = max(5, int(getattr(CFG, "QSITE_PROGRESS_INTERVAL_SEC", 20)))
     _total    = max(1, int(getattr(CFG, "QSITE_SCAN_NSTEPS", 1)))
-    _log_path = qsite_dir / f"{jobname}.log"
-
     _user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+    _log_path = qsite_dir / f"{jobname}.log"   # job-control log, named in the failure message below
 
     def _scan_done():
-        # QSite runs on the job server: the LIVE log sits in /tmp/<user>/jobs/<jobid>/<jobname>.log and is
-        # copied back to qsite_dir only when the job finishes, so reading the launch dir during the run
-        # always sees nothing. Read the newest live copy (fall back to the launch dir), counting geometry-
-        # optimisation convergences - one per completed scan point of the QSITE_SCAN_NSTEPS-point scan.
-        _cands = _glob.glob(f"/tmp/{_user}/jobs/*/{jobname}.log") if _user else []
-        _cands.append(str(_log_path))
+        # QSite runs on the job server: the LIVE Jaguar .out sits in /tmp/<user>/jobs/<jobid>/<jobname>.out
+        # and is copied back to qsite_dir only when the job finishes, so reading the launch dir during the
+        # run sees nothing. Read the newest live copy (fall back to the launch dir) and count COMPLETED
+        # relaxed-scan points: Jaguar prints exactly one "end of geometry scan step N" line - with that
+        # point's converged energy - per converged point of the QSITE_SCAN_NSTEPS-point scan. The count
+        # must NOT fall back to a bare "converged" substring: a single scan point runs hundreds of SCF
+        # cycles, each printing "converged", which instantly and permanently saturates the bar at N/N.
+        # The scan markers live in the .out, never the job-control .log.
+        _cands = _glob.glob(f"/tmp/{_user}/jobs/*/{jobname}.out") if _user else []
+        _cands.append(str(qsite_dir / f"{jobname}.out"))
         _cands = [p for p in _cands if os.path.isfile(p)]
         if not _cands:
             return None
@@ -2998,7 +3001,7 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
             txt = open(max(_cands, key=os.path.getmtime), errors="ignore").read()
         except OSError:
             return None
-        _n = txt.count("Geometry optimization has converged") or txt.count("converged")
+        _n = txt.count("end of geometry scan step")
         return min(_n, _total) if _n else None
 
     # Register BEFORE launch so an interrupt during submission still finds the job to kill.
