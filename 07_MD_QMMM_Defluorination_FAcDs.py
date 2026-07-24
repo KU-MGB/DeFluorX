@@ -2051,49 +2051,81 @@ def _reactive_frames(nac: pd.DataFrame) -> "tuple[np.ndarray, str]":
     return geom, "geometric NAC"
 
 
+def _load_ranked_df(out_dir: Path):
+    """The latest ranked sheet as a DataFrame, or None - shared by the bulk loader and the per-rank
+    draw so both name residues from the same source."""
+    _prod = out_dir.parent / "1_Boltz2_Production"
+    ranked = (_utils_mod.latest_by_mtime(_prod.glob(CFG.GLOB_RANKED_CSV))
+              or _utils_mod.latest_by_mtime(_prod.glob("*Ranked*.csv")))
+    return pd.read_csv(ranked, low_memory=False) if ranked is not None else None
+
+
+def _reactive_pose_entry(d: Path, md: Path, rk_df) -> "dict | None":
+    """One reactive-pose record from a Rank_* dir: the per-frame NAC table, the frame-stamped
+    MM-GBSA table, and the residue names for THIS homolog (from the ranked sheet). Returns None when
+    the directory has no NAC table yet - the rank has not finished its frame analysis. Single source
+    for both the bulk loader and the per-rank draw, so the two can never drift."""
+    m = re.match(r"Rank_(\d+)_", d.name)
+    if not m:
+        return None
+    rank = int(m.group(1))
+    nac_csv = next(iter(sorted(d.glob(f"*{CFG.SUFFIX_NAC_DATA}"))), None)
+    if nac_csv is None:
+        return None
+    _mgdir = md / f"desmond_md_job_R_{rank}"
+    mg_csv = _mgdir / f"desmond_md_job_R_{rank}{CFG.SUFFIX_MMGBSA_CSV}"
+    if not mg_csv.is_file():        # tolerant fallback, same as the engine's discovery ladder
+        mg_csv = next(iter(sorted(_mgdir.glob("*mmgbsa*.csv"))), mg_csv)
+    job = nac_csv.name.replace(CFG.SUFFIX_NAC_DATA, "")
+    _full = re.sub(r"^\d+_", "", job.split("_")[-1]) if "_" in job else job
+    # The 3R3U × FA positive control shares the ligand 'FA' with the candidate fluoroacetate;
+    # label it distinctly (3R3U-FA) so every downstream figure names + colours it as the control.
+    _is_ctrl = job.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in job.upper()
+    lig = _CTRL_LABEL if _is_ctrl else CFG.VIS_LIGAND_SHORT.get(_full.lower(), _full)
+    mapped = {}
+    if rk_df is not None:
+        row = rk_df[rk_df["job_name"] == job]
+        if not row.empty:
+            r0 = row.iloc[0]
+            mapped = {col: (str(r0[col]) if col in row.columns and pd.notna(r0[col]) else "")
+                      for _, _, _, col in _ENGAGE_ROLES}
+    return {
+        "rank": rank, "job": job, "ligand": lig, "is_control": _is_ctrl, "mapped": mapped,
+        "nac": pd.read_csv(nac_csv),
+        "mmgbsa": pd.read_csv(mg_csv) if mg_csv.is_file() else pd.DataFrame(),
+        "dir": d,
+    }
+
+
 def _load_reactive_pose_data(out_dir: Path) -> list:
     """Gather, per candidate: the per-frame NAC table, the frame-stamped MM-GBSA table, and the
     alignment map that names each catalytic residue in that homolog."""
-    run_dir = out_dir.parent
-    md = run_dir / "6_Physics_Validation" / "05_MD_Simulations"
+    md = out_dir.parent / "6_Physics_Validation" / "05_MD_Simulations"
+    rk_df = _load_ranked_df(out_dir)
     out = []
     for d in sorted(out_dir.glob("Rank_*")):
-        m = re.match(r"Rank_(\d+)_", d.name)
-        if not m:
-            continue
-        rank = int(m.group(1))
-        nac_csv = next(iter(sorted(d.glob(f"*{CFG.SUFFIX_NAC_DATA}"))), None)
-        _mgdir = md / f"desmond_md_job_R_{rank}"
-        mg_csv = _mgdir / f"desmond_md_job_R_{rank}{CFG.SUFFIX_MMGBSA_CSV}"
-        if not mg_csv.is_file():        # tolerant fallback, same as the engine's discovery ladder
-            mg_csv = next(iter(sorted(_mgdir.glob("*mmgbsa*.csv"))), mg_csv)
-        if nac_csv is None:
-            continue
-        job = nac_csv.name.replace(CFG.SUFFIX_NAC_DATA, "")
-        _full = re.sub(r"^\d+_", "", job.split("_")[-1]) if "_" in job else job
-        # The 3R3U × FA positive control shares the ligand 'FA' with the candidate fluoroacetate;
-        # label it distinctly (3R3U-FA) so every downstream figure names + colours it as the control.
-        _is_ctrl = job.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in job.upper()
-        lig = _CTRL_LABEL if _is_ctrl else CFG.VIS_LIGAND_SHORT.get(_full.lower(), _full)
-        out.append({
-            "rank": rank, "job": job, "ligand": lig, "is_control": _is_ctrl, "mapped": {},
-            "nac": pd.read_csv(nac_csv),
-            "mmgbsa": pd.read_csv(mg_csv) if mg_csv.is_file() else pd.DataFrame(),
-            "dir": d,
-        })
-
-    _prod = run_dir / "1_Boltz2_Production"
-    ranked = (_utils_mod.latest_by_mtime(_prod.glob(CFG.GLOB_RANKED_CSV))
-              or _utils_mod.latest_by_mtime(_prod.glob("*Ranked*.csv")))
-    if ranked is not None:
-        rk = pd.read_csv(ranked, low_memory=False)
-        for e in out:
-            row = rk[rk["job_name"] == e["job"]]
-            if not row.empty:
-                r0 = row.iloc[0]
-                e["mapped"] = {col: (str(r0[col]) if col in row.columns and pd.notna(r0[col]) else "")
-                               for _, _, _, col in _ENGAGE_ROLES}
+        e = _reactive_pose_entry(d, md, rk_df)
+        if e is not None:
+            out.append(e)
     return sorted(out, key=lambda r: r["rank"])
+
+
+def _draw_reactive_pose_for_rank(master_out_dir: Path, rank: int) -> None:
+    """Draw this rank's own MM-GBSA decomposition (05) and machinery engagement (06) as soon as its
+    frame analysis lands, so both are readable without waiting for every other rank; the cross-rank
+    merged versions are still drawn once at the end. Runs inside the per-rank worker, so the two
+    plotters are held under PLOT_LOCK - pyplot's figure registry is global state. Degrades quietly
+    (each plotter logs and returns) when the rank has no frame-stamped MM-GBSA CSV yet."""
+    md = master_out_dir.parent / "6_Physics_Validation" / "05_MD_Simulations"
+    _rank_dir = next(iter(sorted(master_out_dir.glob(f"Rank_{rank}_*"))), None)
+    if _rank_dir is None:
+        return
+    entry = _reactive_pose_entry(_rank_dir, md, _load_ranked_df(master_out_dir))
+    if entry is None:
+        return
+    with PLOT_LOCK:
+        plot_mmgbsa_decomposition(master_out_dir, [entry], merged=False)
+        plot_machinery_engagement(master_out_dir, [entry], merged=False)
 
 
 def _mmgbsa_components(mg: pd.DataFrame, frames) -> dict:
@@ -2415,15 +2447,16 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
 
 
 def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> None:
-    """Both reactive-pose figures, per candidate and merged, from the per-frame tables on disk."""
+    """The cross-rank reactive-pose figures. The per-candidate versions (05/06) are drawn per rank as
+    each finishes its frame analysis (see _draw_reactive_pose_for_rank); this final pass adds only the
+    merged, all-ranks comparison, which needs every rank present."""
     apply_figure_style(CFG)
     ranks = _load_reactive_pose_data(out_dir)
     if not ranks:
         console_info("    [!] Reactive-pose figures skipped - no per-frame NAC tables found.")
         return
-    for _merged in (False, True):
-        plot_mmgbsa_decomposition(out_dir, ranks, merged=_merged)
-        plot_machinery_engagement(out_dir, ranks, merged=_merged)
+    plot_mmgbsa_decomposition(out_dir, ranks, merged=True)
+    plot_machinery_engagement(out_dir, ranks, merged=True)
 
 
 # =============================================================================
@@ -3831,6 +3864,9 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
     if _mmg_csv:
         generate_mmgbsa_trace(pd.read_csv(_mmg_csv[0]),
                               job_out_dir / f"04_{job_name}_MMGBSA_Trace.png")
+    # 05 (MM-GBSA decomposition) + 06 (machinery engagement) for THIS rank, drawn now so both are
+    # readable the moment the rank lands; the cross-rank merged versions still come at the end.
+    _draw_reactive_pose_for_rank(job_out_dir.parent, rank)
 
 
 def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
@@ -4969,7 +5005,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                         if re.search(r"dg.?bind", c, re.I) and re.search(_pat, c, re.I)
                         and not re.search(r"complex|receptor|ligand", c, re.I)]
                 if _hit:
-                    _nac, _glob = _nac_vs_global(_hit[0])
+                    _nac, _glob = _nac_vs_global(_hit[0])[:2]   # helper returns (mean, global, n, sd)
                     _decomp[_name] = (_nac, _glob)
                     stats[f"MMGBSA_{_name}_NAC_Mean_kcal"] = round(_nac, 2) if _nac == _nac else np.nan
     except Exception as _e:
@@ -5037,13 +5073,24 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             """Snap → PBC-repair → droplet → .in for ONE frame. Returns the .in path if the frame
             still needs a Jaguar run, or None if the folder is already present (cached → parse-only).
 
-            This step MUTATES the shared cms_model (update/make_whole/center), so it must run
-            sequentially across frames - only the QM/MM run itself is parallelised (below). Repairs
-            periodic wrapping and re-centres the box on the LIGAND so a surface active site sits at
-            the box middle and the droplet trim keeps its first-shell waters (vacuum artefact →
-            SCF divergence otherwise).
+            This step MUTATES the shared cms_model AND msys_model (update/make_whole/center), so it
+            must run sequentially across frames - only the QM/MM run itself is parallelised (below).
+            Repairs periodic wrapping and re-centres the box on the LIGAND so a surface active site
+            sits at the box middle and the droplet trim keeps its first-shell waters (vacuum artefact
+            → SCF divergence otherwise).
+
+            BOTH models must be moved onto the frame, not just the cms. `make_whole_cms` and
+            `center_cms` build their working frame from `DuckFrame(msys_model)` and only then push the
+            result into the cms - so with a stale msys they overwrite the cms with the OLD geometry and
+            the frame just loaded is silently discarded. Their docstrings state the precondition:
+            the two models "should have the same atom coordinates and the same simulation box matrix".
+            Updating the cms alone made every frame collapse onto one structure (center_cms ends by
+            writing its frame back to msys, so the state reached a fixed point after the first frame),
+            which handed every QM/MM scan an identical - and wrong - geometry.
             """
-            topo.update_cms(cms_model, tr[_fi])
+            _fr = tr[_fi]
+            topo.update_cms(cms_model, _fr)
+            topo.update_msys(msys_model, _fr)
             topo.make_whole_cms(msys_model, cms_model)
             _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
             topo.center_cms(msys_model, _gids, cms_model)
