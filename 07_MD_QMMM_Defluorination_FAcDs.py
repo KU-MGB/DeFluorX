@@ -1442,7 +1442,13 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax1.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color=_C['tail'], linestyle='--', linewidth=2.5)
         ax1.set_xlabel("Nucleophile – ligand distance (Å)  ·  S$_N$2 reaction trajectory")
         ax1.set_ylabel("Attack Angle: O–C–F (°)")
-        ax1.set_ylim(0, 180); ax1.set_xlim(left=0)
+        # Start the angle axis at the data floor (rounded down to 10°) rather than 0, so the near-attack
+        # cluster is shown in detail. The floor is capped at the relaxed cut-off so its dashed line and the
+        # S_N2 zones stay visible even when every frame sits above it; no data point is clipped.
+        _a_all = df["NAC_Angle_Deg"].to_numpy(dtype=float)
+        _a_min = float(np.nanmin(_a_all)) if np.isfinite(_a_all).any() else 0.0
+        _y1_lo = max(0.0, np.floor((min(_a_min, THRESHOLD_RELAXED_NAC_ANGLE) - 10.0) / 10.0) * 10.0)
+        ax1.set_ylim(_y1_lo, 180); ax1.set_xlim(left=0)
         
         # Legend moved to bottom right and contains zones
         _p1_handles = [
@@ -1486,7 +1492,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
             ax2.axhline(CFG.MECH_CRADLE_RADIUS, color=_C['tail'], linestyle=':', linewidth=1.5, alpha=0.7)
 
         data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
-        ax2.set_ylim(1.5, max(8.0, data_max * 1.05))
+        ax2.set_ylim(1.5, max(7.0, data_max * 1.05))
         ax2.set_xlabel("Simulation frame")
         ax2.set_ylabel("Active-site anchoring - interaction distance (Å)")
         ax2.legend(loc='upper right', frameon=True,
@@ -2216,14 +2222,17 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
             panel the bars carry the component colours, so a coloured swatch would claim a meaning
             it does not have and the candidate is named by the text alone.
             """
-            hdl.append(Patch(facecolor=col if merged else "none",
-                             edgecolor=_ink["outline"] if merged else "none",
-                             label=f"#{r['rank']} {r['ligand']} · n={n_scored:,}"))
+            if merged:      # cross-rank panel: name each candidate so the ranks can be told apart
+                hdl.append(Patch(facecolor=col, edgecolor=_ink["outline"],
+                                 label=f"#{r['rank']} {r['ligand']} · n={n_scored:,}"))
 
+        # Single-case panel: the two shade entries say everything; the case is the figure's own file,
+        # not a legend row. The reactive-pose frame count rides on its own entry rather than a header line.
+        _rp_label = "reactive pose" if merged else f"reactive pose (n={n_scored:,})"
         hdl += [Patch(facecolor=_ink["muted"], alpha=0.40, edgecolor=_ink["outline"],
                       label="whole traj."),
                 Patch(facecolor=_ink["muted"], alpha=1.0, edgecolor=_ink["outline"],
-                      label="reactive pose")]
+                      label=_rp_label)]
 
         # The container is drawn AFTER the children so it can span the data, at a lower zorder so
         # the child bars sit inside it.
@@ -2240,18 +2249,14 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
         for lbl, i in zip(ax.get_xticklabels(), range(len(terms))):
             lbl.set_color(cmap(i % 10))
             lbl.set_fontweight("bold")
-        ax.set_ylabel("ΔG component (kcal/mol)")
-        hdl.append(Patch(facecolor="none", edgecolor="none", label="negative = favours binding"))
-        """
-        The omitted terms are NAMED, but in the legend rather than under the axis: a term dropped for
-        being numerically dead is a footnote and belongs at footnote size. Nothing is hidden - an
-        empty box is noise, a silently deleted term is a lie.
-        """
+        # The descriptive notes live on the axis labels, not the legend, so the legend stays two rows.
+        ax.set_ylabel("ΔG component (kcal/mol)  ·  negative favours binding")
+        # The omitted terms are still NAMED (a silently deleted term is a lie), just under the x-axis.
+        _xlab = "MM-GBSA energy component"
         if dropped:
-            hdl.append(Patch(facecolor="none", edgecolor="none",
-                             label="omitted (|ΔG| < %.1f): %s"
-                                   % (_min_kcal, ", ".join(t.replace("_", " ")
-                                                           for t, _ in dropped))))
+            _xlab += ("  ·  omitted (|ΔG| < %.1f kcal/mol): %s"
+                      % (_min_kcal, ", ".join(t.replace("_", " ") for t, _ in dropped)))
+        ax.set_xlabel(_xlab)
         # Tick every DEFLUOR_COMPONENT_TICK_KCAL: matplotlib's default step is coarser than most of
         # the components themselves - an H-bond term of −2.7 cannot be read off a 20 kcal/mol grid.
         _tick = float(CFG.DEFLUOR_COMPONENT_TICK_KCAL)
@@ -2261,7 +2266,8 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.grid(alpha=CFG.VIS_GRID_ALPHA * 0.5, linewidth=CFG.VIS_GRID_LINEWIDTH * 0.7,
                 axis="y", which="minor")
         ax.set_axisbelow(True)
-        ax.legend(handles=hdl, loc="upper right", fontsize=_f_leg, frameon=True)
+        ax.legend(handles=hdl, loc="upper right", fontsize=_f_leg, frameon=True,
+                  ncol=len(hdl) if not merged else 2)
 
         out_path = (out_dir / "06_MMGBSA_Decomposition_AllRanks.png" if merged
                     else rr[0]["dir"] / f"05_{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
@@ -2299,7 +2305,6 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         rr = _ranks if merged else [entry]
         fig, ax = plt.subplots(figsize=(13.5 if merged else 11, 6.6))
         width = 0.8 / len(rr)
-        rank_hdl = []
 
         """
         The ceiling comes from the DATA - the tallest upper quartile across every candidate and
@@ -2368,8 +2373,6 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                    color=bar_cols, alpha=0.9, edgecolor=_ink["outline"], linewidth=0.6,
                    yerr=err, capsize=3, error_kw=dict(ecolor=_ink["muted"], lw=0.9), zorder=3,
                    label=(_lab if merged else None))
-            if not merged:
-                rank_hdl = [Patch(facecolor="none", edgecolor="none", label=_lab)]
 
             for i, m in enumerate(meds):
                 if m != m:
@@ -2421,20 +2424,19 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         for lb, (_, role, _, _) in zip(ax.get_xticklabels(), _ENGAGE_ROLES):
             lb.set_color(_roles.get(role, _ink["muted"]))
             lb.set_fontweight("bold")
-        ax.set_ylabel("Distance to warhead C (Å)")
-        _hdl_stats = Patch(facecolor="none", edgecolor="none",
-                           label="bars = median · whiskers = IQR")
+        ax.set_ylabel("Distance to warhead C (Å)  ·  bars = median, whiskers = IQR")
+        ax.set_xlabel("catalytic role  ·  Å above bar = median distance  ·  "
+                      f"% in bar = frames within {_occ_cut:g} Å")
         ax.yaxis.set_major_locator(MultipleLocator(1.0))
         ax.yaxis.set_minor_locator(MultipleLocator(0.5))
         ax.grid(alpha=CFG.VIS_GRID_ALPHA, linewidth=CFG.VIS_GRID_LINEWIDTH, axis="y")
         ax.set_axisbelow(True)
 
-        _hdl = (ax.get_legend_handles_labels()[0] if merged else rank_hdl)
-        _hdl += [_hdl_stats,
-                 Patch(facecolor="none", edgecolor="none", label="Å above bar = median distance"),
-                 Patch(facecolor="none", edgecolor="none",
-                       label=f"% in bar = frames within {_occ_cut:g} Å")] + band_hdl
-        ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True)
+        # Legend = the four criterion bands (A-D) only, on a single row; the statistics and annotation
+        # keys moved to the axis labels. The merged panel still leads with per-rank names.
+        _hdl = (ax.get_legend_handles_labels()[0] + band_hdl) if merged else list(band_hdl)
+        ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True,
+                  ncol=len(_hdl) if not merged else 4)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
                     else rr[0]["dir"] / f"06_{rr[0]['job']}_Machinery_Engagement.png")
@@ -3608,7 +3610,8 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, output_path: Path) -> None:
         ax.axhline(mean, color=_INK["dark"], ls="--", lw=1.4, label=f"mean {mean:.2f} kcal/mol")
         ax.axhspan(mean - sd, mean + sd, color=_INK["paler"], alpha=0.18,
                    label=f"±1 SD ({sd:.2f})")
-        ax.set_xlabel("Simulation frame"); ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)")
+        ax.set_xlabel(f"Simulation frame  ·  {len(y):,} frames scored")
+        ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)")
         ax.set_xlim(x.min(), x.max() + (x.max() - x.min()) * 0.012)
         _xc, _yc = _C["tail"], CFG.VIS_ACCENT["green"]
         ax.xaxis.label.set_color(_xc); ax.tick_params(axis="x", colors=_xc)
@@ -3616,10 +3619,8 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, output_path: Path) -> None:
         ax.grid(axis="x", color=_xc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
         ax.grid(axis="y", color=_yc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
         hdl, lab = ax.get_legend_handles_labels()
-        leg = ax.legend(hdl, lab, loc="upper left", ncol=len(lab), fontsize=CFG.VIS_FONT_LEGEND,
-                        frameon=True, framealpha=0.92, columnspacing=0.8, handletextpad=0.4,
-                        title=f"{len(y):,} frames scored")
-        leg.get_title().set_fontsize(CFG.VIS_FONT_ANNOT)
+        ax.legend(hdl, lab, loc="upper left", ncol=len(lab), fontsize=CFG.VIS_FONT_LEGEND,
+                  frameon=True, framealpha=0.92, columnspacing=0.8, handletextpad=0.4)
         clean_spines(ax)
         plt.savefig(output_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
         plt.close(fig)
