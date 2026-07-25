@@ -78,9 +78,12 @@ Date   : 25 July 2026 <───────────────────
                   budget), where the budget counts free RAM plus free swap (CFG.QSITE_RAM_PER_JOB_GB,
                   QSITE_RAM_HEADROOM_FRAC, QSITE_RAM_SWAP_FRAC). Concurrent scans available =
                   ranks × CFG.QSITE_N_FRAMES, so that product - not the core count - sets occupancy.
-                  The SN2 attack angle is the multiplicity-corrected CFG.sn2_effective_angle (identity
-                  for one scissile C-F, Šidák-deflated for DFA/TFA), so 07 stays in lock-step with the
-                  Step-02 tiering rather than gating on a raw geometric angle.
+                  The per-frame NAC uses the CSV-mapped catalytic aspartate's Oδ/Oε as the nucleophile
+                  and reports the RAW backside O-C-F angle to the per-frame leaving fluorine (the α-carbon
+                  F most anti-periplanar to the attacking O-C axis, chosen per frame for a rotating
+                  CF2/CF3) - the exact observed geometry Step 06 measures, so 06 and 07 report the same
+                  NAC. No Šidák multiplicity deflation is applied: that is a screening correction for
+                  Step 02's single predicted pose, not for a measured MD trajectory angle.
                   systemd-oomd masking is self-repairing: a sentinel records that this pipeline masked
                   it, so a killed run is repaired at the next start and the signal handlers restore it
                   on Ctrl+C. A socket masked by the user (no sentinel) is left untouched.
@@ -427,17 +430,6 @@ import traceback as _tb
 thread_logger = threading.local()
 
 _strip_ansi = getattr(_utils_mod, '_strip_ansi', lambda x: x)
-
-
-def _sigmoid07(x: float, k: float, x0: float) -> float:
-    """The graded NAC term that picks the attacking oxygen (CFG §4.1).
-
-    Identical in form to Step 02's sigmoid, so both stages score a near-attack conformation on the
-    same scale and agree on which aspartate oxygen is attacking. A frame whose distance and angle
-    are judged by one rule in the ranking and another in the trajectory analysis is not comparable
-    with itself.
-    """
-    return float(1.0 / (1.0 + np.exp(-np.clip(k * (x - x0), -60.0, 60.0))))
 
 
 def console_title(msg: str) -> None:
@@ -4231,6 +4223,20 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                  f"Nuc {_qm_nuc}, Base {_qm_base}, Acid {_qm_acid}, StabH {_qm_stab}, "
                  f"cradle {_qm_cradle}")
 
+    # ── Per-frame NAC nucleophile: the CSV-mapped catalytic aspartate's carboxylate oxygens ─────────
+    # Step 06 measures the near-attack geometry from the MAPPED nucleophile's Oδ/Oε atoms; 07 uses the
+    # SAME atoms here so the two stages report identical NAC. Only when the mapped residue exposes no
+    # OD/OE (a non-Asp/Glu nucleophile, or a mis-map) does it fall back to the Smart-Lock oxygens.
+    _nac_od = [a.index for a in cms_model.atom
+               if int(a.resnum) == _qm_nuc and a.pdbname.strip() in ("OD1", "OD2", "OE1", "OE2")]
+    if _nac_od:
+        console_info(f"    [NAC] per-frame nucleophile = mapped residue {_qm_nuc} carboxylate O "
+                     f"({len(_nac_od)} atoms) - matches Step 06.")
+    else:
+        _nac_od = list(idx_nuc)
+        console_info(f"    [NAC] mapped nucleophile {_qm_nuc} exposes no OD/OE - "
+                     f"using Smart-Lock oxygens for the per-frame NAC.")
+
     # Filter out ptypes with special characters (e.g. '/') that break ASL parsing.
     _safe_restypes = [r for r in _SOLVENT_RESTYPES if r.isalnum() or '_' in r]
     _sol_asl       = " OR ".join(f"res.ptype {r}" for r in _safe_restypes)
@@ -4293,7 +4299,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # 3. Build the master atom list to pre-load.
     _preload_set = (
-        list(idx_nuc) + list(warhead_c) + list(lig_f) +
+        list(idx_nuc) + list(_nac_od) + list(warhead_c) + list(lig_f) +
         list(idx_base or []) + list(idx_acid or []) +
         list(idx_cradle or []) + _walden_subs +
         [a for idxs in dt_indices.values() for a in idxs] +
@@ -4318,7 +4324,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _n_pre         = len(_preload_atoms)
 
     # 4. Pre-compute local index arrays (avoids per-frame dict lookups).
-    _li_nuc    = [_a2l[a] for a in idx_nuc]
+    _li_nuc    = [_a2l[a] for a in _nac_od]   # per-frame NAC nucleophile = mapped Asp Oδ/Oε (Step-06-matched)
     _li_c      = [_a2l[a] for a in warhead_c]
     _li_f      = [_a2l[a] for a in lig_f]
     _li_base   = [_a2l[a] for a in idx_base]   if idx_base   else []
@@ -4471,66 +4477,22 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _pos_f_f   = _p[_li_f]    if _li_f     else np.empty((0, 3))
 
         """
-        ── Which oxygen attacks which carbon ─────────────────────────────────────────────────────
-        FAcD's nucleophile is the aspartate carboxylate: it attacks the α-carbon and displaces the
-        fluoride. Its two oxygens are resonance-equivalent, so the one that REACTS is the one lined
-        up for backside attack, not the one that happens to be nearer - they sit ~2.2 Å apart and can
-        point in different directions, so choosing by distance can report a side-on approach for a
-        frame whose other oxygen is properly anti-periplanar.
-
-        The pair is therefore chosen by the backside O–C–F angle it produces (distance breaks ties).
-
-        The NAC gates are then evaluated on THAT pair: `nac_nuc_dist` is the approach distance of the
-        oxygen that supplied the angle. Gating on the minimum over both oxygens while measuring the
-        angle on the other one describes a nucleophile that does not exist - one oxygen lending its
-        reach, its partner lending its trajectory - and lets a frame pass the NAC criterion on an
-        oxygen that is not attacking. `min_nuc_dist` is retained as the true closest approach over
-        both oxygens, which is what pocket residency means, and is reported alongside.
+        ── Which oxygen attacks which carbon (Step-06-matched) ────────────────────────────────────
+        FAcD's nucleophile is the CSV-mapped catalytic aspartate; _nac_od holds its Oδ/Oε carboxylate
+        oxygens. The attacking oxygen is the one making the CLOSEST approach to a scissile α-carbon, and
+        the SAME oxygen supplies both the approach distance and the O-C-F angle, so the near-attack
+        geometry is self-consistent (never one oxygen lending its reach and its partner its trajectory).
+        This is the exact method Step 06 uses, so 06 and 07 measure the same NAC. `min_nuc_dist` (closest
+        approach over both oxygens) equals `nac_nuc_dist` here and is what pocket residency reads.
         """
         if _pos_nuc_f.size and _pos_c_f.size:
-            _nc_d    = _mic_dists_2d(_pos_nuc_f, _pos_c_f, box)
-            min_nuc_dist = float(_nc_d.min())          # closest approach, over BOTH oxygens
-            nac_nuc_dist = min_nuc_dist                # approach of the ATTACKING oxygen (set below)
-            _best_key = None
-            best_nuc_idx = best_ca_idx = None
-            for _ni, _n_atom in enumerate(idx_nuc):
-                for _ci, _c_atom in enumerate(warhead_c):
-                    _bf = _li_cf.get(_a2l[_c_atom], [])
-                    if not _bf:
-                        continue
-                    _cpos = _p[_a2l[_c_atom]]
-                    _v_cn = get_mic_vector(_p[_a2l[_n_atom]], _cpos, box)
-                    _n_cn = np.linalg.norm(_v_cn)
-                    if _n_cn <= 1e-6:
-                        continue
-                    _v_cf = np.array([get_mic_vector(_p[_fl], _cpos, box) for _fl in _bf])
-                    _l_cf = np.linalg.norm(_v_cf, axis=1)
-                    _ok = _l_cf > 1e-6
-                    if not np.any(_ok):
-                        continue
-                    _a = np.degrees(np.arccos(np.clip(
-                        np.dot(_v_cf[_ok], _v_cn) / (_l_cf[_ok] * _n_cn), -1.0, 1.0)))
-                    """
-                    The attacking oxygen satisfies BOTH near-attack conditions at once - short
-                    approach and linear trajectory - because the SN2 needs them on the same atom.
-                    Scored jointly with the same graded NAC terms Step 02 uses, so the two stages
-                    agree on which oxygen is attacking. Ranking on angle alone selects a
-                    well-aligned oxygen that can sit far out of reach, and the frame is then
-                    credited with a trajectory no nucleophile could travel.
-                    """
-                    _ang_j = float(_a.max())
-                    _d_j = float(_nc_d[_ni, _ci])
-                    _nac_j = (_sigmoid07(_d_j, CFG.SOFT_K_NUC, CFG.NAC_DIST_STRICT)
-                              * _sigmoid07(_ang_j, CFG.SOFT_K_ANG, CFG.NAC_ANGLE_STRICT))
-                    _key = (_nac_j, _ang_j, -_d_j)
-                    if _best_key is None or _key > _best_key:
-                        _best_key, best_nuc_idx, best_ca_idx = _key, _n_atom, _c_atom
-                        nac_nuc_dist = _d_j
-            if best_nuc_idx is None:                   # no bonded F resolvable - fall back
-                _flat = int(np.argmin(_nc_d))
-                _nl, _cl = divmod(_flat, len(warhead_c))
-                best_nuc_idx, best_ca_idx = idx_nuc[_nl], warhead_c[_cl]
-                nac_nuc_dist = min_nuc_dist
+            _nc_d = _mic_dists_2d(_pos_nuc_f, _pos_c_f, box)     # [n_O, n_C]: mapped Oδ/Oε to warhead carbons
+            min_nuc_dist = float(_nc_d.min())                   # closest approach over both oxygens
+            _flat = int(np.argmin(_nc_d))
+            _oi, _cj = divmod(_flat, _nc_d.shape[1])
+            nac_nuc_dist = float(_nc_d[_oi, _cj])               # nearest O -> C: that oxygen attacks
+            best_nuc_idx = _nac_od[_oi]
+            best_ca_idx  = warhead_c[_cj]
         else:
             min_nuc_dist = nac_nuc_dist = float('inf')
             best_nuc_idx = best_ca_idx = None
@@ -4538,33 +4500,33 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if post_equil and min_nuc_dist <= POCKET_RESIDENCY_DIST:
             n_pocket += 1
 
-        # ── O–C–F attack angle (backside-attack geometry) ─────────────────────
+        # ── O-C-F backside attack angle: raw max over the scissile carbon's fluorines ─────────────
+        # The leaving fluoride is the α-carbon F most anti-periplanar to the attacking O->C axis (largest
+        # O-C-F angle) THIS frame; on a rotating CF2/CF3 that identity changes frame to frame, so it is
+        # chosen per frame, not fixed. The angle is the OBSERVED geometry - no Šidák multiplicity deflation
+        # (that is a screening/prediction correction for Step 02's single pose, never a measured MD angle),
+        # so 07 reports the same raw backside angle as Step 06.
         max_ang = 0.0; best_f_idx = None
-        if best_nuc_idx is not None and _pos_f_f.size:
+        if best_nuc_idx is not None and best_ca_idx is not None:
             _li_c_best  = _a2l[best_ca_idx]
             _pos_c_best = _p[_li_c_best]
-            _bf_li      = _li_cf.get(_li_c_best, [])         # local F indices for this C
+            _bf_li      = _li_cf.get(_li_c_best, [])         # local F indices bonded to this C
             _bonded_f   = [f for c, f in cf_pairs if c == best_ca_idx]
             if _bf_li and _bonded_f:
                 _v_cf_b  = np.array([get_mic_vector(_p[fli], _pos_c_best, box)
                                      for fli in _bf_li])
                 _cf_lens = np.linalg.norm(_v_cf_b, axis=1)
                 _bond_mask = _cf_lens > 1e-6
-                if np.any(_bond_mask):
-                    _v_cn = get_mic_vector(_p[_a2l[best_nuc_idx]], _pos_c_best, box)
-                    _n_cn = np.linalg.norm(_v_cn)
-                    if _n_cn > 1e-6:
-                        _vf_v = _v_cf_b[_bond_mask]
-                        _lf_v = _cf_lens[_bond_mask]
-                        _dots = np.dot(_vf_v, _v_cn) / (_lf_v * _n_cn)
-                        _angs = np.degrees(np.arccos(np.clip(_dots, -1.0, 1.0)))
-                        _bi   = int(np.argmax(_angs))
-                        # Multiplicity-corrected effective SN2 angle - the SAME transform Step 02 tiering
-                        # uses (CFG.sn2_effective_angle): identity for a single scissile C-F (fluoroacetate),
-                        # Šidák-deflated when the α-carbon bears several equivalent C-F bonds (DFA/TFA), so
-                        # 07's NAC gate/stats stay in lock-step with 02/03 rather than reading a raw angle.
-                        max_ang        = CFG.sn2_effective_angle(float(_angs[_bi]), len(_bonded_f))
-                        best_f_idx = _bonded_f[int(np.where(_bond_mask)[0][_bi])]
+                _v_cn = get_mic_vector(_p[_a2l[best_nuc_idx]], _pos_c_best, box)
+                _n_cn = np.linalg.norm(_v_cn)
+                if _n_cn > 1e-6 and np.any(_bond_mask):
+                    _vf_v = _v_cf_b[_bond_mask]
+                    _lf_v = _cf_lens[_bond_mask]
+                    _dots = np.dot(_vf_v, _v_cn) / (_lf_v * _n_cn)
+                    _angs = np.degrees(np.arccos(np.clip(_dots, -1.0, 1.0)))
+                    _bi   = int(np.argmax(_angs))            # backside-most (leaving) F this frame
+                    max_ang    = float(_angs[_bi])           # RAW observed backside angle (no Šidák)
+                    best_f_idx = _bonded_f[int(np.where(_bond_mask)[0][_bi])]
 
         # ── Tail anchor: fluorine to halide cradle ────────────────────────────
         dist_tail = np.nan
