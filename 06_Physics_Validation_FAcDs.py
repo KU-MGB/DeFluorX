@@ -80,7 +80,7 @@ Dependency Map
                        02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png,
                        Defluorination/00_Defluorination_Combined_AllRanks.png,
                        Prime-MMGBSA/Prime-MMGBSA_R{N}/01_MMGBSA_Profile.png,
-                       Defluorination/Defluorination_R{N}/01_SN2_Attack_Geometry.png … 07_Figure_Descriptions.txt}
+                       Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.png … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
@@ -2829,7 +2829,12 @@ def _defl_min_image(dvec, box):
 
 
 def _defl_ligand_atoms(fs):
-    """(alpha_C aid, F aid, [carboxylate O aids]) from the LIG bond graph."""
+    """(alpha_C aid, [alpha-C F aids], [carboxylate O aids]) from the LIG bond graph.
+
+    Every fluorine on the scissile alpha-carbon is returned, not just one: on a poly-fluorinated
+    carbon (CF2 in difluoroacetate, CF3 in trifluoroacetate) the fluorine aligned for backside SN2
+    attack rotates frame-to-frame, so the leaving fluoride must be chosen per frame from the whole
+    set rather than fixed here."""
     lig = [a for a in fs.atom if a.pdbres.strip() == "LIG" and a.element.strip() != "H"]
     ele = {int(a): a.element.strip() for a in lig}
     nb = {int(a): [] for a in lig}
@@ -2845,10 +2850,10 @@ def _defl_ligand_atoms(fs):
     aC = next((c for c in cn if any(ele[k] == "F" for k in nb[c])), cn[0] if cn else None)
     if aC is None:
         raise RuntimeError("no alpha-carbon in ligand")
-    F = next((k for k in nb[aC] if ele[k] == "F"), None)
-    if F is None:
+    Fs = [k for k in nb[aC] if ele[k] == "F"]
+    if not Fs:
         raise RuntimeError("no fluorine on the alpha-carbon (not a scissile C-F ligand)")
-    return aC, F, cox
+    return aC, Fs, cox
 
 
 def _defl_mapped_residues(run_root: Path, rank: str) -> dict:
@@ -2903,8 +2908,8 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         return [aid2gid[int(a)] for a in fs.atom
                 if a.resnum in rs and a.pdbname.strip() in ns and int(a) in aid2gid]
 
-    aC_aid, F_aid, cox_aids = _defl_ligand_atoms(fs)
-    gC = aid2gid[aC_aid]; gF = aid2gid[F_aid]
+    aC_aid, F_aids, cox_aids = _defl_ligand_atoms(fs)
+    gC = aid2gid[aC_aid]; gFs = [aid2gid[i] for i in F_aids]
     gCox = [aid2gid[i] for i in cox_aids]
     gOd = G([R["nuc"]], {"OD1", "OD2", "OE1", "OE2"})
     _STD = set("ALA ARG ASN ASP CYS GLN GLU GLY HIS HID HIE HIP ILE LEU LYS MET PHE "
@@ -2959,13 +2964,25 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
 
     for m, fi in enumerate(idx):
         fr = tr[fi]; pos = fr.pos(); box = fr.box
-        od = pos[gOd]; c = pos[gC][None, :]; f = pos[gF]
+        od = pos[gOd]; c = pos[gC][None, :]
         dd = np.linalg.norm(_defl_min_image(od - c, box), axis=1)
         attack[m] = dd.min()
         o = od[np.argmin(dd)]
         v1 = _defl_min_image((o - pos[gC])[None, :], box)[0]
-        v2 = _defl_min_image((f - pos[gC])[None, :], box)[0]
-        angle[m] = np.degrees(np.arccos(np.clip(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1, 1)))
+        n1 = np.linalg.norm(v1)
+        # Leaving fluoride, chosen per frame: SN2 breaks the C-F bond anti-periplanar to the
+        # incoming nucleophile, so among the alpha-carbon fluorines the reactive one is whichever
+        # is most backside-aligned (largest Od-Ca-F angle, nearest the collinear 180 deg attack
+        # trajectory). On a rotating CF2/CF3 this identity changes frame-to-frame; a fixed choice
+        # would track a spectator F and read a spuriously low angle. The chosen F also sets the
+        # fluoride-cradle distance for that frame.
+        best = -1.0; f = pos[gFs[0]]
+        for gFi in gFs:
+            vf = _defl_min_image((pos[gFi] - pos[gC])[None, :], box)[0]
+            a = np.degrees(np.arccos(np.clip(v1 @ vf / (n1 * np.linalg.norm(vf)), -1, 1)))
+            if a > best:
+                best = a; f = pos[gFi]
+        angle[m] = best
         for k, g in cradle.items():
             cradle_d[k][m] = _mind(f[None, :], pos[g], box) if g else np.nan
         for k, g in clamp.items():
@@ -3028,7 +3045,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     hdr += ["protein_Rg", "lig_com_disp", "mmgbsa_dG_bind"]; cols += [rg, com, dG]
     for _lab in comp:
         hdr.append("mmgbsa_" + _lab); cols.append(comp[_lab])
-    np.savetxt(out / "05_Defluorination_Geometry.csv", np.column_stack(cols),
+    np.savetxt(out / "04_Defluorination_Geometry.csv", np.column_stack(cols),
                delimiter=",", header=",".join(hdr), comments="")
 
     # ── figures (black axis labels/values, neutral grey grid, CFG colours/DPI) ──────────
@@ -3036,99 +3053,106 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     _LF, _FA = CFG.VIS_FONT_LEGEND, CFG.VIS_LEGEND_FRAME_ALPHA
 
     def _dgrid(ax):
-        ax.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.7)
-        ax.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.7); ax.set_axisbelow(True)
+        ax.grid(axis="x", color=_DEFL_GRID_X, lw=float(CFG.DEFLUOR_GRID_X_LW), alpha=float(CFG.DEFLUOR_GRID_X_ALPHA))
+        ax.grid(axis="y", color=_DEFL_GRID_Y, lw=float(CFG.DEFLUOR_GRID_Y_LW), alpha=float(CFG.DEFLUOR_GRID_Y_ALPHA))
+        ax.set_axisbelow(True)
 
-    # 01 attack geometry - dual axis, each axis LABEL + tick VALUES coloured to its own trace so the two
-    # solid traces are named by their axes; a single bottom-right row legend carries only the reference
-    # markers (the two dashed NAC cut-offs + the NAC-competent verdict). Robust to both regimes: a
-    # collapsed pose (~0 % NAC, distance high / angle low) and a held near-attack pose (high NAC, distance
-    # low / angle high) both read correctly.
-    _axlab = float(CFG.VIS_FONT_AXIS_LABEL)
-    fig, ax1 = plt.subplots(figsize=(11, 4.6))
-    ax1.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
-    _cut_d = ax1.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.55)
-    ax1.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
-    ax1.set_ylabel(f"ASP{R['nuc']} Oδ···Cα attack distance (Å)", color=_DEFL_OKABE[0], labelpad=3, fontsize=_axlab)
-    # unit ticks over a 0-based range that always spans the data AND the cut-off (a lone 0/4 was the bug).
-    _top = float(np.ceil(max(float(np.nanmax(attack)), _DEFL_NAC_DIST)))
-    ax1.set_ylim(0, _top); ax1.set_yticks(np.arange(0, _top + 0.001, 1))
-    ax1.set_xticks(np.arange(0, total_ns + 1, 50))
-    ax1.tick_params(axis="y", labelcolor=_DEFL_OKABE[0]); ax1.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
-    ax1.grid(axis="x", color=_DEFL_GRID_X, lw=0.5, alpha=0.5)
-    ax1.grid(axis="y", color=_DEFL_GRID_Y, lw=0.5, alpha=0.5); ax1.set_axisbelow(True)
-    ax2 = ax1.twinx()
-    ax2.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
-    _cut_a = ax2.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.6)
-    ax2.set_ylabel("Oδ–Cα–F backside attack angle (°)", color=_DEFL_OKABE[1], labelpad=3, fontsize=_axlab)
-    ax2.set_ylim(0, 180); ax2.set_yticks(np.arange(0, 181, 30)); ax2.tick_params(axis="y", labelcolor=_DEFL_OKABE[1])
-    _band = ax1.fill_between(t, 0, ax1.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=0.18, step="mid")
-    # The two solid traces are named by their coloured axis labels; the legend carries only the reference
-    # markers - the two dashed NAC cut-offs and the NAC-competent verdict - as one bottom-right row. The
-    # dashed-line + band handles come straight from the artists, so no proxy imports are needed. Put it on
-    # ax2 (the twin, drawn last) with a high zorder so it sits ON TOP of both traces, not under the angle
-    # line the way an ax1 legend would.
-    _leg = ax2.legend([_cut_d, _cut_a, _band],
-                      [f"NAC distance ≤ {_DEFL_NAC_DIST:.1f} Å", f"in-line attack ≥ {_DEFL_NAC_ANGLE:.0f}°",
-                       f"NAC-competent ({nac_pct:.1f}%)"],
-                      loc="lower right", ncol=3, framealpha=_FA, fontsize=_LF,
-                      handlelength=1.8, columnspacing=1.2, borderpad=0.4)
-    _leg.set_zorder(20)
-    fig.tight_layout(); fig.savefig(out / "01_SN2_Attack_Geometry.png", dpi=_dpi); plt.close(fig)
-
-    # 02 cradle + clamp - no legend: each residue is named horizontally in the left-margin gap, coloured
-    # to its own trace, at that trace's starting level. The residue label identifies the line, so the
-    # legend is redundant. Residue names come from the trace keys (mapped per homolog), never hardcoded.
-    # When two traces start at the same level (ARG111/ARG114 in the clamp panel) the labels are nudged
-    # apart in y so they never overlap.
-    _cmax = float(np.nanmax([np.nanmax(d) for d in cradle_d.values()])) * 1.05
-    _lmax = float(np.nanmax([np.nanmax(d) for d in clamp_d.values()])) * 1.05
-    _lblf = float(CFG.VIS_FONT_TICK_DENSE)
-
-    def _edge_labels(ax, entries, ymax):
-        """Write each (label, colour, start_y) horizontally in the left gap, right-aligned just left of
-        the first frame and min-separated in y so neighbours never overlap."""
-        _xp = -total_ns * 0.006
-        _sep = ymax * 0.05
-        _ent = sorted(entries, key=lambda e: e[2])
-        _ys = [e[2] for e in _ent]
-        for _i in range(1, len(_ys)):
-            if _ys[_i] - _ys[_i - 1] < _sep:
-                _ys[_i] = _ys[_i - 1] + _sep
-        for (_lab, _col, _), _y in zip(_ent, _ys):
-            ax.text(_xp, min(_y, ymax * 0.98), _lab, ha="right", va="center",
-                    color=_col, fontsize=_lblf, clip_on=False)
+    # 01 reactive-pose trajectory - three stacked panels sharing one Time axis: (A) SN2 attack geometry
+    # (Oδ···Cα distance on the left axis, backside attack angle on the right), (B) leaving-F fluoride
+    # cradle, (C) carboxylate clamp. The near-attack window (global NAC frames: attack < cut AND angle >
+    # cut) is shaded green in every panel so cradle/clamp engagement can be read at the frames when the
+    # ligand is attack-ready. It is the same global reaction-coordinate mask on all three panels - never a
+    # per-residue claim - and is named in each panel's legend so it cannot be misread as residue-specific.
+    # The attack angle is a property of the ligand carbon (Oδ-Cα-F), so its right-hand axis appears on
+    # panel A only, not mirrored onto the cradle/clamp panels where it would be meaningless. Residue names
+    # come from the trace keys (mapped per homolog), never hardcoded; tags min-separate in y so they never
+    # overlap. Distance panels use unit (1 Å) y-ticks over a 0-based range spanning the data and the cut-off.
+    _axlab = float(CFG.VIS_FONT_AXIS_LABEL); _lblf = float(CFG.VIS_FONT_TICK_DENSE)
+    _band_a = float(CFG.DEFLUOR_NAC_BAND_ALPHA)
+    _xleft = -total_ns * float(CFG.DEFLUOR_LEFT_MARGIN)     # left xlim: empty margin the residue tags sit inside
+    _xlab = -total_ns * float(CFG.DEFLUOR_EDGE_LABEL_X)     # tag x anchor just left of t=0 (ha="right")
 
     def _start_level(d):
         return float(np.nanmean(d[:max(1, len(d) // 50)]))   # avg of the first ~2 % of frames
 
-    fig, (axt, axb) = plt.subplots(2, 1, figsize=(11, 7.4), sharex=True)
+    def _edge_labels(ax, entries):
+        """Write each (label, colour, start_y) horizontally in the left gap, right-aligned just left of the
+        first frame and min-separated in y (falling back down if the stack overruns the top) so tags that
+        start at nearly the same distance never overlap."""
+        _lo, _hi = ax.get_ylim(); _span = _hi - _lo
+        _gap = _span * float(CFG.DEFLUOR_EDGE_LABEL_GAP)
+        _ent = sorted(entries, key=lambda e: e[2]); _ys = [e[2] for e in _ent]
+        for _i in range(1, len(_ys)):
+            if _ys[_i] < _ys[_i - 1] + _gap:
+                _ys[_i] = _ys[_i - 1] + _gap
+        _shift = max(0.0, _ys[-1] - (_hi - _span * 0.03))
+        for (_lab, _col, _), _y in zip(_ent, _ys):
+            ax.text(_xlab, min(_y - _shift, _hi - _span * 0.03), _lab, ha="right", va="center",
+                    color=_col, fontsize=_lblf, fontweight="bold", clip_on=False)
+
+    fig, (axA, axB, axC) = plt.subplots(3, 1, figsize=tuple(CFG.DEFLUOR_MERGED_FIGSIZE), sharex=True,
+                                        gridspec_kw={"height_ratios": list(CFG.DEFLUOR_PANEL_HEIGHT_RATIOS)})
+
+    # panel A - SN2 attack geometry (distance left, backside angle right)
+    axA.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
+    _cut_d = axA.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.55)
+    axA.set_ylabel("Oδ···Cα attack distance (Å)", color=_DEFL_OKABE[0], labelpad=3, fontsize=_axlab)
+    _top = float(np.ceil(max(float(np.nanmax(attack)), _DEFL_NAC_DIST)))
+    axA.set_ylim(0, _top); axA.set_yticks(np.arange(0, _top + 0.001, 1))
+    axA.tick_params(axis="y", labelcolor=_DEFL_OKABE[0]); _dgrid(axA)
+    _edge_labels(axA, [(f"ASP{R['nuc']}·Nu", _DEFL_OKABE[0], _start_level(attack))])
+    _aA = axA.twinx()
+    _aA.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
+    _cut_a = _aA.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.6)
+    _aA.set_ylabel("Oδ–Cα–F backside attack angle (°)", color=_DEFL_OKABE[1], labelpad=3, fontsize=_axlab)
+    _aA.set_ylim(0, 180); _aA.set_yticks(np.arange(0, 181, 30)); _aA.tick_params(axis="y", labelcolor=_DEFL_OKABE[1])
+    _band = axA.fill_between(t, 0, axA.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
+    _leg = _aA.legend([_cut_d, _cut_a, _band],
+                      [f"NAC distance ≤ {_DEFL_NAC_DIST:.1f} Å", f"SN2 in-line attack ≥ {_DEFL_NAC_ANGLE:.0f}°",
+                       f"NAC-competent ({nac_pct:.1f}%)"],
+                      loc="lower right", ncol=3, framealpha=_FA, fontsize=_LF,
+                      handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+    _leg.set_zorder(20)
+
+    # panel B - fluoride cradle (leaving F to each stabiliser)
+    _cmax = float(np.nanmax([np.nanmax(d) for d in cradle_d.values()])) * 1.05
     _lab_top = []
     for (k, d), c in zip(cradle_d.items(), _DEFL_OKABE):
-        axt.plot(t, d, lw=0.8, color=c)
-        _lab_top.append((f"F···{k}", c, _start_level(d)))
-    axt.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
-    axt.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT); axt.set_ylim(0, _cmax)
-    axt.set_yticks(np.arange(0, _cmax, 4)); axt.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axt)
-    _edge_labels(axt, _lab_top, _cmax)
+        axB.plot(t, d, lw=0.8, color=c); _lab_top.append((f"F···{k}", c, _start_level(d)))
+    _dlB = axB.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
+    axB.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT)
+    axB.set_ylim(0, _cmax); axB.set_yticks(np.arange(0, _cmax + 0.001, 1))
+    axB.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axB)
+    _bandB = axB.fill_between(t, 0, _cmax, where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
+    _edge_labels(axB, _lab_top)
+    _lB = axB.legend([_dlB, _bandB], [f"F cradled ≤ {_DEFL_NAC_DIST:.1f} Å", "near-attack window"],
+                     loc="lower right", ncol=2, framealpha=_FA, fontsize=_LF,
+                     handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+    _lB.set_zorder(20)
+
+    # panel C - carboxylate clamp (each Arg NHx to the ligand carboxylate)
+    _lmax = float(np.nanmax([np.nanmax(d) for d in clamp_d.values()])) * 1.05
     _lab_bot = []
     for (k, d), c in zip(clamp_d.items(), [_DEFL_OKABE[4], _DEFL_OKABE[2]]):
-        axb.plot(t, d, lw=0.8, color=c)
-        _lab_bot.append((k, c, _start_level(d)))
-    axb.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
-    axb.set_ylabel("Arg NHx ··· carboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
-    axb.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
-    axb.set_ylim(0, _lmax); axb.set_yticks(np.arange(0, _lmax, 4))
-    axb.set_xticks(np.arange(0, total_ns + 1, 50))
-    axb.tick_params(axis="y", labelcolor=_DEFL_AXTXT); axb.tick_params(axis="x", labelcolor=_DEFL_AXTXT); _dgrid(axb)
-    # Widen the left gap (shared via sharex) so the horizontal residue labels sit clear of the data AND
-    # of the y-tick numbers; the widest label ("F···TRP156") measures ~67 ns, so 8 % of the axis is the
-    # tightest room that still clears it.
-    axt.set_xlim(-total_ns * 0.08, total_ns * 1.005)
-    _edge_labels(axb, _lab_bot, _lmax)
-    fig.tight_layout(); fig.savefig(out / "02_Fluoride_Cradle_and_Carboxylate_Clamp.png", dpi=_dpi); plt.close(fig)
+        axC.plot(t, d, lw=0.8, color=c); _lab_bot.append((k, c, _start_level(d)))
+    _dlC = axC.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
+    axC.set_ylabel("Arg NHx ··· carboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
+    axC.set_ylim(0, _lmax); axC.set_yticks(np.arange(0, _lmax + 0.001, 1))
+    axC.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axC)
+    _bandC = axC.fill_between(t, 0, _lmax, where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
+    _edge_labels(axC, _lab_bot)
+    _lC = axC.legend([_dlC, _bandC], [f"clamp engaged ≤ {_DEFL_NAC_DIST:.1f} Å", "near-attack window"],
+                     loc="upper right", ncol=2, framealpha=_FA, fontsize=_LF,
+                     handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+    _lC.set_zorder(20)
 
-    # 03 reactive summary - each bar's y-tick label AND its value (written just right of the bar, never
+    # one shared Time axis: label + tick VALUES on the bottom panel only
+    axC.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
+    axC.set_xticks(np.arange(0, total_ns + 1, 50)); axC.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
+    axA.set_xlim(_xleft, total_ns * 1.005)
+    fig.tight_layout(h_pad=0.6); fig.savefig(out / "01_Reactive_Pose_Trajectory.png", dpi=_dpi); plt.close(fig)
+
+    # 02 reactive summary - each bar's y-tick label AND its value (written just right of the bar, never
     # inside) take that bar's colour, so residue/criterion, bar and number all read as one coloured unit.
     fig, (axa, axb2) = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw={"width_ratios": [1.7, 1]})
     names = list(occ.keys()); vals = [occ[k] for k in names]
@@ -3153,9 +3177,9 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         _lbl.set_color(_col)
     for i, (c, _col) in enumerate(zip(crit, _txt_b)):
         axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=CFG.VIS_FONT_TICK, color=_col)
-    fig.tight_layout(); fig.savefig(out / "03_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
+    fig.tight_layout(); fig.savefig(out / "02_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
 
-    # 07 binding vs reactivity (only when MM-GBSA is available for this rank)
+    # 03 binding vs reactivity (only when MM-GBSA is available for this rank)
     if np.isfinite(dG).any():
         m = np.isfinite(dG)
         _dv = dG[m]
@@ -3180,7 +3204,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.set_xlabel("attack distance (Å)")
         ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
         ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
-        fig.tight_layout(); fig.savefig(out / "04_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
+        fig.tight_layout(); fig.savefig(out / "03_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
 
     # The MM-GBSA energy-component decomposition (reactive vs rest) is drawn once, in Step 07's
     # per-rank MMGBSA_NAC_Decomposition figure, from the same per-frame Prime terms; the per-component
@@ -3189,7 +3213,8 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     # ── run log + figure-description file ─────────────────────────────────────────────
     log = [f"FAcD defluorination MD analysis - Rank {rank}",
            f"ligand atoms: alpha-C={fs.atom[aC_aid].pdbname.strip()} "
-           f"F={fs.atom[F_aid].pdbname.strip()} carboxylate-O={[fs.atom[i].pdbname.strip() for i in cox_aids]}",
+           f"alpha-C F={[fs.atom[i].pdbname.strip() for i in F_aids]} (leaving F chosen per frame) "
+           f"carboxylate-O={[fs.atom[i].pdbname.strip() for i in cox_aids]}",
            f"frames {nfr} (stride {stride}) · {total_ns:.0f} ns",
            f"NAC-competent (dist<{_DEFL_NAC_DIST} Å & angle>{_DEFL_NAC_ANGLE:.0f}°): {nac_pct:.2f}%",
            f"attack distance: mean {attack.mean():.2f} Å  min {attack.min():.2f} Å",
@@ -3204,16 +3229,17 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         log.append("MM-GBSA ΔG_bind: not available for this rank")
     log.append("per-residue engagement occupancy:")
     log += [f"  {name:16s} {v:5.1f}%" for name, v in occ.items()]
-    (out / "06_Analysis_Log.log").write_text("\n".join(log) + "\n")
-    (out / "07_Figure_Descriptions.txt").write_text(
+    (out / "05_Analysis_Log.log").write_text("\n".join(log) + "\n")
+    (out / "06_Figure_Descriptions.txt").write_text(
         f"FAcD Defluorination MD Analysis - Rank {rank} · {nfr} frames · {total_ns:.0f} ns\n"
-        f"01 SN2 attack geometry (Oδ···Cα distance + Oδ-Cα-F angle; green = NAC-competent)\n"
-        f"02 fluoride cradle (F···stabilisers) + carboxylate clamp (Arg···carboxylate)\n"
-        f"03 reactive summary (per-residue engagement + NAC criterion decomposition)\n"
-        f"04 binding vs reactivity (MM-GBSA ΔG_bind vs attack distance; only if MM-GBSA present)\n"
-        f"05 per-frame geometry CSV (geometry + mmgbsa_dG_bind + per-component terms; the MM-GBSA\n"
+        f"01 reactive-pose trajectory - 3 panels sharing one Time axis: (A) SN2 attack geometry\n"
+        f"   (Oδ···Cα distance + Oδ-Cα-F backside angle), (B) fluoride cradle (F···stabilisers),\n"
+        f"   (C) carboxylate clamp (Arg···carboxylate); green = near-attack window (global NAC frames)\n"
+        f"02 reactive summary (per-residue engagement + NAC criterion decomposition)\n"
+        f"03 binding vs reactivity (MM-GBSA ΔG_bind vs attack distance; only if MM-GBSA present)\n"
+        f"04 per-frame geometry CSV (geometry + mmgbsa_dG_bind + per-component terms; the MM-GBSA\n"
         f"   component decomposition itself is Step 07's MMGBSA_NAC_Decomposition figure)\n"
-        f"06 run log · 07 this figure-description file\n")
+        f"05 run log · 06 this figure-description file\n")
     _dg_note = f" · ΔG {mmgbsa_median:.0f}" if np.isfinite(mmgbsa_median) else ""
     _echo(f"    ✔ Defluor      : NAC {nac_pct:.1f}% · attack min {attack.min():.2f} Å{_dg_note} → {out.name}/")
     return out
@@ -3230,7 +3256,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         return
     rows = []
     for d in sorted(root.glob("Defluorination_R*"), key=lambda p: _natural_rank(p)):
-        csv = d / "05_Defluorination_Geometry.csv"
+        csv = d / "04_Defluorination_Geometry.csv"
         if not csv.is_file():
             continue
         try:

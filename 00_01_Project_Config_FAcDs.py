@@ -3108,6 +3108,22 @@ class CFG:
     DEFLUOR_NAC_ANGLE_DEG: float = 150.0        # in-line Od–C(alpha)–F attack angle cutoff (deg)
     DEFLUOR_ENGAGE_A: float    = 4.0            # residue counted as engaged with the ligand within this distance (Å)
     DEFLUOR_POCKET_RADIUS_A: float = 8.0        # frame-0 pocket = protein Cα within this radius of the ligand (COM reference)
+    """
+    Layout of the merged reactive-pose trajectory figure (01): three stacked panels (SN2 attack
+    geometry, fluoride cradle, carboxylate clamp) sharing one Time axis. The x-grid is drawn heavier
+    than the y-grid because the vertical time gridlines were otherwise near-invisible under the traces.
+    Edge-label offsets are fractions of the axis span so residue names sit clear in the left margin.
+    """
+    DEFLUOR_MERGED_FIGSIZE: tuple = (11.0, 11.0)         # width, height (in) of the 3-panel figure
+    DEFLUOR_PANEL_HEIGHT_RATIOS: tuple = (1.15, 1.0, 1.0)  # panel A slightly taller (dual-axis geometry)
+    DEFLUOR_GRID_X_LW: float = 0.7              # time (x) gridline weight - heavier so it stays visible
+    DEFLUOR_GRID_X_ALPHA: float = 0.9           # time (x) gridline opacity
+    DEFLUOR_GRID_Y_LW: float = 0.5              # value (y) gridline weight
+    DEFLUOR_GRID_Y_ALPHA: float = 0.5           # value (y) gridline opacity
+    DEFLUOR_NAC_BAND_ALPHA: float = 0.18        # opacity of the green near-attack-window shading
+    DEFLUOR_LEFT_MARGIN: float = 0.08           # left xlim margin as a fraction of total_ns (holds the labels)
+    DEFLUOR_EDGE_LABEL_X: float = 0.006         # residue-tag x anchor left of t=0, fraction of total_ns
+    DEFLUOR_EDGE_LABEL_GAP: float = 0.085       # min vertical separation between stacked tags, fraction of y-span
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
     """
     Failed Prime minimisations. A small PFAS ligand cannot bind at −1000 kcal/mol; frames that

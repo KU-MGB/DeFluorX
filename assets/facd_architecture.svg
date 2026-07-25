@@ -17,7 +17,7 @@
 <text x="243" y="128" font-size="10.2" font-weight="800" fill="#f8fafc">00_01_Project_Config_FAcDs.py</text>
 <text x="243" y="145" font-size="9.2" fill="#e2e8f0">single source of truth - thresholds, weights, paths</text>
 <text x="243" y="158.2" font-size="9.2" fill="#e2e8f0">tiers · geometry cutoffs · restraint · gates</text>
-<text x="503" y="180" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,384</text>
+<text x="503" y="180" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,400</text>
 <g filter="url(#ds)"><rect x="524" y="108" width="214" height="80" rx="10" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/></g>
 <text x="541" y="128" font-size="10.2" font-weight="800" fill="#f8fafc">00_02_Project_Utils_FAcDs.py</text>
 <text x="541" y="145" font-size="9.2" fill="#e2e8f0">console &amp; logging · atomic CSV / JSON</text>
@@ -89,7 +89,7 @@
 <text x="389" y="552.6000000000001" font-size="9.2" fill="#dbeafe">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="389" y="565.8000000000002" font-size="9.2" fill="#dbeafe">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="389" y="579.0000000000002" font-size="9.2" fill="#dbeafe">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~4,849</text>
+<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~4,875</text>
 <g filter="url(#ds)"><rect x="736" y="476" width="348" height="134" rx="10" fill="#1d4ed8" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="753" y="496" font-size="10.4" font-weight="800" fill="#eff6ff">07_MD_QMMM_Defluorination_FAcDs.py</text>
 <text x="753" y="513" font-size="9.2" fill="#dbeafe">turns MD trajectories into a defluorination verdict</text>
