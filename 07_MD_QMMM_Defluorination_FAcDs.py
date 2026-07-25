@@ -555,15 +555,19 @@ def console_qmm_ready(msg: str) -> None:
 # NOTE: This function is NOT equivalent to 00_02_Project_Utils.calculate_min_distance.
 # It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
 # The API divergence is intentional - required for Schrödinger/Maestro integration.
-def calculate_min_distance(frame, indices_A: list, indices_B: list) -> float:
-    """Minimum PBC-corrected distance between two atom index sets (vectorised).
+def calculate_min_distance(frame, indices_A: list, indices_B: list, cms=None) -> float:
+    """Minimum PBC-corrected distance between two atom-id sets (vectorised).
 
-    The O(N×M) pairwise MIC distances are computed in one numpy call via
-    _mic_dists_2d instead of a Python double loop - the per-atom frame.pos()
-    gather is unavoidable, but the distance maths is fully vectorised.
+    frame.pos() indexes by trajectory gid, not by CMS atom-id, and the two differ (0- vs 1-based plus any
+    virtual-site offset). Callers therefore pass the `cms` model so the ids are converted to gids here
+    before the position gather; without it a coordinate is read off the wrong atom. The O(N×M) pairwise
+    MIC distances are then computed in one numpy call via _mic_dists_2d.
     """
     if not indices_A or not indices_B:
         return np.nan
+    if cms is not None:
+        indices_A = topo.aids2gids(cms, list(indices_A))
+        indices_B = topo.aids2gids(cms, list(indices_B))
     box = frame.box if hasattr(frame, 'box') else None
     pos_a = np.asarray([frame.pos(a) for a in indices_A], dtype=float)   # (nA, 3)
     pos_b = np.asarray([frame.pos(b) for b in indices_B], dtype=float)   # (nB, 3)
@@ -670,7 +674,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     for res_key, data in res_dict.items():
         if not data['O_idx'] or data['ptype'] not in _NUCLEOPHILE_RESIDUES:
             continue
-        d     = calculate_min_distance(frame_0, lig_c_idxs, data['O_idx'])
+        d     = calculate_min_distance(frame_0, lig_c_idxs, data['O_idx'], cms_model)
         bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_nuc and abs(data['resnum'] - mapped_nuc) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
         if (d + bonus) < min_eff:
             min_eff = d + bonus; best_nuc_key = res_key; actual_dist = d
@@ -683,8 +687,9 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         # before calling so CMS atom-group objects never enter the utility.
         # Threshold aligns with CFG.NAC_ANGLE_RELAXED (BRAIN.md §7).
         c_idx, f_idx = cf_pairs[0]
-        c_pos_np   = np.array(frame_0.pos(c_idx), dtype=float)
-        f_pos_np   = np.array(frame_0.pos(f_idx), dtype=float)
+        # frame.pos() indexes by gid; convert the atom-ids first (see calculate_min_distance).
+        c_pos_np   = np.array(frame_0.pos(topo.aids2gids(cms_model, [c_idx])[0]), dtype=float)
+        f_pos_np   = np.array(frame_0.pos(topo.aids2gids(cms_model, [f_idx])[0]), dtype=float)
         # Build candidate list: (resnum, od1_np, od2_np) for each ASP/ASH residue.
         _asp_cands = []
         for rk, rd in res_dict.items():
@@ -694,8 +699,9 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
                        if cms_model.atom[i].pdbname.strip() in ('OD1', 'OD2')]
             if not od_idxs:
                 continue
-            od1_np = np.array(frame_0.pos(od_idxs[0]), dtype=float)
-            od2_np = np.array(frame_0.pos(od_idxs[1]), dtype=float) if len(od_idxs) > 1 else None
+            od1_np = np.array(frame_0.pos(topo.aids2gids(cms_model, [od_idxs[0]])[0]), dtype=float)
+            od2_np = (np.array(frame_0.pos(topo.aids2gids(cms_model, [od_idxs[1]])[0]), dtype=float)
+                      if len(od_idxs) > 1 else None)
             _asp_cands.append((rk, od1_np, od2_np))
         fb_result = find_nucleophile_od_fallback(
             _asp_cands, c_pos_np, f_pos_np,
@@ -735,7 +741,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         # would have reported "no base found" on a structure that has one.
         if not data['N_idx'] or data['ptype'] not in _BASE_RESIDUES:
             continue
-        d     = calculate_min_distance(frame_0, idx_nuc, data['N_idx'])
+        d     = calculate_min_distance(frame_0, idx_nuc, data['N_idx'], cms_model)
         bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_base and abs(data['resnum'] - mapped_base) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
         bonus += CFG.SMART_LOCK_CHAIN_BIAS if data['chain'] == nuc_chain else 0.0
         if (d + bonus) < min_eff:
@@ -754,7 +760,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
             if (res_key == best_nuc_key or not data['O_idx']
                     or data['ptype'] not in _ACID_RESIDUES):
                 continue
-            d     = calculate_min_distance(frame_0, idx_base, data['O_idx'])
+            d     = calculate_min_distance(frame_0, idx_base, data['O_idx'], cms_model)
             bonus = CFG.SMART_LOCK_BIAS_DIST if (mapped_acid and abs(data['resnum'] - mapped_acid) <= CFG.SMART_LOCK_RESNUM_WINDOW) else 0.0
             bonus += CFG.SMART_LOCK_CHAIN_BIAS if data['chain'] == nuc_chain else 0.0
             if (d + bonus) < min_eff:
@@ -776,7 +782,7 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         if res_key == best_base_key:
             continue
         if data['ptype'] in _cradle_types:
-            if calculate_min_distance(frame_0, idx_nuc, data['heavy_idx']) <= _fcr:
+            if calculate_min_distance(frame_0, idx_nuc, data['heavy_idx'], cms_model) <= _fcr:
                 idx_cradle.extend(data['heavy_idx'])
 
     console_info(f"    {ConsoleColours.OKBLUE}↳ 3D Smart-Lock: Fluorine Cradle → "
@@ -4167,8 +4173,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # PrepWizard residue renumbering can silently mis-map the triad; catch it here
     # before any per-frame analysis runs.
     if idx_nuc and idx_base:
-        nuc_pos_frame0  = np.mean([_f0.pos(i) for i in idx_nuc],  axis=0)
-        base_pos_frame0 = np.mean([_f0.pos(i) for i in idx_base], axis=0)
+        # frame.pos() indexes by gid, so convert the atom-ids (else the sanity check reads wrong coords).
+        nuc_pos_frame0  = np.mean([_f0.pos(g) for g in topo.aids2gids(cms_model, idx_nuc)],  axis=0)
+        base_pos_frame0 = np.mean([_f0.pos(g) for g in topo.aids2gids(cms_model, idx_base)], axis=0)
         nuc_base_frame0_dist = np.linalg.norm(nuc_pos_frame0 - base_pos_frame0)
         if nuc_base_frame0_dist > CFG.SMART_LOCK_MAPPING_SANITY_DIST:
             console_info(
@@ -4280,10 +4287,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        if _n_fr > 1 else np.array([0]))
         _sol_arr = np.asarray(sol_indices)
         _keep    = np.zeros(len(_sol_arr), dtype=bool)
+        # frame.pos() indexes by gid; convert once (these sets are frame-invariant).
+        _nuc_g = topo.aids2gids(cms_model, list(idx_nuc))
+        _sol_g = topo.aids2gids(cms_model, list(sol_indices))
         for _fi in _sample_idx:
             _fr   = tr[int(_fi)]
-            _cen  = np.mean([_fr.pos(i) for i in idx_nuc], axis=0)
-            _spos = np.array([_fr.pos(s) for s in sol_indices])
+            _cen  = np.mean([_fr.pos(g) for g in _nuc_g], axis=0)
+            _spos = np.array([_fr.pos(g) for g in _sol_g])
             _keep |= (np.linalg.norm(_spos - _cen, axis=1) <= _SOL_SPHERE_RADIUS)
         _sol_use = _sol_arr[_keep].tolist()
     else:
@@ -4320,7 +4330,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _preload_set = list(_preload_set) + _ca_atoms
     _preload_atoms = sorted(set(_preload_set))
     _a2l           = {a: i for i, a in enumerate(_preload_atoms)}   # atom_idx → local
-    _preload_list  = list(_preload_atoms)                            # for frame.pos()
+    # frame.pos() indexes by trajectory GID, not by CMS atom-id, and the two differ (0- vs 1-based plus
+    # any virtual-site offset). Passing atom-ids reads each coordinate off the wrong atom, so every
+    # per-frame distance/angle must gather positions by gid. aids2gids preserves order, so _p[_a2l[aid]]
+    # stays the position of that aid.
+    _preload_list  = topo.aids2gids(cms_model, list(_preload_atoms))  # aids -> trajectory gids for frame.pos()
     _n_pre         = len(_preload_atoms)
 
     # 4. Pre-compute local index arrays (avoids per-frame dict lookups).
