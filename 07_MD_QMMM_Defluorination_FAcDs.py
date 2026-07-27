@@ -45,7 +45,7 @@ Date   : 30 July 2026 <───────────────────
                     - 03_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
                     - 04_MMGBSA_Trace.png          (per-frame ΔG_bind with rolling mean and ±1 SD)
                     - Ideal_Final.maegz            (best frame for QSite)
-                    - QSite_SN2/frame_<frame>/     (one QM/MM scan per sampled frame; frame_<N> = the trajectory frame)
+                    - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index)
                     - 07_QSite_Reaction_Profile.png (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
                     - 05_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
                     - 06_Machinery_Engagement.png  (per-residue distance to the warhead C + contact occupancy)
@@ -67,8 +67,12 @@ Date   : 30 July 2026 <───────────────────
 
   Run behaviour : Resume by default. A rank whose per-frame table (NAC_Data.csv), statistics
                   (MD_Stats.json) and QM/MM output are all present is NOT recomputed: the
-                  figures are redrawn from the stored data (seconds) and the run moves on. A rank
-                  whose scans have not finished still takes the full path, because the frame pass is
+                  figures are redrawn from the stored data (seconds) and the run moves on.
+                  QSite-only resume: a rank whose NAC_Data.csv + MD_Stats.json + Ideal_Final.maegz
+                  are present but whose QSite_SN2/ folder was deleted re-runs ONLY QSite - the top
+                  pre-organised frames are re-picked from the cached table and their droplets
+                  re-extracted from just those frames, skipping the multi-hour frame stream. A rank
+                  with no cached table at all still takes the full path, because the frame pass is
                   what produces the QM/MM frame candidates. --force recomputes everything.
                   Frame/SN2 analysis runs one worker per rank; the trajectory read dominates it, so
                   the phase is I/O-bound and does not scale with cores. QM/MM instead runs many
@@ -2684,7 +2688,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     (an implicit `SOLVATION_METHOD sgb`) would double-count solvation. Strip the box
     and re-add `isolv` only for an implicit-solvent QM/MM variant.
     """
-    inp_path = mae_path.parent / f"{job_name}_QSite_SN2.in"
+    inp_path = mae_path.parent / f"{mae_path.parent.name}.in"
 
     # ── Read structure (needed for charge, ligand molid, and cut resolution) ──
     # A truncated or empty .mae yields no structure: raise the reason rather than a bare
@@ -2975,7 +2979,7 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                      f"at {qsite_exe} - skipping launch (input written).{ConsoleColours.ENDC}")
         return False
 
-    jobname = f"{job_name}_QSite_SN2"
+    jobname = inp_path.stem
     cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS),
            "-jobname", jobname, inp_path.name]
     print(f"  [Rank {rank}] Launching QSite ({_QSITE_PROCS} proc): {inp_path.name}", flush=True)
@@ -3119,7 +3123,7 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
         `molchg` requested in the .in with the net charge Jaguar actually used and
         warn on any mismatch so it is caught during the run, not after.
         """
-        _inp = next((p for p in ([qsite_dir / f"{job_name}_QSite_SN2.in"] + sorted(qsite_dir.glob("*_QSite_SN2.in")))
+        _inp = next((p for p in ([qsite_dir / f"{qsite_dir.name}.in"] + sorted(qsite_dir.glob("*.in")))
                      if p.exists()), None)
         _mreq = re.search(r"molchg\s*=\s*(-?\d+)", _inp.read_text(errors="ignore")) if _inp else None
         _mrun = re.search(r"net molecular charge:\s*(-?\d+)", _t)
@@ -3259,7 +3263,7 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
               "coord": [], "energy_kcal": [], "f_charge": [],
               "F_Charge_Reactant": np.nan, "F_Charge_Product": np.nan, "F_Charge_Delta": np.nan}
     try:
-        _outs = ([qsite_dir / f"{job_name}_QSite_SN2.out"] + sorted(qsite_dir.glob("*.out")))
+        _outs = ([qsite_dir / f"{qsite_dir.name}.out"] + sorted(qsite_dir.glob("*.out")))
         text = ""
         for _o in _outs:
             if _o.exists() and _o.stat().st_size > 0:
@@ -4039,7 +4043,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _stats_done = job_out_dir / "MD_Stats.json"
     if not _FORCE_RECOMPUTE and _csv_done.is_file() and _stats_done.is_file():
         _qroot = job_out_dir / "QSite_SN2"
-        _folds_done = [f for f in sorted(_qroot.glob("frame_*")) if f.is_dir()] if _qroot.is_dir() else []
+        _folds_done = [f for f in sorted(_qroot.glob("Frame_*")) if f.is_dir()] if _qroot.is_dir() else []
         _scans_ready = (not _QSITE_RUN) or (bool(_folds_done)
                                             and all(any(f.glob("*.out")) for f in _folds_done))
         if _scans_ready:
@@ -4249,6 +4253,77 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _nac_od = list(idx_nuc)
         console_info(f"    [NAC] mapped nucleophile {_qm_nuc} exposes no OD/OE - "
                      f"using Smart-Lock oxygens for the per-frame NAC.")
+
+    # ── QSite-only resume ───────────────────────────────────────────────────────
+    # A rank whose frame pass already finished (NAC_Data.csv + MD_Stats.json + Ideal_Final.maegz
+    # present) but whose QM/MM folder was removed re-runs ONLY QSite: the top pre-organised frames
+    # are re-picked from the cached per-frame table (Consensus is that frame's selection score) and
+    # their droplets re-extracted from just those frames, skipping the multi-hour frame stream. The
+    # QM-region atoms are the mapped aspartate carboxylate O and the reactive ligand C. Any failure
+    # falls through to the full trajectory pass.
+    _qonly = (not _FORCE_RECOMPUTE and _QSITE_RUN
+              and (job_out_dir / "NAC_Data.csv").is_file()
+              and (job_out_dir / "MD_Stats.json").is_file()
+              and (job_out_dir / "Ideal_Final.maegz").is_file()
+              and not (job_out_dir / "QSite_SN2").is_dir())
+    if _qonly:
+        try:
+            df_res = pd.read_csv(job_out_dir / "NAC_Data.csv")
+            with open(job_out_dir / "MD_Stats.json") as _fh:
+                stats = {k: (np.nan if v is None else v) for k, v in json.load(_fh).items()}
+            _prod = (np.clip(THRESHOLD_RELAXED_NAC_DIST - df_res["NAC_Distance_A"], 0, None) * _SCORE_W_DIST
+                     + np.clip(df_res["NAC_Angle_Deg"] - THRESHOLD_RELAXED_NAC_ANGLE, 0, None) * _SCORE_W_ANGLE)
+            _mask = (_prod > 0) & (df_res["Post_Equilibration"] == 1) & (df_res["Cation_Capped"] == 0)
+            _n_qm = max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1)))
+            _sel_frames = list(dict.fromkeys(
+                df_res[_mask].sort_values("Consensus", ascending=False)["Frame"].astype(int).tolist()))[:_n_qm]
+            console_info(f"    [Rank {rank}] QSite-only resume - reusing NAC_Data.csv "
+                         f"({len(df_res):,} frames) + MD_Stats.json; {len(_sel_frames)} frame(s) -> QSite only.")
+            _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
+            if _sel_frames and _nac_od and warhead_c:
+                _nuc_o, _lig_c = _nac_od[0], warhead_c[0]
+                _qroot = job_out_dir / "QSite_SN2"
+                _folds = [_qroot / f"Frame_{_k + 1}{'_Best' if _k == 0 else ''}_{_f}"
+                          for _k, _f in enumerate(_sel_frames)]
+                _runjobs = []
+                for _k, _f in enumerate(_sel_frames):
+                    _folder = _folds[_k]
+                    _fr = tr[_f]
+                    topo.update_cms(cms_model, _fr)
+                    topo.update_msys(msys_model, _fr)
+                    topo.make_whole_cms(msys_model, cms_model)
+                    _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
+                    topo.center_cms(msys_model, _gids, cms_model)
+                    if _k == 0:
+                        cms_model.fsys_ct.write(str(job_out_dir / "Ideal_Final.maegz"))
+                    _folder.mkdir(parents=True, exist_ok=True)
+                    _mae = _folder / "Ideal_Final.mae"
+                    write_qsite_droplet(cms_model, _mae, lig_resname)
+                    _inp = generate_qsite_inputs(_mae, job_name, _qm_nuc, _qm_stab, _lig_c, _nuc_o,
+                                                 base_num=_qm_base, acid_num=_qm_acid,
+                                                 lig_resname=lig_resname, cradle_nums=_qm_cradle)
+                    if _k == 0:
+                        console_qmm_ready(f"Best frame: {_f} | QSite input: {_inp.name}")
+                    if _QSITE_RUN:
+                        _runjobs.append((_folder, _inp))
+                if _QSITE_RUN and _runjobs:
+                    def _run_one(_job):
+                        _fold_r, _inp_r = _job
+                        with _QSITE_SEM:
+                            console_info(f"    [Rank {rank}] QSite scan (concurrent) - {_fold_r.name}")
+                            run_qsite(_fold_r, _inp_r, job_name, rank)
+                    with ThreadPoolExecutor(max_workers=len(_runjobs),
+                                            thread_name_prefix=f"QSiteR{rank}") as _qpool:
+                        list(_qpool.map(_run_one, _runjobs))
+                _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel_frames), stats)
+            else:
+                console_info(f"    [Rank {rank}] QSite-only resume: no pre-organised frames / QM atoms - "
+                             f"skipping QSite.")
+            print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
+            return stats
+        except Exception as _exc:
+            console_info(f"    [Rank {rank}] QSite-only resume failed ({str(_exc).splitlines()[0]}) - "
+                         f"recomputing from the trajectory.")
 
     # Filter out ptypes with special characters (e.g. '/') that break ASL parsing.
     _safe_restypes = [r for r in _SOLVENT_RESTYPES if r.isalnum() or '_' in r]
@@ -5112,7 +5187,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         print(f"  [Rank {rank}] QM/MM: {len(_sel)} frame(s) (best {ideal_frame_idx}, "
               f"score {best_score:.2f}) - ensemble SN2 barrier.", flush=True)
         _qroot = job_out_dir / "QSite_SN2"
-        _folds = [_qroot / f"frame_{_cand[1]}" for _cand in _sel]
+        _folds = [_qroot / f"Frame_{_k + 1}{'_Best' if _k == 0 else ''}_{_cand[1]}"
+                  for _k, _cand in enumerate(_sel)]
         # PHASE 1 - sequential prep (mutates cms_model); collect the frames that still need a run.
         _runjobs = []
         for _k, _cand in enumerate(_sel):

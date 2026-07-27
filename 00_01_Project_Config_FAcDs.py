@@ -2337,6 +2337,7 @@ class CFG:
         "base_fc": "#1e88e5", "base_ec": "#0d47a1",
         "nuc_fc": "#00bcd4", "nuc_ec": "#006064",
         "default_fc": "#9c27b0", "default_ec": "#4a148c",
+        "title": "#1f4e79",
     })
     """
     Sequential ramps and the pale tints used behind annotations. A ramp is ordered - light to dark -
@@ -3110,7 +3111,7 @@ class CFG:
     LIGAND_MIN_ATOMS: int      = 5              # fallback floor: if MMGBSA_LIGAND_ASL matches no atoms, Step 06 pins the smallest non-protein / non-solvent molecule with at least this many atoms (a bare fluoroacetate has 7) rather than dropping to size-blind auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
-    MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/05_MD_Simulations/ (per-rank subfolders Prime-MMGBSA_R{N}/ + combined at root)
+    MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/06_Analysis/ (flat MMGBSA_Profile_R{N}.png per rank)
 
     # Defluorination geometry - native per-rank trajectory analysis in Step 06 (Section 8b)
     DEFLUOR_RUN: bool         = True             # run the per-rank SN2-defluorination geometry analysis

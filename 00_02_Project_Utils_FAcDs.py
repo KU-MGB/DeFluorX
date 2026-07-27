@@ -555,6 +555,7 @@ _RAMA_FALLBACK = {
     "base_fc": "#1e88e5", "base_ec": "#0d47a1",
     "nuc_fc": "#00bcd4", "nuc_ec": "#006064",
     "default_fc": "#9c27b0", "default_ec": "#4a148c",
+    "title": "#1f4e79",
 }
 
 
@@ -647,21 +648,25 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
         out_pct = f"({st['pct']['Outlier']:.1f}%)"
         tot_pct = "(100.0%)"
 
-        txt = (f"Favoured  {st['counts']['Favored']:<4} {fav_pct:<8}\n"
-               f"Allowed   {st['counts']['Allowed']:<4} {allowed_pct:<8}\n"
-               f"Outlier   {st['counts']['Outlier']:<4} {out_pct:<8}\n"
-               f"Total     {st['total']:<4} {tot_pct:<8}")
-        ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=plt.rcParams["xtick.labelsize"],
-                va="top", ha="right", multialignment="left", family="monospace",
-                bbox=dict(fc="#ffffff", alpha=0.10, ec=_P["box_edge"], boxstyle="round,pad=0.4"))
+        _rows = [f"Favoured  {st['counts']['Favored']:<4} {fav_pct:<8}",
+                 f"Allowed   {st['counts']['Allowed']:<4} {allowed_pct:<8}",
+                 f"Outlier   {st['counts']['Outlier']:<4} {out_pct:<8}",
+                 f"Total     {st['total']:<4} {tot_pct:<8}"]
+        _fs = plt.rcParams["xtick.labelsize"]
+        # Structure name as a coloured, centred title over the left-justified stats (monospace columns).
+        _leg = ax.legend([mlines.Line2D([], [], color="none") for _ in _rows], _rows,
+                         loc="upper right", title=label, handlelength=0, handletextpad=0,
+                         labelspacing=0.3, borderpad=0.6, prop={"family": "monospace", "size": _fs},
+                         framealpha=0.85, edgecolor=_P["box_edge"], facecolor="white")
+        _t = _leg.get_title()
+        _t.set_color(_P["title"]); _t.set_fontfamily("monospace"); _t.set_fontsize(_fs); _t.set_fontweight("bold")
+        _leg.set_zorder(6)
 
         ax.set_xlim(-180, 180)
         ax.set_ylim(-180, 180)
         ax.set_aspect("equal")
         ax.set_xlabel("φ (phi) °", fontweight="500")
         ax.set_ylabel("ψ (psi) °", fontweight="500")
-        ax.text(0.02, 0.98, label, transform=ax.transAxes, ha="left", va="top",
-                fontsize=plt.rcParams["xtick.labelsize"], fontweight="bold")   # in-axes identity label, not a figure title
         ax.set_xticks(range(-180, 181, 60))
         ax.set_yticks(range(-180, 181, 60))
         ax.tick_params()
@@ -714,19 +719,26 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
                    for c in _rama_cls]
         ax.scatter(phis, psis, c=colours, s=14, alpha=0.75, linewidths=0, zorder=3)
     stats = _rama_stats(angles)
-    legend_txt = (f"Favored  {stats['pct']['Favored']:.1f}%  ({stats['counts']['Favored']})\n"
-                  f"Allowed  {stats['pct']['Allowed']:.1f}%  ({stats['counts']['Allowed']})\n"
-                  f"Outlier   {stats['pct']['Outlier']:.1f}%  ({stats['counts']['Outlier']})\n"
-                  f"Total: {stats['total']} residues")
-    ax.text(0.98, 0.98, legend_txt, transform=ax.transAxes, fontsize=plt.rcParams["legend.fontsize"],
-            va="top", ha="right", family="monospace",
-            bbox=dict(fc="white", alpha=0.7, ec=_P["box_edge"], boxstyle="round,pad=0.3"))
+    _lines = [
+        f"Favored {stats['pct']['Favored']:5.1f}%  ({stats['counts']['Favored']})",
+        f"Allowed {stats['pct']['Allowed']:5.1f}%  ({stats['counts']['Allowed']})",
+        f"Outlier {stats['pct']['Outlier']:5.1f}%  ({stats['counts']['Outlier']})",
+        f"Total:  {stats['total']} residues",
+    ]
+    _fs = plt.rcParams["legend.fontsize"]
+    # Stats as a boxed legend so the structure-name title carries its own colour, centred over the
+    # left-justified rows (monospace keeps the percent/count columns aligned).
+    _leg = ax.legend([mlines.Line2D([], [], color="none") for _ in _lines], _lines,
+                     loc="upper right", title=title, handlelength=0, handletextpad=0,
+                     labelspacing=0.3, borderpad=0.6, prop={"family": "monospace", "size": _fs},
+                     framealpha=0.7, edgecolor=_P["box_edge"], facecolor="white")
+    _t = _leg.get_title()
+    _t.set_color(_P["title"]); _t.set_fontfamily("monospace"); _t.set_fontsize(_fs); _t.set_fontweight("bold")
+    _leg.set_zorder(6)
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
     ax.set_xlabel("φ (phi) °")
     ax.set_ylabel("ψ (psi) °")
-    ax.text(0.02, 0.98, title, transform=ax.transAxes, ha="left", va="top",
-            fontsize=plt.rcParams["xtick.labelsize"], fontweight="bold")   # in-axes identity label, not a figure title
     ax.set_xticks(range(-180, 181, 60))
     ax.set_yticks(range(-180, 181, 60))
     ax.tick_params()
