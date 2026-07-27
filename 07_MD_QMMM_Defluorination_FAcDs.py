@@ -45,8 +45,10 @@ Date   : 30 July 2026 <───────────────────
                     - 03_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
                     - 04_MMGBSA_Trace.png          (per-frame ΔG_bind with rolling mean and ±1 SD)
                     - Ideal_Final.maegz            (best frame for QSite)
-                    - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index)
-                    - 07_QSite_Reaction_Profile.png (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
+                    - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index; each holds 01_Reaction_Profile.png)
+                    - 07_QSite_Reaction_Profile.png (best-frame PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
+                    - 08_QSite_Ensemble_Profiles.png (all sampled frames overlaid + rate-weighted ensemble ΔE‡ + min/mean/σ)
+                    - 09_QSite_Scan_Data.csv       (long-format raw PES + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
                     - 05_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
                     - 06_Machinery_Engagement.png  (per-residue distance to the warhead C + contact occupancy)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
@@ -58,6 +60,8 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.png
                   <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.png
                     (the same two reactive-pose figures, merged across candidates)
+                  <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.png
+                    (every job's best-frame QM/MM PES overlaid + defluorination ranking by ensemble ΔE‡)
   Upstream      : 06_Physics_Validation_FAcDs.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
                                                     produces the MD trajectories, WaterMap CSVs,
                                                     *_SID-out.eaf + Prime MM-GBSA summary consumed here
@@ -2470,6 +2474,40 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
     plot_mmgbsa_decomposition(out_dir, ranks, merged=True)
     plot_machinery_engagement(out_dir, ranks, merged=True)
 
+    # Cross-job QSite comparison - each rank's best-frame PES read back from its 09_QSite_Scan_Data.csv.
+    try:
+        _jobs = []
+        for _rd in sorted(out_dir.glob("Rank_*")):
+            _csv = _rd / "09_QSite_Scan_Data.csv"
+            if not _csv.is_file():
+                continue
+            try:
+                _cd = pd.read_csv(_csv)
+            except Exception:
+                continue
+            if "Is_Best_Frame" in _cd.columns:
+                _cd = _cd[_cd["Is_Best_Frame"].astype(str).str.lower().isin(("true", "1"))]
+            if _cd.empty or "Energy_Rel_kcal" not in _cd.columns:
+                continue
+            _cd = _cd.sort_values("Scan_Point")
+            def _one(col, _d=_cd):
+                return _d[col].iloc[0] if col in _d.columns and len(_d) else np.nan
+            _fqp, _bar = _one("Frame_F_Charge_Product"), _one("QSite_Barrier_Ensemble_kcal")
+            _jobs.append({
+                "label": (f"R_{int(_one('Rank'))}" if "Rank" in _cd.columns and pd.notna(_one("Rank")) else _rd.name),
+                "ligand": (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else ""),
+                "coord": _cd["Coord_Nu_O_C_A"].tolist(),
+                "energy_kcal": _cd["Energy_Rel_kcal"].tolist(),
+                "barrier_ens": (float(_bar) if pd.notna(_bar) else np.nan),
+                "derxn_ens": (float(_one("QSite_dErxn_Ensemble_kcal")) if pd.notna(_one("QSite_dErxn_Ensemble_kcal")) else np.nan),
+                "fq_final": (float(_fqp) if pd.notna(_fqp) else np.nan),
+                "is_defluor": bool(pd.notna(_fqp) and float(_fqp) <= CFG.QSITE_F_CHARGE_CLEAVED and pd.notna(_bar)),
+            })
+        if _jobs:
+            plot_qsite_profiles_all_jobs(out_dir / "08_QSite_Profiles_AllJobs.png", _jobs)
+    except Exception as _exc:
+        console_info(f"    [!] QSite all-jobs figure skipped ({_exc}).")
+
 
 # =============================================================================
 # SECTION 6: PHYSICAL CHEMISTRY MODULES
@@ -3637,7 +3675,7 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, output_path: Path) -> None:
         plt.close(fig)
 
 
-def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict) -> None:
+def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict, title: str = None) -> None:
     """The direct 'did it defluorinate' figure: the QM/MM potential-energy surface
     along the SN2 reaction coordinate (Nu_O···C compression), with the activation
     barrier ΔE‡ and reaction energy ΔE_rxn marked, and - where parseable - the
@@ -3675,6 +3713,8 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 ax.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product",
                               fontweight="bold")
                 ax.set_ylabel("Relative QM/MM energy (kcal/mol)")
+                if title:
+                    ax.set_title(title, fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold")
                 ax.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
                 clean_spines(ax)
                 _fq = profile.get("f_charge") or []
@@ -3707,6 +3747,210 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
         console_info(f"    QSite reaction profile saved : {out_path.name}")
     except Exception as _e:
         console_info(f"    [!] QSite reaction-profile plot failed ({_e}).")
+
+
+def _qsite_frame_summary(prof: dict) -> "dict | None":
+    """Per-frame barrier / reaction-energy / departing-F summary from a parsed profile dict."""
+    y = np.asarray(prof.get("energy_kcal") or [], float)
+    fq = np.asarray(prof.get("f_charge") or [], float)
+    if len(y) < 2:
+        return None
+    i_ts = int(np.argmax(y)); react = float(y[0])
+    return {"barrier": float(y[i_ts] - react), "derxn": float(y[-1] - react),
+            "fq_react": (float(fq[0]) if len(fq) else np.nan),
+            "fq_prod": (float(fq[-1]) if len(fq) else np.nan),
+            "fq_delta": (float(fq[-1] - fq[0]) if len(fq) else np.nan),
+            "i_ts": i_ts, "cleaved": bool(len(fq) and fq[-1] <= CFG.QSITE_F_CHARGE_CLEAVED)}
+
+
+def _qsite_ensemble_barrier(barriers) -> float:
+    """Rate-weighted ensemble barrier −RT·ln⟨exp(−ΔE‡/RT)⟩ (same estimator as the master ranking)."""
+    b = np.asarray([v for v in barriers if v == v], float)
+    if b.size == 0:
+        return np.nan
+    _rt = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+    _bmin = float(np.min(b))
+    return _bmin - _rt * float(np.log(np.mean(np.exp(-(b - _bmin) / _rt))))
+
+
+def _qsite_ensemble_derxn(barriers, derxns) -> float:
+    """ΔE_rxn averaged with the same Boltzmann weights as the ensemble barrier."""
+    b = np.asarray(barriers, float); d = np.asarray(derxns, float)
+    _ok = (b == b) & (d == d)
+    if not _ok.any():
+        return np.nan
+    b, d = b[_ok], d[_ok]
+    _rt = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+    w = np.exp(-(b - float(np.min(b))) / _rt)
+    return float(np.sum(w * d) / np.sum(w)) if np.sum(w) > 0 else float(np.mean(d))
+
+
+def _qsite_point_role(i: int, n: int, i_ts: int) -> str:
+    if i == 0:      return "reactant"
+    if i == n - 1:  return "product"
+    if i == i_ts:   return "transition_state"
+    return "ascending" if i < i_ts else "descending"
+
+
+def plot_qsite_ensemble_profiles(out_path: Path, rank, profiles: list) -> None:
+    """All scored frames' PES (top) + departing-F charge (bottom) overlaid, with the rate-weighted
+    ensemble ΔE‡ and the min/mean/σ spread the master ranking uses. Best frame drawn bold."""
+    try:
+        _P = [p for p in profiles if len(p.get("energy_kcal") or []) >= 3]
+        if not _P:
+            return
+        _C = CFG.DEFLUOR_FIG_COLOUR; _pal = CFG.DEFLUOR_FRAME_PALETTE
+        _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
+        with PLOT_LOCK:
+            fig, (axE, axF) = plt.subplots(2, 1, figsize=(8.5, 7.5), sharex=True,
+                                           gridspec_kw={"height_ratios": [2.2, 1]})
+            try:
+                _bars = []
+                for k, p in enumerate(_P):
+                    x = np.asarray(p["coord"], float); y = np.asarray(p["energy_kcal"], float)
+                    fq = np.asarray(p.get("f_charge") or [], float)
+                    col = _pal[k % len(_pal)]; best = (k == 0)
+                    axE.plot(x, y, "-o", color=col, lw=(2.4 if best else 1.4), ms=(4 if best else 3),
+                             alpha=(1.0 if best else 0.75), zorder=(4 if best else 3), label=p.get("label", f"frame {k+1}"))
+                    _i = int(np.argmax(y)); _bars.append(float(y[_i] - y[0]))
+                    axE.scatter([x[_i]], [y[_i]], s=(90 if best else 55), color=col, edgecolor="white", lw=0.6, zorder=5)
+                    if len(fq) >= 3:
+                        _xf = [x[min(int(j * (len(x) - 1) / (len(fq) - 1)), len(x) - 1)] for j in range(len(fq))]
+                        axF.plot(_xf, fq, "--s", color=col, lw=(1.8 if best else 1.2), ms=3, alpha=(1.0 if best else 0.75))
+                _e = _qsite_ensemble_barrier(_bars); _b = np.asarray(_bars, float)
+                axE.axhline(_e, ls=":", lw=1.8, color=_C["ts"], zorder=2)
+                axE.annotate(f"ensemble ΔE‡ = {_e:.1f} kcal/mol\nmin {_b.min():.1f} · mean {_b.mean():.1f} · σ {_b.std():.1f}  (n={len(_b)})",
+                             xy=(0.015, 0.97), xycoords="axes fraction", va="top", ha="left",
+                             fontsize=_ft, color=_C["ts"], fontweight="bold",
+                             bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=_C["ts"], alpha=0.9))
+                axE.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
+                axE.set_title(f"Rank {rank} - QM/MM SN2 ensemble ({len(_P)} frames)", fontsize=_fa, fontweight="bold")
+                axE.legend(loc="upper right", fontsize=_ft, title="frame (best first)", title_fontsize=_ft)
+                clean_spines(axE)
+                axF.axhline(CFG.QSITE_F_CHARGE_CLEAVED, ls="--", lw=1.2, color="#64748B")
+                axF.axhspan(-1.05, CFG.QSITE_F_CHARGE_CLEAVED, color=_C["cleaved_bg"], alpha=0.6, zorder=0)
+                axF.annotate(f"cleaved (F ≤ {CFG.QSITE_F_CHARGE_CLEAVED:+.1f} e)", xy=(0.015, 0.06),
+                             xycoords="axes fraction", fontsize=_ft, color=_C["product"], fontweight="bold")
+                axF.set_ylabel("departing-F Mulliken charge", fontsize=_fa)
+                axF.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product", fontweight="bold", fontsize=_fa)
+                axF.set_ylim(-1.0, -0.2); clean_spines(axF)
+                axE.invert_xaxis()
+                fig.tight_layout()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+            finally:
+                plt.close(fig)
+        console_info(f"    QSite ensemble figure saved  : {out_path.name}")
+    except Exception as _e:
+        console_info(f"    [!] QSite ensemble plot failed ({_e}).")
+
+
+def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
+                         profiles: list, ensemble: dict, qmmeta: dict) -> None:
+    """Long-format QSite scan data - one row per scan point per frame, carrying per-frame + per-rank
+    summaries and the full QM-region provenance, so the whole scan is reproducible from the CSV alone."""
+    try:
+        _P = [p for p in profiles if len(p.get("energy_kcal") or []) >= 2]
+        if not _P:
+            return
+        _sums = [(_qsite_frame_summary(p) or {}) for p in _P]
+        _bar = [s.get("barrier", np.nan) for s in _sums]
+        _der = [s.get("derxn", np.nan) for s in _sums]
+        _ens = ensemble or {}; _qm = qmmeta or {}
+        _rows = []
+        for k, (p, s) in enumerate(zip(_P, _sums)):
+            x = np.asarray(p["coord"], float); y = np.asarray(p["energy_kcal"], float)
+            fq = np.asarray(p.get("f_charge") or [], float); n = len(x); react = float(y[0])
+            for i in range(n):
+                _rows.append({
+                    "Rank": rank, "Job_Name": job_name, "Ligand": ligand,
+                    "Frame_Index": p.get("frame"), "Frame_Folder": p.get("label"),
+                    "Frame_Rank": k + 1, "Is_Best_Frame": (k == 0),
+                    "Frame_Preorg_Score": p.get("preorg_score", np.nan),
+                    "Scan_Point": i + 1, "Coord_Nu_O_C_A": round(float(x[i]), 3),
+                    "Energy_Rel_kcal": round(float(y[i] - react), 3),
+                    "F_Charge_Mulliken": (round(float(fq[i]), 3) if i < len(fq) else np.nan),
+                    "Point_Role": _qsite_point_role(i, n, int(s.get("i_ts", 0))),
+                    "Frame_Barrier_kcal": round(float(s.get("barrier", np.nan)), 2),
+                    "Frame_dErxn_kcal": round(float(s.get("derxn", np.nan)), 2),
+                    "Frame_F_Charge_Reactant": round(float(s.get("fq_react", np.nan)), 3),
+                    "Frame_F_Charge_Product": round(float(s.get("fq_prod", np.nan)), 3),
+                    "Frame_F_Charge_Delta": round(float(s.get("fq_delta", np.nan)), 3),
+                    "Frame_Cleaved": s.get("cleaved"),
+                    "QSite_Barrier_Ensemble_kcal": round(float(_qsite_ensemble_barrier(_bar)), 2),
+                    "QSite_Barrier_Min_kcal": round(float(np.nanmin(_bar)), 2) if any(v == v for v in _bar) else np.nan,
+                    "QSite_Barrier_Mean_kcal": round(float(np.nanmean(_bar)), 2) if any(v == v for v in _bar) else np.nan,
+                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar)), 2) if any(v == v for v in _bar) else np.nan,
+                    "QSite_dErxn_Ensemble_kcal": round(float(_qsite_ensemble_derxn(_bar, _der)), 2),
+                    "QSite_NFrames_Scored": len(_P),
+                    "QSite_NFrames_Attempted": _ens.get("n_attempted", len(_P)),
+                    "QSite_NScan": n,
+                    "Is_Defluorinating": _ens.get("is_defluor"),
+                    "Defluor_Propensity": _ens.get("propensity"),
+                    "QM_Nuc_Resnum": _qm.get("nuc"), "QM_Base_Resnum": _qm.get("base"),
+                    "QM_Acid_Resnum": _qm.get("acid"), "QM_StabH_Resnum": _qm.get("stabh"),
+                    "QM_Cradle_Resnums": _qm.get("cradle"),
+                    "Scan_Nu_O_AtomIdx": _qm.get("nuc_o_idx"), "Scan_Lig_C_AtomIdx": _qm.get("lig_c_idx"),
+                    "QM_Charge": _qm.get("qm_charge"),
+                    "Scan_Start_A": _qm.get("scan_start", CFG.QSITE_SCAN_START),
+                    "Scan_Step_A": _qm.get("scan_step", CFG.QSITE_SCAN_STEP),
+                    "Scan_NSteps": _qm.get("scan_nsteps", CFG.QSITE_SCAN_NSTEPS),
+                    "QSite_Basis": getattr(CFG, "QSITE_SCAN_BASIS", ""), "QSite_Functional": "b3lyp",
+                })
+        _utils_mod.atomic_write_csv(pd.DataFrame(_rows), out_path)
+        console_info(f"    QSite scan data saved        : {out_path.name} ({len(_rows)} rows)")
+    except Exception as _e:
+        console_info(f"    [!] QSite scan-data CSV failed ({_e}).")
+
+
+def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
+    """Cross-job QSite comparison (run root). Top: every job's best-frame PES overlaid (distinct
+    colour; solid = defluorinating, dashed = not). Bottom: ensemble ΔE‡ ranked low→high, tagged with
+    ΔE_rxn and the final departing-F charge - so which complex defluorinates reads at a glance."""
+    try:
+        _J = [j for j in jobs if len(j.get("energy_kcal") or []) >= 3]
+        if not _J:
+            return
+        _C = CFG.DEFLUOR_FIG_COLOUR; _pal = CFG.DEFLUOR_JOB_PALETTE
+        _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
+        js = sorted(_J, key=lambda z: (z.get("barrier_ens") if z.get("barrier_ens") == z.get("barrier_ens") else 1e9))
+        with PLOT_LOCK:
+            fig, (axP, axB) = plt.subplots(2, 1, figsize=(9.0, 8.5), gridspec_kw={"height_ratios": [2.0, 1.0]})
+            try:
+                for k, j in enumerate(js):
+                    col = _pal[k % len(_pal)]
+                    x = np.asarray(j["coord"], float); y = np.asarray(j["energy_kcal"], float)
+                    axP.plot(x, y, ("-" if j.get("is_defluor") else "--"), marker="o", ms=3, lw=2.0, color=col,
+                             alpha=0.9, label=f"{j.get('label')} ({j.get('ligand')}) · ΔE‡ {j.get('barrier_ens', float('nan')):.1f}")
+                    _i = int(np.argmax(y)); axP.scatter([x[_i]], [y[_i]], s=55, color=col, edgecolor="white", lw=0.6, zorder=5)
+                axP.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
+                axP.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product", fontweight="bold", fontsize=_fa)
+                axP.set_title("QM/MM SN2 profiles - all jobs (best frame each)", fontsize=_fa, fontweight="bold")
+                axP.invert_xaxis(); clean_spines(axP)
+                axP.legend(loc="upper right", fontsize=_ft, title="solid = defluorinating", title_fontsize=_ft)
+                _lab = [f"{j.get('label')} ({j.get('ligand')})" for j in js]
+                _b = [j.get("barrier_ens", np.nan) for j in js]
+                _cols = [_C["product"] if j.get("is_defluor") else "#94A3B8" for j in js]
+                _yp = np.arange(len(js))[::-1]
+                axB.barh(_yp, _b, color=_cols, edgecolor="#334155", height=0.6)
+                for _y, j in zip(_yp, js):
+                    axB.annotate(f"ΔE_rxn {j.get('derxn_ens', float('nan')):+.1f} · F {j.get('fq_final', float('nan')):+.2f} e",
+                                 xy=(j.get("barrier_ens", 0) or 0, _y), xytext=(6, 0), textcoords="offset points",
+                                 va="center", fontsize=_ft, color="#334155")
+                axB.set_yticks(_yp); axB.set_yticklabels(_lab, fontsize=_ft)
+                axB.set_xlabel("Ensemble ΔE‡ (kcal/mol) - lower = more accessible defluorination", fontweight="bold", fontsize=_fa)
+                axB.set_title("Defluorination ranking (green = defluorinating)", fontsize=_fa, fontweight="bold")
+                axB.margins(x=0.18); clean_spines(axB)
+                fig.tight_layout()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+            finally:
+                plt.close(fig)
+        console_info(f"    QSite all-jobs figure saved  : {out_path.name}")
+    except Exception as _e:
+        console_info(f"    [!] QSite all-jobs plot failed ({_e}).")
 
 
 # =============================================================================
@@ -3889,7 +4133,7 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
 
 
 def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
-                           n_attempted: int, stats: dict) -> None:
+                           n_attempted: int, stats: dict, ligand: str = "", qmmeta: dict = None) -> None:
     """Parse every QM/MM scan folder and fold the result into `stats`.
 
     Split out so it serves both paths: a fresh run (folders just scanned) and a resume (folders found
@@ -3964,6 +4208,36 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
         if len(_b_arr) < n_attempted:
             console_info(f"    [!] {n_attempted - len(_b_arr)} of {n_attempted} QM/MM frame(s) did not "
                          f"yield a barrier - the ensemble average is over the {len(_b_arr)} that did.")
+
+    # --- Per-frame profiles + ensemble figure + rich scan-data CSV (additive; guarded) ---
+    try:
+        _nac_scores = {}
+        _nac_csv = job_out_dir / "NAC_Data.csv"
+        if _nac_csv.is_file():
+            try:
+                _nd = pd.read_csv(_nac_csv, usecols=["Frame", "Consensus"])
+                _nac_scores = {int(_f): float(_c) for _f, _c in zip(_nd["Frame"], _nd["Consensus"])}
+            except Exception:
+                _nac_scores = {}
+        _profs = []
+        for _fold in folds:
+            _pr = parse_qsite_profile(_fold, job_name)
+            if len(_pr.get("energy_kcal") or []) < 3:
+                continue
+            _m = re.search(r"_(\d+)$", _fold.name)
+            _pr["frame"] = int(_m.group(1)) if _m else -1
+            _pr["label"] = _fold.name
+            _pr["preorg_score"] = _nac_scores.get(_pr["frame"], np.nan)
+            _profs.append(_pr)
+            plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.png", job_name, rank, _pr, title=_fold.name)
+        if _profs:
+            plot_qsite_ensemble_profiles(job_out_dir / "08_QSite_Ensemble_Profiles.png", rank, _profs)
+            _ens = {"n_attempted": n_attempted, "is_defluor": stats.get("Is_Defluorinating"),
+                    "propensity": stats.get("Defluor_Propensity")}
+            write_qsite_scan_csv(job_out_dir / "09_QSite_Scan_Data.csv", rank, job_name,
+                                 ligand, _profs, _ens, qmmeta)
+    except Exception as _exc:
+        console_info(f"    [!] QSite ensemble/CSV/per-frame figures skipped ({_exc}).")
 
 
 
@@ -4056,7 +4330,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
                 if _folds_done:
                     _collect_qsite_results(job_out_dir, job_name, rank,
-                                           _folds_done, len(_folds_done), stats)
+                                           _folds_done, len(_folds_done), stats,
+                                           ligand=job_name.split("_")[-1])
                 print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
                 return stats
             except Exception as _exc:
@@ -4315,7 +4590,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     with ThreadPoolExecutor(max_workers=len(_runjobs),
                                             thread_name_prefix=f"QSiteR{rank}") as _qpool:
                         list(_qpool.map(_run_one, _runjobs))
-                _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel_frames), stats)
+                _qmmeta = {"nuc": _qm_nuc, "base": _qm_base, "acid": _qm_acid, "stabh": _qm_stab,
+                           "cradle": ";".join(str(_c) for _c in (_qm_cradle or [])),
+                           "nuc_o_idx": _nuc_o, "lig_c_idx": _lig_c, "qm_charge": None}
+                _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel_frames), stats,
+                                       ligand=job_name.split("_")[-1], qmmeta=_qmmeta)
             else:
                 console_info(f"    [Rank {rank}] QSite-only resume: no pre-organised frames / QM atoms - "
                              f"skipping QSite.")
@@ -5208,7 +5487,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         elif not _QSITE_RUN:
             for _fold_r in _folds:
                 console_info(f"    [Rank {rank}] QSite run disabled (--no-run-qsite) - inputs in {_fold_r.name}")
-        _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel), stats)
+        _qmmeta = {"nuc": _qm_nuc, "base": _qm_base, "acid": _qm_acid, "stabh": _qm_stab,
+                   "cradle": ";".join(str(_c) for _c in (_qm_cradle or [])),
+                   "nuc_o_idx": (_sel[0][2] if _sel else None), "lig_c_idx": (_sel[0][3] if _sel else None),
+                   "qm_charge": None}
+        _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel), stats,
+                               ligand=job_name.split("_")[-1], qmmeta=_qmmeta)
 
     print(f"  [Rank {rank}] Completed analysis successfully.", flush=True)
     return stats

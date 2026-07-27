@@ -2129,6 +2129,13 @@ class CFG:
         "kde":          "#111111", # NAC dashboard: density contours over the scatter
         "legend_edge":  "#E2E8F0", # legend frame
     })
+    # Categorical palettes for the QSite ensemble (per-frame, best first) and the cross-job
+    # comparison (per-rank) reaction-profile overlays. Distinct hues, colour-blind aware.
+    DEFLUOR_FRAME_PALETTE: list = field(default_factory=lambda: [
+        "#1D4ED8", "#0E7490", "#B45309", "#7C3AED", "#BE185D"])
+    DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
+        "#1D4ED8", "#B45309", "#0E7490", "#BE185D", "#7C3AED", "#15803D",
+        "#B91C1C", "#0F766E", "#A16207", "#6D28D9"])
     # Comparative residue-engagement heatmap (11_): colour ramp and the colour a missing residue
     # takes - a homolog that has no such residue must read as absent, never as a distance.
     ENGAGE_HEATMAP_CMAP: str = "RdYlGn_r"
