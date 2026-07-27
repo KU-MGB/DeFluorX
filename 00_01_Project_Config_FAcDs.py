@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <────────────────────────────────────────────────────────
+Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_FAcDs.py
@@ -137,7 +137,6 @@ Scientific References:
 from dataclasses import dataclass, field
 # --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
 import math
-import math as _math
 import multiprocessing
 
 
@@ -322,7 +321,6 @@ class CFG:
     REFERENCE_PDB_ID: str    = "3R3U"
     REFERENCE_PDB_URL: str   = "https://files.rcsb.org/download/3R3U.pdb"
     REFERENCE_PDB_FILE: str  = "3R3U.pdb"          # local copy filename (SSOT: 03 crystal read)
-    REFERENCE_DIR_NAME: str  = "0_Reference_Crystal_3R3U"
 
     # -------------------------------------------------------------------------------
     # Step 2.4: Control ligand panel (fluoroacetate control substrates)
@@ -546,7 +544,7 @@ class CFG:
     """
 
     # -------------------------------------------------------------------------------
-    # Step 3.0: Spatial validation thresholds (Step 02/08)
+    # Step 3.0: Spatial validation thresholds (Steps 02, 07)
     # -------------------------------------------------------------------------------
     CF_DIST_TOLERANCE: float       = 2.2    # Å  C–F bond-length ceiling for pairing a fluorine to its scissile carbon
     CLASH_DIST_TOLERANCE: float    = 2.5    # Å generic clash distance
@@ -731,7 +729,7 @@ class CFG:
     COORD_MATCH_DIST_MAX: float    = 1.8    # Å  map residue to reference coordinate
 
     # ===============================================================================
-    # SECTION 4: NAC (Near Attack Conformation) GEOMETRY  (Steps 02, 08)
+    # SECTION 4: NAC (Near Attack Conformation) GEOMETRY  (Steps 02, 07)
     # ===============================================================================
     """
     Substrate: fluoroacetate; electrophile: C–F carbon; nucleophile: Asp O.
@@ -778,7 +776,7 @@ class CFG:
     F_CRADLE_RADIUS: float   = 12.0   # Å  search radius from nucleophile to TRP/TYR heavy atoms
 
     # ===============================================================================
-    # SECTION 5: CATALYTIC TRIAD INTEGRITY  (Steps 02, 08)
+    # SECTION 5: CATALYTIC TRIAD INTEGRITY  (Steps 02, 07)
     # ===============================================================================
     """
     Reference: FAcD crystal structure PDB 3R3U (Chan et al. 2011 - see header §3).
@@ -856,7 +854,7 @@ class CFG:
     """
     A pose is flagged a non-productive SN2 dead-end only when BOTH indicators agree
     (consensus → robust against single-signal false positives), and even then the final
-    chemical verdict is deferred to Step-08 QM/MM + MD/WaterMap.
+    chemical verdict is deferred to Step-07 QM/MM + MD/WaterMap.
 
     A - Scissile C–F bond-dissociation energy (kcal/mol), keyed by the number of
         fluorines on the mapped attack carbon. α-Fluorination strengthens the C–F bond,
@@ -1129,7 +1127,7 @@ class CFG:
         machinery only: NO chemical-feasibility (C–F BDE, backside occlusion, β-fluorination)
         - those are the graded penalties in mechanistic_score_effective (§5.2b), applied once
         each. Tiering stays geometric here, no ligand excluded a priori; chemistry rides in
-        the effective score, competence/diagnostics and Step-08 QMMM.
+        the effective score, competence/diagnostics and Step-07 QMMM.
 
         MULTIPLICITY: WHAT THE CALLER ACTUALLY PASSES, AND WHY IT IS 1 HERE.
 
@@ -1218,7 +1216,7 @@ class CFG:
         carboxylate (a non-carboxylate head or mid-chain attack scores 0). The A+B SN2
         dead-end is NOT gated here - it rides in the continuous feasibility_factor scaling
         below (which discounts a strong-C–F / β-fluorinated centre in the rank) and is decided
-        finally by Step-08 QM/MM, matching the diagnostic-only dead-end treatment in
+        finally by Step-07 QM/MM, matching the diagnostic-only dead-end treatment in
         02_Production §7.2.3.
       graded terms (each 0–1, weights sum to 1.0):
         • angle  - Šidák multiplicity-corrected (1-p1)^n for scissile C–F count, the Walden backside trajectory
@@ -2326,6 +2324,21 @@ class CFG:
         "error":      "#FF6B6B",
     })
     """
+    Ramachandran plot palette (Steps 03/05 via 00_02's save_ramachandran_* helpers): the three
+    quality classes, the two pale region backgrounds, the neutral axis/grid/box greys, and the
+    catalytic-triad marker fills+edges. Held here so the Ramachandran figures share the pipeline's
+    single colour source rather than carrying their own literals.
+    """
+    VIS_RAMA: dict = field(default_factory=lambda: {
+        "favoured": "#2e7d32", "allowed": "#f57f17", "outlier": "#c62828",
+        "region_favoured": "#dcedc8", "region_allowed": "#fff9c4",
+        "axis": "#bdbdbd", "grid": "#9e9e9e", "box_edge": "#bdbdbd",
+        "acid_fc": "#d81b60", "acid_ec": "#880e4f",
+        "base_fc": "#1e88e5", "base_ec": "#0d47a1",
+        "nuc_fc": "#00bcd4", "nuc_ec": "#006064",
+        "default_fc": "#9c27b0", "default_ec": "#4a148c",
+    })
+    """
     Sequential ramps and the pale tints used behind annotations. A ramp is ordered - light to dark -
     and is indexed, never picked from by name, so a figure cannot silently reorder its own scale.
     """
@@ -3326,7 +3339,7 @@ class CFG:
     Single source of truth for WHICH complexes receive the expensive downstream
     pipeline (CIF→PDB, PrepWizard, MM-GBSA, MD). Step 02 writes two columns into the
     ranked CSV - MD_Selected (bool) and MD_Rank (1..N over the selected set, ordered
-    by Scientific_Rank) - and Steps 05/06/07/08 prepare/simulate ONLY those rows.
+    by Scientific_Rank) - and Steps 05/06/07 prepare/simulate ONLY those rows.
     Analysis and figures still run over the full population (all 58k); only heavy
     compute is gated, so the tier/decoy statistics are unaffected.
 
@@ -3373,7 +3386,7 @@ class CFG:
         edit that breaks one of these couplings fails loudly at import rather than silently
         drifting apart. Assertions, plus the derived file-name globs built from the CSV STEMs at the end.
         """
-        _isclose = lambda a, b: _math.isclose(float(a), float(b), abs_tol=1e-9)
+        _isclose = lambda a, b: math.isclose(float(a), float(b), abs_tol=1e-9)
         # Re-typed literals that must track their documented source value.
         assert _isclose(self.SOFT_NB_MIDPOINT, self.THRESHOLD_TRIAD_NB), "SOFT_NB_MIDPOINT must equal THRESHOLD_TRIAD_NB"
         assert _isclose(self.TIER_NUC_DIST["Tier_2A"], self.NAC_DIST_STRICT), "TIER_NUC_DIST['Tier_2A'] must equal NAC_DIST_STRICT"

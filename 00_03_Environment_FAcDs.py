@@ -9,7 +9,7 @@ for reproducibility. Provides an automated installation routine to
 re-synchronise environments across compute nodes.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <─────────────────────────────────────────────────────────
+Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 00_03_Environment_FAcDs.py
@@ -44,7 +44,6 @@ from pathlib import Path
 # --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
 import importlib.util as _ilu
 import shutil
-import time as _t
 import time as _time
 
 
@@ -263,7 +262,7 @@ def main():
 
     args = parser.parse_args()
 
-    _now = _t.strftime("%Y-%m-%d %H:%M:%S")
+    _now = _time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
         "  \033[95m\033[1m▶  00_03_Environment_FAcDs.py"

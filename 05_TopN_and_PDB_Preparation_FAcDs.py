@@ -12,7 +12,7 @@ Restricting both phases to the ~10 MD-ready complexes keeps this step cheap
 instead of converting/preparing the entire predicted library.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <────────────────────────────────────────────────────────
+Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 05_TopN_and_PDB_Preparation_FAcDs.py
@@ -24,7 +24,7 @@ Date   : 25 July 2026 <───────────────────
                                             console helpers, Ramachandran helpers)
   Reads         : <Run>/2_Best_Complexes_CIFs/*.cif
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv  (MD_Selected)
-                  <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*
+                  <Run>/1_Boltz2_Production/1_Input_Data/*
   Writes        : <Run>/5_TopN_and_Preparation/  (one consolidated folder)
                     1_Converted_Raw_PDB/   (raw PDBs + Figures/)
                     2_Prepared_PDBs/       (prepared PDBs + Figures/)
@@ -3059,8 +3059,8 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
 
     # Load SMILES map for ligand name lookup (used in get_ligand_info)
     _input_data_dir = next(
-        (run_dir / n for n in ["1_Boltz2_Production/1_Input_FASTA_and_SMILES",
-                                "1_Boltz2_Production/1_Input_Data"]
+        (run_dir / n for n in ["1_Boltz2_Production/1_Input_Data",
+                                "1_Boltz2_Production/1_Input_FASTA_and_SMILES"]
          if (run_dir / n).exists()), None)
     _, _smi_map_fig, _, _ = load_reference_data(_input_data_dir) if _input_data_dir else ({}, {}, 0, 0)
 
@@ -3604,7 +3604,7 @@ def topn_extraction_phase(args):
 
     prod_dir = run_dir / "1_Boltz2_Production"           # Step 02 Output
     prep_dir = run_dir / "5_TopN_and_Preparation"        # Step 05 consolidated folder
-    input_data_dir = next((prod_dir / n for n in ["1_Input_FASTA_and_SMILES", "1_Input_Data"] if (prod_dir / n).exists()), prod_dir / "1_Input_FASTA_and_SMILES")
+    input_data_dir = next((prod_dir / n for n in ["1_Input_Data", "1_Input_FASTA_and_SMILES"] if (prod_dir / n).exists()), prod_dir / "1_Input_Data")
 
     # Comparison + handover outputs (Ramachandran, Controls, handover files, combined
     # CSV) live under 3_Comparative_Analysis/. The raw and prepared PDBs themselves
@@ -3906,7 +3906,7 @@ def topn_extraction_phase(args):
                             f"Rank {rank}: {p_name} (Prepared)",
                             rama_path,
                             critical_res=critical_res,
-                            dpi=CFG.VIS_FIGURE_DPI
+                            dpi=CFG.VIS_FIGURE_DPI, cfg=CFG
                         )
                 except Exception as e:
                     console_info(f"    ! Ramachandran generation failed for {name}: {e}")

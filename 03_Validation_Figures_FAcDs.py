@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, and pocket-fit / multi-mo
 diagnostics).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <────────────────────────────────────────────────────────
+Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_FAcDs.py
@@ -1866,8 +1866,7 @@ def _jf_importance(df, folder_dir, reporter):
         axR.set_xticks(x); axR.set_xticklabels(ct.index, rotation=90, fontsize=_JF_FA)
         axR.set_ylabel("Candidates (stream)"); axR.set_xlabel("Ligand")
         axR.legend(ncol=len(ct.columns), fontsize=_JF_FA - 0.5, loc="lower center",
-                   bbox_to_anchor=(0.5, 1.0), handlelength=0.9, columnspacing=1.0,
-                   borderpad=0.3); axR.grid(False)   # framealpha/handletextpad inherit the CFG legend SSOT
+                   bbox_to_anchor=(0.5, 1.0)); axR.grid(False)   # spacing/handles inherit the CFG legend SSOT
         for s in axR.spines.values():
             s.set_visible(False)
         _jf_save(fig, folder_dir, "12_Feature_Importance_Tier_Streams.png")
@@ -2022,7 +2021,7 @@ def _jf_treemap(df, folder_dir, reporter):
                         fontsize=_fs, color=_text_color(c))
         ax.legend(handles=[_JF_Patch(color=_JF_TCOL[t], label=t)
                            for t in _JF_TORDER], ncol=7, fontsize=_JF_FA, loc="upper center",
-                  bbox_to_anchor=(0.5, -0.01), handlelength=1)
+                  bbox_to_anchor=(0.5, -0.01))
         _jf_save(fig, folder_dir, "06_Treemap_Tier_Ligand_Composition.png")
 
 
@@ -2287,7 +2286,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                    markeredgecolor=CFG.VIS_ACCENT["control_edge"], markeredgewidth=1.4,
                    label="3R3U × FA (positive control)"),
         ]
-        ax.legend(handles=_star_leg6, loc="upper right", fontsize=CFG.VIS_FONT_LEGEND, framealpha=0.9)
+        ax.legend(handles=_star_leg6, loc="upper right", fontsize=CFG.VIS_FONT_LEGEND)
 
         plt.tight_layout()
         plt.savefig(out_dir / "Figure_02_Tier_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -4088,8 +4087,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         _mdh10 = _md_ready_stars_cat(ax, df, existing_tiers, CFG.COL_MECH_S)
         _lh10.extend(_mdh10)
         ax.legend(handles=_lh10, loc="lower left", fancybox=True, ncol=len(_lh10),
-                  fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=1.0,
-                  handletextpad=0.4).set_zorder(20)
+                  fontsize=CFG.VIS_FONT_LEGEND - 1.0).set_zorder(20)
         plt.tight_layout()
         _tier_seps(plt.gca())   # consistent vertical tier separators
         plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
@@ -6463,7 +6461,7 @@ def _mm_variance_by_model(df, out_dir, reporter):
            Line2D([0], [0], color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.2)]
     _labs = list(_models) + [f"strict NAC {_dl:g} Å", f"strict NAC {_al:g}°"]
     ax_d.legend(_h, _labs, loc="upper left", ncol=len(_labs),
-                fontsize=CFG.VIS_FONT_LEGEND, columnspacing=1.0)   # framealpha/handletextpad ← CFG SSOT
+                fontsize=CFG.VIS_FONT_LEGEND)   # framealpha/handletextpad/columnspacing ← CFG SSOT via apply_figure_style
     fig.tight_layout()
     fig.savefig(out_dir / "13_MultiModel_Geometry_Variance_by_Model.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
@@ -8107,8 +8105,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _lh.extend(_mdhc)
             # Legend above the axes (single row) so it never sits on the top data band.
             ax.legend(handles=_lh, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=len(_lh),
-                        fancybox=True, fontsize=CFG.VIS_FONT_LEGEND - 1.0,
-                        columnspacing=1.0, handletextpad=0.4)
+                        fancybox=True, fontsize=CFG.VIS_FONT_LEGEND - 1.0)
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
             _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
@@ -9655,8 +9652,8 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
 
 def _xn__fig_05a_pillar_divergence_modified(df, out_dir, reporter):
     # Tier-resolved pillar divergence: one violin panel per scoring pillar, each showing the
-    # pillar-score distribution across degrader tiers (green→red gradient). Replaces the flat
-    # size-only line plot so each tier's contribution is visible.
+    # pillar-score distribution across degrader tiers (green→red gradient), so each tier's
+    # contribution to every pillar is visible.
     pillars = [('Model_Quality_Score', 'Model Quality'),
                ('Binding_Affinity_Score', 'Binding Affinity'),
                ('Catalytic_Competence_Score', 'Catalytic Competence'),
@@ -9752,7 +9749,7 @@ def _rr_scores(df: pd.DataFrame) -> pd.DataFrame:
     out["residue_coverage"] = pd.concat(prox.values(), axis=1).mean(axis=1)
     cav = _rr_num(df, "pocket_containment_cavity").fillna(0).clip(0, 1)
     s8 = _rr_num(df, "pocket_containment_site8").fillna(0).clip(0, 1)
-    pen = _rr_num(df, "containment_penalty").fillna(0).clip(0, 1)
+    pen = _rr_num(df, "containment_penalty").fillna(1.0).clip(0, 1)   # penalty is subtracted; an unmeasured value takes the worst case, never the most favourable
     occ = _rr_occ(_rr_num(df, "pocket_occupancy"))
     out["pocket_fit"] = (0.6 * (0.5 * cav + 0.5 * s8) + 0.4 * occ - 0.5 * pen).clip(0, 1)
     ang = _rr_num(df, "sn2_attack_angle_effective")
@@ -9864,7 +9861,7 @@ def _xn_fig_reaction_readiness(df: pd.DataFrame, out_dir: Path, reporter) -> Non
     handles = [plt.Rectangle((0, 0), 1, 1, color=CFG.TIER_COLOUR.get(t, _INK["silver"])) for t in _tiers]
     if handles:
         axD.legend(handles, [t.replace("Tier_", "") for t in _tiers], ncol=max(1, len(_tiers)),
-                   fontsize=fl, loc="lower right", framealpha=0.92, handlelength=1.0, columnspacing=1.0, handletextpad=0.4)
+                   fontsize=fl, loc="lower right")
 
     # bottom-right: per-ligand component heatmap, columns ordered by molecular size.
     axC = fig.add_subplot(gs[1, 1:3])
@@ -10533,7 +10530,7 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
 
     rama_ref = _utils_mod.compute_ramachandran_angles(_load(crystal))
     _utils_mod.save_ramachandran_plot(rama_ref, "3R3U Crystal Structure",
-                                      rama_dir / "01_Ramachandran_3R3U_Crystal.png", dpi=dpi)
+                                      rama_dir / "01_Ramachandran_3R3U_Crystal.png", dpi=dpi, cfg=CFG)
     reporter.log("  ✔ Saved: 02_Ramachandran/01_Ramachandran_3R3U_Crystal.png")
 
     _rn = 1   # running plot number within 02_Ramachandran (crystal was 01)
@@ -10545,11 +10542,11 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
         rama_con = _utils_mod.compute_ramachandran_angles(_load(cif))
         _rn += 1; _c_con = f"{_rn:02d}_Ramachandran_{label}_Control.png"
         _utils_mod.save_ramachandran_plot(rama_con, f"{label} Control (Boltz-2)",
-                                          rama_dir / _c_con, dpi=dpi)
+                                          rama_dir / _c_con, dpi=dpi, cfg=CFG)
         _rn += 1; _c_cmp = f"{_rn:02d}_Ramachandran_{label}_vs_Crystal.png"
         _utils_mod.save_ramachandran_comparison(rama_ref, rama_con,
                                                 "3R3U (Crystal)", f"{label} (Boltz-2)",
-                                                rama_dir / _c_cmp, dpi=dpi)
+                                                rama_dir / _c_cmp, dpi=dpi, cfg=CFG)
         reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_con}")
         reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_cmp}")
 

@@ -1,9 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 600" width="1280" height="600" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
   <defs>
     <linearGradient id="gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17bd8c"/><stop offset="1" stop-color="#0c7d5d"/></linearGradient>
     <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa3d4"/><stop offset="1" stop-color="#2b6f9e"/></linearGradient>
     <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b431"/><stop offset="1" stop-color="#d68a00"/></linearGradient>
     <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a3d"/><stop offset="1" stop-color="#d81f16"/></linearGradient>
+    <linearGradient id="gRibbon" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0c7d5d"/><stop offset="0.5" stop-color="#b9760a"/><stop offset="1" stop-color="#c21d15"/></linearGradient>
     <filter id="ds" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#123" flood-opacity="0.18"/></filter>
     <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#9fb0ad"/>
@@ -11,80 +12,97 @@
   </defs>
 
   <!-- solid white plate so the mark stays legible on any README theme (light/dark) -->
-  <rect x="0" y="0" width="1280" height="400" rx="20" fill="#ffffff"/>
-  <rect x="3" y="3" width="1274" height="394" rx="18" fill="none" stroke="#e3ede9" stroke-width="2"/>
+  <rect x="0" y="0" width="1280" height="600" rx="22" fill="#ffffff"/>
+  <rect x="3" y="3" width="1274" height="594" rx="20" fill="none" stroke="#e3ede9" stroke-width="2"/>
 
-  <!-- ===== centred header ===== -->
-  <text x="640" y="80" font-size="57" font-weight="800" fill="#1f2937" text-anchor="middle" letter-spacing="0.4">Defluorination of 27-PFAS with <tspan fill="#0c7d5d">FAcDs</tspan></text>
-  <text x="640" y="120" font-size="20" font-weight="600" fill="#15b587" text-anchor="middle" letter-spacing="2.8">ALL  BACTERIAL  FAcDs  VARIANTS   ×   27  PFAS  COMPOUNDS</text>
-  <line x1="240" y1="148" x2="1040" y2="148" stroke="#dfe9e5" stroke-width="2"/>
+  <!-- ===== header ===== -->
+  <text x="640" y="70" font-size="55" font-weight="800" fill="#1f2937" text-anchor="middle" letter-spacing="0.4">Defluorination of 27-PFAS with <tspan fill="#0c7d5d">FAcDs</tspan></text>
+  <text x="640" y="104" font-size="18" font-weight="600" fill="#15b587" text-anchor="middle" letter-spacing="2.6">FULLY  AUTOMATED  END-TO-END  ENZYME-DISCOVERY  PIPELINE</text>
+  <line x1="220" y1="126" x2="1060" y2="126" stroke="#dfe9e5" stroke-width="2"/>
 
-  <!-- ===== connectors (drawn first, behind medallions) ===== -->
+  <!-- ===== scale equation: the search space that is actually enumerated ===== -->
+  <g font-size="15.5" font-weight="700" text-anchor="middle">
+    <rect x="322" y="149" width="216" height="34" rx="17" fill="#e9f7f1" stroke="#bfe6d7" stroke-width="1.5"/>
+    <text x="430" y="171" fill="#0c7d5d"><tspan font-weight="800">2,150</tspan> bacterial FAcD variants</text>
+    <text x="556" y="172" fill="#6b7c78" font-size="19">×</text>
+    <rect x="574" y="149" width="104" height="34" rx="17" fill="#eaf3fa" stroke="#c6dcec" stroke-width="1.5"/>
+    <text x="626" y="171" fill="#2b6f9e"><tspan font-weight="800">27</tspan> PFAS</text>
+    <text x="696" y="172" fill="#6b7c78" font-size="19">=</text>
+    <rect x="714" y="149" width="244" height="34" rx="17" fill="#fdeeea" stroke="#f4cabc" stroke-width="1.5"/>
+    <text x="836" y="171" fill="#c21d15"><tspan font-weight="800">58,050</tspan> predicted complexes</text>
+  </g>
+
+  <!-- ===== connectors (behind medallions) ===== -->
   <g stroke="#c3d3cf" stroke-width="5" fill="none">
-    <line x1="262" y1="250" x2="358" y2="250" marker-end="url(#arrow)"/>
-    <line x1="562" y1="250" x2="658" y2="250" marker-end="url(#arrow)"/>
-    <line x1="862" y1="250" x2="958" y2="250" marker-end="url(#arrow)"/>
+    <line x1="256" y1="322" x2="356" y2="322" marker-end="url(#arrow)"/>
+    <line x1="556" y1="322" x2="656" y2="322" marker-end="url(#arrow)"/>
+    <line x1="856" y1="322" x2="956" y2="322" marker-end="url(#arrow)"/>
   </g>
 
-  <!-- ============ STAGE 1 - PREDICT (Boltz-2) ============ -->
+  <!-- ============ PHASE 1 - PREDICT ============ -->
   <g filter="url(#ds)">
-    <circle cx="180" cy="250" r="70" fill="url(#gTeal)"/>
-    <!-- stacked protein silhouettes = a library of bacterial FAcD variants -->
-    <path d="M150 286 C141 260 173 260 166 236 C161 219 182 217 186 236 C190 255 208 250 205 274"
+    <circle cx="180" cy="322" r="64" fill="url(#gTeal)"/>
+    <path d="M152 354 C144 330 173 330 167 308 C162 292 181 291 185 308 C189 325 205 321 202 343"
           fill="none" stroke="#bff0df" stroke-width="5" stroke-linecap="round" opacity="0.55"/>
-    <path d="M158 282 C149 256 181 256 174 232 C169 215 190 213 194 232 C198 251 216 246 213 270"
+    <path d="M160 350 C152 326 181 326 175 304 C170 288 189 287 193 304 C197 321 213 317 210 339"
           fill="none" stroke="#dff8ee" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
-    <path d="M166 278 C157 252 189 252 182 228 C177 211 198 209 202 228 C206 247 224 242 221 266"
+    <path d="M168 346 C160 322 189 322 183 300 C178 284 197 283 201 300 C205 317 221 313 218 335"
           fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
-    <!-- ligand in the front variant's pocket -->
-    <circle cx="208" cy="254" r="8" fill="#bff0df"/>
+    <circle cx="205" cy="325" r="7.5" fill="#bff0df"/>
   </g>
-  <text x="180" y="345" font-size="21" font-weight="700" fill="#0c7d5d" text-anchor="middle">Predict</text>
-  <text x="180" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Boltz-2 · FAcD variants × PFAS · 5 models</text>
+  <text x="180" y="410" font-size="20" font-weight="700" fill="#0c7d5d" text-anchor="middle">1 · Predict</text>
+  <text x="180" y="431" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Boltz-2 · MSA + 5-model diffusion</text>
+  <text x="180" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">pTM / ipTM · best complex per pair</text>
 
-  <!-- ============ STAGE 2 - SCREEN & TIER ============ -->
+  <!-- ============ PHASE 2 - SCREEN & TIER ============ -->
   <g filter="url(#ds)">
-    <circle cx="480" cy="250" r="70" fill="url(#gBlue)"/>
-    <!-- descending tier bars (funnel 27 -> elite) -->
-    <rect x="440" y="216" width="80" height="12" rx="4" fill="#fff"/>
-    <rect x="450" y="236" width="60" height="12" rx="4" fill="#fff" opacity="0.85"/>
-    <rect x="460" y="256" width="40" height="12" rx="4" fill="#fff" opacity="0.7"/>
-    <rect x="470" y="276" width="20" height="12" rx="4" fill="#fdd" opacity="0.95"/>
+    <circle cx="480" cy="322" r="64" fill="url(#gBlue)"/>
+    <rect x="442" y="292" width="76" height="11" rx="4" fill="#fff"/>
+    <rect x="451" y="310" width="58" height="11" rx="4" fill="#fff" opacity="0.85"/>
+    <rect x="460" y="328" width="40" height="11" rx="4" fill="#fff" opacity="0.7"/>
+    <rect x="469" y="346" width="22" height="11" rx="4" fill="#fdd" opacity="0.95"/>
   </g>
-  <text x="480" y="345" font-size="21" font-weight="700" fill="#2b6f9e" text-anchor="middle">Screen &amp; Tier</text>
-  <text x="480" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">competence-floor tiers</text>
+  <text x="480" y="410" font-size="20" font-weight="700" fill="#2b6f9e" text-anchor="middle">2 · Screen &amp; Tier</text>
+  <text x="480" y="431" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">competence-floor tiers · SN2 geometry</text>
+  <text x="480" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Pareto fronts · 69 validation panels · phylogeny</text>
 
-  <!-- ============ STAGE 3 - SIMULATE (MD) ============ -->
+  <!-- ============ PHASE 3 - SIMULATE ============ -->
   <g filter="url(#ds)">
-    <circle cx="780" cy="250" r="70" fill="url(#gAmber)"/>
-    <!-- trajectory sine wave -->
-    <path d="M742 258 q 12 -34 24 0 t 24 0 t 24 0" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
-    <line x1="742" y1="282" x2="820" y2="282" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+    <circle cx="780" cy="322" r="64" fill="url(#gAmber)"/>
+    <path d="M744 330 q 12 -32 24 0 t 24 0 t 24 0" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+    <line x1="744" y1="352" x2="816" y2="352" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
   </g>
-  <text x="780" y="345" font-size="21" font-weight="700" fill="#b9760a" text-anchor="middle">Simulate</text>
-  <text x="780" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">Desmond MD · 1000 ns</text>
+  <text x="780" y="410" font-size="20" font-weight="700" fill="#b9760a" text-anchor="middle">3 · Simulate</text>
+  <text x="780" y="431" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Desmond MD · 1 µs · SID · Prime MM-GBSA</text>
+  <text x="780" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">WaterMap hydration · NAC dwell time</text>
 
-  <!-- ============ STAGE 4 - DEFLUORINATE (QM/MM) ============ -->
+  <!-- ============ PHASE 4 - DEFLUORINATE ============ -->
   <g filter="url(#ds)">
-    <circle cx="1080" cy="250" r="70" fill="url(#gRed)"/>
-    <!-- alpha carbon -->
-    <circle cx="1080" cy="256" r="15" fill="#3a1512"/>
-    <text x="1080" y="261" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">C</text>
-    <!-- Asp O- backside attack arrow -->
-    <path d="M1036 256 L1060 256" stroke="#fff" stroke-width="4" stroke-dasharray="5 4" stroke-linecap="round"/>
-    <circle cx="1030" cy="256" r="8" fill="#fff"/>
-    <!-- C-F breaking bond -->
-    <line x1="1090" y1="244" x2="1104" y2="222" stroke="#fff" stroke-width="4" stroke-dasharray="4 4" stroke-linecap="round"/>
+    <circle cx="1080" cy="322" r="64" fill="url(#gRed)"/>
+    <circle cx="1080" cy="328" r="14" fill="#3a1512"/>
+    <text x="1080" y="333" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">C</text>
+    <path d="M1038 328 L1062 328" stroke="#fff" stroke-width="4" stroke-dasharray="5 4" stroke-linecap="round"/>
+    <circle cx="1032" cy="328" r="7.5" fill="#fff"/>
+    <line x1="1090" y1="316" x2="1104" y2="296" stroke="#fff" stroke-width="4" stroke-dasharray="4 4" stroke-linecap="round"/>
   </g>
-  <text x="1080" y="345" font-size="21" font-weight="700" fill="#c21d15" text-anchor="middle">Defluorinate</text>
-  <text x="1080" y="368" font-size="14" font-weight="500" fill="#5a6b67" text-anchor="middle">QM/MM · ΔE‡ · F⁻ release</text>
+  <text x="1080" y="410" font-size="20" font-weight="700" fill="#c21d15" text-anchor="middle">4 · Defluorinate</text>
+  <text x="1080" y="431" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">B3LYP QM/MM relaxed scan · ΔE‡ barrier</text>
+  <text x="1080" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Mulliken F⁻ charge · defluorination landscape</text>
 
-  <!-- ===== the story's payoff: fluoride leaving ===== -->
+  <!-- ===== the payoff: fluoride leaving ===== -->
   <g filter="url(#ds)">
-    <circle cx="1180" cy="176" r="26" fill="url(#gRed)"/>
-    <circle cx="1180" cy="176" r="26" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
-    <text x="1180" y="183" font-size="22" font-weight="800" fill="#fff" text-anchor="middle">F⁻</text>
+    <circle cx="1176" cy="252" r="24" fill="url(#gRed)"/>
+    <circle cx="1176" cy="252" r="24" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+    <text x="1176" y="259" font-size="20" font-weight="800" fill="#fff" text-anchor="middle">F⁻</text>
   </g>
-  <path d="M1150 150 q 12 -12 4 -26" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
-  <path d="M1206 152 q 12 -6 22 -14" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <path d="M1148 228 q 11 -11 4 -24" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M1200 230 q 11 -6 20 -13" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- ===== payoff ribbon: what the pipeline delivers ===== -->
+  <rect x="40" y="486" width="1200" height="46" rx="13" fill="#f2f9f6" stroke="#d6ece3" stroke-width="1.5"/>
+  <rect x="40" y="486" width="6" height="46" rx="3" fill="url(#gRibbon)"/>
+  <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,050 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
+
+  <!-- ===== footer: the engineering weight behind it ===== -->
+  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   ~41,700 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
 </svg>

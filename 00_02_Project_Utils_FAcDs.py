@@ -7,7 +7,7 @@ spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
 All downstream scripts import from here - never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <────────────────────────────────────────────────────────
+Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_02_Project_Utils_FAcDs.py
@@ -61,8 +61,6 @@ from typing import Any
 import numpy as np
 # --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
 from datetime import datetime as _dt
-from pathlib import Path as _P
-from pathlib import Path as _Path
 import json
 import math
 import os
@@ -318,7 +316,7 @@ class ReportManager:
     """
     def __init__(self, log_path, header, separator=SEPARATOR_LIGHT,
                  rule_width=80, log_fn=None):
-        self.path = _Path(log_path)
+        self.path = Path(log_path)
         self.separator = separator
         self._log_fn = log_fn if log_fn is not None else console_info
         with open(self.path, "w") as f:
@@ -403,7 +401,7 @@ def latest_by_mtime(paths):
     and a wildcard fallback second, e.g.
         latest_by_mtime(prod.glob(CFG.GLOB_RANKED_CSV)) or latest_by_mtime(prod.glob("*Ranked*.csv"))
     """
-    _ps = [_P(p) for p in paths if _P(p).exists()]
+    _ps = [Path(p) for p in paths if Path(p).exists()]
     return max(_ps, key=lambda p: p.stat().st_mtime) if _ps else None
 
 
@@ -414,7 +412,7 @@ def write_json_atomic(path, payload: dict) -> None:
     atomic within a filesystem, so a run killed mid-write leaves either the previous file or the new
     one, never a truncated hybrid another step would parse as truth.
     """
-    path = _Path(path)
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Per-process/per-call unique temp name: a fixed "<file>.tmp" would let two workers writing the same
     # path clobber each other's half-written temp before the rename. pid + a short uuid make it collision-free.
@@ -430,7 +428,7 @@ def atomic_write_csv(df, path, **to_csv_kwargs) -> None:
     renamed over it (atomic within a filesystem), so a run killed mid-write leaves either the previous file
     or the complete new one, never a truncated hybrid a downstream step would parse as truth.
     """
-    path = _Path(path)
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Per-process/per-call unique temp name (see write_json_atomic) so concurrent writers to one path
     # cannot clobber each other's temp before the atomic rename.
@@ -549,10 +547,31 @@ def _rama_stats(angles: list[tuple]) -> dict[str, Any]:
     return {"total": total, "counts": counts, "pct": pct}
 
 
-def _draw_rama_background(ax) -> None:
+_RAMA_FALLBACK = {
+    "favoured": "#2e7d32", "allowed": "#f57f17", "outlier": "#c62828",
+    "region_favoured": "#dcedc8", "region_allowed": "#fff9c4",
+    "axis": "#bdbdbd", "grid": "#9e9e9e", "box_edge": "#bdbdbd",
+    "acid_fc": "#d81b60", "acid_ec": "#880e4f",
+    "base_fc": "#1e88e5", "base_ec": "#0d47a1",
+    "nuc_fc": "#00bcd4", "nuc_ec": "#006064",
+    "default_fc": "#9c27b0", "default_ec": "#4a148c",
+}
+
+
+def _rama_palette(cfg=None) -> dict:
+    """Ramachandran colours from CFG.VIS_RAMA (the single source of truth); the built-in fallback
+    (identical values) is used only when no cfg is supplied, so behaviour is unchanged either way."""
+    _p = dict(_RAMA_FALLBACK)
+    if cfg is not None:
+        _p.update(getattr(cfg, "VIS_RAMA", {}) or {})
+    return _p
+
+
+def _draw_rama_background(ax, cfg=None) -> None:
     """Draw the standard alpha/beta/L region backgrounds on a Ramachandran axes."""
-    fav_c = "#dcedc8" # light green
-    all_c = "#fff9c4" # light yellow
+    _P = _rama_palette(cfg)
+    fav_c = _P["region_favoured"]
+    all_c = _P["region_allowed"]
 
     alpha_fav  = plt.Polygon([(-165,-70),(-30,-70),(-30,50),(-165,50)], closed=True, fc=fav_c, ec="none", zorder=0)
     beta_fav1  = plt.Polygon([(-180,110),(-50,110),(-50,180),(-180,180)], closed=True, fc=fav_c, ec="none", zorder=0)
@@ -569,24 +588,26 @@ def _draw_rama_background(ax) -> None:
     for patch in [alpha_fav, beta_fav1, beta_fav2, lhand_fav]:
         ax.add_patch(patch)
 
-    ax.axhline(0, color="#bdbdbd", lw=1, zorder=1)
-    ax.axvline(0, color="#bdbdbd", lw=1, zorder=1)
+    ax.axhline(0, color=_P["axis"], lw=1, zorder=1)
+    ax.axvline(0, color=_P["axis"], lw=1, zorder=1)
 
 
 def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple],
                                  label_ref: str, label_con: str, out_path: Path | str,
                                  critical_res: dict[int, tuple[str, str]] = None,
-                                 dpi: int = 300) -> None:
-    """Save a side-by-side comparison Ramachandran PNG."""
+                                 dpi: int = 300, cfg=None) -> None:
+    """Save a side-by-side comparison Ramachandran PNG. Colours come from CFG.VIS_RAMA when cfg is
+    supplied (SSOT), else the identical built-in fallback."""
 
+    _P = _rama_palette(cfg)
     plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"]})
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    for ax, angles, label, _colour in [
-        (axes[0], angles_ref, label_ref, "#6a1b9a"),
-        (axes[1], angles_con, label_con, "#1565c0"),
+    for ax, angles, label in [
+        (axes[0], angles_ref, label_ref),
+        (axes[1], angles_con, label_con),
     ]:
-        _draw_rama_background(ax)
+        _draw_rama_background(ax, cfg)
         if angles:
             for marker_type, m_shape in [("General", "o"), ("Glycine", "^"), ("Proline", "s")]:
                 m_phis, m_psis, m_cols = [], [], []
@@ -598,25 +619,25 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                         m_psis.append(psi)
                         classification = _rama_classify(phi, psi)
                         if classification == "Favored":
-                            m_cols.append("#2e7d32")
+                            m_cols.append(_P["favoured"])
                         elif classification == "Allowed":
-                            m_cols.append("#f57f17")
+                            m_cols.append(_P["allowed"])
                         else:
-                            m_cols.append("#c62828")
+                            m_cols.append(_P["outlier"])
                 if m_phis:
                     ax.scatter(m_phis, m_psis, c=m_cols, marker=m_shape, s=20,
                                alpha=0.85, linewidths=0.4, edgecolors="white", zorder=3)
 
             if critical_res:
                 triad_styles = {
-                    "Acid": {"marker": "D", "fc": "#d81b60", "ec": "#880e4f", "s": 80},
-                    "Base": {"marker": "p", "fc": "#1e88e5", "ec": "#0d47a1", "s": 100},
-                    "Nuc":  {"marker": "*", "fc": "#00bcd4", "ec": "#006064", "s": 180}
+                    "Acid": {"marker": "D", "fc": _P["acid_fc"], "ec": _P["acid_ec"], "s": 80},
+                    "Base": {"marker": "p", "fc": _P["base_fc"], "ec": _P["base_ec"], "s": 100},
+                    "Nuc":  {"marker": "*", "fc": _P["nuc_fc"], "ec": _P["nuc_ec"], "s": 180}
                 }
                 for resname, resnum, phi, psi in angles:
                     if resnum in critical_res and critical_res[resnum][0] == resname:
                         role = critical_res[resnum][1]
-                        style = triad_styles.get(role, {"marker": "X", "fc": "#9c27b0", "ec": "#4a148c", "s": 100})
+                        style = triad_styles.get(role, {"marker": "X", "fc": _P["default_fc"], "ec": _P["default_ec"], "s": 100})
                         ax.scatter([phi], [psi], c=style["fc"], marker=style["marker"], s=style["s"],
                                    alpha=1.0, linewidths=0.8, edgecolors=style["ec"], zorder=5)
 
@@ -632,7 +653,7 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                f"Total     {st['total']:<4} {tot_pct:<8}")
         ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=plt.rcParams["xtick.labelsize"],
                 va="top", ha="right", multialignment="left", family="monospace",
-                bbox=dict(fc="#ffffff", alpha=0.10, ec="#bdbdbd", boxstyle="round,pad=0.4"))
+                bbox=dict(fc="#ffffff", alpha=0.10, ec=_P["box_edge"], boxstyle="round,pad=0.4"))
 
         ax.set_xlim(-180, 180)
         ax.set_ylim(-180, 180)
@@ -644,11 +665,11 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
         ax.set_xticks(range(-180, 181, 60))
         ax.set_yticks(range(-180, 181, 60))
         ax.tick_params()
-        ax.grid(True, linestyle=":", alpha=0.6, color="#9e9e9e", zorder=1)
+        ax.grid(True, linestyle=":", alpha=0.6, color=_P["grid"], zorder=1)
 
-    favoured_p = mpatches.Patch(color="#2e7d32", label="Favoured")
-    allowed_p  = mpatches.Patch(color="#f57f17", label="Allowed")
-    outlier_p  = mpatches.Patch(color="#c62828", label="Outlier")
+    favoured_p = mpatches.Patch(color=_P["favoured"], label="Favoured")
+    allowed_p  = mpatches.Patch(color=_P["allowed"], label="Allowed")
+    outlier_p  = mpatches.Patch(color=_P["outlier"], label="Outlier")
 
     gen_m = mlines.Line2D([], [], color="none", marker="o", markerfacecolor="gray", markeredgecolor="white", markersize=7, label="General")
     gly_m = mlines.Line2D([], [], marker="^", color="none", markerfacecolor="gray", markeredgecolor="white", markersize=7, label="Glycine")
@@ -656,12 +677,12 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     crit_handles = []
     if critical_res:
         triad_styles = {
-            "Acid": {"marker": "D", "fc": "#d81b60", "ec": "#880e4f"},
-            "Base": {"marker": "p", "fc": "#1e88e5", "ec": "#0d47a1"},
-            "Nuc":  {"marker": "*", "fc": "#00bcd4", "ec": "#006064"}
+            "Acid": {"marker": "D", "fc": _P["acid_fc"], "ec": _P["acid_ec"]},
+            "Base": {"marker": "p", "fc": _P["base_fc"], "ec": _P["base_ec"]},
+            "Nuc":  {"marker": "*", "fc": _P["nuc_fc"], "ec": _P["nuc_ec"]}
         }
         for resnum, (resname, role) in sorted(critical_res.items(), key=lambda x: x[1][1]):
-            style = triad_styles.get(role, {"marker": "X", "fc": "#9c27b0", "ec": "#4a148c"})
+            style = triad_styles.get(role, {"marker": "X", "fc": _P["default_fc"], "ec": _P["default_ec"]})
             handle = mlines.Line2D([], [], color="none", marker=style["marker"],
                                    markerfacecolor=style["fc"], markeredgecolor=style["ec"],
                                    markersize=9, label=f"{role}: {resname}{resnum}")
@@ -678,16 +699,18 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     plt.close(fig)
 
 
-def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str, dpi: int = 300) -> None:
-    """Save a single-structure Ramachandran plot PNG."""
+def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str,
+                           dpi: int = 300, cfg=None) -> None:
+    """Save a single-structure Ramachandran plot PNG. Colours from CFG.VIS_RAMA when cfg is supplied."""
+    _P = _rama_palette(cfg)
     fig, ax = plt.subplots(figsize=(6, 6))
-    _draw_rama_background(ax)
+    _draw_rama_background(ax, cfg)
     if angles:
         phis = [a[2] for a in angles]
         psis = [a[3] for a in angles]
         _rama_cls = [_rama_classify(p, s) for p, s in zip(phis, psis)]
-        colours = ["#1b5e20" if c == "Favored"
-                   else ("#f9a825" if c == "Allowed" else "#c62828")
+        colours = [_P["favoured"] if c == "Favored"
+                   else (_P["allowed"] if c == "Allowed" else _P["outlier"])
                    for c in _rama_cls]
         ax.scatter(phis, psis, c=colours, s=14, alpha=0.75, linewidths=0, zorder=3)
     stats = _rama_stats(angles)
@@ -697,7 +720,7 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
                   f"Total: {stats['total']} residues")
     ax.text(0.98, 0.98, legend_txt, transform=ax.transAxes, fontsize=plt.rcParams["legend.fontsize"],
             va="top", ha="right", family="monospace",
-            bbox=dict(fc="white", alpha=0.7, ec="#cccccc", boxstyle="round,pad=0.3"))
+            bbox=dict(fc="white", alpha=0.7, ec=_P["box_edge"], boxstyle="round,pad=0.3"))
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
     ax.set_xlabel("φ (phi) °")

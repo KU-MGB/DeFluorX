@@ -21,14 +21,14 @@ build an MSA (MAFFT / Clustal-Ω) and a maximum-likelihood or Bayesian tree
 tier classification produced here.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 25 July 2026 <─────────────────────────────────────────────────────────
+Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
   Imports from  : 00_02_Project_Utils_FAcDs.py  (console_info / console_separator)
   Reads         : <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
-                  <Run>/1_Boltz2_Production/1_Input_FASTA_and_SMILES/*.fasta
+                  <Run>/1_Boltz2_Production/1_Input_Data/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
                   <Run>/4_Dendrogram/02_Global_Master_Matrix_Data.csv
                   <Run>/4_Dendrogram/03_Global_Master_Interactive_App.html
@@ -322,9 +322,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     console_separator()
 
     input_dir = next(
-        (prod_dir / n for n in ["1_Input_FASTA_and_SMILES", "1_Input_Data"]
+        (prod_dir / n for n in ["1_Input_Data", "1_Input_FASTA_and_SMILES"]
          if (prod_dir / n).exists()),
-        prod_dir / "1_Input_FASTA_and_SMILES"
+        prod_dir / "1_Input_Data"
     )
     tier_dir = out_dir / "05_Tiers"
     out_dir.mkdir(parents=True, exist_ok=True)
