@@ -2128,6 +2128,8 @@ class CFG:
         "tail":         "#0072B2", # NAC dashboard: cradle → ligand-F trace and its criterion line
         "kde":          "#111111", # NAC dashboard: density contours over the scatter
         "legend_edge":  "#E2E8F0", # legend frame
+        "cleave_line":  "#64748B", # departing-F cleaved-charge threshold line
+        "inactive_bar": "#94A3B8", # cross-job ranking bar - non-defluorinating job
     })
     # Categorical palettes for the QSite ensemble (per-frame, best first) and the cross-job
     # comparison (per-rank) reaction-profile overlays. Distinct hues, colour-blind aware.

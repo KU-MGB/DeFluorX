@@ -4181,7 +4181,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                         fontsize=CFG.VIS_FONT_LEGEND_TITLE, fontweight="bold", linespacing=0.95)
             ax.set_yticks(_fp_rings)
             ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"],
-                               color=CFG.VIS_BAND["low"], size=7.5, fontweight="bold")
+                               color=CFG.VIS_BAND["low"], fontsize=CFG.VIS_FONT_TICK_DENSE, fontweight="bold")
             # Radial tick labels parked in an empty wedge between spokes (no data line there).
             ax.set_rlabel_position(np.degrees(np.pi / float(_N_fp)))
             ax.set_ylim(0, 1.10)
@@ -5535,7 +5535,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                       rotation=_rot_s, rotation_mode="anchor")
         ax_r.set_yticks(_ring_levels)
         ax_r.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"],
-                             color=CFG.VIS_BAND["low"], size=7.5, fontweight="bold")
+                             color=CFG.VIS_BAND["low"], fontsize=CFG.VIS_FONT_TICK_DENSE, fontweight="bold")
         ax_r.set_rlabel_position(45)
         ax_r.set_ylim(0, 1.10)
         ax_r.yaxis.grid(False)
