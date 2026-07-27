@@ -3044,12 +3044,13 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     def _scan_done():
         # QSite runs on the job server: the LIVE Jaguar .out sits in /tmp/<user>/jobs/<jobid>/<jobname>.out
         # and is copied back to qsite_dir only when the job finishes, so reading the launch dir during the
-        # run sees nothing. Read the newest live copy (fall back to the launch dir) and count COMPLETED
-        # relaxed-scan points: Jaguar prints exactly one "end of geometry scan step N" line - with that
-        # point's converged energy - per converged point of the QSITE_SCAN_NSTEPS-point scan. The count
-        # must NOT fall back to a bare "converged" substring: a single scan point runs hundreds of SCF
-        # cycles, each printing "converged", which instantly and permanently saturates the bar at N/N.
-        # The scan markers live in the .out, never the job-control .log.
+        # run sees nothing. Read the newest live copy (fall back to the launch dir) and count how many
+        # relaxed-scan POINTS have been reached: QSite echoes the active scan constraint ("  r = 3.5#")
+        # before every geometry-optimisation step, so the number of DISTINCT consecutive constraint
+        # values is the current scan point (1..QSITE_SCAN_NSTEPS) - the same dedup _extract_scan_coordinates
+        # uses. This must NOT count a "converged" / "Total Energy" line: QSite prints those once per SCF /
+        # optimisation iteration, hundreds per point, which would saturate the bar at N/N on the first point.
+        # The scan constraint lives in the .out, never the job-control .log.
         _cands = _glob.glob(f"/tmp/{_user}/jobs/*/{jobname}.out") if _user else []
         _cands.append(str(qsite_dir / f"{jobname}.out"))
         _cands = [p for p in _cands if os.path.isfile(p)]
@@ -3059,8 +3060,11 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
             txt = open(max(_cands, key=os.path.getmtime), errors="ignore").read()
         except OSError:
             return None
-        _n = txt.count("end of geometry scan step")
-        return min(_n, _total) if _n else None
+        _pts, _prev = 0, None
+        for _v in re.findall(r"^\s*r\s*=\s*(-?\d+(?:\.\d+)?)#", txt, re.M):
+            if _v != _prev:
+                _pts += 1; _prev = _v
+        return min(_pts, _total) if _pts else None
 
     # Register BEFORE launch so an interrupt during submission still finds the job to kill.
     _register_qsite_job(jobname)
@@ -3078,32 +3082,33 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
         time.sleep(_interval)
         _elapsed = time.time() - _t0
         _done = _scan_done()
-        # Emit only when a scan point completes (the count advances) or every ~2 min as a keep-alive -
-        # NOT every _interval tick. This turns hundreds of identical "running…" lines into one line per
-        # completed scan point, each carrying real k/N progress. One \r line per rank on a terminal (the
-        # lock keeps parallel ranks from interleaving); appended lines off-tty (the log file).
+        # Report this scan into the shared registry and refresh ONE in-place line that covers every
+        # concurrent scan, grouped by rank (R1 F1 k/N F2 k/N ...). Emit only when THIS scan advances a
+        # point or every ~2 min as a keep-alive, so a slow first point never spams one line per job per
+        # interval. The \r line is written unconditionally: the driver's stdout is a pipe into the tee'd
+        # log rather than a tty, but \r still overwrites on the attached console, and the per-scan
+        # "finished in ... min" line below stays the durable, newline-terminated record.
         if _done == _last_done and (time.time() - _last_emit) < 120:
             continue
         _last_done, _last_emit = _done, time.time()
-        if _done is not None:
-            _pct  = min(100, int(100 * _done / _total))
-            _fill = _pct // 5
-            _bar  = "#" * _fill + "-" * (20 - _fill)
-            # Linear ETA from the scan points already converged; shown only while the scan is mid-flight.
-            _eta  = (f" | ETA ~{_elapsed * (_total - _done) / _done / 60:.1f} min"
-                     if 0 < _done < _total else "")
-            _msg = (f"  [Rank {rank}] QSite {jobname[:38]}: [{_bar}] {_done}/{_total} pts "
-                    f"({_pct}%) | {_elapsed / 60:.1f} min{_eta}")
-        else:
-            _msg = f"  [Rank {rank}] QSite {jobname[:38]}: starting… {_elapsed / 60:.1f} min"
         with _PROGRESS_LOCK:
-            if sys.stdout.isatty():
-                sys.stdout.write(f"\r{_msg}\033[K"); sys.stdout.flush()
-            else:
-                print(_msg, flush=True)
+            _QSITE_PROG[jobname] = (rank, _done, _total, _elapsed)
+            try:
+                sys.stdout.write(f"\r{_qsite_status_line(_QSITE_PROG)}\033[K")
+                sys.stdout.flush()
+            except Exception:
+                pass
 
     _rc = proc.returncode
     _elapsed = time.time() - _t0
+    # This scan is done: drop it from the live registry and clear the shared heartbeat line so the
+    # durable "finished" record below prints on a clean line.
+    with _PROGRESS_LOCK:
+        _QSITE_PROG.pop(jobname, None)
+        try:
+            sys.stdout.write("\r\033[K"); sys.stdout.flush()
+        except Exception:
+            pass
     if _rc == 0:
         print(f"  [Rank {rank}] QSite {jobname} finished in {_elapsed / 60:.1f} min (rc=0).", flush=True)
     else:
@@ -4118,6 +4123,26 @@ def _qsite_concurrency() -> int:
 
 # Serialises the in-place \r progress lines from parallel rank threads so they never interleave.
 _PROGRESS_LOCK = threading.Lock()
+
+# Live QSite heartbeat: each concurrent scan reports (rank, done, total, elapsed) into this registry so a
+# SINGLE in-place line can summarise all of them, instead of one keep-alive line per job per interval.
+_QSITE_PROG: dict = {}
+_QSITE_EMIT: list = [0.0]
+
+
+def _qsite_status_line(prog: dict) -> str:
+    """One line summarising every in-flight QSite scan, grouped by rank, e.g.
+    'QSite 12 scans | R1 F1 3/23 F2 2/23 F3 2/23 | R2 ... | 61m' (max elapsed across the scans)."""
+    if not prog:
+        return ""
+    _by, _max = {}, 0.0
+    for _jn, (_rk, _dn, _tot, _el) in prog.items():
+        _m = re.search(r"Frame_(\d+)", str(_jn))
+        _fs = f"F{_m.group(1)}" if _m else str(_jn)[:6]
+        _by.setdefault(_rk, []).append((_fs, f"{_fs} {_dn if _dn is not None else 0}/{_tot}"))
+        _max = max(_max, _el)
+    _parts = [f"R{_rk} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
+    return f"QSite {len(prog)} scans | " + " | ".join(_parts) + f" | {_max / 60:.0f}m"
 
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
