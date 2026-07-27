@@ -3092,6 +3092,10 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
         _last_done, _last_emit = _done, time.time()
         with _PROGRESS_LOCK:
             _QSITE_PROG[jobname] = (rank, _done, _total, _elapsed)
+            if not _QSITE_BANNER[0]:          # open the block: blank line + rule, once
+                print(flush=True)
+                console_separator(heavy=False)
+                _QSITE_BANNER[0] = True
             try:
                 sys.stdout.write(f"\r{_qsite_status_line(_QSITE_PROG)}\033[K")
                 sys.stdout.flush()
@@ -3126,6 +3130,12 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
         pass
     # Finished (server-side job already gone): drop it so a later clean exit kills nothing.
     _unregister_qsite_job(jobname)
+    # Close the bracketed heartbeat block (rule + blank line) once the last scan drains the registry.
+    with _PROGRESS_LOCK:
+        if not _QSITE_PROG and _QSITE_BANNER[0]:
+            console_separator(heavy=False)
+            print(flush=True)
+            _QSITE_BANNER[0] = False
     return True
 
 
@@ -4126,17 +4136,20 @@ _PROGRESS_LOCK = threading.Lock()
 # Live QSite heartbeat: each concurrent scan reports (rank, done, total, elapsed) into this registry so a
 # SINGLE in-place line can summarise all of them, instead of one keep-alive line per job per interval.
 _QSITE_PROG: dict = {}
-_QSITE_EMIT: list = [0.0]
+# Whether the bracketed heartbeat block (gap + rule ... rule + gap) is currently open, so the opening
+# rule prints once when the first scan registers and the closing rule once when the last one drains.
+_QSITE_BANNER: list = [False]
 
 
 def _qsite_status_line(prog: dict) -> str:
     """One line summarising every in-flight QSite scan, grouped by rank, e.g.
     'QSite 12 scans | R1 F1 3/23 F2 2/23 F3 2/23 | R2 ... | 61m' (max elapsed across the scans).
-    A frame whose scan has reached all QSITE_SCAN_NSTEPS points is shown in green so the
-    finished scans stand out from the ones still climbing the coordinate."""
+    The header, rank labels and elapsed clock are green and the field separators red; a frame whose
+    scan has reached all QSITE_SCAN_NSTEPS points turns green so finished scans stand out."""
     if not prog:
         return ""
-    _G, _B, _E = ConsoleColours.OKGREEN, ConsoleColours.BOLD, ConsoleColours.ENDC
+    _G, _R, _B, _E = (ConsoleColours.OKGREEN, ConsoleColours.FAIL,
+                      ConsoleColours.BOLD, ConsoleColours.ENDC)
     _by, _max = {}, 0.0
     for _jn, (_rk, _dn, _tot, _el) in prog.items():
         _m = re.search(r"Frame_(\d+)", str(_jn))
@@ -4145,8 +4158,9 @@ def _qsite_status_line(prog: dict) -> str:
         _tok = f"{_fs} {_d}/{_tot}"
         _by.setdefault(_rk, []).append((_fs, f"{_G}{_tok}{_E}" if _d >= _tot else _tok))
         _max = max(_max, _el)
-    _parts = [f"R{_rk} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
-    return f"{_B}QSite {len(prog)} scans{_E} | " + " | ".join(_parts) + f" | {_max / 60:.0f}m"
+    _sep = f" {_R}|{_E} "
+    _ranks = [f"{_G}R{_rk}{_E} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
+    return _sep.join([f"{_B}{_G}QSite {len(prog)} scans{_E}"] + _ranks + [f"{_G}{_max / 60:.0f}m{_E}"])
 
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
