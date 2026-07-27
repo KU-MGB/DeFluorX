@@ -78,8 +78,8 @@ Dependency Map
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
                   <out>/06_Analysis/{00_MMGBSA_Summary.csv, 01_Physics_Build_Solvation_QC.png,
                        02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png,
-                       Defluorination/00_Defluorination_Combined_AllRanks.png,
-                       Prime-MMGBSA/Prime-MMGBSA_R{N}/01_MMGBSA_Profile.png,
+                       04_Defluorination_Combined_AllRanks.png,
+                       Prime-MMGBSA/MMGBSA_Profile_R{N}.png,
                        Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.png … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
@@ -2284,7 +2284,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     # shared) - so a ΔG value can be read straight across from one panel to the other.
     ax2.tick_params(labelleft=False, left=True)
     ax2.grid(alpha=0.25, linewidth=0.5)
-    out_path = out_dir / "01_MMGBSA_Profile.png"
+    out_path = out_dir / f"MMGBSA_Profile_R{rank}.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _echo(f"    ✔ Figure       : {out_path.name}")
@@ -2643,9 +2643,8 @@ def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv
     _span, _nfr = traj_span_ns(_trj), traj_frame_count(_trj)
     _nspf = (_span / (_nfr - 1)) if (_span > 0 and _nfr > 1) else 0.0
     _out = _analysis_dir(md_dir.parent) / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")
-    _rank_fig = _out / f"{_out.name}_R{rank}"
-    _rank_fig.mkdir(parents=True, exist_ok=True)
-    plot_mmgbsa_individual(_rank_fig, job_name, rank, dg, ns_per_frame=_nspf)
+    _out.mkdir(parents=True, exist_ok=True)
+    plot_mmgbsa_individual(_out, job_name, rank, dg, ns_per_frame=_nspf)
 
 
 def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> str:
@@ -2675,7 +2674,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     # MM-GBSA data (the summary CSV) stays in its own compute subdir; the FIGURES go to the single
     # 06_Analysis folder alongside every other Step-06 figure. md_dir.parent is 6_Physics_Validation.
     fig_dir = _analysis_dir(md_dir.parent)                                  # 06_Analysis (all Step-06 figures)
-    out_dir = fig_dir / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")  # per-rank profiles group here
+    out_dir = fig_dir / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")  # one flat profile per rank lands here
     tiers = _lookup_tiers(run_root)
     ligands = _lookup_ligands(run_root)
     controls = _lookup_controls(run_root)   # ranks labelled with the CFG control tag (e.g. 3R3U-FA)
@@ -3315,10 +3314,10 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         a.set_xticks(range(len(rks))); a.set_xticklabels(_labs)
         a.set_xlabel("MD-selected complex")
     fig.tight_layout()
-    fig.savefig(analysis / "00_Defluorination_Combined_AllRanks.png",
+    fig.savefig(analysis / "04_Defluorination_Combined_AllRanks.png",
                 dpi=int(CFG.VIS_FIGURE_DPI))
     plt.close(fig)
-    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/00_Defluorination_Combined_AllRanks.png")
+    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/04_Defluorination_Combined_AllRanks.png")
 
 
 # =============================================================================

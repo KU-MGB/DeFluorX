@@ -3075,7 +3075,6 @@ class CFG:
     SUFFIX_SID_EAF:     str = "_SID-out.eaf"                  # Desmond SID → 06 reads
     SUFFIX_MMGBSA_CSV:  str = "_mmgbsa-prime-out.csv"         # Prime → 06/07 read (matches what 06 writes)
     SUFFIX_CMS_OUT:     str = "-out.cms"                      # Desmond → 06/07 read
-    SUFFIX_NAC_DATA:    str = "_NAC_Data.csv"                 # 07 writes → 07 figures read
     FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
     FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes → 07 reads
     FILE_VALIDATED_MASTER: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source - 02's ranked CSV is authoritative.

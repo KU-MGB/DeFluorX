@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """
 ===============================================================================
 FAcDs Pipeline  |  Step 07  |  MD + QM/MM Defluorination Engine
@@ -39,17 +38,17 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
                   <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv
                   <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
-  Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N_<Name>/
-                    - <Name>_NAC_Data.csv          (per-frame geometry + DT)
-                    - 01_<Name>_NAC_Dashboard.png  (2-panel figure)
-                    - 02_<Name>_Active_Site_Dynamics.png  (all catalytic distances: time-traces + violin bank + NAC dwell)
-                    - 03_<Name>_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
-                    - 04_<Name>_MMGBSA_Trace.png          (per-frame ΔG_bind with rolling mean and ±1 SD)
-                    - <Name>_Ideal_Final.maegz      (best frame for QSite)
-                    - <Name>_QSite_SN2/            (primary QM/MM scan) + _QSite_SN2_f<frame>/ (extra ensemble frames)
-                    - 07_<Name>_QSite_Reaction_Profile.png (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
-                    - 05_<Name>_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
-                    - 06_<Name>_Machinery_Engagement.png  (per-residue distance to the warhead C + contact occupancy)
+  Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N/
+                    - NAC_Data.csv                 (per-frame geometry + DT)
+                    - 01_NAC_Dashboard.png         (2-panel figure)
+                    - 02_Active_Site_Dynamics.png  (all catalytic distances: time-traces + violin bank + NAC dwell)
+                    - 03_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
+                    - 04_MMGBSA_Trace.png          (per-frame ΔG_bind with rolling mean and ±1 SD)
+                    - Ideal_Final.maegz            (best frame for QSite)
+                    - QSite_SN2/frame_<frame>/     (one QM/MM scan per sampled frame; frame_<N> = the trajectory frame)
+                    - 07_QSite_Reaction_Profile.png (PES vs reaction coordinate + departing-F charge → the C–F-cleavage proof)
+                    - 05_MMGBSA_NAC_Decomposition.png (ΔG components: whole trajectory vs the reactive pose)
+                    - 06_Machinery_Engagement.png  (per-residue distance to the warhead C + contact occupancy)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
@@ -66,8 +65,8 @@ Date   : 30 July 2026 <───────────────────
                   02_Production_FAcDs.py         → master CSV with alignment maps
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
 
-  Run behaviour : Resume by default. A rank whose per-frame table (<Name>_NAC_Data.csv), statistics
-                  (<Name>_MD_Stats.json) and QM/MM output are all present is NOT recomputed: the
+  Run behaviour : Resume by default. A rank whose per-frame table (NAC_Data.csv), statistics
+                  (MD_Stats.json) and QM/MM output are all present is NOT recomputed: the
                   figures are redrawn from the stored data (seconds) and the run moves on. A rank
                   whose scans have not finished still takes the full path, because the frame pass is
                   what produces the QM/MM frame candidates. --force recomputes everything.
@@ -1542,7 +1541,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
 
     all_data = []
     for _, row in df_master.iloc[::-1].iterrows():
-        csv_path = next(iter(sorted(out_dir.glob(f"**/{row['Job_Name']}_NAC_Data.csv"))), None)
+        csv_path = out_dir / f"Rank_{row['Scientific_Rank']}" / "NAC_Data.csv"
         if csv_path and csv_path.exists():
             df_job = pd.read_csv(csv_path)
             df_job['Job']  = format_job_label(row['Job_Name'], row['Scientific_Rank'])
@@ -2069,18 +2068,25 @@ def _reactive_pose_entry(d: Path, md: Path, rk_df) -> "dict | None":
     MM-GBSA table, and the residue names for THIS homolog (from the ranked sheet). Returns None when
     the directory has no NAC table yet - the rank has not finished its frame analysis. Single source
     for both the bulk loader and the per-rank draw, so the two can never drift."""
-    m = re.match(r"Rank_(\d+)_", d.name)
+    m = re.match(r"Rank_(\d+)(?:_|$)", d.name)
     if not m:
         return None
     rank = int(m.group(1))
-    nac_csv = next(iter(sorted(d.glob(f"*{CFG.SUFFIX_NAC_DATA}"))), None)
-    if nac_csv is None:
+    nac_csv = d / "NAC_Data.csv"
+    if not nac_csv.is_file():
         return None
     _mgdir = md / f"desmond_md_job_R_{rank}"
     mg_csv = _mgdir / f"desmond_md_job_R_{rank}{CFG.SUFFIX_MMGBSA_CSV}"
     if not mg_csv.is_file():        # tolerant fallback, same as the engine's discovery ladder
         mg_csv = next(iter(sorted(_mgdir.glob("*mmgbsa*.csv"))), mg_csv)
-    job = nac_csv.name.replace(CFG.SUFFIX_NAC_DATA, "")
+    # Job identity is authoritative in the ranked sheet, keyed by rank; the per-rank filenames do not embed it.
+    job = ""
+    if rk_df is not None and "Scientific_Rank" in rk_df.columns and "job_name" in rk_df.columns:
+        _jr = rk_df[pd.to_numeric(rk_df["Scientific_Rank"], errors="coerce") == rank]
+        if not _jr.empty:
+            job = str(_jr.iloc[0]["job_name"])
+    if not job:
+        job = f"Rank_{rank}"
     _full = re.sub(r"^\d+_", "", job.split("_")[-1]) if "_" in job else job
     # The 3R3U × FA positive control shares the ligand 'FA' with the candidate fluoroacetate;
     # label it distinctly (3R3U-FA) so every downstream figure names + colours it as the control.
@@ -2121,7 +2127,8 @@ def _draw_reactive_pose_for_rank(master_out_dir: Path, rank: int) -> None:
     plotters are held under PLOT_LOCK - pyplot's figure registry is global state. Degrades quietly
     (each plotter logs and returns) when the rank has no frame-stamped MM-GBSA CSV yet."""
     md = master_out_dir.parent / "6_Physics_Validation" / "05_MD_Simulations"
-    _rank_dir = next(iter(sorted(master_out_dir.glob(f"Rank_{rank}_*"))), None)
+    _rank_dir = master_out_dir / f"Rank_{rank}"
+    _rank_dir = _rank_dir if _rank_dir.is_dir() else None
     if _rank_dir is None:
         return
     entry = _reactive_pose_entry(_rank_dir, md, _load_ranked_df(master_out_dir))
@@ -2270,7 +2277,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool) -> None:
                   ncol=len(hdl) if not merged else 2)
 
         out_path = (out_dir / "06_MMGBSA_Decomposition_AllRanks.png" if merged
-                    else rr[0]["dir"] / f"05_{rr[0]['job']}_MMGBSA_NAC_Decomposition.png")
+                    else rr[0]["dir"] / "05_MMGBSA_NAC_Decomposition.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -2439,7 +2446,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                   ncol=len(_hdl) if not merged else 4)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
-                    else rr[0]["dir"] / f"06_{rr[0]['job']}_Machinery_Engagement.png")
+                    else rr[0]["dir"] / "06_Machinery_Engagement.png")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -3861,17 +3868,17 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
     """
     print(f"  [Rank {rank}] Generating trajectory figures...", flush=True)
     generate_individual_dashboard(
-        df_res, job_name, job_out_dir / f"01_{job_name}_NAC_Dashboard.png", stats)
+        df_res, job_name, job_out_dir / "01_NAC_Dashboard.png", stats)
     generate_active_site_dynamics(
-        df_res, row, job_out_dir / f"02_{job_name}_Active_Site_Dynamics.png")
+        df_res, row, job_out_dir / "02_Active_Site_Dynamics.png")
     generate_free_energy_landscapes(
-        df_res, job_out_dir / f"03_{job_name}_Free_Energy_Landscapes.png")
+        df_res, job_out_dir / "03_Free_Energy_Landscapes.png")
     _md_root = job_out_dir.parent.parent / "6_Physics_Validation" / "05_MD_Simulations"
     _cands = [d for d in (_md_root / f"desmond_md_job_R_{rank}",) if d.is_dir()]
     _mmg_csv = [q for d in _cands for q in sorted(d.glob("*mmgbsa*.csv"))]
     if _mmg_csv:
         generate_mmgbsa_trace(pd.read_csv(_mmg_csv[0]),
-                              job_out_dir / f"04_{job_name}_MMGBSA_Trace.png")
+                              job_out_dir / "04_MMGBSA_Trace.png")
     # 05 (MM-GBSA decomposition) + 06 (machinery engagement) for THIS rank, drawn now so both are
     # readable the moment the rank lands; the cross-rank merged versions still come at the end.
     _draw_reactive_pose_for_rank(job_out_dir.parent, rank)
@@ -3896,7 +3903,7 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             # charge) → the direct "did it defluorinate" figure + F-charge cols.
             _prof = parse_qsite_profile(_fold, job_name)
             plot_qsite_reaction_profile(
-                job_out_dir / f"07_{job_name}_QSite_Reaction_Profile.png", job_name, rank, _prof)
+                job_out_dir / "07_QSite_Reaction_Profile.png", job_name, rank, _prof)
             for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
                 stats[_fk] = _prof.get(_fk, np.nan)
     if _barriers:
@@ -4015,8 +4022,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     job_name   = row['job_name']
     print(f"  [Rank {rank}] Initialising analysis for: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}", flush=True)
 
-    _dir_label  = re.sub(r'_\d{1,3}_[A-Za-z][A-Za-z0-9]+$', '', job_name)
-    job_out_dir = master_out_dir / f"Rank_{rank}_{_dir_label}"
+    job_out_dir = master_out_dir / f"Rank_{rank}"
     job_out_dir.mkdir(parents=True, exist_ok=True)
     console_info(f"Processing Rank {rank} [Stride={stride}]: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}")
 
@@ -4029,12 +4035,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     a rank whose scans never ran still takes the full path, which is what produces the frame
     candidates those scans need. --force ignores all of this and recomputes.
     """
-    _csv_done   = job_out_dir / f"{job_name}_NAC_Data.csv"
-    _stats_done = job_out_dir / f"{job_name}_MD_Stats.json"
+    _csv_done   = job_out_dir / "NAC_Data.csv"
+    _stats_done = job_out_dir / "MD_Stats.json"
     if not _FORCE_RECOMPUTE and _csv_done.is_file() and _stats_done.is_file():
-        _folds_done = ([job_out_dir / f"{job_name}_QSite_SN2"]
-                       + sorted(job_out_dir.glob(f"{job_name}_QSite_SN2_f*")))
-        _folds_done = [f for f in _folds_done if f.is_dir()]
+        _qroot = job_out_dir / "QSite_SN2"
+        _folds_done = [f for f in sorted(_qroot.glob("frame_*")) if f.is_dir()] if _qroot.is_dir() else []
         _scans_ready = (not _QSITE_RUN) or (bool(_folds_done)
                                             and all(any(f.glob("*.out")) for f in _folds_done))
         if _scans_ready:
@@ -5017,7 +5022,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     df_res = pd.DataFrame(results)
     if 'EAF_MSA' in df_res.columns and df_res['EAF_MSA'].notna().any():
         df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=50, min_periods=1).mean()
-    _utils_mod.atomic_write_csv(df_res, job_out_dir / f"{job_name}_NAC_Data.csv")
+    _utils_mod.atomic_write_csv(df_res, job_out_dir / "NAC_Data.csv")
 
     """
     The per-job statistics, written beside the per-frame table. Everything the dashboard prints and
@@ -5036,7 +5041,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             return None
         return v
 
-    _stats_path = job_out_dir / f"{job_name}_MD_Stats.json"
+    _stats_path = job_out_dir / "MD_Stats.json"
     write_json_atomic(_stats_path, {k: _plain(v) for k, v in stats.items()})
     console_info(f"    Per-job statistics saved : {_stats_path.name}")
 
@@ -5081,14 +5086,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
             topo.center_cms(msys_model, _gids, cms_model)
             if _primary:
-                cms_model.fsys_ct.write(str(job_out_dir / f"{job_name}_Ideal_Final.maegz"))
+                cms_model.fsys_ct.write(str(job_out_dir / "Ideal_Final.maegz"))
             if _folder.exists():
                 console_info(f"    [Rank {rank}] QSite folder exists - will parse: {_folder.name}")
                 return None
             _folder.mkdir(parents=True, exist_ok=True)
             # QSite/Jaguar reads uncompressed .mae; trim the periodic box to a
             # local solvation droplet so the QM/MM MM region stays tractable.
-            _mae = _folder / f"{job_name}_Ideal_Final.mae"
+            _mae = _folder / "Ideal_Final.mae"
             _ds = write_qsite_droplet(cms_model, _mae, lig_resname)
             print(f"  [Rank {rank}] QSite .mae solvent (frame {_fi}): {_ds}", flush=True)
             _inp = generate_qsite_inputs(
@@ -5106,9 +5111,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
         print(f"  [Rank {rank}] QM/MM: {len(_sel)} frame(s) (best {ideal_frame_idx}, "
               f"score {best_score:.2f}) - ensemble SN2 barrier.", flush=True)
-        _folds = [(job_out_dir / f"{job_name}_QSite_SN2") if _k == 0
-                  else (job_out_dir / f"{job_name}_QSite_SN2_f{_cand[1]}")
-                  for _k, _cand in enumerate(_sel)]
+        _qroot = job_out_dir / "QSite_SN2"
+        _folds = [_qroot / f"frame_{_cand[1]}" for _cand in _sel]
         # PHASE 1 - sequential prep (mutates cms_model); collect the frames that still need a run.
         _runjobs = []
         for _k, _cand in enumerate(_sel):
