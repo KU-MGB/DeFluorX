@@ -25,7 +25,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-42215-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-42224-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -190,7 +190,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** - `mechani
 
 ---
 
-## 🔄 Pipeline architecture (42,215 lines)
+## 🔄 Pipeline architecture (42,224 lines)
 
 <div align="center">
 <img src="assets/facd_architecture.svg" alt="FAcDs pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 0 Ingest (Input, 01 Merge) → Phase 1 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 2 Selection &amp; Prep (05) → Phase 3 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">

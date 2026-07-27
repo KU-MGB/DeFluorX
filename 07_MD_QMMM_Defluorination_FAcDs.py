@@ -3028,7 +3028,6 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     jobname = inp_path.stem
     cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS),
            "-jobname", jobname, inp_path.name]
-    print(f"  [Rank {rank}] Launching QSite ({_QSITE_PROCS} proc): {inp_path.name}", flush=True)
 
     # Live progress: QM/MM relaxed scans run for many minutes per frame, during
     # which a blocking call looks frozen. Launch non-blocking (still -WAIT, so the
@@ -4132,17 +4131,22 @@ _QSITE_EMIT: list = [0.0]
 
 def _qsite_status_line(prog: dict) -> str:
     """One line summarising every in-flight QSite scan, grouped by rank, e.g.
-    'QSite 12 scans | R1 F1 3/23 F2 2/23 F3 2/23 | R2 ... | 61m' (max elapsed across the scans)."""
+    'QSite 12 scans | R1 F1 3/23 F2 2/23 F3 2/23 | R2 ... | 61m' (max elapsed across the scans).
+    A frame whose scan has reached all QSITE_SCAN_NSTEPS points is shown in green so the
+    finished scans stand out from the ones still climbing the coordinate."""
     if not prog:
         return ""
+    _G, _B, _E = ConsoleColours.OKGREEN, ConsoleColours.BOLD, ConsoleColours.ENDC
     _by, _max = {}, 0.0
     for _jn, (_rk, _dn, _tot, _el) in prog.items():
         _m = re.search(r"Frame_(\d+)", str(_jn))
         _fs = f"F{_m.group(1)}" if _m else str(_jn)[:6]
-        _by.setdefault(_rk, []).append((_fs, f"{_fs} {_dn if _dn is not None else 0}/{_tot}"))
+        _d = _dn if _dn is not None else 0
+        _tok = f"{_fs} {_d}/{_tot}"
+        _by.setdefault(_rk, []).append((_fs, f"{_G}{_tok}{_E}" if _d >= _tot else _tok))
         _max = max(_max, _el)
     _parts = [f"R{_rk} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
-    return f"QSite {len(prog)} scans | " + " | ".join(_parts) + f" | {_max / 60:.0f}m"
+    return f"{_B}QSite {len(prog)} scans{_E} | " + " | ".join(_parts) + f" | {_max / 60:.0f}m"
 
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
@@ -4674,10 +4678,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     if _QSITE_RUN:
                         _runjobs.append((_folder, _inp))
                 if _QSITE_RUN and _runjobs:
+                    print(f"  [Rank {rank}] Launching {len(_runjobs)} concurrent QSite scans: "
+                          f"{', '.join(_f.name for _f, _ in _runjobs)}", flush=True)
                     def _run_one(_job):
                         _fold_r, _inp_r = _job
                         with _QSITE_SEM:
-                            console_info(f"    [Rank {rank}] QSite scan (concurrent) - {_fold_r.name}")
                             run_qsite(_fold_r, _inp_r, job_name, rank)
                     with ThreadPoolExecutor(max_workers=len(_runjobs),
                                             thread_name_prefix=f"QSiteR{rank}") as _qpool:
@@ -5569,10 +5574,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         # PHASE 2 - run the QM/MM scans CONCURRENTLY (each Jaguar QM engine is single-threaded),
         # globally bounded by _QSITE_SEM so parallel ranks × frames never exceed the core/RAM cap.
         if _QSITE_RUN and _runjobs:
+            print(f"  [Rank {rank}] Launching {len(_runjobs)} concurrent QSite scans: "
+                  f"{', '.join(_f.name for _f, _ in _runjobs)}", flush=True)
             def _run_one(_job):
                 _fold_r, _inp_r = _job
                 with _QSITE_SEM:
-                    console_info(f"    [Rank {rank}] QSite scan (concurrent) - {_fold_r.name}")
                     run_qsite(_fold_r, _inp_r, job_name, rank)
             with ThreadPoolExecutor(max_workers=len(_runjobs), thread_name_prefix=f"QSiteR{rank}") as _qpool:
                 list(_qpool.map(_run_one, _runjobs))
@@ -5923,7 +5929,10 @@ def main():
     console_info(f"Parallel workers : {_n_workers} (of {len(_rank_list)} ranks) - "
                  f"frame/SN2 analysis parallel @ cores-2={_cores_budget}; QSite QM/MM up to "
                  f"{_qsite_concurrency()} scans concurrent (single-threaded engine, 1 core/job)")
-    print(flush=True)
+    console_separator(heavy=False)
+    print(f"  {ConsoleColours.BOLD}Per-rank analysis - trajectory NAC -> QM/MM defluorination "
+          f"({len(_rank_list)} ranks in parallel, lines interleave){ConsoleColours.ENDC}", flush=True)
+    console_separator(heavy=False)
 
     _failed_ranks: list  = []
     _all_results:  list  = []
