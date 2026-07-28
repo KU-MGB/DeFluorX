@@ -1,51 +1,62 @@
-# FAcDs / PFAS-27 - Example run (controls only)
+# Boltz-2_Run_EXAMPLE_Controls
 
-This is a **test / example** Boltz-2 run kept in the repository so anyone can see how a
-completed pipeline run is organised on disk. **It is not a full production run.**
+An example run directory, retained in the repository so that the on-disk layout of a completed
+FAcDs / PFAS-27 pipeline run can be inspected directly. It is a controls-only illustration, not a
+production run: it carries real, viewable data for the control cases while every other stage is
+represented by its empty folder skeleton.
 
-## Why only a slice of the data is here
+## Purpose
 
-The real production run screens **2,150 FAcD variants x 27 PFAS = 58,050 complexes** and
-grows to tens of gigabytes (the best-complex CIFs alone are ~12 GB, the master/ranked CSVs
-~350 MB each). That far exceeds GitHub's file and repository limits, so a full run cannot be
-committed. To still show the folder layout with real, inspectable data, this example keeps
-**only the control cases**:
+A production run screens 2,150 FAcD variants against 27 PFAS ligands (58,050 complexes) and reaches
+tens of gigabytes. The best-complex CIF structures alone occupy roughly 12 GB, and the master and
+ranked tables are approximately 350 MB each, so a complete run cannot be committed within GitHub's
+file and repository limits. This directory therefore preserves the folder structure with a small,
+representative slice of genuine output.
 
-- **3R3U** (the RPA1163 / 3R3U crystal fluoroacetate dehalogenase) and
-- **DeHa4** (the functional positive control)
+## Control cases
 
-each paired with **fluoroacetate (FA)**, **difluoroacetate (DFA)** and **trifluoroacetate
-(TFA)** - the six `0000000_*` control jobs.
+Six control complexes are included, formed from two reference proteins and three short-chain
+substrates:
 
-## What contains data
+- Proteins: 3R3U (the RPA1163 / 3R3U crystal fluoroacetate dehalogenase) and DeHa4 (the functional
+  positive control).
+- Ligands: fluoroacetate (FA), difluoroacetate (DFA) and trifluoroacetate (TFA).
 
-Data is present **only** in these two directories (kept small, well under GitHub limits):
+These correspond to the six `0000000_*` prediction jobs.
 
-- **`1_Boltz2_Production/`**
-  - `1_Input_Data/` - the input FASTA + PFAS SMILES roster
-  - `2_Boltz2_YAML_Configs/` - the 6 control Boltz-2 job configs
-  - `3_Sequence_Reference_Data/Active_Site_Alignments/` - the 3R3U + DeHa4 control alignments
-  - `4_Prediction_Jobs/` - the **6 control prediction jobs** (co-folded structures, best complex,
-    interaction + summary files; heavy regenerable binaries such as MSA search caches and the
-    `.npz` confidence tensors are omitted to keep the example light)
-  - `5_Boltz2_FAcDs_Master_*.csv` and `6_Boltz2_FAcDs_Ranked_*.csv` - the master and ranked
-    CSVs **filtered to the control rows only**
-- **`2_Best_Complexes_CIFs/`** - the 6 best control complex CIF structures
+## Directories that contain data
 
-## What is empty
+Data is present only where it remains well within GitHub limits:
 
-Every other phase folder is present as an **empty skeleton** so the directory structure is
-visible, but carries no data (its real outputs would exceed GitHub limits):
+- `1_Boltz2_Production/`
+  - `1_Input_Data/` - input protein FASTA and PFAS SMILES roster.
+  - `2_Boltz2_YAML_Configs/` - the six control Boltz-2 job configurations.
+  - `3_Sequence_Reference_Data/Active_Site_Alignments/` - the 3R3U and DeHa4 control alignments.
+  - `4_Prediction_Jobs/` - the six control prediction jobs, each with its co-folded models, best
+    complex and interaction and summary files.
+  - `5_Boltz2_FAcDs_Master_*.csv` and `6_Boltz2_FAcDs_Ranked_*.csv` - the master and ranked tables,
+    restricted to the six control rows.
+- `2_Best_Complexes_CIFs/` - the six best control complex CIF structures.
+
+Heavy, regenerable intermediates (multiple-sequence-alignment search caches and the `.npz`
+confidence tensors) are omitted from the prediction jobs to keep the example compact.
+
+## Directories retained as empty skeletons
+
+Every remaining stage is present with its folder structure but without data, so the overall layout
+is visible without exceeding size limits:
 
 - `0_FAcDs_Pipeline_Logs/`
-- `3_Validation_Figures/` (analysis data + the 7 figure folders)
-- `4_Dendrogram/` (per-tier interactive apps)
-- `5_TopN_and_Preparation/` (converted / prepared PDBs, comparative analysis, ESP charges)
-- `6_Physics_Validation/` (prepared proteins, ESP complexes, WaterMaps, system builder,
-  MD simulations, analysis + Prime-MMGBSA / defluorination)
+- `3_Validation_Figures/` - analysis data and the seven thematic figure folders.
+- `4_Dendrogram/` - the per-tier interactive phylogeny applications.
+- `5_TopN_and_Preparation/` - converted and prepared PDBs, comparative analysis, ligand ESP charges.
+- `6_Physics_Validation/` - prepared proteins, ESP-charged complexes, WaterMaps, system builder,
+  MD simulations, and the analysis folder (Prime MM-GBSA and defluorination).
 - `7_MD_Thermodynamics_Results/`
 
-(`.gitkeep` files hold the empty folders in git.)
+Empty folders are held in version control by `.gitkeep` placeholders.
 
-To reproduce a real run, use the pipeline in the repository root (`00_00_run_pipeline_FAcDs.sh`
-through `07_MD_QMMM_Defluorination_FAcDs.py`).
+## Reproducing a full run
+
+The complete pipeline resides in the repository root and runs in sequence from
+`00_00_run_pipeline_FAcDs.sh` through `07_MD_QMMM_Defluorination_FAcDs.py`.
