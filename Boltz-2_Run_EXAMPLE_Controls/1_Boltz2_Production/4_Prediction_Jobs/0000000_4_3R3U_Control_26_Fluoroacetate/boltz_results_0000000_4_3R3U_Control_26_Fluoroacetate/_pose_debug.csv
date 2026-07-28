@@ -1,0 +1,6 @@
+model,effective_tier,raw_tier,constellation,mechanistic_score,sn2_attack_angle,competence,confidence
+model_0,Tier_3,Tier_3,,0.9,107.9,0.7,0.9669032096862793
+model_1,Tier_2A,Tier_2A,,0.99,163.1,0.872,0.9665035605430603
+model_2,Tier_2A,Tier_2A,,0.99,155.5,0.842,0.9663428664207458
+model_3,Tier_3,Tier_3,,0.88,102.3,0.661,0.9657058715820312
+model_4,Tier_3,Tier_3,,0.87,97.1,0.67,0.9651756286621094

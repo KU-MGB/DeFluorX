@@ -1,0 +1,19 @@
+MSA server enabled: https://api.colabfold.com
+MSA server authentication: no credentials provided
+Checking input data.
+Processing 1 inputs with 1 threads.
+Generating MSA for /mnt/wdpassport/FAcDs/Boltz-2_Run_20260309T085406Z/1_Boltz2_Production/2_Boltz2_YAML_Configs/0000000_1_DeHa4_Control_26_Fluoroacetate.yaml with 1 protein entities.
+Calling MSA server for target 0000000_1_DeHa4_Control_26_Fluoroacetate with 1 sequences
+MSA server URL: https://api.colabfold.com
+MSA pairing strategy: greedy
+No authentication provided for MSA server
+Running structure prediction for 1 input.
+Predicting: |          | 0/? [00:00<?, ?it/s]Predicting:   0%|          | 0/1 [00:00<?, ?it/s]Predicting DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s]Predicting DataLoader 0: 100%|██████████| 1/1 [00:10<00:00,  0.10it/s]Number of failed examples: 0
+Predicting DataLoader 0: 100%|██████████| 1/1 [00:10<00:00,  0.10it/s]
+
+Predicting property: affinity
+
+Checking input data for affinity.
+Running affinity prediction for 1 input.
+Predicting: |          | 0/? [00:00<?, ?it/s]Predicting:   0%|          | 0/1 [00:00<?, ?it/s]Predicting DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s]Predicting DataLoader 0: 100%|██████████| 1/1 [00:08<00:00,  0.12it/s]Number of failed examples: 0
+Predicting DataLoader 0: 100%|██████████| 1/1 [00:08<00:00,  0.12it/s]
