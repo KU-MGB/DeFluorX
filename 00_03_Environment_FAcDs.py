@@ -50,14 +50,15 @@ import time as _time
 """
 ConsoleColours is defined locally because this script runs BEFORE the PFAS
 conda environment is guaranteed to exist - importing 00_02_Project_Utils is not
-safe here. If the canonical definition in 00_03 changes, sync this copy manually
-(the drift assertion in main() guards the two key codes).
+safe here. The canonical definition lives in 00_02; if it changes, sync this copy
+manually (the drift assertion in main() guards the shared codes).
 """
 class ConsoleColours:
     OKGREEN = "\033[92m"  # Green text designating success
     WARNING = "\033[93m"  # Yellow text designating caution
     FAIL    = "\033[91m"  # Red text designating failure
     OKBLUE  = "\033[94m"  # Blue text designating information
+    MAGENTA = "\033[95m"  # Magenta text designating script banners
     BOLD    = "\033[1m"   # Bold text designed for headers
     ENDC    = "\033[0m"   # Reset colour formatting
 
@@ -265,8 +266,8 @@ def main():
     _now = _time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        "  \033[95m\033[1m▶  00_03_Environment_FAcDs.py"
-        "\033[0m  │  FAcDs Pipeline",
+        f"  {ConsoleColours.MAGENTA}{ConsoleColours.BOLD}▶  00_03_Environment_FAcDs.py"
+        f"{ConsoleColours.ENDC}  │  FAcDs Pipeline",
         flush=True,
     )
     print("  Conda Environment Export & Installation Manager", flush=True)
@@ -276,9 +277,9 @@ def main():
     try:
         _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_FAcDs.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
-        for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "BOLD", "ENDC"):
+        for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "MAGENTA", "BOLD", "ENDC"):
             assert getattr(ConsoleColours, _code) == getattr(_u.ConsoleColours, _code), \
-                f"ConsoleColours.{_code} drift: update 00_01 to match 00_03"
+                f"ConsoleColours.{_code} drift: sync this local copy in 00_03 to match canonical 00_02"
     except AssertionError as _drift:
         # A drift is a real (but non-fatal) maintenance issue - warn, don't crash the installer.
         print(f"{ConsoleColours.WARNING}⚠ {_drift}{ConsoleColours.ENDC}")

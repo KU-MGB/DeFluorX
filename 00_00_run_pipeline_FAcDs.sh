@@ -125,8 +125,8 @@ fi
 # Validate --resume-from is a non-negative integer at parse time; otherwise the later
 # integer comparisons ([[ 7 -ge $RESUME_FROM ]]) throw "integer expression expected"
 # and abort under set -e.
-if [[ ! "$RESUME_FROM" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: --resume-from must be a non-negative integer." >&2
+if [[ ! "$RESUME_FROM" =~ ^[0-7]$ ]]; then
+    echo "ERROR: --resume-from must be an integer 0-7 (0 = run all; the last step is 07)." >&2
     exit 1
 fi
 

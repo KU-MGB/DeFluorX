@@ -27,7 +27,7 @@ Date   : 30 July 2026 <───────────────────
   Script        : 04_Dendrogram_FAcDs.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
   Imports from  : 00_02_Project_Utils_FAcDs.py  (console_info / console_separator)
-  Reads         : <Run>/3_Validation_Figures/03_Figure_Enriched_Dataset.csv
+  Reads         : <Run>/3_Validation_Figures/01_Analysis_Data/03_Figure_Enriched_Dataset.csv
                   <Run>/1_Boltz2_Production/1_Input_Data/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
                   <Run>/4_Dendrogram/02_Global_Master_Matrix_Data.csv
@@ -115,7 +115,7 @@ from Bio import SeqIO
 # Step 1.3: Pipeline modules (00_01) via importlib
 # -------------------------------------------------------------------------------
 import importlib.util as _ilu
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# Consolidated top-level imports; any optional/heavy dependency stays local to its caller.
 import time as _time
 
 def _load_module(name: str, path: Path):
@@ -308,7 +308,7 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     _lig_col = next((c for c in CFG.VIS_PHYLO_COLUMN_MAP["Ligand_Name"] if c in csv_df.columns), None)
     _n_lig = int(csv_df[_lig_col].nunique()) if _lig_col else 0
     _lig_txt = f" × {_n_lig} ligands" if _n_lig else ""
-    reporter.log(f"  ✓ Suite Generated: {prefix} ({len(labels)} proteins{_lig_txt}) -> {out_dir.resolve()}")
+    reporter.log(f"  ✔ Suite Generated: {prefix} ({len(labels)} proteins{_lig_txt}) -> {out_dir.resolve()}")
 
 
 # -------------------------------------------------------------------------------
@@ -583,7 +583,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Load Data</h2>
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Upload Tree (.tree) OR Sequences (.fasta)</label>
-                            <input type="file" id="tree-upload" accept=".tree,.tree,.txt,.fasta,.fa,.faa" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
+                            <input type="file" id="tree-upload" accept=".tree,.txt,.fasta,.fa,.faa" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Upload Boltz Master CSV</label>
@@ -1258,7 +1258,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     const tierOpacity = {{ JSON_TIER_ALPHAS }};
                     return tierOpacity[d.tier] !== undefined ? tierOpacity[d.tier] : 0.5;
                 })
-                .attr("fill", d => LIGAND_COLORS[d.ligIdx % 10])
+                .attr("fill", d => LIGAND_COLORS[d.ligIdx % LIGAND_COLORS.length])
                 .attr("stroke", "none")
                 .attr("d", d => arcGen({
                     innerRadius: RINGS_START + d.ligIdx * RING_STEP,
@@ -1301,7 +1301,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 .attr("startOffset", "50%").attr("text-anchor", "middle");
             ringLabels.merge(rlEnter)
                 .style("opacity", d => state.activeLigands.has(d.lig) ? 1 : 0.3)
-                .style("fill", (d, i) => LIGAND_COLORS[i % 10])
+                .style("fill", (d, i) => LIGAND_COLORS[i % LIGAND_COLORS.length])
                 .style("paint-order", "stroke fill")
                 .style("-webkit-text-stroke", "2px white")
                 .select("textPath")
@@ -1375,7 +1375,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     if (d.children || d._children) return "none";
                     const m = getBestActiveMatch(d.data.name);
                     const li = visibleLigands.indexOf(m.ligand);
-                    return li >= 0 ? LIGAND_COLORS[li % 10] : "#94a3b8";
+                    return li >= 0 ? LIGAND_COLORS[li % LIGAND_COLORS.length] : "#94a3b8";
                 })
                 .style("stroke-dasharray", d => (d.children || d._children || !d.data.name) ? "none" : "3 2")
                 .style("opacity", d => (d.children || d._children || !d.data.name) ? 0 : 0.55);
@@ -1396,7 +1396,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     if (d.children || d._children || !d.data.name) return "#334155";
                     const m = getBestActiveMatch(d.data.name);
                     const li = visibleLigands.indexOf(m.ligand);
-                    return li >= 0 ? LIGAND_COLORS[li % 10] : "#334155";
+                    return li >= 0 ? LIGAND_COLORS[li % LIGAND_COLORS.length] : "#334155";
                 })
                 .text(d => { const n = d.data.name || ''; return n.length > 16 ? n.substring(0, 15) + '…' : n; })
                 .style("fill-opacity", 1);
@@ -1510,7 +1510,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 .attr("y1", (d, i) => isV ? maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2 : minLeafX - NODE_SPACING)
                 .attr("x2", (d, i) => isV ? maxLeafX + NODE_SPACING : maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2)
                 .attr("y2", (d, i) => isV ? maxDepthY + MATRIX_GAP + (i * DIM_LIG) - CELL_PADDING/2 : maxLeafX + NODE_SPACING)
-                .style("stroke", (d, i) => LIGAND_COLORS[i % 10]);
+                .style("stroke", (d, i) => LIGAND_COLORS[i % LIGAND_COLORS.length]);
             colLines.exit().remove();
 
             // HEADERS
@@ -1523,7 +1523,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 })
                 .merge(headers).transition().duration(transDuration).text(d => d)
                 .attr("transform", (d, i) => isV ? `translate(${maxLeafX + NODE_SPACING + 10}, ${maxDepthY + MATRIX_GAP + (i * DIM_LIG) + DIM_LIG/2 + 3}) rotate(0)` : `translate(${maxDepthY + MATRIX_GAP + (i * DIM_LIG) + DIM_LIG/2 + 3}, ${minLeafX - NODE_SPACING - 10}) rotate(-90)`)
-                .style("fill", (d, i) => LIGAND_COLORS[i % 10]).style("text-anchor", "start").style("dominant-baseline", "middle").style("opacity", d => state.activeLigands.has(d) ? 1 : 0.3);
+                .style("fill", (d, i) => LIGAND_COLORS[i % LIGAND_COLORS.length]).style("text-anchor", "start").style("dominant-baseline", "middle").style("opacity", d => state.activeLigands.has(d) ? 1 : 0.3);
             headers.exit().remove();
 
             // NODES

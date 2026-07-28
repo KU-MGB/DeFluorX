@@ -29,6 +29,7 @@ Date   : 30 July 2026 <───────────────────
                     1_Converted_Raw_PDB/   (raw PDBs + Figures/)
                     2_Prepared_PDBs/       (prepared PDBs + Figures/)
                     3_Comparative_Analysis/ (Ramachandran, Controls, handover, combined CSV)
+                    4_Ligand_ESP_Charges/  (<stem>_ESP.mae + 00_ESP_Charges_Summary.csv; gated on --esp)
                     00_TopN_and_Preparation.log  (single log for both phases)
   Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
   Downstream    : 06_Physics_Validation_FAcDs.py       → reads the MD-selected handover (R{N}_*.pdb
@@ -2957,7 +2958,7 @@ class SoftwareManager:
                 _fig_log(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PyMOL      : Successfully installed.")
             return p
         except Exception:
-            _fig_log(f"  {ConsoleColours.FAIL}✗{ConsoleColours.ENDC} PyMOL      : Conda install failed.")
+            _fig_log(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} PyMOL      : Conda install failed.")
             return None
 
     def _attempt_install_plip(self):
@@ -2970,7 +2971,7 @@ class SoftwareManager:
                 _fig_log(f"  {ConsoleColours.OKGREEN}✔{ConsoleColours.ENDC} PLIP       : Successfully installed.")
             return p
         except Exception:
-            _fig_log(f"  {ConsoleColours.FAIL}✗{ConsoleColours.ENDC} PLIP       : Pip install failed.")
+            _fig_log(f"  {ConsoleColours.FAIL}✘{ConsoleColours.ENDC} PLIP       : Pip install failed.")
             return None
 
     def _print_summary(self):
@@ -3402,9 +3403,9 @@ def prep_and_convert_phase(args):
                 for future in as_completed(futures):
                     count += 1
                     res = future.result()
-                    symbol = "✓"
+                    symbol = "✔"
                     stat_text = res["status"]
-                    if stat_text != "Success": symbol = "✗"
+                    if stat_text != "Success": symbol = "✘"
                     try:
                         job_id_num = res["job"].split("_")[0]
                     except Exception:

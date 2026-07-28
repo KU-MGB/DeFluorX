@@ -40,6 +40,7 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N/
                     - NAC_Data.csv                 (per-frame geometry + DT)
+                    - MD_Stats.json                (per-rank statistics cache; drives the resume path)
                     - 01_NAC_Dashboard.png         (2-panel figure)
                     - 02_Active_Site_Dynamics.png  (all catalytic distances: time-traces + violin bank + NAC dwell)
                     - 03_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
@@ -55,6 +56,12 @@ Date   : 30 July 2026 <───────────────────
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
                      the Defluor_Propensity / Is_Defluorinating verdict)
+                  <Run>/7_MD_Thermodynamics_Results/02_MD_Comparative_Analysis.png
+                    (cross-rank comparative dashboard)
+                  <Run>/7_MD_Thermodynamics_Results/03_MD_Viability_Summary.png
+                    (per-candidate MD viability bar chart)
+                  <Run>/7_MD_Thermodynamics_Results/04_Comparative_Residue_Engagement.png
+                    (cross-rank catalytic-residue engagement heatmap)
                   <Run>/7_MD_Thermodynamics_Results/05_Defluorination_Landscape.png
                     (whole-story figure: persistence × QM/MM barrier × binding)
                   <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.png
@@ -540,19 +547,19 @@ def _print_labeled(label: str, ansi_col: str, msg: str,
     Colour passes through pipeline tee to the terminal; file logger stays clean."""
     _log = log_label or label
     if hasattr(thread_logger, 'lines'):
-        thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {ansi_col}{label}\033[0m {msg}")
+        thread_logger.lines.append(f"  [Rank {thread_logger.rank}] {ansi_col}{label}{ConsoleColours.ENDC} {msg}")
     else:
         if _rcon:
             _rcon.print(f"  [bold]{label}[/bold] {msg}", markup=False)
         else:
-            print(f"  {ansi_col}{label}\033[0m {msg}", flush=True)
+            print(f"  {ansi_col}{label}{ConsoleColours.ENDC} {msg}", flush=True)
     if logger:
         r_prefix = f"Rank {thread_logger.rank} | " if hasattr(thread_logger, 'rank') else ""
         getattr(logger, level)(f"{r_prefix}{_log} | {msg}")
 
 
 def console_qmm_ready(msg: str) -> None:
-    _print_labeled("QM/MM READY", "\033[94m", msg)
+    _print_labeled("QM/MM READY", ConsoleColours.OKBLUE, msg)
 
 
 # =============================================================================
@@ -2982,8 +2989,9 @@ CFG.QSITE_MM_FF is therefore EMPTY, so the &mmkey is empty and Impact falls back
         console_info(f"    [i] QSite &mmkey MM force field: {CFG.QSITE_MM_FF} - the closest QSite offers to "
                      f"the trajectory's OPLS4 (QSite supports only OPLS_2005 / OPLS3e).")
     else:
-        console_info("    [!] QSite &mmkey carries no force-field flag - the MM region falls back to "
-                     "OPLS_2005 while the trajectory was propagated under OPLS4.")
+        console_info(f"    {ConsoleColours.WARNING}⚠ QSite &mmkey carries no force-field flag - the MM "
+                     f"region falls back to OPLS_2005 while the trajectory was propagated under "
+                     f"OPLS4.{ConsoleColours.ENDC}")
 
     content = (
         f"MAEFILE: {mae_path.name}\n"
@@ -3057,7 +3065,7 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
             return None
         try:
             txt = open(max(_cands, key=os.path.getmtime), errors="ignore").read()
-        except OSError:
+        except Exception:   # OSError, or MemoryError on a multi-GB live .out - never escape the poll loop
             return None
         _pts, _prev = 0, None
         for _v in re.findall(r"^\s*r\s*=\s*(-?\d+(?:\.\d+)?)#", txt, re.M):
@@ -3091,12 +3099,21 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
             continue
         _last_done, _last_emit = _done, time.time()
         with _PROGRESS_LOCK:
-            _QSITE_PROG[jobname] = (rank, _done, _total, _elapsed)
-            if not _QSITE_BANNER[0]:          # open the block: blank line + rule, once
-                print(flush=True)
-                console_separator(heavy=False)
-                _QSITE_BANNER[0] = True
+            _QSITE_PROG[jobname] = (rank, _done, _total, _elapsed, "run")
+            # Every console write here is wrapped: a severed tee/console (BrokenPipeError) must not
+            # escape the poll loop, or it would skip the terminal-state set, job de-registration and
+            # block-close below and strand a "run" entry that never clears.
             try:
+                if not _QSITE_BANNER[0]:      # open the block once: blank line + launch table + rule
+                    print(flush=True)
+                    _tbl = _qsite_launch_table_str(_QSITE_LAUNCH_ROWS)
+                    if _tbl:
+                        print(f"  {ConsoleColours.BOLD}QSite scans launched (best pre-organised frame "
+                              f"first){ConsoleColours.ENDC}", flush=True)
+                        print(_tbl, flush=True)
+                        print(flush=True)
+                    console_separator(heavy=False)
+                    _QSITE_BANNER[0] = True
                 sys.stdout.write(f"\r{_qsite_status_line(_QSITE_PROG)}\033[K")
                 sys.stdout.flush()
             except Exception:
@@ -3104,19 +3121,26 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
 
     _rc = proc.returncode
     _elapsed = time.time() - _t0
-    # This scan is done: drop it from the live registry and clear the shared heartbeat line so the
-    # durable "finished" record below prints on a clean line.
+    # Mark this scan terminal (done / failed) but KEEP it in the registry so the shared heartbeat can
+    # carry an accumulating tick / cross; clear the live line so the durable record below prints clean.
     with _PROGRESS_LOCK:
-        _QSITE_PROG.pop(jobname, None)
+        _prev = _QSITE_PROG.get(jobname)
+        _dn = _total if _rc == 0 else (_prev[1] if _prev else 0)
+        _QSITE_PROG[jobname] = (rank, _dn, _total, _elapsed, "done" if _rc == 0 else "fail")
         try:
             sys.stdout.write("\r\033[K"); sys.stdout.flush()
         except Exception:
             pass
-    if _rc == 0:
-        print(f"  [Rank {rank}] QSite {jobname} finished in {_elapsed / 60:.1f} min (rc=0).", flush=True)
-    else:
-        console_info(f"    {ConsoleColours.WARNING}[Rank {rank}] QSite {jobname} exited rc={_rc} "
-                     f"after {_elapsed / 60:.1f} min - check {_log_path.name}.{ConsoleColours.ENDC}")
+    # Wrapped so a severed console (BrokenPipe) on the durable line cannot skip the close block below
+    # and leak the banner-open flag into the next scan's output.
+    try:
+        if _rc == 0:
+            print(f"  [Rank {rank}] QSite {jobname} finished in {_elapsed / 60:.1f} min (rc=0).", flush=True)
+        else:
+            console_info(f"    {ConsoleColours.WARNING}[Rank {rank}] QSite {jobname} exited rc={_rc} "
+                         f"after {_elapsed / 60:.1f} min - check {_log_path.name}.{ConsoleColours.ENDC}")
+    except Exception:
+        pass
     # Self-check: surface the common QSite failure where the QM-region charge /
     # electron count is inconsistent (Jaguar 'incorrect molecular charge', odd
     # electrons) and it silently skips every scan point → an empty/NaN barrier.
@@ -3124,17 +3148,24 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     try:
         _reason = _qsite_scan_failure_reason(qsite_dir, jobname)
         if _reason:
-            console_info(f"    {ConsoleColours.FAIL}[Rank {rank}] QSite produced no valid "
+            console_info(f"    {ConsoleColours.FAIL}✘ [Rank {rank}] QSite produced no valid "
                          f"reaction coordinate: {_reason}{ConsoleColours.ENDC}")
     except Exception:
         pass
     # Finished (server-side job already gone): drop it so a later clean exit kills nothing.
     _unregister_qsite_job(jobname)
-    # Close the bracketed heartbeat block (rule + blank line) once the last scan drains the registry.
+    # Once no scan is still running, render the final tick/cross heartbeat, close the bracketed block
+    # (rule + blank line) and clear the registry so a subsequent phase opens a fresh block.
     with _PROGRESS_LOCK:
-        if not _QSITE_PROG and _QSITE_BANNER[0]:
+        if _QSITE_BANNER[0] and not any(_v[4] == "run" for _v in _QSITE_PROG.values()):
+            try:
+                sys.stdout.write(f"\r{_qsite_status_line(_QSITE_PROG)}\033[K\n"); sys.stdout.flush()
+            except Exception:
+                pass
             console_separator(heavy=False)
             print(flush=True)
+            _QSITE_PROG.clear()
+            _QSITE_LAUNCH_ROWS.clear()
             _QSITE_BANNER[0] = False
     return True
 
@@ -3394,7 +3425,14 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
         two different states as one.
         """
         _i_react = e.index(_react) if _react in e else 0
-        _fq_react = _fq[_i_react] if len(_fq) > _i_react else (_fq[0] if _fq else np.nan)
+        # Map the reactant's energy-series index onto the charge series proportionally: the Mulliken
+        # cadence need not equal the energy cadence, so a raw shared index could read the wrong point.
+        if _fq:
+            _fq_i = (min(int(_i_react * (len(_fq) - 1) / (len(e) - 1)), len(_fq) - 1)
+                     if len(_fq) != len(e) and len(e) > 1 else min(_i_react, len(_fq) - 1))
+            _fq_react = _fq[_fq_i]
+        else:
+            _fq_react = np.nan
         _fq_prod = _fq[-1] if _fq else np.nan
         return {
             # The barrier is the post-reactant maximum minus the reactant minimum - e[_imax], not
@@ -3423,8 +3461,8 @@ def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
 
 
 # ────────────────────────────────────────────────────────────────────────────
-#  § 9.4  Trajectory-level figures: active-site dynamics, free-energy
-#         landscapes and the per-frame MM-GBSA trace
+# SECTION 7c: Trajectory-level figures: active-site dynamics, free-energy
+#            landscapes and the per-frame MM-GBSA trace
 # ────────────────────────────────────────────────────────────────────────────
 """
 Three per-rank figures drawn from the same per-frame table the dashboard uses, so a completed MD
@@ -4139,28 +4177,71 @@ _QSITE_PROG: dict = {}
 # Whether the bracketed heartbeat block (gap + rule ... rule + gap) is currently open, so the opening
 # rule prints once when the first scan registers and the closing rule once when the last one drains.
 _QSITE_BANNER: list = [False]
+# Launched-scan rows buffered here (rank -> runjobs); the full bordered table is printed ONCE,
+# atomically, when the heartbeat block opens - so the four ranks' rows never interleave into a
+# broken table. Cleared together with the heartbeat registry when the block closes.
+_QSITE_LAUNCH_ROWS: dict = {}
+
+
+def _qsite_register_launch(rank: int, runjobs: list) -> None:
+    """Record a rank's launched scans for the one-shot launch table (rendered at heartbeat open)."""
+    with _PROGRESS_LOCK:
+        _QSITE_LAUNCH_ROWS[rank] = list(runjobs)
+
+
+def _qsite_launch_table_str(rows: dict) -> str:
+    """A full box-drawn table of the launched QSite scans, every column sized to its widest cell so
+    the borders always line up: 'Rank | Frame 1 (best) | Frame 2 | ...', one row per rank."""
+    if not rows:
+        return ""
+    _order = sorted(rows)
+    _nf = max((len(rows[_r]) for _r in _order), default=0)
+    _hdr = ["Rank"] + [f"Frame {_i + 1}" + (" (best)" if _i == 0 else "") for _i in range(_nf)]
+    _body = []
+    for _r in _order:
+        _rj = rows[_r]
+        _body.append([f"R{_r}"] + [(_rj[_i][0].name if _i < len(_rj) else "-") for _i in range(_nf)])
+    _nc = len(_hdr)
+    _w = [max(len(_hdr[_c]), max((len(_row[_c]) for _row in _body), default=0)) for _c in range(_nc)]
+
+    def _rule(_l, _m, _rr):
+        return "  " + _l + _m.join("─" * (_w[_c] + 2) for _c in range(_nc)) + _rr
+
+    def _line(_cells):
+        return "  │" + "│".join(f" {_cells[_c].ljust(_w[_c])} " for _c in range(_nc)) + "│"
+
+    _out = [_rule("┌", "┬", "┐"), _line(_hdr), _rule("├", "┼", "┤")]
+    _out += [_line(_row) for _row in _body]
+    _out.append(_rule("└", "┴", "┘"))
+    return "\n".join(_out)
 
 
 def _qsite_status_line(prog: dict) -> str:
     """One line summarising every in-flight QSite scan, grouped by rank, e.g.
-    'QSite 12 scans | R1 F1 3/23 F2 2/23 F3 2/23 | R2 ... | 61m' (max elapsed across the scans).
-    The header, rank labels and elapsed clock are green and the field separators red; a frame whose
-    scan has reached all QSITE_SCAN_NSTEPS points turns green so finished scans stand out."""
+    'QSite 12 scans | R1 ✔ F1 23/23 F2 9/23 F3 8/23 | R2 ... | ⏱ 61m' (max elapsed across the scans).
+    The header, rank labels and stopwatch clock are green and the field separators red; a completed
+    scan is prefixed with a green tick and a failed one (rc != 0) with a red cross, so finished and
+    broken scans read at a glance without parsing the k/N numbers."""
     if not prog:
         return ""
     _G, _R, _B, _E = (ConsoleColours.OKGREEN, ConsoleColours.FAIL,
                       ConsoleColours.BOLD, ConsoleColours.ENDC)
     _by, _max = {}, 0.0
-    for _jn, (_rk, _dn, _tot, _el) in prog.items():
+    for _jn, (_rk, _dn, _tot, _el, _st) in prog.items():
         _m = re.search(r"Frame_(\d+)", str(_jn))
         _fs = f"F{_m.group(1)}" if _m else str(_jn)[:6]
         _d = _dn if _dn is not None else 0
-        _tok = f"{_fs} {_d}/{_tot}"
-        _by.setdefault(_rk, []).append((_fs, f"{_G}{_tok}{_E}" if _d >= _tot else _tok))
+        if _st == "fail":
+            _tok = f"{_R}✘ {_fs} {_d}/{_tot}{_E}"
+        elif _st == "done" or _d >= _tot:
+            _tok = f"{_G}✔ {_fs} {_tot}/{_tot}{_E}"
+        else:
+            _tok = f"{_fs} {_d}/{_tot}"
+        _by.setdefault(_rk, []).append((_fs, _tok))
         _max = max(_max, _el)
     _sep = f" {_R}|{_E} "
     _ranks = [f"{_G}R{_rk}{_E} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
-    return _sep.join([f"{_B}{_G}QSite {len(prog)} scans{_E}"] + _ranks + [f"{_G}{_max / 60:.0f}m{_E}"])
+    return _sep.join([f"{_B}{_G}QSite {len(prog)} scans{_E}"] + _ranks + [f"{_G}⏱ {_max / 60:.0f}m{_E}"])
 
 # QM-region coordinating waters: solvent O within this radius (Å) of the
 # scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
@@ -4240,6 +4321,7 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
     # 05 (MM-GBSA decomposition) + 06 (machinery engagement) for THIS rank, drawn now so both are
     # readable the moment the rank lands; the cross-rank merged versions still come at the end.
     _draw_reactive_pose_for_rank(job_out_dir.parent, rank)
+    print(f"  {ConsoleColours.OKGREEN}✔ [Rank {rank}] Trajectory figures done.{ConsoleColours.ENDC}", flush=True)
 
 
 def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
@@ -4427,7 +4509,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _stats_done = job_out_dir / "MD_Stats.json"
     if not _FORCE_RECOMPUTE and _csv_done.is_file() and _stats_done.is_file():
         _qroot = job_out_dir / "QSite_SN2"
-        _folds_done = [f for f in sorted(_qroot.glob("Frame_*")) if f.is_dir()] if _qroot.is_dir() else []
+        # Sort by the numeric selection-position token so index 0 is always the best frame
+        # (a lexicographic sort would place Frame_10_* before Frame_1_Best_* if QSITE_N_FRAMES >= 10).
+        _folds_done = (sorted([f for f in _qroot.glob("Frame_*") if f.is_dir()],
+                              key=lambda p: int((re.search(r"Frame_(\d+)", p.name) or [0, "0"])[1]))
+                       if _qroot.is_dir() else [])
         _scans_ready = (not _QSITE_RUN) or (bool(_folds_done)
                                             and all(any(f.glob("*.out")) for f in _folds_done))
         if _scans_ready:
@@ -4435,8 +4521,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 df_res = pd.read_csv(_csv_done)
                 with open(_stats_done) as _fh:
                     stats = {k: (np.nan if v is None else v) for k, v in json.load(_fh).items()}
-                console_info(f"    [Rank {rank}] Resume - reusing {_csv_done.name} "
-                             f"({len(df_res):,} frames); redrawing figures only.")
+                console_info(f"  {ConsoleColours.OKGREEN}✔ [Rank {rank}] Cache found - reusing "
+                             f"{_csv_done.name} ({len(df_res):,} frames) + MD_Stats.json; "
+                             f"redrawing figures only.{ConsoleColours.ENDC}")
                 _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
                 if _folds_done:
                     _collect_qsite_results(job_out_dir, job_name, rank,
@@ -4662,8 +4749,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _n_qm = max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1)))
             _sel_frames = list(dict.fromkeys(
                 df_res[_mask].sort_values("Consensus", ascending=False)["Frame"].astype(int).tolist()))[:_n_qm]
-            console_info(f"    [Rank {rank}] QSite-only resume - reusing NAC_Data.csv "
-                         f"({len(df_res):,} frames) + MD_Stats.json; {len(_sel_frames)} frame(s) -> QSite only.")
+            console_info(f"  {ConsoleColours.OKGREEN}✔ [Rank {rank}] Cache found - reusing NAC_Data.csv "
+                         f"({len(df_res):,} frames) + MD_Stats.json; {len(_sel_frames)} frame(s) -> "
+                         f"QSite only.{ConsoleColours.ENDC}")
             _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
             if _sel_frames and _nac_od and warhead_c:
                 _nuc_o, _lig_c = _nac_od[0], warhead_c[0]
@@ -4692,8 +4780,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     if _QSITE_RUN:
                         _runjobs.append((_folder, _inp))
                 if _QSITE_RUN and _runjobs:
-                    print(f"  [Rank {rank}] Launching {len(_runjobs)} concurrent QSite scans: "
-                          f"{', '.join(_f.name for _f, _ in _runjobs)}", flush=True)
+                    _qsite_register_launch(rank, _runjobs)
                     def _run_one(_job):
                         _fold_r, _inp_r = _job
                         with _QSITE_SEM:
@@ -5432,6 +5519,20 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
                 stats["MMGBSA_dG_NAC_SD_kcal"]      = round(_sd_nac, 2) if _sd_nac == _sd_nac else np.nan
                 stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
+                # Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
+                # MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
+                # reading any central Step-06 summary file.
+                _dg_all = pd.to_numeric(_mdf[_dgc], errors="coerce").dropna()
+                if len(_dg_all):
+                    _rt_mg = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+                    _w_mg = np.exp(-(_dg_all - _dg_all.min()) / _rt_mg)
+                    stats["MMGBSA_dG_Boltzmann_kcal"] = (round(float((_dg_all * _w_mg).sum() / _w_mg.sum()), 2)
+                                                         if float(_w_mg.sum()) > 0 else np.nan)
+                    stats["MMGBSA_dG_ArithMean_kcal"] = round(float(_dg_all.mean()), 2)
+                    stats["MMGBSA_dG_Median_kcal"]    = round(float(_dg_all.median()), 2)
+                    stats["MMGBSA_dG_Min_kcal"]       = round(float(_dg_all.min()), 2)
+                    stats["MMGBSA_dG_Max_kcal"]       = round(float(_dg_all.max()), 2)
+                    stats["MMGBSA_dG_Std_kcal"]       = round(float(_dg_all.std()), 2)
                 '''
                 The penalty is the difference of two means, and it is only reportable if the NAC mean
                 is. Prime's per-frame ΔG_bind scatter runs to several kcal/mol, so below
@@ -5588,8 +5689,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         # PHASE 2 - run the QM/MM scans CONCURRENTLY (each Jaguar QM engine is single-threaded),
         # globally bounded by _QSITE_SEM so parallel ranks × frames never exceed the core/RAM cap.
         if _QSITE_RUN and _runjobs:
-            print(f"  [Rank {rank}] Launching {len(_runjobs)} concurrent QSite scans: "
-                  f"{', '.join(_f.name for _f, _ in _runjobs)}", flush=True)
+            _qsite_register_launch(rank, _runjobs)
             def _run_one(_job):
                 _fold_r, _inp_r = _job
                 with _QSITE_SEM:
@@ -6003,27 +6103,10 @@ def main():
                                           kind="mergesort").reset_index(drop=True)
         df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
 
-        # Merge Prime MM-GBSA ΔG_bind (Step 06) onto the master by Scientific_Rank so the
-        # terminal ranking couples non-covalent binding thermodynamics with the QSite
-        # reaction barrier. Both keys are coerced to numeric before the join. A missing or
-        # partial summary (Step 06 not run) is non-fatal - the ΔG columns are left absent.
-        _mmgbsa_csv = (work_dir / "05_MD_Simulations"
-                       / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime_MMGBSA")
-                       / CFG.FILE_MMGBSA_SUMMARY)
-        if _mmgbsa_csv.exists() and "Scientific_Rank" in df_master.columns:
-            try:
-                _mdf = pd.read_csv(_mmgbsa_csv)
-                _keep = [c for c in _mdf.columns if c.startswith("MMGBSA_dG")]
-                if "Scientific_Rank" in _mdf.columns and _keep:
-                    _mdf = _mdf[["Scientific_Rank"] + _keep].copy()
-                    _mdf["Scientific_Rank"] = pd.to_numeric(_mdf["Scientific_Rank"], errors="coerce")
-                    df_master["Scientific_Rank"] = pd.to_numeric(df_master["Scientific_Rank"], errors="coerce")
-                    df_master = df_master.merge(_mdf, on="Scientific_Rank", how="left")
-                    console_info(f"Merged Prime MM-GBSA ΔG_bind for {int(_mdf['Scientific_Rank'].notna().sum())} rank(s).")
-            except Exception as _e:
-                console_info(f"{ConsoleColours.WARNING}MM-GBSA merge skipped ({_e}).{ConsoleColours.ENDC}")
-        elif not _mmgbsa_csv.exists():
-            console_info("MM-GBSA summary not found (Step 06 not run) - master written without ΔG_bind columns.")
+        # Prime MM-GBSA ΔG_bind (whole-trajectory Boltzmann/mean/median/min/max/std + the
+        # NAC-conditioned means) is aggregated per rank from each rank's own job-dir CSV, alongside
+        # SID, in the per-rank analysis above (MMGBSA_dG_* in stats). The master already carries those
+        # columns, so no central Step-06 summary file is read here.
 
         """
         ── Defluorination verdict + propensity ───────────────────────────────────────────────────────

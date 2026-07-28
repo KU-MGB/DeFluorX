@@ -84,9 +84,8 @@ Dependency Map
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
--------------------------------------------------------------------------------
-The Critic's Corner: Known Limitations & Failure Points
--------------------------------------------------------------------------------
+
+── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Pipelined GPU→CPU per rank: MD runs on the GPU; the instant it lands (and its files settle)
      that rank's Extraction → SID → MM-GBSA → Defluorination is queued to a single CPU worker while
      the GPU starts the next rank's MD. The worker processes one rank at a time, so two Prime batches
@@ -407,7 +406,7 @@ def _eta_str(done: float, total: float, elapsed_sec: float) -> str:
     enough progress to extrapolate (done in (0, total)), so a just-started or finished step shows none."""
     if done <= 0 or done >= total or elapsed_sec <= 0:
         return ""
-    return f" · ETA {_fmt_dur(elapsed_sec * (total - done) / done)}"
+    return f" · ⏱ ETA {_fmt_dur(elapsed_sec * (total - done) / done)}"
 
 
 @contextmanager
@@ -684,11 +683,11 @@ class Heartbeat:
     The latest captured N is shown as a percentage of the known trajectory length.
     """
 
-    # ANSI styling for the PHASE 2 banner (passes through the pipeline tee to a
-    # live terminal; harmless byte-noise in a pure-file redirect).
-    _C_PHASE2 = "\033[1;36m"   # bold cyan
-    _C_DIM    = "\033[2m"      # dim
-    _C_RST    = "\033[0m"      # reset
+    # PHASE 2 banner styling from the shared ConsoleColours palette (passes through the pipeline
+    # tee to a live terminal; harmless byte-noise in a pure-file redirect).
+    _C_PHASE2 = _C.BOLD + _C.CYAN   # bold cyan
+    _C_DIM    = _C.DIM              # dim
+    _C_RST    = _C.ENDC             # reset
 
     def __init__(self, log_file: Path, label: str, total: int,
                  patterns: list[str] | None = None, interval: int = 120,
@@ -1039,7 +1038,7 @@ class MDHeartbeat:
                     rate = f" · {ns_per_day:,.0f} ns/day"
                     remain_ns = max(0.0, self.total_ns - ns_done)
                     eta_s = remain_ns / max(ns_per_day, 1e-9) * 86400.0
-                    eta = f" · ETA {_fmt_dur(eta_s)}"
+                    eta = f" · ⏱ ETA {_fmt_dur(eta_s)}"
             self._last = (now, t_ps)
             self._progress(f"{self.label}: {ns_done:.2f}/{self.total_ns:.2f} ns ({pct:.1f}%)"
                            f"{rate}{eta} · {mins}m elapsed")
@@ -2656,7 +2655,7 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     "warn" lets the pipeline report WARN (not a false PASS) without hard-aborting:
     MM-GBSA is complementary to the QSite barrier, so Step 07 still runs.
     "disabled" (CFG.MMGBSA_RUN=False) is an intentional no-op → "ok"."""
-    if not getattr(CFG, "MMGBSA_RUN", False):
+    if not getattr(CFG, "MMGBSA_RUN", True):
         _echo("  MM-GBSA disabled (CFG.MMGBSA_RUN = False) - skipped.")
         return "ok"
     job_dirs = sorted(
@@ -2810,8 +2809,8 @@ def _readable(colour, max_lum: float = _DEFL_TEXT_MAX_LUM) -> str:
         return _mcolors.to_hex((r, g, b))
     k = max_lum / lum
     return _mcolors.to_hex((r * k, g * k, b * k))
-_DEFL_NAC_DIST = float(getattr(CFG, "DEFLUOR_NAC_DIST_A", 3.5))      # Od...C(alpha) near-attack distance
-_DEFL_NAC_ANGLE = float(getattr(CFG, "DEFLUOR_NAC_ANGLE_DEG", 150.0))  # Od-C(alpha)-F in-line attack angle
+_DEFL_NAC_DIST = float(CFG.DEFLUOR_NAC_DIST_A)      # Od...C(alpha) near-attack distance
+_DEFL_NAC_ANGLE = float(CFG.DEFLUOR_NAC_ANGLE_DEG)  # Od-C(alpha)-F in-line attack angle
 _DEFL_ENGAGE = float(getattr(CFG, "DEFLUOR_ENGAGE_A", 4.0))          # residue engaged with ligand within this
 _DEFL_POCKET = float(getattr(CFG, "DEFLUOR_POCKET_RADIUS_A", 8.0))   # frame-0 pocket radius for the COM reference
 
@@ -4596,7 +4595,7 @@ def _phase_watermap(entry: dict, dirs: dict, a) -> None:
         else:
             _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
     except Exception as exc:
-        _fail(f"[watermap] R_{rank} ✗ FAILED after 3 tries - SKIPPED, continuing. "
+        _fail(f"[watermap] R_{rank} ✘ FAILED after 3 tries - SKIPPED, continuing. "
               f"{(str(exc).splitlines() or ['<no message>'])[0]}")
 
 
@@ -4863,7 +4862,7 @@ def main() -> int:
     for t in ok:
         _echo(f"  {_C.OKGREEN}✔{_C.ENDC} {t}")
     for t, why in failed:
-        _echo(f"  {_C.FAIL}✗{_C.ENDC} {t}  →  {why}")
+        _echo(f"  {_C.FAIL}✘{_C.ENDC} {t}  →  {why}")
     _emit_timings(out_root)                               # per-job + per-phase wall-clock → log + 00_Phase_Timings.csv
     _guard.__exit__(None, None, None)                    # restore systemd-oomd (idempotent if Step 4 already did)
     print_elapsed(t0, "06_Physics_Validation_FAcDs.py")

@@ -1002,8 +1002,9 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
 
     # Ensemble_Score is exploratory only (PCA/weighted blend for colouring and
     # chemical-space maps). The authoritative rank downstream is the ranked CSV's
-    # Scientific_Rank / competence_score from Step 02; Ensemble_Score is never used
-    # as a sort or rank key.
+    # Scientific_Rank / competence_score from Step 02; Ensemble_Score is never the
+    # authoritative rank - only a last-resort figure-ordering fallback when both of
+    # those are absent.
     df.loc[x.index, "Ensemble_Score"] = (0.5 * score_pca) + (0.5 * score_weighted)
     df["Ensemble_Score"] = df["Ensemble_Score"].fillna(0)
 
@@ -4247,12 +4248,15 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         # Median value labels: sort by angle and place in four alternating vertical
         # bands (offsets in points) so clustered medians (e.g. 158/162/168°) never
         # collide; each label is joined to its dot by a thin leader arrow.
-        _band14 = [40, -40, 24, -24]
-        for _k, (_mx, _my, _mc) in enumerate(sorted(_med_pts, key=lambda z: z[0])):
-            _oy = _band14[_k % len(_band14)]
+        # Median labels on a monotonic, evenly-spaced vertical ladder (>= 26 pt apart, scaling to any
+        # tier count) so clustered medians never collide; each joined to its dot by a thin leader arrow.
+        _meds14 = sorted(_med_pts, key=lambda z: z[0])
+        _n14 = len(_meds14)
+        for _k, (_mx, _my, _mc) in enumerate(_meds14):
+            _oy = 26.0 * ((_n14 - 1) / 2.0 - _k)
             ax.annotate(f"{_mx:.0f}°", (_mx, _my), xytext=(0, _oy), textcoords="offset points",
                         fontsize=CFG.VIS_FONT_LEGEND, color=_mc, fontweight="bold", ha="center",
-                        va="bottom" if _oy > 0 else "top", zorder=7,
+                        va="bottom" if _oy >= 0 else "top", zorder=7,
                         bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                         arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
         # MD-ready overlay - the top-performing MD-selected complexes (incl. those inside
@@ -4539,12 +4543,15 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _mdv = float(np.median(_v)); _mdy = float(np.interp(_mdv, _v, _yv))
                 _axb.scatter([_mdv], [_mdy], color=_cc, s=70, zorder=6, edgecolors="black", linewidths=0.8)
                 _med_cb.append((_mdv, _mdy, _cc))
-            _band_cb = [40, -40, 24, -24]
-            for _k, (_mx, _my, _mc) in enumerate(sorted(_med_cb, key=lambda z: z[0])):
-                _oy = _band_cb[_k % len(_band_cb)]
+            # Median labels on a monotonic evenly-spaced ladder (>= 26 pt apart) so clustered tier
+            # medians never collide, each joined to its dot by a thin leader arrow.
+            _meds_cb = sorted(_med_cb, key=lambda z: z[0])
+            _n_cb = len(_meds_cb)
+            for _k, (_mx, _my, _mc) in enumerate(_meds_cb):
+                _oy = 26.0 * ((_n_cb - 1) / 2.0 - _k)
                 _axb.annotate(f"{_mx:.2f}", (_mx, _my), xytext=(0, _oy), textcoords="offset points",
                               fontsize=CFG.VIS_FONT_LEGEND, color=_mc, fontweight="bold", ha="center",
-                              va="bottom" if _oy > 0 else "top", zorder=7,
+                              va="bottom" if _oy >= 0 else "top", zorder=7,
                               bbox=dict(boxstyle="round,pad=0.15", fc="white", ec=_mc, alpha=0.85, linewidth=0.6),
                               arrowprops=dict(arrowstyle="->", color=_mc, lw=0.7, shrinkA=0, shrinkB=3))
             # MD-ready overlay: top-performing MD-selected complexes on their tier's B-ECDF curve.
@@ -4558,7 +4565,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                     errors="coerce").dropna().sort_values().values
                 if len(_bv) == 0:
                     continue
-                _axb.scatter([_bx], [float(np.interp(_bx, _bv, np.linspace(0, 1, len(_bv))))], **_MD_STAR_KW)
+                _axb.scatter([_bx], [float(np.interp(_bx, _bv, np.arange(1, len(_bv) + 1) / len(_bv)))], **_MD_STAR_KW)
             for _, _cr_b in _control_star_df(df).iterrows():
                 _cbx = pd.to_numeric(pd.Series([_cr_b.get("catalytic_constellation_score")]), errors="coerce").iloc[0]
                 _cbt = _cr_b.get(CFG.COL_TIER)
@@ -6967,7 +6974,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             _fail_now = _alive24 & ~_pass_now          # failed HERE, not earlier
             _n_fail24 = int(_fail_now.sum())
             # The node drawer already prints the count; adding it here prints it twice.
-            _rej_lbl24 = f"✗ {_faillbl24}"
+            _rej_lbl24 = f"✘ {_faillbl24}"
             d[_key24] = np.where(_pass_now, "Pass",
                                  np.where(_fail_now, _rej_lbl24, _REJLANE24))
             _alive24 = _pass_now
@@ -7012,7 +7019,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         }
 
         def _clr_24(cat_col, lbl):
-            if str(lbl).startswith("✗"):          # a dead-end node: the complexes rejected at this gate
+            if str(lbl).startswith("✘"):          # a dead-end node: the complexes rejected at this gate
                 return _REJ_CLR_24
             if cat_col == "tier_cat":
                 return TIER_PALETTE.get(lbl, _tier_clr_24.get(lbl, CFG.VIS_INK["palest"]))
@@ -7263,8 +7270,8 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                 along in the already-rejected lane, is drawn pale and translucent so it recedes. The
                 reader then follows the surviving candidates without having to read a single label.
                 """
-                _dead_src = (s0 == _REJLANE24) or str(s0).startswith("✗")
-                _dead_tgt = (t0 == _REJLANE24) or str(t0).startswith("✗")
+                _dead_src = (s0 == _REJLANE24) or str(s0).startswith("✘")
+                _dead_tgt = (t0 == _REJLANE24) or str(t0).startswith("✘")
                 if _dead_src or _dead_tgt:
                     _rc24, _ra24 = _LANE_CLR_24, 0.30
                 else:
@@ -7724,7 +7731,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
 
 
 # =============================================================================
-# SECTION 4D: DIAGNOSTIC & MULTI-MODEL TREND FIGURES  (folder 07)
+# SECTION 4D: DIAGNOSTIC & MULTI-MODEL TREND FIGURES  (folder 08)
 # =============================================================================
 
 def generate_additional_figures(df: pd.DataFrame, out_dir: Path,

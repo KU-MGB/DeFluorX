@@ -13,7 +13,8 @@ Date   : 30 July 2026 <───────────────────
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_FAcDs.py
   Role          : Sequence merger and pre-processing pipeline wrapper.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (clean_spines)
+  Imports from  : 00_02_Project_Utils_FAcDs.py  (clean_spines, print_script_banner,
+                  print_elapsed, SEPARATOR_HEAVY/LIGHT/DASH)
                   00_01_Project_Config_FAcDs.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   - merged, deduplicated sequence set
@@ -127,7 +128,7 @@ from Bio import SeqIO
 CFG supplies only PREP_AMBIGUOUS_AA for QC (no geometric thresholds used here).
 """
 import importlib.util as _ilu
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# Consolidated top-level imports; any optional/heavy dependency stays local to its caller.
 import time as _time
 
 def _load_module(name: str, path: Path):
@@ -322,8 +323,9 @@ def process_and_write(
         clean_id = clean_header(rec.description)
 
         """
-        Prevent ID collision if two DIFFERENT sequences have the exact same name
-        This is the safety check that fixes your duplicate header concern!
+        Disambiguate identical headers on distinct sequences: two different sequences that
+        carry the same cleaned name would otherwise collide on ID, so a numeric suffix is
+        appended to keep every record's identifier unique.
         """
         original_clean_id = clean_id
         counter = 1
@@ -607,7 +609,7 @@ def main():
     )
     logger.info(f"  Master    : {f1_path.name}")
     logger.info(f"  Secondary : {f2_path.name}  (Len: {args.min_len}–{args.max_len} aa)")
-    print(f"  Output    : {out_path.name}", flush=True)
+    logger.info(f"  Output    : {out_path.name}")
 
     seen_sequences = set()
     seen_ids = set()
@@ -649,9 +651,9 @@ def main():
     # -------------------------------------------------------------------------------
     # Step 6.5: Final Reporting & Shutdown
     # -------------------------------------------------------------------------------
-    logger.info("=" * 79)
+    logger.info(_utils_mod.SEPARATOR_HEAVY)
     logger.info("FINAL REPORT")
-    logger.info("=" * 79)
+    logger.info(_utils_mod.SEPARATOR_HEAVY)
 
     def log_stage(name, s):
         logger.info(f"\n[{name}]")
@@ -685,10 +687,10 @@ def main():
     if plot_path != "FAILED":
         logger.info(f"  3. PLOTS : {plot_path.resolve()}")
 
-    logger.info("-" * 80)
+    logger.info(_utils_mod.SEPARATOR_DASH)
     logger.info("✔ All Files Saved Successfully")
 
-    logger.info("──────────────────────────────────────────────────────────────────────")
+    logger.info(_utils_mod.SEPARATOR_LIGHT)
 
 if __name__ == "__main__":
     _t0 = _time.perf_counter()

@@ -29,8 +29,10 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
   Upstream      : 01_Merge_FAcDs.py → writes the merged FASTA consumed here
   Downstream    : 03_Validation_Figures_FAcDs.py → reads ranked CSV
-                  05_TopN_and_PDB_Preparation_FAcDs.py → reads Best_Complexes_CIFs
-                  05_TopN_and_PDB_Preparation_FAcDs.py → reads ranked CSV
+                  04_Dendrogram_FAcDs.py → reads 1_Input_Data roster
+                  05_TopN_and_PDB_Preparation_FAcDs.py → reads ranked CSV + Best_Complexes_CIFs
+                  06_Physics_Validation_FAcDs.py → reads ranked CSV
+                  07_MD_QMMM_Defluorination_FAcDs.py → reads ranked + master CSV
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -370,7 +372,7 @@ except Exception:
 
 import importlib.util as _ilu
 from pathlib import Path as _Path
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# Consolidated top-level imports; optional/heavy + Schrodinger dependencies stay local to their callers.
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ThreadPoolExecutor as _TPE
 from scipy.spatial import ConvexHull
@@ -423,7 +425,6 @@ RETRY_ON_FAIL             = CFG.BOLTZ_RETRY_MAX
 RETRY_SLEEP               = CFG.BOLTZ_RETRY_SLEEP
 PREDICT_TIMEOUT_S         = CFG.BOLTZ_PREDICT_TIMEOUT_S
 MAX_PROTEINS_PER_BATCH    = CFG.BOLTZ_MAX_PROTEINS_PER_BATCH
-SEPARATOR                 = "-" * 80
 
 # -------------------------------------------------------------------------------
 # Step 2.3: Scoring Weights
@@ -520,9 +521,9 @@ Source: Farajollahi et al. (2024) - see header Scientific References §4 (positi
 """
 DEHA4_CONTROL_SEQ = CFG.DEHA4_CONTROL_SEQ
 # Active-site mapping aligns every query against the RPA1163 3R3U crystal - the real
-# fluoroacetate-dehalogenase structure - not the DeHa4 functional control. DeHa4 vs 3R3U
-# were shown to give identical catalytic residue picks, so the mapped residues are unchanged
-# while the reference is now the crystal (REF_ACTIVE_SITE_MAP 'id' indexes RPA1163_3R3U_SEQ).
+# fluoroacetate-dehalogenase structure - not the DeHa4 functional control. DeHa4 and 3R3U
+# give identical catalytic residue picks, so the mapped residues are unchanged; the alignment
+# reference is the 3R3U crystal (REF_ACTIVE_SITE_MAP 'id' indexes RPA1163_3R3U_SEQ).
 REF_SEQUENCE_STR = CFG.RPA1163_3R3U_SEQ
 
 # Fluoroacetate SMILES used for reference construction operations.
@@ -549,7 +550,7 @@ COLUMN_RENAMING_MAP = {
     # Role-based generic names: VALUE = distance to the per-protein dynamically-
     # mapped residue (±5 resolver), not a fixed 3R3U number; mapped residue per
     # role is in the Mapped_* columns / Active_Site_Triad_Map (refs: CFG §2.5).
-    "dist_Nuc":    "Dist_Nucleophile",
+    "dist_Nuc":    CFG.COL_NUC_DIST,
     "dist_Base":   "Dist_Base",
     "dist_Acid":   "Dist_Acid",
     "dist_Stab_H": "Dist_Stabiliser_H",
@@ -5249,13 +5250,12 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
 # =============================================================================
 
 def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
-    """Build the mechanism-first Scientific Ranking CSV from the master CSV.
-    Extracted verbatim from main() (M1): tier-first sort, MD-ready selection,
-    positive-control validation, no-gaps fill. Returns (rank_csv_path,
-    rank_columns_count). `logger` is the module-global; console_info is used
-    for reporting exactly as in-line.
+    """Build the mechanism-first Scientific Ranking CSV from the master CSV:
+    tier-first sort, MD-ready selection, positive-control validation, no-gaps
+    fill. Returns (rank_csv_path, rank_columns_count); `logger` is the
+    module-global and console_info carries the progress reporting.
     """
-    # Step 10.10: Scientific Ranking Matrix CSV Generation (MECHANISM-FIRST)
+    # Scientific Ranking Matrix CSV Generation (MECHANISM-FIRST) - helper for main() Step 10.
     # -------------------------------------------------------------------------------
     console_info("Executing the compilation of the strictly mechanistic Scientific Ranking CSV...")
     rank_csv_path = None
@@ -5302,9 +5302,9 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 df_rank.insert(1, "Rank_Within_Ligand", df_rank.groupby(_lig_col).cumcount() + 1)
 
             '''
-            MD-ready selection (SECTION 18 SSOT). Flag the cohort that receives the
+            MD-ready selection (§18 SSOT). Flag the cohort that receives the
             expensive downstream pipeline (CIF->PDB, PrepWizard, MM-GBSA, MD) so Steps
-            05-08 prepare/simulate only these rows, not all ~58k. Analysis/figures still
+            05-07 prepare/simulate only these rows, not all ~58k. Analysis/figures still
             span the full population; only heavy compute is gated.
             '''
             _md_sel = CFG.MD_SELECTED_COL
@@ -7276,7 +7276,7 @@ def main():
     console_separator()
 
     # -------------------------------------------------------------------------------
-    # Step 10.11: Final Report and Output Terminal UI
+    # Step 10.10: Final Report and Output Terminal UI
     # -------------------------------------------------------------------------------
     console_separator()
     console_info(f"\nSequential Analytical Pipeline entirely Completed. Associated Files are formally verified inside: {PROD.resolve()}")

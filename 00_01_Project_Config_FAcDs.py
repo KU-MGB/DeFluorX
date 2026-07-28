@@ -16,7 +16,8 @@ Date   : 30 July 2026 <───────────────────
   Reads         : Nothing (pure Python dataclass; no file I/O).
   Writes        : Nothing.
   Upstream      : None (root module - must load before all others).
-  Downstream    : 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
+  Downstream    : 00_02_Project_Utils_FAcDs.py, 01_Merge_FAcDs.py,
+                  02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
                   04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
                   06_Physics_Validation_FAcDs.py,
                   07_MD_QMMM_Defluorination_FAcDs.py
@@ -48,7 +49,7 @@ Section map (prefix → section):
     TIER_*         §8     Catalytic tier classification & display
     WATERMAP_*     §9     WaterMap hydration-site integration
     VIABILITY_*    §9     Catalytic viability display thresholds
-    SCORE_*        §9/14  Likelihood scoring thresholds
+    SCORE_*        §9/13/14 Likelihood scoring thresholds (SCORE_PCA_NEUTRAL lives in §13)
     QSITE_*        §10    QM/MM extraction settings (QSite/Schrödinger)
     PROC_*         §12    Processing / file-I/O operational parameters
     VIS_*          §13    Visualisation rendering parameters
@@ -59,6 +60,8 @@ Section map (prefix → section):
     COL_*          §16    Master-CSV column-name registry
     MMGBSA_*       §17    Prime MM-GBSA binding free-energy parameters
     MD_*           §18    MD-ready cohort selection (gates Steps 05-07)
+    GLOB_*         §16    SSOT file-naming glob patterns (Step 16.5)
+    EXT_*          §19    SSOT file-naming extensions
 ───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
@@ -154,7 +157,7 @@ class CFG:
     TIER_*         §8     Catalytic tier classification & display
     WATERMAP_*     §9     WaterMap hydration-site integration
     VIABILITY_*    §9     Catalytic viability display thresholds
-    SCORE_*        §9/14  Likelihood scoring thresholds
+    SCORE_*        §9/13/14 Likelihood scoring thresholds (SCORE_PCA_NEUTRAL lives in §13)
     QSITE_*        §10    QM/MM extraction settings (QSite/Schrödinger)
     PROC_*         §12    Processing / file-I/O operational parameters
     VIS_*          §13    Visualisation rendering parameters
@@ -165,6 +168,8 @@ class CFG:
     COL_*          §16    Master-CSV column-name registry
     MMGBSA_*       §17    Prime MM-GBSA binding free-energy parameters
     MD_*           §18    MD-ready cohort selection (gates Steps 05-07)
+    GLOB_*         §16    SSOT file-naming glob patterns (Step 16.5)
+    EXT_*          §19    SSOT file-naming extensions
     """
 
     # ===============================================================================
@@ -3086,7 +3091,7 @@ class CFG:
     SUFFIX_MMGBSA_CSV:  str = "_mmgbsa-prime-out.csv"         # Prime → 06/07 read (matches what 06 writes)
     SUFFIX_CMS_OUT:     str = "-out.cms"                      # Desmond → 06/07 read
     FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
-    FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes → 07 reads
+    FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes (its own combined figures); 07 aggregates per-rank
     FILE_VALIDATED_MASTER: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source - 02's ranked CSV is authoritative.
 
     # ===============================================================================

@@ -16,14 +16,14 @@ Date   : 30 July 2026 <───────────────────
                   04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
                   06_Physics_Validation_FAcDs.py,
                   07_MD_QMMM_Defluorination_FAcDs.py
-                  (also referenced by 00_01 for a ConsoleColours drift check)
+                  (also referenced by 00_03 for a ConsoleColours drift check)
   Reads         : (none - pure utility module)
   Writes        : (none - pure utility module)
+  Upstream      : 00_01_Project_Config_FAcDs.py (CFG is passed in by callers).
+  Downstream    : 01_Merge through 07_MD_QMMM (every pipeline step imports these helpers).
 ───────────────────────────────────────────────────────────────────────────────
 
--------------------------------------------------------------------------------
-The Critic's Corner: Known Limitations & Failure Points
--------------------------------------------------------------------------------
+── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Pure library: no executable entry point and no input validation of its own -
      callers must pass well-formed arrays/paths.
   2. Geometry helpers assume Cartesian coordinates in Ångström; the MIC routines
@@ -31,7 +31,7 @@ The Critic's Corner: Known Limitations & Failure Points
      6-parameter crystallographic cell.
   3. Heavy optional dependencies (gemmi, RDKit, pandas) are imported lazily on
      demand; the relevant helper raises cleanly if the dependency is absent.
--------------------------------------------------------------------------------
+───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
 Scientific References:
@@ -89,7 +89,9 @@ class ConsoleColours:
     FAIL    = "\033[91m"   # red     - error / fail
     OKBLUE  = "\033[94m"   # blue    - information
     MAGENTA = "\033[95m"   # magenta - script banners
+    CYAN    = "\033[96m"   # cyan    - phase / heartbeat headers
     BOLD    = "\033[1m"    # bold    - section headers
+    DIM     = "\033[2m"    # dim     - de-emphasised detail
     ENDC    = "\033[0m"    # reset   - end all formatting
 
 
@@ -601,7 +603,8 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
     supplied (SSOT), else the identical built-in fallback."""
 
     _P = _rama_palette(cfg)
-    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"]})
+    _fam = list(getattr(cfg, "VIS_FONT_FAMILY", ("Arial", "Helvetica", "DejaVu Sans")))
+    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": _fam})
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     for ax, angles, label in [
