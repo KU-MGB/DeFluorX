@@ -481,10 +481,11 @@ def _mask_oomd_at_start():
     as well as atexit."""
     if not sys.stdin.isatty():
         return lambda: None
-    console_info("OPTIONAL - protect this run from the Linux out-of-memory killer.")
+    console_info(f"{ConsoleColours.BOLD}OPTIONAL - protect this run from the Linux out-of-memory (OOM) killer.{ConsoleColours.ENDC}")
     console_info("  QSite QM/MM holds large systems in memory for hours; systemd-oomd can kill it. "
-                 "Masking needs root.")
-    console_info("  Enter your sudo password to mask systemd-oomd, or press Enter / Ctrl-D to skip.")
+                 "Masking systemd-oomd needs root.")
+    console_info(f"  {ConsoleColours.FAIL}{ConsoleColours.BOLD}Enter your sudo password to mask "
+                 f"systemd-oomd, or press Enter / Ctrl-D to skip and run unprotected:{ConsoleColours.ENDC}")
     try:
         with open("/dev/tty") as _tty:
             _ok = _sp.run(["sudo", "-v"], stdin=_tty).returncode == 0

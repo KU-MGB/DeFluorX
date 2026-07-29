@@ -614,11 +614,11 @@ class OomdGuard:
         if not self.active:
             _echo("  [PIPELINE-MODE] oomd management delegated to pipeline runner.")
             return self
-        _echo("OPTIONAL - protect this run from the Linux out-of-memory killer.")
-        _echo("  SID and Prime MM-GBSA both hold large trajectories in memory for hours, and "
-              "systemd-oomd can kill them mid-run. Masking it needs root.")
-        _echo("  Enter your sudo password to mask systemd-oomd, or press Enter / Ctrl-D to skip "
-              "and run unprotected.")
+        _echo(f"{_C.BOLD}OPTIONAL - protect this run from the Linux out-of-memory (OOM) killer.{_C.ENDC}")
+        _echo("  SID and Prime MM-GBSA hold large trajectories in memory for hours; systemd-oomd can "
+              "kill them mid-run. Masking systemd-oomd needs root.")
+        _echo(f"  {_C.FAIL}{_C.BOLD}Enter your sudo password to mask systemd-oomd, or press Enter / "
+              f"Ctrl-D to skip and run unprotected:{_C.ENDC}")
         # Prime the sudo credential interactively against the controlling tty (optional).
         _sudo_ok = False
         try:
@@ -4724,7 +4724,9 @@ def main() -> int:
 
     if "merge" in stages:
         _section(f"Step 1/4 - Import + ESP merge  ({len(entries)} complex)")
-        for e in entries:
+        for _i, e in enumerate(entries):
+            if _i:
+                _echo("")
             try:
                 _phase_merge(e, ranked_map, dirs)
             except Exception as exc:
@@ -4733,16 +4735,24 @@ def main() -> int:
 
     if "watermap" in stages:
         _section(f"Step 2/4 - WaterMap  ({a.wm_ns:g} ns)")
+        _first = True
         for e in entries:
             if e.get("_skip"):
                 continue
+            if not _first:
+                _echo("")
+            _first = False
             _phase_watermap(e, dirs, a)
 
     if "build" in stages:
         _section("Step 3/4 - System Builder  (minimise-volume)")
+        _first = True
         for e in entries:
             if e.get("_skip"):
                 continue
+            if not _first:
+                _echo("")
+            _first = False
             try:
                 _phase_build(e, dirs)
             except Exception as exc:
@@ -4823,6 +4833,8 @@ def main() -> int:
                 if e.get("_skip"):
                     continue
                 _job_pos += 1
+                if _job_pos > 1:
+                    _echo("")
                 rank = e["rank"]
                 try:
                     jd = _phase_md(e, dirs, a)                          # MD  (GPU, blocking)
