@@ -16,7 +16,7 @@
   <rect x="3" y="3" width="1274" height="594" rx="20" fill="none" stroke="#e3ede9" stroke-width="2"/>
 
   <!-- ===== header ===== -->
-  <text x="640" y="68" font-size="31" font-weight="800" fill="#1f2937" text-anchor="middle" letter-spacing="0.2"><tspan fill="#0c7d5d">DeFluorX:</tspan> Discovering <tspan fill="#0c7d5d">FAcD</tspan> Variants for PFAS Defluorination</text>
+  <text x="640" y="68" font-size="35" font-weight="800" fill="#1f2937" text-anchor="middle" letter-spacing="0.2"><tspan fill="#0c7d5d">DeFluorX:</tspan> Discovering <tspan fill="#0c7d5d">FAcDs</tspan> for PFAS Defluorination</text>
   <text x="640" y="104" font-size="18" font-weight="600" fill="#15b587" text-anchor="middle" letter-spacing="2.6">FULLY  AUTOMATED  END-TO-END  ENZYME-DISCOVERY  PIPELINE</text>
   <line x1="220" y1="126" x2="1060" y2="126" stroke="#dfe9e5" stroke-width="2"/>
 

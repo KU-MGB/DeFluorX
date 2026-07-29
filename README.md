@@ -1,6 +1,6 @@
 <div align="center">
 
-# DeFluorX: Discovering FAcD Variants for PFAS Defluorination
+# DeFluorX: Discovering FAcDs for PFAS Defluorination
 
 **AI-guided Structure-based Discovery & Physics-based Mechanistic Validation of FAcD Variants for PFAS Defluorination**
 
