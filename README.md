@@ -52,7 +52,7 @@
 
 ### The PFAS problem
 
-Per- and polyfluoroalkyl substances (PFAS) are a family of >12,000 synthetic compounds, persistent in the environment and resistant to biotic and abiotic degradation, characterised by extraordinarily stable carbon–fluorine bonds (C–F bond dissociation energy ~544 kJ mol⁻¹). Ubiquitous environmental contamination, bioaccumulation, and links to endocrine disruption and carcinogenicity make PFAS remediation one of the defining environmental challenges of the 21st century.
+Per- and polyfluoroalkyl substances (PFAS) are a family of >12,000 synthetic compounds, persistent and resistant to biotic and abiotic degradation through their exceptionally stable carbon–fluorine bonds (C–F BDE ~544 kJ mol⁻¹). Widespread contamination, bioaccumulation, and links to endocrine disruption and carcinogenicity make their remediation a major environmental challenge.
 
 Enzymatic defluorination represents a thermodynamically favourable route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. This pipeline addresses the following question:
 
@@ -110,9 +110,9 @@ The screening panel spans the full regulatory PFAS priority list, from short-cha
 | 23 | 8:2 Fluorotelomer alcohol | **8:2-FTOH** | FTOH | 17 |
 | 24 | Cyclic perfluoroether | **C6O4** | Cyclic PFAS | - |
 
-> †  **C–F count for GenX, ADONA and C6O4:** these are perfluoroether / cyclic next-generation replacements whose fluorine inventory is structure-dependent and branched. The count is listed as '-' pending a verified per-atom structural assignment rather than asserting an unconfirmed value; defluorination scoring uses the modelled 3D structure, not this tabulated count.
+> †  **GenX / ADONA / C6O4 C–F count:** perfluoroether / cyclic replacements with branched, structure-dependent fluorine inventories; listed as '-' rather than an unconfirmed value. Scoring uses the modelled 3D structure, not this count.
 
-> **Controls (25–27):** All 27 compounds are genuine screen targets, each modelled against the full ~2,150-protein panel. Entries 25–27 *additionally* serve as controls with known answers: **FA and DFA are positive controls** (real FAcD substrates - must register as degraders), while **TFA is the negative/decoy control** (α-CF₃, which wild-type FAcD does not defluorinate - must fail). Against the 3R3U crystal these give the reference ordering **FA → Tier_2A, DFA → Tier_2B, TFA → Tier_3**; alongside the DEHA4 enzyme they constitute **6 control cases** that anchor the NAC geometry thresholds. Every run benchmarks them-if a positive control drops out of the degrader band, or the decoy climbs into it, investigate the thresholds or structure-prediction quality before trusting the wider screen.
+> **Controls (25–27):** all 27 compounds are genuine screen targets; entries 25–27 *additionally* act as controls with known answers. **FA and DFA are positive controls** (real FAcD substrates, must register as degraders); **TFA is the decoy** (α-CF₃, which wild-type FAcD does not defluorinate, must fail). Against 3R3U they give **FA → Tier_2A, DFA → Tier_2B, TFA → Tier_3**; with DEHA4 they form **6 control cases** anchoring the NAC thresholds. A positive control dropping out of the degrader band, or the decoy climbing into it, flags a threshold or prediction-quality problem before the wider screen is trusted.
 
 </details>
 
@@ -177,7 +177,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** - `mechani
 | **Confidence demotion** | A Tier_1A hit whose Boltz confidence < 0.85 is demoted one notch to Tier_1B; the raw geometric tier is retained in `geometric_tier` | Guards the headline elite claim against an unconfident predicted fold |
 | **Size-fair backbone-clash veto** | A pose is decoyed when the backbone-clash **fraction** ≥ 0.15 **and** count ≥ 3 (clashing tail atoms / ligand heavy atoms) | Fraction-based, so a long PFAS is not penalised for length the way a flat clash count would |
 
-**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr219 basket, is **classified non-degrader regardless of Boltz-2 confidence** - high-affinity binders are not FAcDs. Beyond that, recalcitrance is folded into the tier as a **graded** penalty on `mechanistic_score_effective`: the chemistry penalty (scissile C–F BDE above 123 kcal/mol + backside occlusion above 2.0 Å) demotes the SN2 dead-end **TFA** below the elite tiers, and the **Tier_2A/2B competence-feasibility floor** then places the trifluoroacetate references at **Tier_3** (the family caps at competence ≈ 0.35); the pocket-containment penalty demotes oversized chains - all proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Critically, only the **backside-occlusion** half of the chemistry penalty fades with a near-ideal SN2 attack angle - computed on the multiplicity-corrected `angle_effective`, the same angle the tier ladder gates on, **not** the raw best-of-N angle, so a poly-fluorinated carbon cannot escape its backside penalty on an inflated single-fluorine trajectory the Šidák correction removes (applied in full at/below 175°, waived at/above 180°). Occlusion is a steric obstruction of the attack trajectory, and a pose that reaches an effective 180° has by construction cleared it. The **C–F bond-dissociation energy does not fade**, because the strength of the bond being broken is a property of the bond and not of the angle of approach. A scissile C–F above `TIER_ELITE_BDE_MAX` (128 kcal/mol) is therefore **barred from Tier_1A at any angle** and capped at Tier_1B. An **α-CF₃ carbon (scissile C–F 127.5 kcal/mol) sits just below that ceiling**, so on an ideal pose it stays eligible for Tier_1A - held near the floor by the graded C–F penalty (above `SCISSILE_CF_BDE_MAX`, 123 kcal/mol) rather than capped, and adjudicated by Step-07 QM/MM. The β-fluorination and containment penalties likewise do not fade, so a perfluoroalkyl chain is never rescued by a single favourable angle. The β-withdrawal count **crosses a single ether oxygen** (an ether O is a strong −I withdrawer, counted alongside vicinal fluorine), so the perfluoro**ether** acids - **C6O4** (ether O directly on the α-carbon) and **ADONA** - are correctly penalised (β = 2 and 4) rather than read as difluoroacetate (β = 0/1); without it they leak into Tier_1A. FA/DFA/TFA carry no vicinal withdrawing group, so β = 0 and their score is untouched (O'Hagan 2008 on C–F strength; Wackett 2022 on perfluoroether recalcitrance). The **`feasibility_factor`** and the two-factor **`sn2_dead_end`** flag remain reported diagnostics. The activation barrier is decided downstream by **Step-07 QM/MM** (the final arbiter); DeHa4's inability to turn over TFA (Wackett 2022) does not prove no FAcD variant can - the near-ideal geometry is exactly the prerequisite such a variant would need - hence graded not vetoed. Within a tier, ties break on `competence_score` → catalytic constellation (Criterion B) → active-site conservation → **`model_degrader_consensus`** (the fraction of Boltz diffusion samples that agree - a reproducible pose floats above a single-frame fluke, but is never filtered). A control assertion flags the run if the native substrates FA/DFA fail to register as degraders.
+**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr219 basket, is classified non-degrader regardless of Boltz-2 confidence. Beyond that, recalcitrance is a **graded** penalty on `mechanistic_score_effective`, proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Only the **backside-occlusion** half of the chemistry penalty fades with a near-ideal SN2 angle (on the Šidák-corrected `angle_effective`, waived at ≥ 180°); the C–F **bond-dissociation energy does not fade** - a scissile C–F above `TIER_ELITE_BDE_MAX` (128 kcal/mol) is barred from Tier_1A at any angle, though α-CF₃ (127.5) sits just under it and is held near the floor by the graded penalty rather than capped. The β-withdrawal count **crosses a single ether oxygen** (a strong −I withdrawer counted alongside vicinal fluorine), so the perfluoroether acids **C6O4** and **ADONA** are penalised (β = 2 and 4) instead of leaking into Tier_1A as difluoroacetate-like; FA/DFA/TFA carry β = 0 (O'Hagan 2008; Wackett 2022). Step-07 QM/MM is the final arbiter - DeHa4's inability to turn over TFA does not prove no FAcD variant can, hence graded not vetoed. Within a tier, ties break `competence_score` → constellation (Criterion B) → conservation → `model_degrader_consensus`. A control assertion flags the run if FA/DFA fail to register as degraders.
 
 **On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide - high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr219) provides the specific hard-acid electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
 
@@ -1396,26 +1396,7 @@ python 02_Production_DeFluorX.py
 # python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
-For step 07 (Desmond MD), GPU offloading handles the PME and non-bonded calculations. Request the same GPU partition; 32 CPUs are recommended for the CPU-side NAC trajectory analysis loop.
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=pfas27_md
-#SBATCH --partition=gpu
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --gres=gpu:a100:1
-#SBATCH --mem=64G
-#SBATCH --time=48:00:00
-#SBATCH --output=logs/pfas27_md_%j.out
-
-module load cuda/13.x anaconda3
-conda activate PFAS
-export SCHRODINGER=/opt/schrodinger
-
-python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
-```
+For **step 07** (Desmond MD), reuse the template above with `--mem=64G --time=48:00:00` and the step-07 command (`python 07_MD_QMMM_Defluorination_DeFluorX.py <Run>`); GPU offloading handles PME/non-bonded, and the 32 CPUs serve the CPU-side NAC trajectory analysis.
 
 > Steps 01, 03–05 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism. Steps 06 (Prime MM-GBSA) and 07 (Desmond MD + QM/MM) require the Schrödinger Suite and GPU.
 
@@ -1429,18 +1410,14 @@ python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 These are deliberate scope decisions, stated so that they are not mistaken for oversights.
 
 **The screen models a monomeric active site.** Every Boltz-2 prediction is one protein chain plus one
-ligand (`02_Production_DeFluorX.py`, YAML builder), so the whole downstream chain - pocket containment,
-Prime MM-GBSA, the Desmond trajectory and the QM/MM droplet - measures a monomer. Fluoroacetate
-dehalogenase is a physiological **homodimer**, and the dimer is not merely a packing artefact: FAcD
-displays **half-of-sites reactivity**, in which the two protomers are non-equivalent and only one binds
-substrate at a time - a property that has no meaning in a monomer (Chan *et al.*, *Biochemistry* 2011;
-Kuo *et al.*). Cross-protomer contributions to the active site and to substrate affinity are therefore
-outside what this pipeline measures. For a comparative screen across ~2,150 homologues, where the
-question is which enzymes present a competent SN2 geometry to a fluorinated substrate, the monomeric
-model is the defensible unit of comparison and the cost of dimerising every candidate is prohibitive.
-It does mean that **absolute** binding free energies and barriers carry a systematic error of unknown
-sign, and that any half-of-sites cooperativity is invisible. Rankings are internally consistent because
-every candidate is treated identically; absolute values are not to be quoted as such.
+ligand, so the whole downstream chain - pocket containment, Prime MM-GBSA, Desmond trajectory, QM/MM
+droplet - measures a monomer. FAcD is a physiological **homodimer** with **half-of-sites reactivity**
+(non-equivalent protomers, only one binding substrate at a time; Chan *et al.* 2011), so cross-protomer
+contributions to the active site and affinity are outside what this pipeline measures. For a comparative
+screen across ~2,150 homologues the monomeric model is the defensible, identically-applied unit of
+comparison, and dimerising every candidate is prohibitive. Consequence: **absolute** free energies and
+barriers carry a systematic error of unknown sign and any half-of-sites cooperativity is invisible, so
+rankings are internally consistent but absolute values are not to be quoted as such.
 
 **The QM/MM barrier is electronic (ΔE‡), not free-energetic (ΔG‡)**, and **dispersion is absent from
 the QM region** - both are detailed in the QSite step of the script catalogue above, along with why
@@ -1908,16 +1885,7 @@ For external databases, crystallographic references, and software dependencies, 
 
 ## 📜 License
 
-Released under a **non-commercial academic research licence** based on [Creative Commons Attribution–NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/). See [`LICENSE`](./LICENSE) for the full text.
-
-```
-© 2026 Shaban Ahmad & Tue Kjærgaard Nielsen - CC BY-NC 4.0
-```
-
-**Permitted:** research, education, non-commercial use, modification, and redistribution with attribution.
-**Prohibited:** commercial, industrial, enterprise, or profit-oriented use without explicit prior written permission from the copyright holders.
-
-For commercial licensing enquiries, contact: shaban.ucph@gmail.com · tkn@plen.ku.dk
+See [`LICENSE`](./LICENSE) for the full text. For commercial licensing enquiries, contact: shaban.ucph@gmail.com · tkn@plen.ku.dk
 
 ---
 
@@ -1974,14 +1942,10 @@ University of Copenhagen, Denmark
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=13&duration=3000&pause=1000&color=22C55E&center=true&vCenter=true&width=700&lines=Tackling+forever+chemicals+with+AI+and+enzyme+engineering;27+PFAS+compounds+%C2%B7+2%2C150+enzyme+candidates+%C2%B7+end-to-end+automation;Fluoroacetate+Dehalogenase+%7C+SN2+Walden+inversion+%7C+C%E2%80%93F+cleavage" />
 
-*"The strength of an enzyme lies not in its sequence, but in the geometry it can sustain."*
-
 <br>
 
-<img src="https://komarev.com/ghpvc/?username=KU-MGB&label=Repository+Views&color=22C55E&style=flat" />
+<img src="https://komarev.com/ghpvc/?username=KU-MGB&label=Repository+Views&color=22C55E&style=flat" /> &nbsp; <sub>Last updated: 29 July 2026</sub>
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
-
-<sub>Last updated: 29 July 2026</sub>
 
 </div>
