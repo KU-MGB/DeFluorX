@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 02  |  Boltz-2 Production, Analysis & FAcD Ranking
+DeFluorX Pipeline  |  Step 02  |  Boltz-2 Production, Analysis & FAcD Ranking
 ===============================================================================
 Large-scale, resume-safe Boltz-2 protein-ligand predictions with deep
 structural, geometric, and chemical scoring for FAcD SN2 degrader tiers.
@@ -17,22 +17,22 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 02_Production_FAcDs.py
+  Script        : 02_Production_DeFluorX.py
   Role          : "Engine" - Boltz-2 prediction orchestrator and ranker.
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG - all geometric thresholds)
-                  00_02_Project_Utils_FAcDs.py   (geometric utilities, console funcs)
-  Reads         : 01_Merge_FAcDs.py output - merged *.fasta (protein sequences)
+  Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - all geometric thresholds)
+                  00_02_Project_Utils_DeFluorX.py   (geometric utilities, console funcs)
+  Reads         : 01_Merge_DeFluorX.py output - merged *.fasta (protein sequences)
                   User-supplied *.smi (SMILES ligand file)
   Writes        : <Run>/1_Boltz2_Production/  (Boltz-2 CIF outputs)
                   <Run>/2_Best_Complexes_CIFs/ (top-model CIF selection)
-                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
-  Upstream      : 01_Merge_FAcDs.py → writes the merged FASTA consumed here
-  Downstream    : 03_Validation_Figures_FAcDs.py → reads ranked CSV
-                  04_Dendrogram_FAcDs.py → reads 1_Input_Data roster
-                  05_TopN_and_PDB_Preparation_FAcDs.py → reads ranked CSV + Best_Complexes_CIFs
-                  06_Physics_Validation_FAcDs.py → reads ranked CSV
-                  07_MD_QMMM_Defluorination_FAcDs.py → reads ranked + master CSV
+                  <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv
+  Upstream      : 01_Merge_DeFluorX.py → writes the merged FASTA consumed here
+  Downstream    : 03_Validation_Figures_DeFluorX.py → reads ranked CSV
+                  04_Dendrogram_DeFluorX.py → reads 1_Input_Data roster
+                  05_TopN_and_PDB_Preparation_DeFluorX.py → reads ranked CSV + Best_Complexes_CIFs
+                  06_Physics_Validation_DeFluorX.py → reads ranked CSV
+                  07_MD_QMMM_Defluorination_DeFluorX.py → reads ranked + master CSV
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -48,8 +48,8 @@ Date   : 30 July 2026 <───────────────────
 
 Usage:
     conda activate PFAS
-    python 02_Production_FAcDs.py --fasta merged.fasta --smi ligands.smi
-    python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
+    python 02_Production_DeFluorX.py --fasta merged.fasta --smi ligands.smi
+    python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 
 Purpose:
     Performs large-scale, resume-safe Boltz-2 protein-ligand complex
@@ -392,8 +392,8 @@ def _load_module(name: str, path):
     return mod
 
 _REPO_DIR  = _Path(__file__).resolve().parent
-_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_DeFluorX.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_DeFluorX.py")
 CFG        = _cfg_mod.CFG()
 
 safe_name = _utils_mod.safe_name
@@ -5574,7 +5574,7 @@ def main():
     if args.resume:
         run_folder_name = args.resume
         _utils_mod.print_script_banner(
-            "02_Production_FAcDs.py",
+            "02_Production_DeFluorX.py",
             "Boltz-2 Scoring  ·  NAC Geometry  ·  Degrader Tier Assignment  │  Resume Mode",
         )
         console_info(f"  Run Name : {run_folder_name}")
@@ -5582,7 +5582,7 @@ def main():
         ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         run_folder_name = f"Boltz-2_Run_{ts}"
         _utils_mod.print_script_banner(
-            "02_Production_FAcDs.py",
+            "02_Production_DeFluorX.py",
             "Boltz-2 Scoring  ·  NAC Geometry  ·  Degrader Tier Assignment  │  Fresh Run",
         )
         console_info(f"  Run Name : {run_folder_name}")
@@ -7300,9 +7300,9 @@ def main():
     console_info("Sequence Reference Data (MSA + Alignments):".ljust(45) + f" |      {D_SEQ.resolve()}")
     console_info(f"  ├─ MSA Sequences: {len(list(D_COLABFOLD.glob('*.a3m')))}" .ljust(45) + f" |      {D_COLABFOLD.resolve()}")
     console_info(f"  └─ Alignments: {str_aln}".ljust(45) + f" |      {D_ALN.resolve()}")
-    console_info(f"FAcDs Master CSV:   {str_mc}".ljust(45) + f" |      {CSV_PATH.resolve()}")
+    console_info(f"DeFluorX Master CSV:   {str_mc}".ljust(45) + f" |      {CSV_PATH.resolve()}")
     if rank_csv_path:
-        console_info(f"FAcDs Ranked CSV:   {str_rc}".ljust(45) + f" |      {rank_csv_path.resolve()}")
+        console_info(f"DeFluorX Ranked CSV:   {str_rc}".ljust(45) + f" |      {rank_csv_path.resolve()}")
     _mir = run_root / "2_Best_Complexes_CIFs"
     _mir_count = sum(1 for _ in _mir.rglob("*.cif")) if _mir.exists() else 0
     console_info(f"Best Complexes CIFs Mirror: {_mir_count} CIFs".ljust(45) + f" |      {_mir.resolve()}")
@@ -7428,4 +7428,4 @@ def main():
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "02_Production_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "02_Production_DeFluorX.py")

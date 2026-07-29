@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 06  |  ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination
+DeFluorX Pipeline  |  Step 06  |  ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination
 ===============================================================================
 Builds and runs the full explicit-solvent physics for every MD-selected complex,
 using the Jaguar ESP partial charges on the ligand so the reactive α-carbon
@@ -48,7 +48,7 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
-  python 06_Physics_Validation_FAcDs.py [Boltz-2_Run_Directory] [options]
+  python 06_Physics_Validation_DeFluorX.py [Boltz-2_Run_Directory] [options]
 
   --test            quick run: WaterMap 2 ns · MD 5 ns/500 frames (~30 min end-to-end)
   --md-ns   N       MD production length (ns)          [default 1000]
@@ -57,22 +57,22 @@ Usage:
   --lig-dist N      WaterMap active-site radius (Å)     [default 10]
   --stages  a,b,c   subset of {merge,watermap,build,md} [default all]  (Extraction + SID + MM-GBSA + Defluorination run on CPU after each MD)
   --out     DIR     output root                         [default <run>/6_Physics_Validation]
-  --pipeline-mode   called from 00_00_run_pipeline_FAcDs.sh (delegates oomd masking to the runner)
+  --pipeline-mode   called from 00_00_run_pipeline_DeFluorX.sh (delegates oomd masking to the runner)
 
 -------------------------------------------------------------------------------
 Dependency Map
 -------------------------------------------------------------------------------
-  Script        : 06_Physics_Validation_FAcDs.py
+  Script        : 06_Physics_Validation_DeFluorX.py
   Role          : Step 06 - build + run the ESP-charged explicit-solvent physics
                   (WaterMap, System Builder, MD) and post-process it (SID + MM-GBSA + Defluorination).
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG), 00_02_Project_Utils_FAcDs.py (utils)
+  Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG), 00_02_Project_Utils_DeFluorX.py (utils)
   Reads         : <Run>/5_TopN_and_Preparation/3_Comparative_Analysis/
                        06_<tier>_<count>hits_Molecular_Handover_Files/R{N}_<stem>.pdb  (N=Scientific_Rank, SSOT)
                   <Run>/5_TopN_and_Preparation/4_Ligand_ESP_Charges/<stem>_ESP.mae
                   <Run>/1_Boltz2_Production/*Ranked*.csv  (job_name → Mapped_Base)
   Writes        : <out>/01_Prepared_Proteins/R{N}_<stem>.pdb
                   <out>/02_ESP_Charged_Complexes/R_N_<stem>_ESP_Complex.mae
-                  <out>/03_WaterMaps/watermap_R_N/*_wm.maegz + watermap_R_N.csv
+                  <out>/03_WaterMaps/watermap_R_N/*_wm.maegz + *-in.maegz (aligning frame) + watermap_R_N.csv
                   <out>/04_System_Builder/desmond_setup_R_N/desmond_setup_R_N-out.cms
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
@@ -82,8 +82,8 @@ Dependency Map
                        Prime-MMGBSA/MMGBSA_Profile_R{N}.png,
                        Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.png … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
-  Upstream      : 05_TopN_and_PDB_Preparation_FAcDs.py (prepared PDBs + ESP charges).
-  Downstream    : 07_MD_QMMM_Defluorination_FAcDs.py (reads 05_MD_Simulations + 03_WaterMaps).
+  Upstream      : 05_TopN_and_PDB_Preparation_DeFluorX.py (prepared PDBs + ESP charges).
+  Downstream    : 07_MD_QMMM_Defluorination_DeFluorX.py (reads 05_MD_Simulations + 03_WaterMaps).
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Pipelined GPU→CPU per rank: MD runs on the GPU; the instant it lands (and its files settle)
@@ -193,8 +193,8 @@ def _load_module(name: str, path: Path):
 
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-_utils_mod = _load_module("ProjectUtils", _SCRIPT_DIR / "00_02_Project_Utils_FAcDs.py")
-_cfg_mod = _load_module("ProjectConfig", _SCRIPT_DIR / "00_01_Project_Config_FAcDs.py")
+_utils_mod = _load_module("ProjectUtils", _SCRIPT_DIR / "00_02_Project_Utils_DeFluorX.py")
+_cfg_mod = _load_module("ProjectConfig", _SCRIPT_DIR / "00_01_Project_Config_DeFluorX.py")
 
 CFG = _cfg_mod.CFG()
 print_script_banner = _utils_mod.print_script_banner
@@ -1077,8 +1077,8 @@ def resolve_run_dir(run_arg: str | None) -> str:
         _echo(f"Auto-detected run directory: {chosen}")
         return chosen
     _echo("ERROR: Run directory not specified and no Boltz-2_Run_* found.")
-    _echo("Usage: python 06_Physics_Validation_FAcDs.py <Boltz-2_Run_Directory>/ [--test]")
-    _echo("  quick test (WaterMap 2 ns · MD 5 ns): python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/ --test")
+    _echo("Usage: python 06_Physics_Validation_DeFluorX.py <Boltz-2_Run_Directory>/ [--test]")
+    _echo("  quick test (WaterMap 2 ns · MD 5 ns): python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z/ --test")
     sys.exit(1)
 
 
@@ -4058,6 +4058,12 @@ def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_
         _LAUNCHED_JOBS.discard(jobname)                # server job has finished (WAIT returned with a maegz)
         out = wd / f"{jobname}_wm.maegz"
         shutil.copy2(src, out)
+        if in_mae.exists():
+            # Retain the WaterMap INPUT frame alongside the output. Its Cα are the reference the static
+            # hydration sites are aligned onto before use (Step 07 load_watermap_reference_ca + frame
+            # superposition); the *_wm.maegz output carries only sites, no protein backbone, so without
+            # this the sites cannot be superimposed onto any MD frame and the WaterMap guidance no-ops.
+            shutil.copy2(in_mae, wd / in_mae.name)
         cluster = scratch / f"{jobname}-cluster.maegz"
         if cluster.exists():
             shutil.copy2(cluster, wd / cluster.name)
@@ -4129,8 +4135,8 @@ def _parse_args_merged():
     ap = argparse.ArgumentParser(
         description=f"{CFG.PROJECT_NAME} Step 06 - ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA",
         epilog=("examples:\n"
-                "  production : python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/\n"
-                "  quick test : python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z/ --test"),
+                "  production : python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z/\n"
+                "  quick test : python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z/ --test"),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_folder", nargs="?", default=None,
                     help="Boltz-2_Run_* directory (auto-detect latest if omitted)")
@@ -4144,7 +4150,7 @@ def _parse_args_merged():
                     help="subset of {merge,watermap,build,md}; SID+MM-GBSA run sequentially inside the md stage")
     ap.add_argument("--out", default=None)
     ap.add_argument("--pipeline-mode", action="store_true",
-                    help="called from 00_00_run_pipeline_FAcDs.sh; delegates oomd masking to the runner.")
+                    help="called from 00_00_run_pipeline_DeFluorX.sh; delegates oomd masking to the runner.")
     a = ap.parse_args()
     if a.test:
         a.md_ns, a.md_frames, a.wm_ns = CFG.PHYS_TEST_MD_NS, CFG.PHYS_TEST_MD_FRAMES, CFG.PHYS_TEST_WM_NS
@@ -4681,7 +4687,7 @@ def main() -> int:
         d.mkdir(parents=True, exist_ok=True)
 
     _open_step_log(out_root)   # 6_Physics_Validation/00_Physics_Validation.log (colour-preserving, fresh)
-    print_script_banner("06_Physics_Validation_FAcDs.py",
+    print_script_banner("06_Physics_Validation_DeFluorX.py",
                         "ESP Physics - WaterMap → System Builder → MD → SID → MM-GBSA")
 
     ranked = newest_ranked_csv(run)
@@ -4865,7 +4871,7 @@ def main() -> int:
         _echo(f"  {_C.FAIL}✘{_C.ENDC} {t}  →  {why}")
     _emit_timings(out_root)                               # per-job + per-phase wall-clock → log + 00_Phase_Timings.csv
     _guard.__exit__(None, None, None)                    # restore systemd-oomd (idempotent if Step 4 already did)
-    print_elapsed(t0, "06_Physics_Validation_FAcDs.py")
+    print_elapsed(t0, "06_Physics_Validation_DeFluorX.py")
     return EXIT_WARN if (failed or _mmgbsa_status == "warn") else 0
 
 

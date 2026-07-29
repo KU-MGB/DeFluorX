@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 03  |  Validation, Ranking & Visualisation
+DeFluorX Pipeline  |  Step 03  |  Validation, Ranking & Visualisation
 ===============================================================================
 The definitive "Judge": merges physics-based structural validation with
 confidence metrics from Boltz-2, performs Pareto optimisation, rescues
@@ -16,13 +16,13 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 03_Validation_Figures_FAcDs.py
+  Script        : 03_Validation_Figures_DeFluorX.py
   Role          : Scoring, ranking, and visual reporting of Boltz-2 predictions.
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG - tier colours, vis params)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+  Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - tier colours, vis params)
+                  00_02_Project_Utils_DeFluorX.py   (ConsoleColours, setup_logging,
                                                  console_info, console_separator)
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
-                  (Master CSV written by 02_Production_FAcDs.py; latest file selected)
+                  (Master CSV written by 02_Production_DeFluorX.py; latest file selected)
   Writes        : <Run>/3_Validation_Figures/  (figures grouped folder-by-folder)
                     02_Ramachandran/                          Ramachandran_*.png
                     03_Dataset_and_Alignment_Overview/        01_*.png onward
@@ -39,10 +39,10 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/3_Validation_Figures/01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/01_Analysis_Data/05_Figure_Descriptions.txt
                   <Run>/3_Validation_Figures/01_Analysis_Data/00_Validation_Figures.log
-  Upstream      : 02_Production_FAcDs.py → writes the master ranked CSV (incl. the pocket-fit
+  Upstream      : 02_Production_DeFluorX.py → writes the master ranked CSV (incl. the pocket-fit
                   columns active_site_volume, ligand_volume, pocket_occupancy, fit_ratio,
                   ligand_fits) consumed here
-  Downstream    : 04_Dendrogram_FAcDs.py  → reads 03_Figure_Enriched_Dataset.csv (figure columns
+  Downstream    : 04_Dendrogram_DeFluorX.py  → reads 03_Figure_Enriched_Dataset.csv (figure columns
                   only; the authoritative rank stays in 02's ranked CSV)
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ Usage:
        conda activate PFAS
 
     2. Run Validation (Auto-detects latest run if argument omitted)
-       python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z
+       python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z
     -------------------------------------------------------------------------------
 
 -------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ Purpose:
     3. Rescues "Hidden Gems" that AI missed but Physics loves.
     4. Generates a complete suite of high-resolution scientific figures.
 
-    Phylogenetic analysis is handled by the downstream 04_Dendrogram_FAcDs.py script.
+    Phylogenetic analysis is handled by the downstream 04_Dendrogram_DeFluorX.py script.
 
 -------------------------------------------------------------------------------
 Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
@@ -180,7 +180,7 @@ Scientific References:
     5. Molecular rendering (optional structure figures):
        - The PyMOL Molecular Graphics System, Schrödinger, LLC. https://pymol.org
     6. All scientific thresholds/criteria plotted here are defined in
-       00_01_Project_Config_FAcDs.py - see that module's Scientific References
+       00_01_Project_Config_DeFluorX.py - see that module's Scientific References
        for the underlying primary literature (NAC, Maestro criteria, mech score, etc.).
 ===============================================================================
 """
@@ -307,8 +307,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_cfg_mod   = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_DeFluorX.py")
+_utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00_02_Project_Utils_DeFluorX.py")
 CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
@@ -4100,7 +4100,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
     spoke is a mechanistic feature, each filled polygon a tier, and the radius its tier-mean
     engagement (0–1). Boolean requirements → fraction engaged; the SN2 attack angle is
     normalised (angle / 180°, ideal back-side = 1.0); continuous scores → clipped mean.
-    Built from the FAcDs mechanistic-score components (config §5), it shows which catalytic
+    Built from the FAcD mechanistic-score components (config §5), it shows which catalytic
     requirements each tier satisfies and how the profile degrades down the tiers -
     complementing the scalar Figure 11 (mech-score mean ± CI).
     """
@@ -7561,7 +7561,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         plt.close(fig25b)
 
         """
-        Figure 26c: does FAcDs prefer smaller PFAS? The question is one of CATALYTIC
+        Figure 26c: does FAcD prefer smaller PFAS? The question is one of CATALYTIC
         competence, not model confidence, so the LEFT axis carries catalytic-competence
         readouts per CARBON-NUMBER group (x = C2…Cn, fluorine counts in parentheses):
           • soft_catalytic_score (box plots) - the continuous sigmoid composite of
@@ -9480,7 +9480,7 @@ def _xn__fig_01C_geometry_and_uncertainty(df, out_dir, reporter):
         reporter.log('  · no per-model variance CSV; drawing the two geometry panels. '
                      'Pass --variance to build it from the CIFs (slow) and get the uncertainty panels too.')
     if var_path is None or not Path(var_path).exists():
-        # FAcDs has no per-model variance CSV (needs the 02b reanalysis engine), so the two
+        # FAcD has no per-model variance CSV (needs the 02b reanalysis engine), so the two
         # inter-model uncertainty panels cannot be drawn. Plot the two absolute-geometry panels
         # (nucleophile distance, SN2 attack angle) by tier from the ranked CSV instead.
         reporter.log('  ! Figure 01C: variance CSV unavailable - plotting geometry-only (nucleophile distance + SN2 angle) from ranked CSV.')
@@ -11461,7 +11461,7 @@ def main():
         sys.exit(1)
 
     _utils_mod.print_script_banner(
-        "03_Validation_Figures_FAcDs.py",
+        "03_Validation_Figures_DeFluorX.py",
         "Multi-Objective Ranking  ·  Pareto Frontiers  ·  Publication Figures",
     )
     print(f"  Run Name : {run_ttth.name}", flush=True)
@@ -11545,4 +11545,4 @@ def main():
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "03_Validation_Figures_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "03_Validation_Figures_DeFluorX.py")

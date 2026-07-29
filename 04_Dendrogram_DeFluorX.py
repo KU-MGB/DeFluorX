@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 04  |  Phylogenetic Analysis & Deployment
+DeFluorX Pipeline  |  Step 04  |  Phylogenetic Analysis & Deployment
 ===============================================================================
 Computes UPGMA dendrograms from alignment-free K-mer (k=3) cosine sequence
 distances and deploys interactive D3.js HTML visualisations with per-tier
@@ -24,9 +24,9 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 04_Dendrogram_FAcDs.py
+  Script        : 04_Dendrogram_DeFluorX.py
   Role          : Phylogenetic analysis and interactive tree visualisation.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (console_info / console_separator)
+  Imports from  : 00_02_Project_Utils_DeFluorX.py  (console_info / console_separator)
   Reads         : <Run>/3_Validation_Figures/01_Analysis_Data/03_Figure_Enriched_Dataset.csv
                   <Run>/1_Boltz2_Production/1_Input_Data/*.fasta
   Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
@@ -35,7 +35,7 @@ Date   : 30 July 2026 <───────────────────
                   <Run>/4_Dendrogram/04_Global_Master_Delivery_Suite.zip
                   <Run>/4_Dendrogram/05_Tiers/<Tier>_*  (per-tier tree + HTML)
                   <Run>/4_Dendrogram/00_Dendrogram.log
-  Upstream      : 03_Validation_Figures_FAcDs.py → writes 03_Figure_Enriched_Dataset.csv
+  Upstream      : 03_Validation_Figures_DeFluorX.py → writes 03_Figure_Enriched_Dataset.csv
   Downstream    : None (terminal analysis step)
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ Date   : 30 July 2026 <───────────────────
 
 Usage:
     conda activate PFAS
-    python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 04_Dendrogram_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
@@ -126,8 +126,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
-_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
+_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_DeFluorX.py")
+_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_DeFluorX.py")
 CFG             = _cfg_mod.CFG()
 _console_info   = _utils_mod.console_info
 _console_sep    = _utils_mod.console_separator
@@ -464,7 +464,7 @@ def main():
         run_path = runs[-1]
 
     _utils_mod.print_script_banner(
-        "04_Dendrogram_FAcDs.py",
+        "04_Dendrogram_DeFluorX.py",
         "Phylogenetic Tree Construction  ·  Sequence Clustering  ·  Taxonomic Analysis",
     )
     print(f"  Run Name : {run_path.name}", flush=True)
@@ -482,7 +482,7 @@ def main():
     global logger
     logger = _setup_logging(out_dir / "00_Dendrogram.log", "04_Dendrogram")
 
-    # Locate the figure-enriched dataset produced by 03_Validation_Figures_FAcDs.py
+    # Locate the figure-enriched dataset produced by 03_Validation_Figures_DeFluorX.py
     # (written under 01_Analysis_Data; the root and rglob lookups cover a non-default out_dir layout).
     csv_candidates = (
         sorted(val_dir.glob(f"01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
@@ -491,7 +491,7 @@ def main():
     )
     if not csv_candidates:
         print(f"Error: No {CFG.FILE_VALIDATED_MASTER} found in {val_dir.resolve()}")
-        print("       Run 03_Validation_Figures_FAcDs.py first to generate it.")
+        print("       Run 03_Validation_Figures_DeFluorX.py first to generate it.")
         sys.exit(1)
 
     csv_path = csv_candidates[0]
@@ -1671,5 +1671,5 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "04_Dendrogram_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "04_Dendrogram_DeFluorX.py")
 

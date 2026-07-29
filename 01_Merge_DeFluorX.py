@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 01  |  FASTA Sequence Merge & Deduplication
+DeFluorX Pipeline  |  Step 01  |  FASTA Sequence Merge & Deduplication
 ===============================================================================
 Constructs a high-quality, non-redundant FASTA dataset by merging multiple
 protein sequence sources using a strict, master-guided deduplication strategy.
@@ -11,17 +11,17 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 01_Merge_FAcDs.py
+  Script        : 01_Merge_DeFluorX.py
   Role          : Sequence merger and pre-processing pipeline wrapper.
-  Imports from  : 00_02_Project_Utils_FAcDs.py  (clean_spines, print_script_banner,
+  Imports from  : 00_02_Project_Utils_DeFluorX.py  (clean_spines, print_script_banner,
                   print_elapsed, SEPARATOR_HEAVY/LIGHT/DASH)
-                  00_01_Project_Config_FAcDs.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
+                  00_01_Project_Config_DeFluorX.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   - merged, deduplicated sequence set
                   <output>.log     - inclusion/exclusion statistics
                   <output>.png     - QC dashboard (throughput + KDE)
   Upstream      : None (standalone data-curation step)
-  Downstream    : 02_Production_FAcDs.py → consumes the merged FASTA as Boltz-2 input
+  Downstream    : 02_Production_DeFluorX.py → consumes the merged FASTA as Boltz-2 input
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -35,10 +35,10 @@ Date   : 30 July 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
+    python 01_Merge_DeFluorX.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
 
     (bash multi-line - use a single backslash, not double \\):
-    python 01_Merge_FAcDs.py --master A_Labelled_15-Seq.fasta \
+    python 01_Merge_DeFluorX.py --master A_Labelled_15-Seq.fasta \
                        --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
                        --output C_INP_Merged_for_Boltz-2.fasta
 
@@ -139,8 +139,8 @@ def _load_module(name: str, path: Path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_FAcDs.py")
-_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_FAcDs.py")
+_utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent / "00_02_Project_Utils_DeFluorX.py")
+_cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_DeFluorX.py")
 CFG             = _cfg_mod.CFG()
 clean_spines    = _utils_mod.clean_spines
 
@@ -604,7 +604,7 @@ def main():
         sys.exit(1)
 
     _utils_mod.print_script_banner(
-        "01_Merge_FAcDs.py",
+        "01_Merge_DeFluorX.py",
         "FASTA Deduplication & Merge  ·  Length Filtering  ·  Sequence Standardisation",
     )
     logger.info(f"  Master    : {f1_path.name}")
@@ -695,4 +695,4 @@ def main():
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "01_Merge_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "01_Merge_DeFluorX.py")

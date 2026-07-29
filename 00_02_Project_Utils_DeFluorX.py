@@ -1,6 +1,6 @@
 """
 ===============================================================================
-FAcDs Pipeline  |  MODULE 00_02  |  Shared Utilities
+DeFluorX Pipeline  |  MODULE 00_02  |  Shared Utilities
 ===============================================================================
 Canonical source for console styling, logging infrastructure, matplotlib
 spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
@@ -10,16 +10,16 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Module        : 00_02_Project_Utils_FAcDs.py
+  Module        : 00_02_Project_Utils_DeFluorX.py
   Role          : Shared utility library; no executable entry point.
-  Imported by   : 01_Merge_FAcDs.py, 02_Production_FAcDs.py, 03_Validation_Figures_FAcDs.py,
-                  04_Dendrogram_FAcDs.py, 05_TopN_and_PDB_Preparation_FAcDs.py,
-                  06_Physics_Validation_FAcDs.py,
-                  07_MD_QMMM_Defluorination_FAcDs.py
+  Imported by   : 01_Merge_DeFluorX.py, 02_Production_DeFluorX.py, 03_Validation_Figures_DeFluorX.py,
+                  04_Dendrogram_DeFluorX.py, 05_TopN_and_PDB_Preparation_DeFluorX.py,
+                  06_Physics_Validation_DeFluorX.py,
+                  07_MD_QMMM_Defluorination_DeFluorX.py
                   (also referenced by 00_03 for a ConsoleColours drift check)
   Reads         : (none - pure utility module)
   Writes        : (none - pure utility module)
-  Upstream      : 00_01_Project_Config_FAcDs.py (CFG is passed in by callers).
+  Upstream      : 00_01_Project_Config_DeFluorX.py (CFG is passed in by callers).
   Downstream    : 01_Merge through 07_MD_QMMM (every pipeline step imports these helpers).
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ Scientific References:
        - pandas: McKinney, W. (2010) Data Structures for Statistical Computing in Python. Proc 9th Python in Science Conf 56–61. DOI: https://doi.org/10.25080/Majora-92bf1922-00a
        - RDKit: Landrum, G. (2006) RDKit: Open-source cheminformatics. https://www.rdkit.org
     Note: the angle/dihedral helpers implement standard vector geometry; metric
-    definitions and their primary literature live in 00_01_Project_Config_FAcDs.py.
+    definitions and their primary literature live in 00_01_Project_Config_DeFluorX.py.
 -------------------------------------------------------------------------------
 """
 
@@ -269,14 +269,14 @@ def print_script_banner(script_name: str, subtitle: str = "") -> None:
 
     Parameters
     ----------
-    script_name : Filename of the running script (e.g. "02_Production_FAcDs.py").
+    script_name : Filename of the running script (e.g. "02_Production_DeFluorX.py").
     subtitle    : One-line description shown below the script name.
     """
     _now = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
         f"  {ConsoleColours.MAGENTA}{ConsoleColours.BOLD}▶  {script_name}"
-        f"{ConsoleColours.ENDC}  │  FAcDs Pipeline",
+        f"{ConsoleColours.ENDC}  │  DeFluorX Pipeline",
         flush=True,
     )
     if subtitle:
@@ -291,7 +291,7 @@ def print_elapsed(t0: float, script_name: str) -> None:
     Parameters
     ----------
     t0          : ``time.perf_counter()`` value recorded before ``main()`` was called.
-    script_name : Filename displayed in the output line (e.g. ``"02_Production_FAcDs.py"``).
+    script_name : Filename displayed in the output line (e.g. ``"02_Production_DeFluorX.py"``).
     """
     _el = time.perf_counter() - t0
     _h, _rem = divmod(int(_el), 3600)

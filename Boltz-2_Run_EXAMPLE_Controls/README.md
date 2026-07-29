@@ -1,7 +1,7 @@
 # Boltz-2_Run_EXAMPLE_Controls
 
 An example run directory, retained in the repository so that the on-disk layout of a completed
-FAcDs / PFAS-27 pipeline run can be inspected directly. It is a controls-only illustration, not a
+DeFluorX pipeline run can be inspected directly. It is a controls-only illustration, not a
 production run: it carries real, viewable data for the control cases while every other stage is
 represented by its empty folder skeleton.
 
@@ -34,7 +34,7 @@ Data is present only where it remains well within GitHub limits:
   - `3_Sequence_Reference_Data/Active_Site_Alignments/` - the 3R3U and DeHa4 control alignments.
   - `4_Prediction_Jobs/` - the six control prediction jobs, each with its co-folded models, best
     complex and interaction and summary files.
-  - `5_Boltz2_FAcDs_Master_*.csv` and `6_Boltz2_FAcDs_Ranked_*.csv` - the master and ranked tables,
+  - `5_Boltz2_DeFluorX_Master_*.csv` and `6_Boltz2_DeFluorX_Ranked_*.csv` - the master and ranked tables,
     restricted to the six control rows.
 - `2_Best_Complexes_CIFs/` - the six best control complex CIF structures.
 
@@ -46,7 +46,7 @@ confidence tensors) are omitted from the prediction jobs to keep the example com
 Every remaining stage is present with its folder structure but without data, so the overall layout
 is visible without exceeding size limits:
 
-- `0_FAcDs_Pipeline_Logs/`
+- `0_DeFluorX_Pipeline_Logs/`
 - `3_Validation_Figures/` - analysis data and the seven thematic figure folders.
 - `4_Dendrogram/` - the per-tier interactive phylogeny applications.
 - `5_TopN_and_Preparation/` - converted and prepared PDBs, comparative analysis, ligand ESP charges.
@@ -59,4 +59,4 @@ Empty folders are held in version control by `.gitkeep` placeholders.
 ## Reproducing a full run
 
 The complete pipeline resides in the repository root and runs in sequence from
-`00_00_run_pipeline_FAcDs.sh` through `07_MD_QMMM_Defluorination_FAcDs.py`.
+`00_00_run_pipeline_DeFluorX.sh` through `07_MD_QMMM_Defluorination_DeFluorX.py`.

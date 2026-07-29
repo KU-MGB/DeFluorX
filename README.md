@@ -1,6 +1,10 @@
 <div align="center">
 
-<img src="assets/facd_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
+<img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
+
+# DeFluorX
+
+*Structure-guided discovery and physics validation of FAcD variants for PFAS defluorination*
 
 **Structure-based mechanistic validation of Fluoroacetate Dehalogenases against 27 PFAS compounds**
 *AI structure prediction · thermodynamic MD · QM/MM frame extraction - fully automated*
@@ -25,7 +29,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-42339-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-42428-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -59,7 +63,7 @@
 
 Per- and polyfluoroalkyl substances (PFAS) are a family of >12,000 synthetic compounds, persistent in the environment and resistant to biotic and abiotic degradation, characterised by extraordinarily stable carbon–fluorine bonds (C–F bond dissociation energy ~544 kJ mol⁻¹). Ubiquitous environmental contamination, bioaccumulation, and links to endocrine disruption and carcinogenicity make PFAS remediation one of the defining environmental challenges of the 21st century.
 
-Enzymatic defluorination represents the most thermodynamically elegant route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. This pipeline addresses the following question:
+Enzymatic defluorination represents a thermodynamically favourable route to PFAS degradation. **Fluoroacetate Dehalogenases (FAcDs)** catalyse an **SN2 Walden-inversion** mechanism, directly cleaving the C–F bond via nucleophilic substitution at the α-carbon. This pipeline addresses the following question:
 
 > *Among thousands of phylogenetically diverse fluoroacetate dehalogenase (FAcD) candidate proteins, which ones possess the precise three-dimensional active-site geometry capable of catalysing defluorination of long-chain perfluorinated PFAS?*
 
@@ -133,7 +137,7 @@ This pipeline adopts a **structure-first, geometry-validated** screening strateg
 
 ### Crystal reference: PDB 3R3U
 
-All mechanistic geometry is benchmarked against the **3R3U crystal structure** (*Rhodopseudomonas palustris* FAcD, wild-type, 1.60 Å resolution, no substrate bound - carries Ni²⁺/Cl⁻ ions; Chan *et al.* 2011 *JACS*, DOI: 10.1021/ja200277d). The catalytic triad - **Asp110 (nucleophile) · Asp134 (acid catalyst) · His277 (base)** - defines canonical geometry for an active FAcD, cross-validated against DEHA4 (*Delftia acidovorans* D4B; Farajollahi *et al.* 2024 *ACS Omega*).
+All mechanistic geometry is benchmarked against the **3R3U crystal structure** (*Rhodopseudomonas palustris* FAcD, wild-type, 1.60 Å resolution, no substrate bound - carries Ni²⁺/Cl⁻ ions; Chan *et al.* 2011 *JACS*, DOI: 10.1021/ja200277d). The catalytic triad - **Asp110 (nucleophile) · Asp134 (acid catalyst) · His280 (base)** - defines canonical geometry for an active FAcD, cross-validated against DEHA4 (*Delftia acidovorans* D4B; Farajollahi *et al.* 2024 *ACS Omega*).
 
 **Active-site residue quick reference (3R3U / DEHA4 numbering):**
 
@@ -145,8 +149,8 @@ All mechanistic geometry is benchmarked against the **3R3U crystal structure** (
 | Acid catalyst | Acid | Asp | 134 | Orients/polarises the His base (Asp–His catalytic dyad); the departing F⁻ leaves as a stabilised anion, it is **not** protonated |
 | Fluoride stabiliser | Stab_H | His | 155 | H-bond to F⁻ |
 | Fluoride cradle | Stab_W | Trp | 156 | H-bond donor (indole N–H) + aromatic stabilisation of F⁻ |
-| Fluoride cradle | Stab_Y | Tyr | 217 | H-bond donor (phenolic O–H) + aromatic stabilisation of F⁻ |
-| Base catalyst | Base | His | 277 | General base - activates the hydrolytic water that cleaves the Asp110 glycolyl-ester intermediate (Asp110 attacks Cα directly by SN2, without base activation) |
+| Fluoride cradle | Stab_Y | Tyr | 219 | H-bond donor (phenolic O–H) + aromatic stabilisation of F⁻ |
+| Base catalyst | Base | His | 280 | General base - activates the hydrolytic water that cleaves the Asp110 glycolyl-ester intermediate (Asp110 attacks Cα directly by SN2, without base activation) |
 
 > [!NOTE]
 > **Residue numbering in predicted versus crystal structures:**
@@ -175,57 +179,58 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** - `mechani
 | **Pocket containment - two protein-aware measurements** | `pocket_containment_cavity` (**gates**) = fraction of ligand heavy atoms the **protein cavity** encloses, by ray-cast buriedness: 42 rays per ligand heavy atom, an atom counts as contained at buriedness ≥ `BURIAL_MIN` (0.70, corpus-calibrated). Measured against protein coordinates, so the same ligand scores differently in a narrow and a wide pocket and a genuine wide-pocket homolog is not punished for the ligand's intrinsic length. `pocket_containment_site8` (**reported**) = fraction of ligand heavy atoms within `SITE8_SHELL_A` (5 Å) of the **eight mapped catalytic residues** - catalytic engagement, not cavity fit. Measured: FA/DFA/TFA ≈ 0.92–1.00 · PFBA/PFHxA/PFOA ≈ 0.91–0.99 · PFTeDA (C14) 0.36 · PFODA (C18) 0.35. Perfluoro recalcitrance is carried by the **β-fluorine chemistry penalty**, not by containment | FAcD is a small-substrate haloacetate hydrolase; long PFAS defluorinate (rarely) by radical decarboxylation, not hydrolytic SN2 (Wackett 2022; Chan 2011). Containment must express the **pocket**, not the ligand - a metric computed on ligand coordinates alone cannot tell a narrow pocket from a wide one |
 | **Bidentate carboxylate clamp** | Tier_1A requires the ligand –COO⁻ oxygens to salt-bridge **both** distinct cationic clamp residues (Arg111/Arg114, or an engineered Lys), donor N within 4.0 Å, **and the two arms must be assignable to distinct carboxylate oxygens** - both arginines converging on the same oxygen is a monodentate collapse and earns no bidentate credit | The two-arm clamp positions the substrate for α-attack; one contact, one oxygen, or a non-carboxylate head, is insufficient (Maestro salt-bridge geometry; Donald 2011) |
 | **Elite bond-strength ceiling** | A scissile C–F above `TIER_ELITE_BDE_MAX` (128 kcal/mol) **cannot hold Tier_1A at any attack angle** - it is capped at Tier_1B and remains a discovery lead for Step-07 QM/MM. The angle fade applies to the **backside-occlusion** term only (a steric obstruction a near-linear approach genuinely clears); the C–F dissociation energy is a property of the bond, not of the angle of approach, and does not fade | Geometry cannot repeal thermochemistry: a bond above the ceiling stays unbroken however linear the approach. The α-F-count BDE tops out at 127.5 (α-CF3), just under the 128 ceiling, so an **α-CF3 carbon stays eligible for Tier_1A on a pose that earns it** - not capped by the ceiling, but held to the tier floor by the *graded* C–F penalty above `SCISSILE_CF_BDE_MAX` (123 kcal/mol); an α-CF2 (119.5) and α-CH2F (109.9) sit comfortably inside |
-| **Criterion A - active-site integrity** | Fraction of the **eight** catalytic residues (Asp110 nucleophile · His277 base · Asp134 acid · two clamp arginines · His155/Trp156/Tyr217 cradle) present and correctly typed | Identity/presence of the catalytic machinery (Chan 2011); replaces global sequence identity as the conservation signal |
+| **Criterion A - active-site integrity** | Fraction of the **eight** catalytic residues (Asp110 nucleophile · His280 base · Asp134 acid · two clamp arginines · His155/Trp156/Tyr219 cradle) present and correctly typed | Identity/presence of the catalytic machinery (Chan 2011); replaces global sequence identity as the conservation signal |
 | **Criterion B - catalytic constellation** | `1/(1+RMSD)` of the eight catalytic-residue Cα superposed on the 3R3U crystal; a per-tier floor (0.55 / 0.45 / 0.35 / 0.25) **caps** the tier - a pose below its floor is demoted (downgrade-only, never a promoter; B<0.25 → Tier_4, unmeasurable → Decoy) | Residues present (A) ≠ residues geometrically assembled (B); B enforces a crystal-grade constellation for the elite tiers |
-| **Fluoride cradle occupancy** | His155 / Trp156 / Tyr217 **H-bond-donor atom** within 5.5 Å of the departing F | Electrostatic + aromatic stabilisation of F⁻ departure; donor-atom test avoids a ring carbon spuriously satisfying the gate |
+| **Fluoride cradle occupancy** | His155 / Trp156 / Tyr219 **H-bond-donor atom** within 5.5 Å of the departing F | Electrostatic + aromatic stabilisation of F⁻ departure; donor-atom test avoids a ring carbon spuriously satisfying the gate |
 | **Nucleophile-resolution guard** | Tier_1A requires the catalytic Asp to be a direct alignment hit or a tight (≤ 2-residue) windowed rescue, recorded in `nuc_resolution` | The ±5 resolver can otherwise latch onto a non-catalytic Asp; the elite tier is barred from improbable realignments |
 | **Confidence demotion** | A Tier_1A hit whose Boltz confidence < 0.85 is demoted one notch to Tier_1B; the raw geometric tier is retained in `geometric_tier` | Guards the headline elite claim against an unconfident predicted fold |
 | **Size-fair backbone-clash veto** | A pose is decoyed when the backbone-clash **fraction** ≥ 0.15 **and** count ≥ 3 (clashing tail atoms / ligand heavy atoms) | Fraction-based, so a long PFAS is not penalised for length the way a flat clash count would |
 
-**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr217 basket, is **classified non-degrader regardless of Boltz-2 confidence** - high-affinity binders are not FAcDs. Beyond that, recalcitrance is folded into the tier as a **graded** penalty on `mechanistic_score_effective`: the chemistry penalty (scissile C–F BDE above 123 kcal/mol + backside occlusion above 2.0 Å) demotes the SN2 dead-end **TFA** below the elite tiers, and the **Tier_2A/2B competence-feasibility floor** then places the trifluoroacetate references at **Tier_3** (the family caps at competence ≈ 0.35); the pocket-containment penalty demotes oversized chains - all proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Critically, only the **backside-occlusion** half of the chemistry penalty fades with a near-ideal SN2 attack angle - computed on the multiplicity-corrected `angle_effective`, the same angle the tier ladder gates on, **not** the raw best-of-N angle, so a poly-fluorinated carbon cannot escape its backside penalty on an inflated single-fluorine trajectory the Šidák correction removes (applied in full at/below 175°, waived at/above 180°). Occlusion is a steric obstruction of the attack trajectory, and a pose that reaches an effective 180° has by construction cleared it. The **C–F bond-dissociation energy does not fade**, because the strength of the bond being broken is a property of the bond and not of the angle of approach. A scissile C–F above `TIER_ELITE_BDE_MAX` (128 kcal/mol) is therefore **barred from Tier_1A at any angle** and capped at Tier_1B. An **α-CF₃ carbon (scissile C–F 127.5 kcal/mol) sits just below that ceiling**, so on an ideal pose it stays eligible for Tier_1A - held near the floor by the graded C–F penalty (above `SCISSILE_CF_BDE_MAX`, 123 kcal/mol) rather than capped, and adjudicated by Step-07 QM/MM. The β-fluorination and containment penalties likewise do not fade, so a perfluoroalkyl chain is never rescued by a single favourable angle. The β-withdrawal count **crosses a single ether oxygen** (an ether O is a strong −I withdrawer, counted alongside vicinal fluorine), so the perfluoro**ether** acids - **C6O4** (ether O directly on the α-carbon) and **ADONA** - are correctly penalised (β = 2 and 4) rather than read as difluoroacetate (β = 0/1); without it they leak into Tier_1A. FA/DFA/TFA carry no vicinal withdrawing group, so β = 0 and their score is untouched (O'Hagan 2008 on C–F strength; Wackett 2022 on perfluoroether recalcitrance). The **`feasibility_factor`** and the two-factor **`sn2_dead_end`** flag remain reported diagnostics. The activation barrier is decided downstream by **Step-07 QM/MM** (the final arbiter); DeHa4's inability to turn over TFA (Wackett 2022) does not prove no FAcD variant can - the near-ideal geometry is exactly the prerequisite such a variant would need - hence graded not vetoed. Within a tier, ties break on `competence_score` → catalytic constellation (Criterion B) → active-site conservation → **`model_degrader_consensus`** (the fraction of Boltz diffusion samples that agree - a reproducible pose floats above a single-frame fluke, but is never filtered). A control assertion flags the run if the native substrates FA/DFA fail to register as degraders.
+**Chemistry and pocket-fit are graded tier penalties, not hard vetoes (discovery-open).** A high-affinity PFAS binder that presents the wrong face to Asp110, or lacks the His155/Trp156/Tyr219 basket, is **classified non-degrader regardless of Boltz-2 confidence** - high-affinity binders are not FAcDs. Beyond that, recalcitrance is folded into the tier as a **graded** penalty on `mechanistic_score_effective`: the chemistry penalty (scissile C–F BDE above 123 kcal/mol + backside occlusion above 2.0 Å) demotes the SN2 dead-end **TFA** below the elite tiers, and the **Tier_2A/2B competence-feasibility floor** then places the trifluoroacetate references at **Tier_3** (the family caps at competence ≈ 0.35); the pocket-containment penalty demotes oversized chains - all proportional to severity, so no ligand is excluded and a favourable pose or genuine wide-pocket variant can still climb. Critically, only the **backside-occlusion** half of the chemistry penalty fades with a near-ideal SN2 attack angle - computed on the multiplicity-corrected `angle_effective`, the same angle the tier ladder gates on, **not** the raw best-of-N angle, so a poly-fluorinated carbon cannot escape its backside penalty on an inflated single-fluorine trajectory the Šidák correction removes (applied in full at/below 175°, waived at/above 180°). Occlusion is a steric obstruction of the attack trajectory, and a pose that reaches an effective 180° has by construction cleared it. The **C–F bond-dissociation energy does not fade**, because the strength of the bond being broken is a property of the bond and not of the angle of approach. A scissile C–F above `TIER_ELITE_BDE_MAX` (128 kcal/mol) is therefore **barred from Tier_1A at any angle** and capped at Tier_1B. An **α-CF₃ carbon (scissile C–F 127.5 kcal/mol) sits just below that ceiling**, so on an ideal pose it stays eligible for Tier_1A - held near the floor by the graded C–F penalty (above `SCISSILE_CF_BDE_MAX`, 123 kcal/mol) rather than capped, and adjudicated by Step-07 QM/MM. The β-fluorination and containment penalties likewise do not fade, so a perfluoroalkyl chain is never rescued by a single favourable angle. The β-withdrawal count **crosses a single ether oxygen** (an ether O is a strong −I withdrawer, counted alongside vicinal fluorine), so the perfluoro**ether** acids - **C6O4** (ether O directly on the α-carbon) and **ADONA** - are correctly penalised (β = 2 and 4) rather than read as difluoroacetate (β = 0/1); without it they leak into Tier_1A. FA/DFA/TFA carry no vicinal withdrawing group, so β = 0 and their score is untouched (O'Hagan 2008 on C–F strength; Wackett 2022 on perfluoroether recalcitrance). The **`feasibility_factor`** and the two-factor **`sn2_dead_end`** flag remain reported diagnostics. The activation barrier is decided downstream by **Step-07 QM/MM** (the final arbiter); DeHa4's inability to turn over TFA (Wackett 2022) does not prove no FAcD variant can - the near-ideal geometry is exactly the prerequisite such a variant would need - hence graded not vetoed. Within a tier, ties break on `competence_score` → catalytic constellation (Criterion B) → active-site conservation → **`model_degrader_consensus`** (the fraction of Boltz diffusion samples that agree - a reproducible pose floats above a single-frame fluke, but is never filtered). A control assertion flags the run if the native substrates FA/DFA fail to register as degraders.
 
-**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide - high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr217) provides the specific hard-acid electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
+**On the hard–soft acid–base (HSAB) transition:** Fluoroacetate's α-carbon is a borderline electrophile, whilst the departing fluoride is the hardest halide - high charge density, low polarisability. The incoming Asp110-OD is a hard nucleophile. The pipeline explicitly models this: the fluoride cradle (His155/Trp156/Tyr219) provides the specific hard-acid electrostatic environment required for F⁻ departure, whilst the SN2 angle enforces the anti-periplanar trajectory that maximises orbital overlap with the active C–F σ* anti-bonding orbital, whilst minimising steric and electrostatic repulsion with adjacent fluorine substituents in the transition state.
 
 </details>
 
 ---
 
-## 🔄 Pipeline architecture (42,339 lines)
+## 🔄 Pipeline architecture (42,428 lines)
 
 <div align="center">
-<img src="assets/facd_architecture.svg" alt="FAcDs pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 0 Ingest (Input, 01 Merge) → Phase 1 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 2 Selection &amp; Prep (05) → Phase 3 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">
+<img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">
 </div>
 
-**Diagram key:** a bash orchestrator (`00_00_run_pipeline_FAcDs.sh`, violet) runs each step 01–07 in sequence and provisions the shared **Foundation** - `00_01` config · `00_02` utils · `00_03` env; the **grey dotted** links mark it as imported by every step. **Solid arrows** are data flow: `Input → 01 → 02 → 03 → 04` across Phase 1 (top), then `02 → 05 → 06 → 07` down through Phase 2 and Phase 3 (bottom). Every box is a script, labelled with its approximate line count.
+**Diagram key:** a bash orchestrator (`00_00_run_pipeline_DeFluorX.sh`, violet) runs each step 01–07 in sequence and provisions the shared **Foundation** - `00_01` config · `00_02` utils · `00_03` env; the **grey dotted** links mark it as imported by every step. **Solid arrows** are data flow: `Input → 01 → 02 → 03 → 04` across the top row (Phase 1 Ingest, Phase 2 Screening), then `02 → 05 → 06 → 07` down through the bottom row (Phase 3 Selection, Phase 4 Dynamics). Every box is a script, labelled with its approximate line count.
 
-**Three-phase design:**
+**Four-phase design:**
 
 | Phase | Steps | Goal | Input | Output |
 |---|---|---|---|---|
 | **Foundation** | 00_01–00_03 | Environment installation, shared configuration, and utility functions | - | Conda environment, `CFG` & `ProjectUtils` |
-| **Phase 1 - HTS** | 01–04 | Database merging, co-folding, & database-wide validation | Raw sequence databases | Master CSV, D3 tree, publication figure panel |
-| **Phase 2 - Select & Prep** | 05 | MD-ready selection, protonation, minimisation & Top-N extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
-| **Phase 3 - Dynamics & QM** | 06–07 | Step 06 runs the ESP-charged physics in one script - WaterMap hydration, System Builder, Desmond MD, then SID + Prime MM-GBSA binding free energy; Step 07 adds MD/NAC analysis, PBC-corrected frame extraction, and automated QSite QM/MM defluorination scans | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | Desmond trajectories, WaterMaps, MM-GBSA ΔG_bind + plots, QSite `.in` + per-candidate QSite output folders, WaterMap/QSite defluorination figures |
+| **Phase 1 - Ingest** | 01 | Database merging & non-redundant QC | Raw sequence databases | Merged FASTA |
+| **Phase 2 - Screening (HTS)** | 02–04 | Co-folding, ranking & database-wide validation | Merged FASTA + PFAS panel | Master/ranked CSV, D3 tree, publication figure panel |
+| **Phase 3 - Select & Prep** | 05 | MD-ready selection, protonation, minimisation & Top-N extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
+| **Phase 4 - Dynamics & QM** | 06–07 | Step 06 runs the ESP-charged physics in one script - WaterMap hydration, System Builder, Desmond MD, then SID + Prime MM-GBSA binding free energy; Step 07 adds MD/NAC analysis, PBC-corrected frame extraction, and automated QSite QM/MM defluorination scans | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | Desmond trajectories, WaterMaps, MM-GBSA ΔG_bind + plots, QSite `.in` + per-candidate QSite output folders, WaterMap/QSite defluorination figures |
 
-Phase 1 is deliberately fast and permissive; Phase 2 prepares and extracts the elite hits; Phase 3 evaluates candidate dynamics under thermodynamic fluctuations to confirm Near Attack Conformation (NAC) persistence.
+Phases 1-2 (ingest and screening) are deliberately fast and permissive; Phase 3 prepares and extracts the elite hits; Phase 4 evaluates candidate dynamics under thermodynamic fluctuations to confirm Near Attack Conformation (NAC) persistence.
 
 > [!NOTE]
-> In Phase 1, Step 02 (Boltz-2 production) co-folds every candidate against the PFAS panel. A fresh prediction takes approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations). The timing of `4h23m` for `02 Production (Boltz-2 scoring)` shown in the timing summary below is for resume mode checking 58,056 pre-existing jobs.
+> In Phase 2, Step 02 (Boltz-2 production) co-folds every candidate against the PFAS panel. A fresh prediction takes approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations).
 
 ### 🕸 Code architecture graph
 
 <details>
 <summary><b>Function-level knowledge graph (graphify) - click to expand</b></summary>
 
-A function-level knowledge graph of the whole pipeline (1,265 nodes · 2,578 edges ·
-73 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
-and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_FAcDs.py) is the top
-hub node (81 edges, the most connected)** - every module's thresholds and figure colours route
+A function-level knowledge graph of the whole pipeline (1,075 nodes · 2,099 edges ·
+12 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
+and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_DeFluorX.py) is the top
+hub node (91 edges, the most connected)** - every module's thresholds and figure colours route
 through it, the single-source-of-truth architecture showing up structurally.
 
-![FAcDs code architecture graph - communities coloured, hub nodes enlarged](assets/graphify.png)
+![DeFluorX code architecture graph - communities coloured, hub nodes enlarged](assets/graphify.png)
 
-**▶ [Open the interactive graph in your browser](https://htmlpreview.github.io/?https://github.com/KU-MGB/FAcDs_PFAS-27_Defluorination/blob/main/assets/graph.html)** - renders the live `assets/graph.html` (GitHub shows repo HTML as source, so it is served through the htmlpreview proxy).
+**▶ [Open the interactive graph in your browser](https://htmlpreview.github.io/?https://github.com/KU-MGB/DeFluorX/blob/main/assets/graph.html)** - renders the live `assets/graph.html` (GitHub shows repo HTML as source, so it is served through the htmlpreview proxy).
 
 The graph output lives in **[`assets/`](./assets/)** and is regenerated with `/graphify`:
 
@@ -245,20 +250,20 @@ The graph output lives in **[`assets/`](./assets/)** and is regenerated with `/g
 <summary><b>Full directory tree (click to expand)</b></summary>
 
 ```
-FAcDs_PFAS-27_Defluorination/
+DeFluorX/
 │
-├── 00_00_run_pipeline_FAcDs.sh              ← One-command full pipeline runner
-├── 00_01_Project_Config_FAcDs.py            ← ★ Central configuration (all parameters)
-├── 00_02_Project_Utils_FAcDs.py             ← Shared utilities (logging, geometry, colours)
-├── 00_03_Environment_FAcDs.py               ← Environment check, conda/pip export
+├── 00_00_run_pipeline_DeFluorX.sh              ← One-command full pipeline runner
+├── 00_01_Project_Config_DeFluorX.py            ← ★ Central configuration (all parameters)
+├── 00_02_Project_Utils_DeFluorX.py             ← Shared utilities (logging, geometry, colours)
+├── 00_03_Environment_DeFluorX.py               ← Environment check, conda/pip export
 │
-├── 01_Merge_FAcDs.py                        ← FASTA merge, deduplication, QC
-├── 02_Production_FAcDs.py                   ← Boltz-2 prediction + scoring (MAIN ENGINE)
-├── 03_Validation_Figures_FAcDs.py           ← Publication-quality validation figures
-├── 04_Dendrogram_FAcDs.py                    ← Interactive D3 phylogenetic tree
-├── 05_TopN_and_PDB_Preparation_FAcDs.py     ← MD-ready gate · CIF→PDB · PrepWizard · Top-N extraction · PyMOL/PLIP figures
-├── 06_Physics_Validation_FAcDs.py       ← Step 06 ESP physics: WaterMap · System Builder · MD · SID · Prime MM-GBSA
-├── 07_MD_QMMM_Defluorination_FAcDs.py ← Step 07 MD + NAC analysis + QM/MM engine
+├── 01_Merge_DeFluorX.py                        ← FASTA merge, deduplication, QC
+├── 02_Production_DeFluorX.py                   ← Boltz-2 prediction + scoring (MAIN ENGINE)
+├── 03_Validation_Figures_DeFluorX.py           ← Publication-quality validation figures
+├── 04_Dendrogram_DeFluorX.py                    ← Interactive D3 phylogenetic tree
+├── 05_TopN_and_PDB_Preparation_DeFluorX.py     ← MD-ready gate · CIF→PDB · PrepWizard · Top-N extraction · PyMOL/PLIP figures
+├── 06_Physics_Validation_DeFluorX.py       ← Step 06 ESP physics: WaterMap · System Builder · MD · SID · Prime MM-GBSA
+├── 07_MD_QMMM_Defluorination_DeFluorX.py ← Step 07 MD + NAC analysis + QM/MM engine
 │
 ├── PFAS.yml                                 ← Conda environment (full reproducible spec)
 ├── requirements.txt                         ← pip requirements (refreshed each run)
@@ -266,28 +271,28 @@ FAcDs_PFAS-27_Defluorination/
 ├── A_Labelled_15-Seq.fasta                  ← Curated seed sequences (~15 proteins)
 ├── B_Downloaded-Blast_Uniprot_NCBI.fasta    ← BLAST/UniProt/NCBI expanded set
 ├── C_INP_Merged_for_Boltz-2.fasta         ← Merged, deduplicated input (auto-generated)
-├── 00_Merge.log                            ← Merge QC report (auto-generated by 01_Merge_FAcDs.py)
+├── 00_Merge.log                            ← Merge QC report (auto-generated by 01_Merge_DeFluorX.py)
 ├── C_INP_Merged_for_Boltz-2.png           ← Length/identity distribution figure (auto-generated)
 ├── D_INP_PFAS-27_Ligands.smi                  ← 27 PFAS ligands (SMILES format, tab-separated)
 │
 ├── Boltz-2_Run_YYYYMMDDTHHMMSSZ/        ← Output directory generated for each pipeline execution run
-│   ├── 0_FAcDs_Pipeline_Logs/           ← Orchestrator per-run log (00_Pipeline_*.log, from 00_00_run_pipeline_FAcDs.sh)
-│   ├── 1_Boltz2_Production/             ← Prediction engine outputs (generated by 02_Production_FAcDs.py)
+│   ├── 0_DeFluorX_Pipeline_Logs/           ← Orchestrator per-run log (00_Pipeline_*.log, from 00_00_run_pipeline_DeFluorX.sh)
+│   ├── 1_Boltz2_Production/             ← Prediction engine outputs (generated by 02_Production_DeFluorX.py)
 │   │   ├── 1_Input_Data/               ← Copied input files (FASTA + SMILES)
 │   │   ├── 2_Boltz2_YAML_Configs/       ← Per-job Boltz-2 YAML inputs
 │   │   ├── 3_Sequence_Reference_Data/   ← BLOSUM62 alignments, identity tables
 │   │   ├── 4_Prediction_Jobs/           ← Boltz-2 run outputs + confidence JSON
 │   │   ├── 00_Boltz2_Production.log       ← Production engine log file
-│   │   ├── 5_Boltz2_FAcDs_Master_*.csv  ← Master results CSV (all jobs)
-│   │   └── 6_Boltz2_FAcDs_Ranked_*.csv  ← Tier-ranked results CSV
+│   │   ├── 5_Boltz2_DeFluorX_Master_*.csv  ← Master results CSV (all jobs)
+│   │   └── 6_Boltz2_DeFluorX_Ranked_*.csv  ← Tier-ranked results CSV
 │   │
-│   ├── 2_Best_Complexes_CIFs/           ← Top-ranked CIF per protein × ligand (generated by 02_Production_FAcDs.py)
+│   ├── 2_Best_Complexes_CIFs/           ← Top-ranked CIF per protein × ligand (generated by 02_Production_DeFluorX.py)
 │   │
-│   ├── 3_Validation_Figures/            ← 64 figure panels (folders 03–08) + 5 Ramachandran controls (folder 02) = 69, in 7 figure folders + 01_Analysis_Data (03_Figure_Enriched_Dataset.csv). Generated by 03_Validation_Figures_FAcDs.py
+│   ├── 3_Validation_Figures/            ← 64 figure panels (folders 03–08) + 5 Ramachandran controls (folder 02) = 69, in 7 figure folders + 01_Analysis_Data (03_Figure_Enriched_Dataset.csv). Generated by 03_Validation_Figures_DeFluorX.py
 │   │
-│   ├── 4_Dendrogram/                     ← Interactive phylogenetic D3 tree apps (generated by 04_Dendrogram_FAcDs.py)
+│   ├── 4_Dendrogram/                     ← Interactive phylogenetic D3 tree apps (generated by 04_Dendrogram_DeFluorX.py)
 │   │
-│   ├── 5_TopN_and_Preparation/         ← Consolidated Step-05 output (generated by 05_TopN_and_PDB_Preparation_FAcDs.py)
+│   ├── 5_TopN_and_Preparation/         ← Consolidated Step-05 output (generated by 05_TopN_and_PDB_Preparation_DeFluorX.py)
 │   │   ├── 00_TopN_and_Preparation.log               ← single log (preparation + extraction)
 │   │   ├── 1_Converted_Raw_PDB/        ← Gemmi-converted PDB files (+ PyMOL/PLIP figures)
 │   │   ├── 2_Prepared_PDBs/            ← Prepared PDB files (PrepWizard, 0.15 Å restrained min) (+ figures)
@@ -298,7 +303,7 @@ FAcDs_PFAS-27_Defluorination/
 │   │   └── 4_Ligand_ESP_Charges/       ← Jaguar ESP partial charges per ligand (ON by default):
 │   │         00_ESP_Charges_Summary.csv · 01_ESP_Alpha_Carbon_Charge.png · <lig>_ESP.mae (load in System Builder)
 │   │
-│   ├── 6_Physics_Validation/            ← ESP-charged explicit-solvent physics (generated by 06_Physics_Validation_FAcDs.py)
+│   ├── 6_Physics_Validation/            ← ESP-charged explicit-solvent physics (generated by 06_Physics_Validation_DeFluorX.py)
 │   │   ├── 00_Physics_Validation.log            ← Step-06 merged colour log (WaterMap → build → MD → SID → MM-GBSA)
 │   │   ├── 01_Prepared_Proteins/       ← MD-selected prepared proteins imported from Step 05
 │   │   ├── 02_ESP_Charged_Complexes/   ← merged complexes carrying the ligand ESP charges (R_N_<stem>_ESP_Complex.mae)
@@ -307,7 +312,7 @@ FAcDs_PFAS-27_Defluorination/
 │   │   ├── 05_MD_Simulations/          ← Desmond MD topology + trajectory (*-out.cms, *_trj/, *.ene) + SID *.eaf + per-rank *_mmgbsa-prime-out.csv (one per desmond_md_job_R_N/, alongside SID)
 │   │   └── 06_Analysis/                ← ALL Step-06 figures + the combined 00_MMGBSA_Summary.csv, numbered in pipeline order: 01_Physics_Build_Solvation_QC.png, 02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png, 04_Defluorination_Combined_AllRanks.png, Defluorination/ (Defluorination_R<N>/01-03 figures + 04_Defluorination_Geometry.csv), Prime-MMGBSA/MMGBSA_Profile_R<N>.png
 │   │
-│   └── 7_MD_Thermodynamics_Results/     ← MD + NAC analysis + QM/MM engine outputs (generated by 07_MD_QMMM_Defluorination_FAcDs.py)
+│   └── 7_MD_Thermodynamics_Results/     ← MD + NAC analysis + QM/MM engine outputs (generated by 07_MD_QMMM_Defluorination_DeFluorX.py)
 │       ├── Rank_N/                       ← Per-candidate: PBC-corrected frame (Ideal_Final.maegz), NAC dashboard + NAC_Data.csv, MD_Stats.json (resume cache), and QSite_SN2/Frame_<rank>[_Best]_<traj>/ (one QM/MM scan per sampled frame, best pre-organised first: .in/.mae/.out named for the frame folder + defluorination energy profile/CSV/renders)
 │       ├── 00_MD_Thermodynamics.log    ← Step 07 engine execution log
 │       ├── 01_MD_Master_Ranking.csv     ← Master ranked thermodynamic validation CSV (NAC dwell ns, QSite ΔE‡/ΔE_rxn, departing-F charge, NAC-conditioned + component-decomposed MM-GBSA, Defluor_Propensity / Is_Defluorinating verdict)
@@ -333,18 +338,18 @@ FAcDs_PFAS-27_Defluorination/
 
 | File | Role | Inputs | Outputs |
 |------|------|--------|---------|
-| [`00_00_run_pipeline_FAcDs.sh`](./00_00_run_pipeline_FAcDs.sh) | **Entry point** - bash orchestrator; conda-activates then runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; starts the Schrödinger local job server before Step 05 (it does not survive a reboot); Ctrl-C / kill cancels background Schrödinger jobs. Imports nothing - invokes each script as a subprocess | - | Logs, all outputs |
-| [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) | **Single source of truth** - all tiers, thresholds, scoring weights, figure-style tokens, and CSV name stems; imported by every step | - | `CFG` dataclass instance |
-| [`00_02_Project_Utils_FAcDs.py`](./00_02_Project_Utils_FAcDs.py) | Shared utilities: ConsoleColours, geometry / MIC / Kabsch, logging, atomic CSV/JSON, `latest_by_mtime`, `apply_figure_style` | - | `ConsoleColours`, `calculate_angle()`, `latest_by_mtime()`, etc. |
-| [`00_03_Environment_FAcDs.py`](./00_03_Environment_FAcDs.py) | Environment check + conda/pip export (reproducibility spec) | - | `PFAS.yml`, `requirements.txt` |
-| [`01_Merge_FAcDs.py`](./01_Merge_FAcDs.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
-| [`02_Production_FAcDs.py`](./02_Production_FAcDs.py) | **Core engine** - MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
-| [`03_Validation_Figures_FAcDs.py`](./03_Validation_Figures_FAcDs.py) | 64 figure panels + 5 Ramachandran controls (= 69) in 7 content-matched figure folders + 01_Analysis_Data - overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
-| [`04_Dendrogram_FAcDs.py`](./04_Dendrogram_FAcDs.py) | Interactive phylogenetic D3 tree | merged FASTA + `03_Figure_Enriched_Dataset.csv` | `03_Global_Master_Interactive_App.html` (+ per-tier apps) |
-| [`05_TopN_and_PDB_Preparation_FAcDs.py`](./05_TopN_and_PDB_Preparation_FAcDs.py) | MD-ready gate → Gemmi CIF→PDB + PrepWizard + Top-N extraction + PyMOL/PLIP figures | ranked CSV + CIF files | prepared `.pdb` files, tier CSV, interaction figures |
-| [`06_Physics_Validation_FAcDs.py`](./06_Physics_Validation_FAcDs.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD on GPU, then extraction → SID → MM-GBSA → defluorination on a CPU worker, pipelined so the GPU runs the next rank's MD; production under a ligand/backbone positional restraint, so retention is restraint-enforced; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*_mmgbsa-prime-out.csv`, **`06_Analysis/` - every Step-06 figure in one folder** (build/solvation QC, MD trajectory QC, MM-GBSA individual + combined), **`00_Phase_Timings.csv`** (per-job + per-phase wall-clock), merged log |
-| [`07_MD_QMMM_Defluorination_FAcDs.py`](./07_MD_QMMM_Defluorination_FAcDs.py) | **Step 07** MD + NAC analysis + QM/MM extraction & QSite auto-run (consumes `*_SID-out.eaf`) | Step-06 MD trajectories + WaterMaps + ranked CSV | PBC-corrected frame, QSite `.in`/`.mae`, per-candidate QSite output folder |
-| [`C_INP_Merged_for_Boltz-2.fasta`](./C_INP_Merged_for_Boltz-2.fasta) | Merged, deduplicated input protein sequences for Boltz-2 (generated by 01_Merge_FAcDs.py) | - | - |
+| [`00_00_run_pipeline_DeFluorX.sh`](./00_00_run_pipeline_DeFluorX.sh) | **Entry point** - bash orchestrator; conda-activates then runs 00_03 → 01 → … → 07 in sequence; `--resume-from` any step; starts the Schrödinger local job server before Step 05 (it does not survive a reboot); Ctrl-C / kill cancels background Schrödinger jobs. Imports nothing - invokes each script as a subprocess | - | Logs, all outputs |
+| [`00_01_Project_Config_DeFluorX.py`](./00_01_Project_Config_DeFluorX.py) | **Single source of truth** - all tiers, thresholds, scoring weights, figure-style tokens, and CSV name stems; imported by every step | - | `CFG` dataclass instance |
+| [`00_02_Project_Utils_DeFluorX.py`](./00_02_Project_Utils_DeFluorX.py) | Shared utilities: ConsoleColours, geometry / MIC / Kabsch, logging, atomic CSV/JSON, `latest_by_mtime`, `apply_figure_style` | - | `ConsoleColours`, `calculate_angle()`, `latest_by_mtime()`, etc. |
+| [`00_03_Environment_DeFluorX.py`](./00_03_Environment_DeFluorX.py) | Environment check + conda/pip export (reproducibility spec) | - | `PFAS.yml`, `requirements.txt` |
+| [`01_Merge_DeFluorX.py`](./01_Merge_DeFluorX.py) | Sequence deduplication + QC | `A_*.fasta`, `B_*.fasta` | `C_INP_Merged_for_Boltz-2.fasta` |
+| [`02_Production_DeFluorX.py`](./02_Production_DeFluorX.py) | **Core engine** - MSA, prediction, scoring, tier classification | merged FASTA + SMI | master CSV, CIF files, YAML jobs |
+| [`03_Validation_Figures_DeFluorX.py`](./03_Validation_Figures_DeFluorX.py) | 64 figure panels + 5 Ramachandran controls (= 69) in 7 content-matched figure folders + 01_Analysis_Data - overview/AI quality/geometry+mechanism/interactions/PFAS scope/diagnostics | ranked CSV | PNG figures + `03_Figure_Enriched_Dataset.csv` |
+| [`04_Dendrogram_DeFluorX.py`](./04_Dendrogram_DeFluorX.py) | Interactive phylogenetic D3 tree | merged FASTA + `03_Figure_Enriched_Dataset.csv` | `03_Global_Master_Interactive_App.html` (+ per-tier apps) |
+| [`05_TopN_and_PDB_Preparation_DeFluorX.py`](./05_TopN_and_PDB_Preparation_DeFluorX.py) | MD-ready gate → Gemmi CIF→PDB + PrepWizard + Top-N extraction + PyMOL/PLIP figures | ranked CSV + CIF files | prepared `.pdb` files, tier CSV, interaction figures |
+| [`06_Physics_Validation_DeFluorX.py`](./06_Physics_Validation_DeFluorX.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD on GPU, then extraction → SID → MM-GBSA → defluorination on a CPU worker, pipelined so the GPU runs the next rank's MD; production under a ligand/backbone positional restraint, so retention is restraint-enforced; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*_mmgbsa-prime-out.csv`, **`06_Analysis/` - every Step-06 figure in one folder** (build/solvation QC, MD trajectory QC, MM-GBSA individual + combined), **`00_Phase_Timings.csv`** (per-job + per-phase wall-clock), merged log |
+| [`07_MD_QMMM_Defluorination_DeFluorX.py`](./07_MD_QMMM_Defluorination_DeFluorX.py) | **Step 07** MD + NAC analysis + QM/MM extraction & QSite auto-run (consumes `*_SID-out.eaf`) | Step-06 MD trajectories + WaterMaps + ranked CSV | PBC-corrected frame, QSite `.in`/`.mae`, per-candidate QSite output folder |
+| [`C_INP_Merged_for_Boltz-2.fasta`](./C_INP_Merged_for_Boltz-2.fasta) | Merged, deduplicated input protein sequences for Boltz-2 (generated by 01_Merge_DeFluorX.py) | - | - |
 | [`D_INP_PFAS-27_Ligands.smi`](./D_INP_PFAS-27_Ligands.smi) | 27 PFAS ligand SMILES panel | - | - |
 
 ---
@@ -371,8 +376,8 @@ FAcDs_PFAS-27_Defluorination/
 ### Step 1 - Clone the repository
 
 ```bash
-git clone https://github.com/KU-MGB/FAcDs_PFAS-27_Defluorination.git
-cd FAcDs_PFAS-27_Defluorination
+git clone https://github.com/KU-MGB/DeFluorX.git
+cd DeFluorX
 ```
 
 ### Step 2 - Create and verify the conda environment
@@ -380,9 +385,9 @@ cd FAcDs_PFAS-27_Defluorination
 Use the automated installer (recommended):
 
 ```bash
-python 00_03_Environment_FAcDs.py --install
+python 00_03_Environment_DeFluorX.py --install
 conda activate PFAS
-python 00_03_Environment_FAcDs.py
+python 00_03_Environment_DeFluorX.py
 ```
 
 <details>
@@ -400,7 +405,7 @@ conda activate PFAS
 ### Step 3 - Verify the environment
 
 ```bash
-python 00_03_Environment_FAcDs.py
+python 00_03_Environment_DeFluorX.py
 ```
 
 Expected output:
@@ -438,42 +443,21 @@ Steps **01–04** (merge, Boltz-2 co-folding, validation figures, dendrogram) ru
 
 ```bash
 conda activate PFAS
-bash 00_00_run_pipeline_FAcDs.sh
+bash 00_00_run_pipeline_DeFluorX.sh
 ```
 
-The script activates the environment, runs all steps in sequence, writes a timestamped log to `<Run>/0_FAcDs_Pipeline_Logs/`, and prints a timing summary on completion:
-
-```
-  ══════════════════════════════════════════════════════════════════════════
-  TIMING SUMMARY
-  ══════════════════════════════════════════════════════════════════════════
-  STEP                                     ELAPSED  STATUS
-  ----                                     -------  ------
-  00  Environment check                        12s  PASS
-  01  Merge sequences                          45s  PASS
-  02  Production (Boltz-2 scoring)           4h23m  PASS
-  03  Validation figures                     8m12s  PASS
-  04  Dendrogram                             3m47s  PASS
-  05  Top-N selection + CIF/PDB prep         1h12m  PASS
-  06  Physics validation (WaterMap·build·MD·SID·MM-GBSA)  1h04m  WARN
-  07  MD thermodynamics + QM/MM engine       6h36m  PASS
-  ──────────────────────────────────  ──────────
-  TOTAL WALL TIME                           12h48m
-```
-
-> [!NOTE]
-> The timing of `4h23m` for Step 02 shown above represents a run in **resume mode** checking 58,056 pre-existing jobs. In a **fresh run**, prediction throughput is approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations).
+The script activates the environment, runs all steps in sequence, writes a timestamped log to `<Run>/0_DeFluorX_Pipeline_Logs/`, and records per-step wall-clock timings to `00_Phase_Timings.csv` on completion.
 
 ### Quick validation (smoke test)
 
 Before committing to a full 12-hour run, verify that Boltz-2, Schrödinger, and all path dependencies are correctly configured:
 
-1. Create a minimal FASTA containing the reference sequence (for example, the DeHa4 control sequence available in `CFG.DEHA4_CONTROL_SEQ` in `00_01_Project_Config_FAcDs.py`):
+1. Create a minimal FASTA containing the reference sequence (for example, the DeHa4 control sequence available in `CFG.DEHA4_CONTROL_SEQ` in `00_01_Project_Config_DeFluorX.py`):
 
 ```bash
 python -c "
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location('cfg', '00_01_Project_Config_FAcDs.py')
+spec = importlib.util.spec_from_file_location('cfg', '00_01_Project_Config_DeFluorX.py')
 mod  = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 with open('smoke_test.fasta', 'w') as f:
     f.write('>DeHa4_reference\n' + mod.CFG().DEHA4_CONTROL_SEQ + '\n')
@@ -484,10 +468,10 @@ print('Written smoke_test.fasta')
 2. Run step 02:
 
 ```bash
-python 02_Production_FAcDs.py --fasta smoke_test.fasta
+python 02_Production_DeFluorX.py --fasta smoke_test.fasta
 ```
 
-Expected behaviour: the pipeline will execute the 6 positive control calibration cases (DeHa4 and 3R3U controls × 3 control ligands) at the very beginning of the run. This initial calibration takes approximately 10–15 minutes on a single GPU.
+Expected behaviour: the pipeline will execute the 6 control calibration cases (DeHa4 and 3R3U controls × 3 control ligands) at the very beginning of the run. This initial calibration takes approximately 10–15 minutes on a single GPU.
 
 The 3R3U × Fluoroacetate complex is expected to classify as **Tier_2A** or higher. Once the consolidated calibration summary table prints to the console, the environment configuration is successfully verified, and you may terminate the process. If you choose to let the run proceed, it will co-fold the smoke test sequence against the 27 PFAS ligands.
 
@@ -498,7 +482,7 @@ The 3R3U × Fluoroacetate complex is expected to classify as **Tier_2A** or high
 Step 02 supports full crash recovery. Pass the existing run directory name to resume from the last completed job:
 
 ```bash
-python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 Completed jobs are detected from the master CSV and skipped automatically - zero repeated work.
@@ -508,11 +492,11 @@ Completed jobs are detected from the master CSV and skipped automatically - zero
 Each script after step 02 takes the run directory as its first argument (03 also accepts `--no-variance`):
 
 ```bash
-python 03_Validation_Figures_FAcDs.py  Boltz-2_Run_20260309T085406Z [--no-variance]
-python 04_Dendrogram_FAcDs.py           Boltz-2_Run_20260309T085406Z
-python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 03_Validation_Figures_DeFluorX.py  Boltz-2_Run_20260309T085406Z [--no-variance]
+python 04_Dendrogram_DeFluorX.py           Boltz-2_Run_20260309T085406Z
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 </details>
@@ -526,7 +510,7 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 RuntimeError: CUDA out of memory
 ```
 
-Reduce `BOLTZ_MAX_PROTEINS_PER_BATCH` in [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py):
+Reduce `BOLTZ_MAX_PROTEINS_PER_BATCH` in [`00_01_Project_Config_DeFluorX.py`](./00_01_Project_Config_DeFluorX.py):
 ```python
 BOLTZ_MAX_PROTEINS_PER_BATCH: int = 10  # reduce from 20 to 10
 ```
@@ -569,7 +553,7 @@ Step 05 will fall back to raw Gemmi-converted PDB files without PrepWizard prepa
 <summary><b>Config module not found</b></summary>
 
 ```
-FileNotFoundError: Required module not found: .../00_01_Project_Config_FAcDs.py
+FileNotFoundError: Required module not found: .../00_01_Project_Config_DeFluorX.py
 ```
 
 All scripts must be run from the repository root directory. Do not move scripts to subdirectories.
@@ -586,9 +570,9 @@ Pre-generate A3M MSA files locally using `colabfold_search` and place them in th
 
 ```bash
 # Back up before recovery
-cp Boltz-2_Run_*/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv backup.csv
+cp Boltz-2_Run_*/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv backup.csv
 # Resume - the pipeline re-scores only the missing jobs
-python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 </details>
 
@@ -600,22 +584,22 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 ### 📖 Script catalogue
 
 <details>
-<summary><b>00_00_run_pipeline_FAcDs.sh - Pipeline Runner</b></summary>
+<summary><b>00_00_run_pipeline_DeFluorX.sh - Pipeline Runner</b></summary>
 
-**Purpose:** Orchestrates the complete FAcDs workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
+**Purpose:** Orchestrates the complete DeFluorX workflow from environment checks through production, validation figures, dendrogram, structure preparation, top-candidate extraction, and MD/QM/MM analysis.
 
 **Usage:**
 ```bash
-bash 00_00_run_pipeline_FAcDs.sh
+bash 00_00_run_pipeline_DeFluorX.sh
 ```
 
 The runner prompts for the run mode (Fresh/Resume) and then for foreground or background execution. Background detaches the run so the terminal can be closed; monitor it with `tail -f <log>` and stop it with `kill -- -<PID>` (both commands are printed on launch).
 
-**Outputs:** Timestamped run directory, per-step logs, and the timing summary printed at completion.
+**Outputs:** Timestamped run directory, per-step logs, and per-step timings in `00_Phase_Timings.csv`.
 </details>
 
 <details>
-<summary><b>00_01_Project_Config_FAcDs.py - Central Configuration</b></summary>
+<summary><b>00_01_Project_Config_DeFluorX.py - Central Configuration</b></summary>
 
 **Purpose:** Single-source-of-truth `@dataclass` holding every numerical parameter, threshold, weight, and constant used across the entire pipeline. Editing this file propagates changes to all downstream scripts - no code modification required elsewhere.
 
@@ -680,7 +664,7 @@ slightly different green in another, which a reader is entitled to read as two d
 **Usage:**
 ```python
 from importlib.util import spec_from_file_location, module_from_spec
-spec = spec_from_file_location("cfg", "00_01_Project_Config_FAcDs.py")
+spec = spec_from_file_location("cfg", "00_01_Project_Config_DeFluorX.py")
 mod  = module_from_spec(spec); spec.loader.exec_module(mod)
 cfg  = mod.CFG()
 print(cfg.NAC_DIST_STRICT)    # 3.2 Å
@@ -688,7 +672,7 @@ print(cfg.TIER_MECH_MIN)      # dict: per-tier minimum mechanistic score
 ```
 
 **Frequently Tuned Parameters:**
-To change any parameter, edit only `00_01_Project_Config_FAcDs.py`. Examples of frequently tuned attributes:
+To change any parameter, edit only `00_01_Project_Config_DeFluorX.py`. Examples of frequently tuned attributes:
 ```python
 # ── Tier thresholds (§8) - relax or tighten the scoring tiers (dicts keyed by tier)
 TIER_NUC_DIST  = {"Tier_1A": 3.0, ...}   # Å, Nuc–C upper bound per tier
@@ -777,30 +761,30 @@ VIS_RAY_TRACE: bool = True   # PyMOL ray tracing (high quality, slower)
 </details>
 
 <details>
-<summary><b>00_02_Project_Utils_FAcDs.py - Shared Utilities</b></summary>
+<summary><b>00_02_Project_Utils_DeFluorX.py - Shared Utilities</b></summary>
 
 **Purpose:** Central utility module for console formatting, logging helpers, geometry calculations, and reusable plotting helpers imported by downstream pipeline scripts.
 
 **Usage:** Loaded by numbered pipeline scripts through `importlib.util.spec_from_file_location`, because the filename begins with digits.
 
-**Typical downstream consumers:** `01_Merge_FAcDs.py`, `02_Production_FAcDs.py`, `03_Validation_Figures_FAcDs.py`, `04_Dendrogram_FAcDs.py`, `05_TopN_and_PDB_Preparation_FAcDs.py`, `06_Physics_Validation_FAcDs.py`, and `07_MD_QMMM_Defluorination_FAcDs.py`.
+**Typical downstream consumers:** `01_Merge_DeFluorX.py`, `02_Production_DeFluorX.py`, `03_Validation_Figures_DeFluorX.py`, `04_Dendrogram_DeFluorX.py`, `05_TopN_and_PDB_Preparation_DeFluorX.py`, `06_Physics_Validation_DeFluorX.py`, and `07_MD_QMMM_Defluorination_DeFluorX.py`.
 </details>
 
 <details>
-<summary><b>00_03_Environment_FAcDs.py - Environment Setup</b></summary>
+<summary><b>00_03_Environment_DeFluorX.py - Environment Setup</b></summary>
 
 **Purpose:** Verifies all pipeline dependencies are installed and optionally exports the current environment for archiving or sharing.
 
 **Usage:**
 ```bash
 # Check environment only
-python 00_03_Environment_FAcDs.py
+python 00_03_Environment_DeFluorX.py
 
 # Export current environment to PFAS.yml and requirements.txt (overwrite)
-python 00_03_Environment_FAcDs.py --export
+python 00_03_Environment_DeFluorX.py --export
 ```
 
-The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, so `PFAS.yml` and `requirements.txt` are always refreshed to the current host versions (export timestamp in each file's header).
+The pipeline runner (`00_00_run_pipeline_DeFluorX.sh`) calls `--export` every run, so `PFAS.yml` and `requirements.txt` are always refreshed to the current host versions (export timestamp in each file's header).
 
 **Arguments:**
 
@@ -817,13 +801,13 @@ The pipeline runner (`00_00_run_pipeline_FAcDs.sh`) calls `--export` every run, 
 </details>
 
 <details>
-<summary><b>01_Merge_FAcDs.py - Sequence Deduplication & QC</b></summary>
+<summary><b>01_Merge_DeFluorX.py - Sequence Deduplication & QC</b></summary>
 
 **Purpose:** Merges a curated seed FASTA (`A_*.fasta`) with a broader BLAST/UniProt/NCBI database set (`B_*.fasta`), removes duplicates, flags ambiguous residues, and generates a length/identity QC figure.
 
 **Usage:**
 ```bash
-python 01_Merge_FAcDs.py \
+python 01_Merge_DeFluorX.py \
     --master    A_Labelled_15-Seq.fasta \
     --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
     --output    C_INP_Merged_for_Boltz-2.fasta
@@ -844,7 +828,7 @@ python 01_Merge_FAcDs.py \
 </details>
 
 <details>
-<summary><b>02_Production_FAcDs.py - Core Production Engine</b></summary>
+<summary><b>02_Production_DeFluorX.py - Core Production Engine</b></summary>
 
 **Purpose:** The central pipeline engine. For every protein in the merged FASTA × every PFAS ligand in the SMI panel:
 1. Generates ColabFold MSA via cloud API (or uses cached A3M files)
@@ -857,10 +841,10 @@ python 01_Merge_FAcDs.py \
 **Usage:**
 ```bash
 # New run - auto-creates a timestamped run directory
-python 02_Production_FAcDs.py --fasta C_INP_Merged_for_Boltz-2.fasta --smi D_INP_PFAS-27_Ligands.smi
+python 02_Production_DeFluorX.py --fasta C_INP_Merged_for_Boltz-2.fasta --smi D_INP_PFAS-27_Ligands.smi
 
 # Resume from checkpoint after interruption
-python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 **Arguments:**
@@ -930,7 +914,7 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 > and a Tier_1A hit with Boltz confidence < `TIER_ELITE_CONF_MIN` (0.85) is demoted one notch.
 > The tier gate is **size-agnostic** - `ligand_max_extent` is reported but never excludes a tier.
 > All threshold values are defined once in
-> [`00_01_Project_Config_FAcDs.py`](./00_01_Project_Config_FAcDs.py) §8–§9
+> [`00_01_Project_Config_DeFluorX.py`](./00_01_Project_Config_DeFluorX.py) §8–§9
 > (`TIER_NUC_DIST`, `TIER_ANGLE_MIN`, `TIER_NB_MAX`, `TIER_BA_MAX`, `TIER_MECH_MIN`,
 > `TIER_CONSTELLATION_MIN`, `TIER_ELITE_CONF_MIN`).
 >
@@ -938,14 +922,14 @@ python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
 </details>
 
 <details>
-<summary><b>03_Validation_Figures_FAcDs.py - Publication-Quality QC Figures</b></summary>
+<summary><b>03_Validation_Figures_DeFluorX.py - Publication-Quality QC Figures</b></summary>
 
 **Purpose:** Generates a comprehensive figure suite for manuscript-quality validation of the prediction run.
 
 **Usage:**
 ```bash
-python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 03_Validation_Figures_FAcDs.py Boltz-2_Run_20260309T085406Z --no-variance   # skip the CIF re-parse
+python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z --no-variance   # skip the CIF re-parse
 ```
 
 > **`--no-variance`.** The two inter-model uncertainty panels need a per-model variance table, built by
@@ -981,7 +965,7 @@ a logistic resolves. This changes no gate - the tier and `MD_Selected` key on ge
 </details>
 
 <details>
-<summary><b>04_Dendrogram_FAcDs.py - Interactive Sequence-Similarity Dendrogram</b></summary>
+<summary><b>04_Dendrogram_DeFluorX.py - Interactive Sequence-Similarity Dendrogram</b></summary>
 
 **Purpose:** Constructs an alignment-free **K-mer (k=3) cosine UPGMA dendrogram** from the merged FASTA and overlays tier-classification colours on each leaf, giving a similarity map of where FAcD-competent candidates cluster.
 
@@ -989,7 +973,7 @@ a logistic resolves. This changes no gate - the tier and `MD_Selected` key on ge
 
 **Usage:**
 ```bash
-python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 04_Dendrogram_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 **Output:** `03_<Tier>_Interactive_App.html` (one self-contained app per tree) - fully interactive D3.js tree viewable in any browser, featuring:
@@ -1002,14 +986,14 @@ python 04_Dendrogram_FAcDs.py Boltz-2_Run_20260309T085406Z
 </details>
 
 <details>
-<summary><b>05_TopN_and_PDB_Preparation_FAcDs.py - Structure Preparation, Top-N Extraction & 3D Figures</b></summary>
+<summary><b>05_TopN_and_PDB_Preparation_DeFluorX.py - Structure Preparation, Top-N Extraction & 3D Figures</b></summary>
 
 **Purpose:** One script covering the whole hand-off from Boltz-2 to the physics stage - it (a) converts the MD-selected mmCIF outputs to PDB, runs Schrödinger PrepWizard, and assigns QM ligand charges, then (b) extracts the top-N candidates from the ranked CSV by tier/score/quota and renders per-candidate 3D interaction figures.
 
 **Usage:**
 ```bash
-python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
-python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z --esp   # force QM ligand charges (ON by default)
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z --esp   # force QM ligand charges (ON by default)
 ```
 
 Interactive mode prompts tier selection if multiple tiers contain viable candidates; auto-selects the highest available tier after a 30-second timeout.
@@ -1091,13 +1075,13 @@ from every supported visualisation engine.
 </details>
 
 <details>
-<summary><b>06_Physics_Validation_FAcDs.py - ESP Physics: WaterMap · System Builder · MD · SID · Prime MM-GBSA</b></summary>
+<summary><b>06_Physics_Validation_DeFluorX.py - ESP Physics: WaterMap · System Builder · MD · SID · Prime MM-GBSA</b></summary>
 
 **Purpose:** Runs the entire ESP-charged explicit-solvent physics for the MD-selected candidates in one script - no manual Maestro steps. It imports the Step-05 handover, merges the ligand ESP charges into the complex, runs **WaterMap** hydration and **System Builder** solvation phase by phase, then runs **Desmond MD** pipelined GPU→CPU: each rank's MD runs on the GPU and, the moment it lands and its files settle, that rank's **extraction → SID → Prime MM-GBSA → defluorination** is queued to a single CPU worker while the GPU immediately starts the next rank's MD. The worker drains one rank at a time, so exactly one Prime batch touches the scratch disk at once (no contention) while the GPU never idles. The optional sudo password (systemd-oomd masking) is prompted **at the start**, so the run is fully unattended thereafter.
 
 **Usage:**
 ```bash
-python 06_Physics_Validation_FAcDs.py Boltz-2_Run_20260309T085406Z   # --test for a fast WaterMap 2 ns / MD 5 ns pass
+python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z   # --test for a fast WaterMap 2 ns / MD 5 ns pass
 ```
 
 **Pipeline (phased):**
@@ -1120,18 +1104,18 @@ Crash prevention (`systemd-oomd` masking) and heartbeat logging wrap the whole r
 </details>
 
 <details>
-<summary><b>07_MD_QMMM_Defluorination_FAcDs.py - MD Trajectory & QM/MM Analyzer</b></summary>
+<summary><b>07_MD_QMMM_Defluorination_DeFluorX.py - MD Trajectory & QM/MM Analyzer</b></summary>
 
 **Purpose:** The final-stage analysis engine for thermodynamic validation, QM/MM input preparation, and automated QSite execution for top FAcD candidates.
 
 **Usage:**
 ```bash
-python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 **Pipeline stages:**
 
-*   **Upstream physics (Step 06, automated):** [`06_Physics_Validation_FAcDs.py`](./06_Physics_Validation_FAcDs.py) has already run WaterMap, System Builder, Desmond MD and SID + Prime MM-GBSA on the ESP-charged complexes. Step 07 consumes those MD trajectories (`05_MD_Simulations/`) and WaterMap CSVs (`03_WaterMaps/`) - nothing here is a manual Maestro step.
+*   **Upstream physics (Step 06, automated):** [`06_Physics_Validation_DeFluorX.py`](./06_Physics_Validation_DeFluorX.py) has already run WaterMap, System Builder, Desmond MD and SID + Prime MM-GBSA on the ESP-charged complexes. Step 07 consumes those MD trajectories (`05_MD_Simulations/`) and WaterMap CSVs (`03_WaterMaps/`) - nothing here is a manual Maestro step.
 
 ---
 
@@ -1230,7 +1214,7 @@ the result far more than the water model does.
     3.  **WaterMap thermodynamic integration** - reads the hydration-site reports to calculate ΔG-weighted water blockade scores on the SN2 reaction runway. **Every frame is superimposed (Kabsch, on Cα) onto the structure the WaterMap sites were computed in before a single site distance is taken, and the sites are carried across with the protein.** This is not optional: the protein diffuses and tumbles through the periodic box - measured on this project's own trajectory, the Cα centroid moves 30–45 Å over 1 µs while the fold stays rigid (2–3 Å RMSD once superimposed) - so comparing an MD coordinate against a static site coordinate compares two unrelated frames. Sites are read only from atoms carrying `r_watermap_deltaG`; a WaterMap *input* file (which contains the protein, not the sites) is rejected rather than being read as thousands of zero-ΔG "sites". If the sites cannot be aligned, WaterMap scoring is disabled for that rank rather than reported wrongly.
     4.  **Conformation frame scoring** - ranks all frames using a multi-parameter scoring function to locate the ideal conformation.
     5.  **PBC-corrected frame extraction** - the chosen frame is snapped into the CMS model, then `make_whole_cms` + `center_cms` repair periodic-boundary wrapping (reconnect split molecules and re-centre the box on the protein+ligand) before the full system is written to `<Rank>/Ideal_Final.maegz`. This removes the "protein at the box edge / water box on one side" artefact produced by writing a raw wrapped frame.
-    6.  **QSite input generation** - a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The scan runs the non-diffuse `QSITE_SCAN_BASIS` (6-31G**) for SCF stability - a diffuse basis on a large QM region drives near-linear-dependence and aborts scan points - and emits `mulken=1`, without which Jaguar writes **no charge table at all** and the departing-fluoride charge cannot be parsed. Residues with no Cβ (glycine) and prolines (whose Cα–Cβ cut would sever the pyrrolidine ring) are dropped from the QM region rather than aborting the job. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His277, Acid Asp134, StabH His155 sidechains + ligand - these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3 - verified directly against a real QM/MM input: Jaguar aborts with `ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts: DFT(b3lyp-d3)`. **This is a declared limitation, not an oversight:** the substrate is polyfluorinated and the C–F···π contacts against the Trp/Tyr cradle are dispersion-bound, so the barrier is computed without them; dispersion would require abandoning the frozen-cut QM region altogether. No implicit-solvation keyword is emitted - the extracted frame is trimmed to an explicit-solvent DROPLET in the MM region - water and counter-ions beyond 15 Å of the ligand are deleted, the surface is frozen and the shell inside it restrained, so the QM/MM runs in a finite cluster with a vacuum boundary (outer dielectric = 1), not in a periodic box, so adding implicit solvation would double-count.
+    6.  **QSite input generation** - a genuine Jaguar/QSite `.in` is written (`MAEFILE` + `&gen`/`&qmregion`/`&zvar`/`&coord`) defining a B3LYP QM/MM relaxed coordinate scan of the Nu_O···C_lig distance. The scan runs the non-diffuse `QSITE_SCAN_BASIS` (6-31G**) for SCF stability - a diffuse basis on a large QM region drives near-linear-dependence and aborts scan points - and emits `mulken=1`, without which Jaguar writes **no charge table at all** and the departing-fluoride charge cannot be parsed. Residues with no Cβ (glycine) and prolines (whose Cα–Cβ cut would sever the pyrrolidine ring) are dropped from the QM region rather than aborting the job. The QM region is the **full catalytic triad + fluoride stabiliser** (Nuc Asp110, Base His280, Acid Asp134, StabH His155 + fluoride-cradle Trp156/Tyr219 sidechains + ligand - these are the FAcD reference numbering; the actual residues are resolved per homolog via the alignment mapping, not hardcoded) so the general acid/base proton-transfer relay is treated quantum-mechanically. B3LYP is used because QSite frozen-orbital QM/MM cuts (required for residue-selective QM regions) reject meta-GGA hybrids such as M06-2X and dispersion-corrected variants such as B3LYP-D3 - verified directly against a real QM/MM input: Jaguar aborts with `ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts: DFT(b3lyp-d3)`. **This is a declared limitation, not an oversight:** the substrate is polyfluorinated and the C–F···π contacts against the Trp/Tyr cradle are dispersion-bound, so the barrier is computed without them; dispersion would require abandoning the frozen-cut QM region altogether. No implicit-solvation keyword is emitted - the extracted frame is trimmed to an explicit-solvent DROPLET in the MM region - water and counter-ions beyond 15 Å of the ligand are deleted, the surface is frozen and the shell inside it restrained, so the QM/MM runs in a finite cluster with a vacuum boundary (outer dielectric = 1), not in a periodic box, so adding implicit solvation would double-count.
     7.  **Automated QSite execution** - unless disabled, `$SCHRODINGER/qsite` is launched on each generated input, with all output written to a per-frame folder `<Rank>/QSite_SN2/Frame_<rank>[_Best]_<traj>/` (one QM/MM scan per sampled frame, best pre-organised first; the Jaguar `.in`/`.out` take the frame-folder name). Execution is **idempotent**: if a frame's folder already exists that scan is skipped (mirroring the PDB-preparation cache), so re-runs do not resubmit completed jobs. A live scan-point heartbeat reports progress.
     8.  **QM/MM defluorination figures** - once a scan finishes, the relaxed-scan energies are parsed into the SN2 reaction profile: a per-rank figure (`07_QSite_Reaction_Profile.png`) of three linked panels - the activation energetics (potential-energy surface with the reactant well, transition state and product along the reaction coordinate), the departing-fluoride Mulliken charge (→ ≈ −0.9 as F leaves), and a plain-language cleaved/intact verdict card. **This is enforced, not merely displayed:** the `Is_Defluorinating` verdict requires the product fluoride to reach `QSITE_F_CHARGE_CLEAVED` (≤ −0.5 e), so a scan with a low barrier and downhill ΔE_rxn but no fluoride release is *not* called defluorination-competent - the C–F bond must actually break. Alongside it, `08_QSite_Ensemble_Profiles.png` overlays all sampled frames with the rate-weighted ensemble ΔE‡ and its min/mean/σ spread, each `QSite_SN2/Frame_N/` gets its own `01_Reaction_Profile.png`, and `09_QSite_Scan_Data.csv` persists the full per-point scan (PES + departing-F charge) with per-frame/per-rank summaries and QM-region provenance. The per-rank data feeds the cross-rank `05_Defluorination_Landscape.png` and the `08_QSite_Profiles_AllJobs.png` comparison (every job's best-frame PES overlaid + a defluorination ranking by ensemble ΔE‡). **A scan that resolves no transition state (monotonically downhill from the first point) reports its barrier as NaN, never as 0.0** - a fabricated zero would read as 'barrierless', the strongest possible claim, from a scan that simply failed.
     9.  **WaterMap hydration scoring** - the Step-06 WaterMap sites (per-site ΔG, read from `03_WaterMaps/watermap_R_N.csv` + `*_wm.maegz`) are folded into each frame's NAC score as a ΔG-weighted water-blockade term on the SN2 runway (`CFG.SCORE_WATERMAP_WEIGHT`). There is no separate WaterMap figure - the hydration penalty lives inside the per-frame geometry table the dashboards are drawn from.
@@ -1274,19 +1258,19 @@ As the final computational analysis step, the following design architectures are
 *   **Concurrency Control (`--workers`):** The frame/SN2 trajectory analysis runs concurrently across ranks in a thread pool (`ThreadPoolExecutor`), capped by default at **`os.cpu_count() − 2`**. The QM/MM (QSite/Jaguar) launches run **concurrently**, one core each: the QSite engine is single-threaded in practice (a job pins exactly one core no matter what `-PARALLEL` is given), so raising the per-job core count buys nothing and the only real parallelism is running several scans at once. The admitted job count is therefore set by `_qsite_concurrency()` from the CPU cap (`os.cpu_count() − PREP_CPU_RESERVE`) **and** the memory budget - `CFG.QSITE_RAM_PER_JOB_GB` against free RAM plus the swap fraction `CFG.QSITE_RAM_SWAP_FRAC`, so the scans use the machine fully without driving it into the OOM killer. In practice the number of scans is the binding constraint, not the budget: occupancy is `ranks × CFG.QSITE_N_FRAMES`. A live per-rank frame counter (`Processing: Rank_N: k/total frames`) prints as each trajectory streams (in place with `\r` for a single rank, throttled appended lines when several run in parallel). Override the analysis concurrency with `--workers` (use `--workers 1` for one rank at a time and clean single-line progress):
     ```bash
     # Run sequentially (rank-by-rank), clean in-place progress
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --workers 1
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --workers 1
     ```
 
 *   **QSite execution control (`--no-run-qsite`, `--qsite-procs`):** By default (`CFG.QSITE_RUN = True`) the engine launches QSite automatically after writing each input. QM/MM relaxed scans are expensive, so two CLI overrides are provided:
     ```bash
     # Generate the QSite .in/.mae inputs only - do not launch QSite
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --no-run-qsite
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --no-run-qsite
 
     # Cores handed to each QSite job (qsite -PARALLEL; default CFG.QSITE_PROCS = 1)
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --qsite-procs 2
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --qsite-procs 2
     ```
     `QSITE_PROCS` defaults to **1** because the engine does not thread: a scan given 10 cores still runs on one. Throughput comes from concurrency (above), so leave this at 1 unless a specific job is known to benefit. Because launches are idempotent (skip if a frame's `QSite_SN2/Frame_<rank>[_Best]_<traj>/` folder exists), an interrupted pipeline can be re-run safely - only frames without an output folder are submitted.
-*   **Automatic `systemd-oomd` masking:** The pipeline wrapper script masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 06 and 07 to prevent termination by the system daemon, and unmasks it on completion. Step 07 masks it itself when run standalone, and records that it did so in a sentinel file (`~/.cache/facds_step07_oomd_masked`). The restore is therefore **crash-proof**: it runs from the signal handler and at exit, and if the process is killed outright the *next* 07 run sees the sentinel and unmasks on startup, so a hard kill cannot leave the machine permanently without its OOM daemon.
+*   **Automatic `systemd-oomd` masking:** The pipeline wrapper script masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 06 and 07 to prevent termination by the system daemon, and unmasks it on completion. Step 07 masks it itself when run standalone, and records that it did so in a sentinel file (`~/.cache/defluorx_step07_oomd_masked`). The restore is therefore **crash-proof**: it runs from the signal handler and at exit, and if the process is killed outright the *next* 07 run sees the sentinel and unmasks on startup, so a hard kill cannot leave the machine permanently without its OOM daemon.
 
 **Configuration (CFG §7, §9, §10):** Smart-Lock biases (§7), WaterMap radii + frame scoring weights + Desmond MD parameters (§9), QSite region/level-of-theory definitions and execution policy (`QSITE_RUN`, `QSITE_PROCS`, `QSITE_N_FRAMES`, and the concurrency budget `QSITE_RAM_PER_JOB_GB` / `QSITE_RAM_HEADROOM_FRAC` / `QSITE_RAM_SWAP_FRAC`) (§10).
 
@@ -1329,7 +1313,7 @@ As the final computational analysis step, the following design architectures are
 conda env create -f PFAS.yml
 
 # Export current environment for archiving
-python 00_03_Environment_FAcDs.py --export
+python 00_03_Environment_DeFluorX.py --export
 # ↳ writes PFAS.yml + requirements.txt with current exact versions
 ```
 
@@ -1407,16 +1391,16 @@ The pipeline runs on any Linux system with CUDA. For institutional clusters (Slu
 #SBATCH --output=logs/pfas27_%j.out
 #SBATCH --error=logs/pfas27_%j.err
 
-module load cuda/12.x anaconda3
+module load cuda/13.x anaconda3
 conda activate PFAS
 
 export SCHRODINGER=/opt/schrodinger   # adjust to cluster path
 
 # New run
-python 02_Production_FAcDs.py
+python 02_Production_DeFluorX.py
 
 # Or resume after pre-emption
-# python 02_Production_FAcDs.py --resume Boltz-2_Run_20260309T085406Z
+# python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 For step 07 (Desmond MD), GPU offloading handles the PME and non-bonded calculations. Request the same GPU partition; 32 CPUs are recommended for the CPU-side NAC trajectory analysis loop.
@@ -1433,11 +1417,11 @@ For step 07 (Desmond MD), GPU offloading handles the PME and non-bonded calculat
 #SBATCH --time=48:00:00
 #SBATCH --output=logs/pfas27_md_%j.out
 
-module load cuda/12.x anaconda3
+module load cuda/13.x anaconda3
 conda activate PFAS
 export SCHRODINGER=/opt/schrodinger
 
-python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 > Steps 01, 03–05 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism. Steps 06 (Prime MM-GBSA) and 07 (Desmond MD + QM/MM) require the Schrödinger Suite and GPU.
@@ -1452,7 +1436,7 @@ python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
 These are deliberate scope decisions, stated so that they are not mistaken for oversights.
 
 **The screen models a monomeric active site.** Every Boltz-2 prediction is one protein chain plus one
-ligand (`02_Production_FAcDs.py`, YAML builder), so the whole downstream chain - pocket containment,
+ligand (`02_Production_DeFluorX.py`, YAML builder), so the whole downstream chain - pocket containment,
 Prime MM-GBSA, the Desmond trajectory and the QM/MM droplet - measures a monomer. Fluoroacetate
 dehalogenase is a physiological **homodimer**, and the dimer is not merely a packing artefact: FAcD
 displays **half-of-sites reactivity**, in which the two protomers are non-equivalent and only one binds
@@ -1483,10 +1467,10 @@ If this pipeline is used in your research, please cite:
 ```bibtex
 @software{ahmad2026pfas27,
   author       = {Ahmad, Shaban and Nielsen, Tue Kjærgaard},
-  title        = {{FAcDs PFAS-27: Fluoroacetate Dehalogenase Defluorination Pipeline}},
+  title        = {{DeFluorX: Fluoroacetate Dehalogenase Defluorination Pipeline}},
   year         = {2026},
   publisher    = {GitHub},
-  howpublished = {\url{https://github.com/KU-MGB/FAcDs_PFAS-27_Defluorination}}
+  howpublished = {\url{https://github.com/KU-MGB/DeFluorX}}
 }
 ```
 
@@ -2005,6 +1989,6 @@ University of Copenhagen, Denmark
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
-<sub>Last updated: 25 July 2026</sub>
+<sub>Last updated: 29 July 2026</sub>
 
 </div>

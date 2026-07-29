@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 00  |  Environment Management
+DeFluorX Pipeline  |  Step 00  |  Environment Management
 ===============================================================================
 Exports the active Conda environment to 'PFAS.yml' and 'requirements.txt'
 for reproducibility. Provides an automated installation routine to
@@ -12,13 +12,13 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 00_03_Environment_FAcDs.py
+  Script        : 00_03_Environment_DeFluorX.py
   Role          : Infrastructure - environment export and sync.
   Imports from  : None (standalone sys/os/subprocess).
   Reads         : Active conda environment.
   Writes        : PFAS.yml, requirements.txt.
   Upstream      : None.
-  Downstream    : 00_00_run_pipeline_FAcDs.sh (Step 00).
+  Downstream    : 00_00_run_pipeline_DeFluorX.sh (Step 00).
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -106,7 +106,7 @@ def export_environment():
         header = (
             f"# PFAS Conda Environment\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_03_Environment_FAcDs.py {_mode}\n"
+            f"# Script   : 00_03_Environment_DeFluorX.py {_mode}\n"
             f"#\n"
         )
         with open(_yml_path, "w") as f:
@@ -125,7 +125,7 @@ def export_environment():
         header = (
             f"# PFAS pip Requirements\n"
             f"# Exported : {timestamp}\n"
-            f"# Script   : 00_03_Environment_FAcDs.py {_mode}\n"
+            f"# Script   : 00_03_Environment_DeFluorX.py {_mode}\n"
             f"#\n"
         )
         # Filter the obsolete `dataclasses` backport (stdlib since Python 3.7).
@@ -246,7 +246,7 @@ def verify_environment() -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Environment Manager for the PFAS Pipeline"
+        description="Environment Manager for the DeFluorX Pipeline"
     )
     parser.add_argument(
         "--export",  action="store_true",
@@ -266,8 +266,8 @@ def main():
     _now = _time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  {ConsoleColours.MAGENTA}{ConsoleColours.BOLD}▶  00_03_Environment_FAcDs.py"
-        f"{ConsoleColours.ENDC}  │  FAcDs Pipeline",
+        f"  {ConsoleColours.MAGENTA}{ConsoleColours.BOLD}▶  00_03_Environment_DeFluorX.py"
+        f"{ConsoleColours.ENDC}  │  DeFluorX Pipeline",
         flush=True,
     )
     print("  Conda Environment Export & Installation Manager", flush=True)
@@ -275,7 +275,7 @@ def main():
     print(f"{SEPARATOR_HEAVY}\n", flush=True)
 
     try:
-        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_FAcDs.py")
+        _spec = _ilu.spec_from_file_location("utils", Path(__file__).parent / "00_02_Project_Utils_DeFluorX.py")
         _u = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_u)
         for _code in ("OKGREEN", "WARNING", "FAIL", "OKBLUE", "MAGENTA", "BOLD", "ENDC"):
             assert getattr(ConsoleColours, _code) == getattr(_u.ConsoleColours, _code), \
@@ -305,7 +305,7 @@ if __name__ == "__main__":
             f"{_s}s")
     print(f"\n{SEPARATOR_HEAVY}", flush=True)
     print(
-        f"  {ConsoleColours.OKGREEN}✔  00_03_Environment_FAcDs.py  -  Pipeline Phase Complete"
+        f"  {ConsoleColours.OKGREEN}✔  00_03_Environment_DeFluorX.py  -  Pipeline Phase Complete"
         f"  │  Total Elapsed: {_fmt}{ConsoleColours.ENDC}",
         flush=True,
     )

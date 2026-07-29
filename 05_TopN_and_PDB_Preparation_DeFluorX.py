@@ -2,7 +2,7 @@
 
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 05  |  Top-N Selection + PDB Generation & Preparation
+DeFluorX Pipeline  |  Step 05  |  Top-N Selection + PDB Generation & Preparation
 ===============================================================================
 Two phases on the MD-ready cohort only (MD_Selected column from Step 02, §18):
   Phase 1 - CIF → PDB conversion (Gemmi) + Schrödinger PrepWizard preparation.
@@ -15,15 +15,15 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 05_TopN_and_PDB_Preparation_FAcDs.py
+  Script        : 05_TopN_and_PDB_Preparation_DeFluorX.py
   Role          : "Builder + Selector" - gates on the MD-ready cohort (MD_Selected),
                   converts CIF outputs to analysis-ready PDB, prepares them with
                   PrepWizard, then extracts and renders that cohort for handover.
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG - pH values, MD-selection §18)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, setup_logging,
+  Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - pH values, MD-selection §18)
+                  00_02_Project_Utils_DeFluorX.py   (ConsoleColours, setup_logging,
                                             console helpers, Ramachandran helpers)
   Reads         : <Run>/2_Best_Complexes_CIFs/*.cif
-                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv  (MD_Selected)
+                  <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv  (MD_Selected)
                   <Run>/1_Boltz2_Production/1_Input_Data/*
   Writes        : <Run>/5_TopN_and_Preparation/  (one consolidated folder)
                     1_Converted_Raw_PDB/   (raw PDBs + Figures/)
@@ -31,10 +31,10 @@ Date   : 30 July 2026 <───────────────────
                     3_Comparative_Analysis/ (Ramachandran, Controls, handover, combined CSV)
                     4_Ligand_ESP_Charges/  (<stem>_ESP.mae + 00_ESP_Charges_Summary.csv; gated on --esp)
                     00_TopN_and_Preparation.log  (single log for both phases)
-  Upstream      : 02_Production_FAcDs.py  → writes Best_Complexes_CIFs and ranked CSV
-  Downstream    : 06_Physics_Validation_FAcDs.py       → reads the MD-selected handover (R{N}_*.pdb
+  Upstream      : 02_Production_DeFluorX.py  → writes Best_Complexes_CIFs and ranked CSV
+  Downstream    : 06_Physics_Validation_DeFluorX.py       → reads the MD-selected handover (R{N}_*.pdb
                                                           + *_ESP.mae) → WaterMap · System Builder · MD · SID · MM-GBSA
-                  07_MD_QMMM_Defluorination_FAcDs.py   → reads the MD/WaterMap outputs for QM/MM defluorination
+                  07_MD_QMMM_Defluorination_DeFluorX.py   → reads the MD/WaterMap outputs for QM/MM defluorination
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -50,7 +50,7 @@ Date   : 30 July 2026 <───────────────────
 
 Usage:
     conda activate PFAS
-    python 05_TopN_and_PDB_Preparation_FAcDs.py Boltz-2_Run_20260309T085406Z
+    python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
 
 ── Key features ───────────────────────────────────────────────────────────────
   • Smart Validation: SOURCE_CIF tag in PDB header detects stale files from
@@ -59,7 +59,7 @@ Usage:
   • Gemmi Conversion: robust CIF → PDB; moves non-protein residues to Chain L.
   • Smart Ligand Management: metals (Zn, Mg) and modified residues (MSE) stay
     with the protein chain to preserve topology for Maestro.
-  • PrepWizard: fills side chains, PropKa pH 8.0, Epik pH 8.0, 0.3 Å RMSD
+  • PrepWizard: fills side chains, PropKa pH 8.0, Epik pH 8.0, 0.15 Å RMSD
     restrained minimisation, disulfide detection.
   • MD-ready gate: both phases process only the MD_Selected cohort (CFG §18) plus
     the control jobs (ID 0000000_*), so the whole predicted library is never
@@ -170,8 +170,8 @@ def _load_module(name: str, path: Path):
     return mod
 
 _REPO_DIR   = Path(__file__).resolve().parent
-_cfg_mod    = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
-_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod    = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_DeFluorX.py")
+_utils_mod  = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_DeFluorX.py")
 
 CFG             = _cfg_mod.CFG()
 ConsoleColours     = _utils_mod.ConsoleColours
@@ -290,7 +290,7 @@ def collect_best_cifs(best_cifs_dir: Path) -> list:
 
 def load_rank_map(prod_dir: Path) -> dict:
     """Loads the master CSV to annotate PDB headers with a score/rank.
-    Prefers the FAcDs Ranked CSV (6_Boltz2_FAcDs_Ranked_*), then any ranked CSV,
+    Prefers the DeFluorX Ranked CSV (6_Boltz2_DeFluorX_Ranked_*), then any ranked CSV,
     then falls back to any master CSV.
     Uses Scientific_Rank if present, otherwise Boltz_Model_Confidence (rounded to 4dp).
     """
@@ -369,7 +369,7 @@ def update_pdb_header(pdb_path: Path, job_name: str, rank: str, source_cif: str)
 
         header_block = [
             f"HEADER    {job_name[:40].ljust(40)}",
-            f"TITLE     Scientific Rank: {rank} | FAcD Pipeline",
+            f"TITLE     Scientific Rank: {rank} | DeFluorX Pipeline",
             f"REMARK 999 SOURCE_CIF: {source_cif}"
         ]
 
@@ -447,7 +447,7 @@ def run_prepwizard(raw_pdb: Path, final_dest: Path):
     - Fills missing side chains with Prime
     - PropKa protonation at pH 8.0 (FAcD physiological context)
     - Epik protonation of PFAS ligands at pH 8.0
-    - Restrained minimisation (0.3 Å RMSD) to resolve clashes
+    - Restrained minimisation (0.15 Å RMSD) to resolve clashes
     - Runs inline via -NOJOBID (no Schrödinger job-server dependency)
     - Uses /tmp for work dir - nothing written to the output folder
     """
@@ -2235,7 +2235,7 @@ def _parse_plip_xml(xml_path, lig, pro):
             _ANGLE_REJECTS[itype] = _ANGLE_REJECTS.get(itype, 0) + 1
             return
         la, _  = _closest_lig_atom(ligcoo_3d)
-        # C–F bonds are leaving groups in FAcDs SN2; exclude F from H-bond / halogen contacts
+        # C–F bonds are leaving groups in FAcD SN2; exclude F from H-bond / halogen contacts
         if la["elem"] == "F" and itype in ("hbond", "halogen"):
             return
         is_hbond  = itype == "hbond"
@@ -3240,7 +3240,7 @@ def prep_and_convert_phase(args):
                 if jn in _md_jobs or (jn.startswith(CFG.CONTROL_JOB_PREFIX) and _is_reference_control(jn))]
 
     _utils_mod.print_script_banner(
-        "05_TopN_and_PDB_Preparation_FAcDs.py",
+        "05_TopN_and_PDB_Preparation_DeFluorX.py",
         "PDB Conversion & Preparation  ·  Top-N Selection & Delivery  ·  Figure Generation",
     )
     console_info(f"  Run Name : {args.run_folder_name}")
@@ -3621,7 +3621,7 @@ def topn_extraction_phase(args):
     # -------------------------------------------------------------------------------
     # Step 5.4: Load ranking logic
     # -------------------------------------------------------------------------------
-    # Primary: FAcDs Ranked CSV written by 02_Production_FAcDs.py
+    # Primary: DeFluorX Ranked CSV written by 02_Production_DeFluorX.py
     rank_csvs = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                  sorted(prod_dir.glob("*_Ranked_*.csv")))
     if not rank_csvs:
@@ -3829,7 +3829,7 @@ def topn_extraction_phase(args):
 
             console_info(f"  -> Controls: {ctrl_extracted_raw} raw, {ctrl_extracted_prep} prepared structures saved.")
         else:
-            console_info("  Note: No control jobs found in the CSV (FAcDs_Control / 3R3U_Control).")
+            console_info("  Note: No control jobs found in the CSV (DeHa4_Control / 3R3U_Control).")
         console_separator()
 
         # -------------------------------------------------------------------------------
@@ -4131,7 +4131,7 @@ def main():
     _ESP_REQUESTED = bool(args.esp)
     prep_and_convert_phase(args)
     topn_extraction_phase(args)
-    _utils_mod.print_elapsed(_t0, "05_TopN_and_PDB_Preparation_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "05_TopN_and_PDB_Preparation_DeFluorX.py")
 
 
 if __name__ == "__main__":

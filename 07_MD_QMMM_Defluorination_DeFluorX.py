@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-FAcDs Pipeline  |  Step 07  |  MD + QM/MM Defluorination Engine
+DeFluorX Pipeline  |  Step 07  |  MD + QM/MM Defluorination Engine
 ===============================================================================
 
 Terminal computational step: turns the Desmond MD trajectories into a concrete,
@@ -26,18 +26,18 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 30 July 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 07_MD_QMMM_Defluorination_FAcDs.py
+  Script        : 07_MD_QMMM_Defluorination_DeFluorX.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
-  Imports from  : 00_01_Project_Config_FAcDs.py  (CFG - all thresholds + tier metadata)
-                  00_02_Project_Utils_FAcDs.py   (ConsoleColours, geometric utilities)
+  Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - all thresholds + tier metadata)
+                  00_02_Project_Utils_DeFluorX.py   (ConsoleColours, geometric utilities)
   Reads         : <Run>/6_Physics_Validation/05_MD_Simulations/desmond_md_job_R_N/*-out.cms
                                                                /*_trj/   (dir carrying the _R_N rank token; *Rank_N* also matched)
                                                                /*.eaf
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N.csv  (Step-06 WaterMap export)
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
-                  <Run>/1_Boltz2_Production/6_Boltz2_FAcDs_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/5_Boltz2_FAcDs_Master_*.csv
+                  <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N/
                     - NAC_Data.csv                 (per-frame geometry + DT)
                     - MD_Stats.json                (per-rank statistics cache; drives the resume path)
@@ -69,11 +69,11 @@ Date   : 30 July 2026 <───────────────────
                     (the same two reactive-pose figures, merged across candidates)
                   <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.png
                     (every job's best-frame QM/MM PES overlaid + defluorination ranking by ensemble ΔE‡)
-  Upstream      : 06_Physics_Validation_FAcDs.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
+  Upstream      : 06_Physics_Validation_DeFluorX.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
                                                     produces the MD trajectories, WaterMap CSVs,
                                                     *_SID-out.eaf + Prime MM-GBSA summary consumed here
-                  05_TopN_and_PDB_Preparation_FAcDs.py → provides ranked structures & IDs
-                  02_Production_FAcDs.py         → master CSV with alignment maps
+                  05_TopN_and_PDB_Preparation_DeFluorX.py → provides ranked structures & IDs
+                  02_Production_DeFluorX.py         → master CSV with alignment maps
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
 
   Run behaviour : Resume by default. A rank whose per-frame table (NAC_Data.csv), statistics
@@ -115,9 +115,9 @@ Date   : 30 July 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
-    python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
+    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
 
 Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
@@ -135,7 +135,7 @@ Arguments:
                       Default: 280  (FAcD canonical His280, 3R3U numbering)
     --acid   RESNUM   Fallback catalytic acid residue number.
                       Default: 134  (FAcD canonical Asp134)
-    --csv    PATH     Path to 02_Production_FAcDs.py master CSV for triad mapping and
+    --csv    PATH     Path to 02_Production_DeFluorX.py master CSV for triad mapping and
                       alignment map. Auto-detected from sibling Boltz-2_Run_*
                       directories if omitted.
 
@@ -143,7 +143,7 @@ Arguments:
   1. Performance striding: configurable frame-sampling interval.
   2. 8-Residue Dream Team tracking: per-frame distances for all catalytic
      machinery (Nuc, Clamp1, Clamp2, Acid, StabH, StabW, StabY, Base),
-     mapped from 02_Production_FAcDs.py master CSV alignment map.
+     mapped from 02_Production_DeFluorX.py master CSV alignment map.
   3. WaterMap CSV integration: Maestro-exported thermodynamic statistics
      (dG, dH, -TdS, occupancy, H-bond counts) added to master CSV.
   4. WaterMap spatial scoring: per-frame dG-weighted water blockade using
@@ -238,8 +238,8 @@ import os
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 # Both forms are equivalent:
-#   python 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 07_MD_QMMM_Defluorination_FAcDs.py Boltz-2_Run_20260309T085406Z
+#   python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+#   $SCHRODINGER/run 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -343,8 +343,8 @@ def _load_module(name: str, path: Path):
 
 
 _REPO_DIR  = Path(__file__).resolve().parent
-_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_FAcDs.py")
-_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_FAcDs.py")
+_cfg_mod   = _load_module("ProjectConfig", _REPO_DIR / "00_01_Project_Config_DeFluorX.py")
+_utils_mod = _load_module("ProjectUtils",  _REPO_DIR / "00_02_Project_Utils_DeFluorX.py")
 CFG        = _cfg_mod.CFG()
 
 # The 3R3U × FA positive control gets one distinct label + colour across every 07 figure, so it
@@ -395,7 +395,7 @@ PLOT_LOCK = threading.Lock()
 # =============================================================================
 # SECTION 1: GLOBAL CONSTANTS & CONFIGURATION
 # =============================================================================
-# All thresholds sourced from 00_01_Project_Config_FAcDs.py (CFG).
+# All thresholds sourced from 00_01_Project_Config_DeFluorX.py (CFG).
 # Fallback literals are numerically identical - activate only when CFG is
 # unavailable (e.g., standalone testing outside the repository).
 
@@ -696,10 +696,10 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     if not best_nuc_key or actual_dist > CFG.SMART_LOCK_NUC_MAX_DIST:
         # ── Oδ Orientation Fallback ────────────────────────────────────────────
         # Primary geometry search exhausted.  Delegate to shared utility
-        # find_nucleophile_od_fallback() (00_02_Project_Utils_FAcDs.py).
+        # find_nucleophile_od_fallback() (00_02_Project_Utils_DeFluorX.py).
         # The function accepts plain NumPy arrays only; extract positions here
         # before calling so CMS atom-group objects never enter the utility.
-        # Threshold aligns with CFG.NAC_ANGLE_RELAXED (BRAIN.md §7).
+        # Threshold aligns with CFG.NAC_ANGLE_RELAXED.
         c_idx, f_idx = cf_pairs[0]
         # frame.pos() indexes by gid; convert the atom-ids first (see calculate_min_distance).
         c_pos_np   = np.array(frame_0.pos(topo.aids2gids(cms_model, [c_idx])[0]), dtype=float)
@@ -2715,7 +2715,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
                           nuc_num, stab_f_num, lig_c_idx, nuc_o_idx,
                           base_num=None, acid_num=None,
                           lig_charge: int = None, lig_resname: str = "LIG",
-                          cradle_nums=None) -> Path:
+                          cradle_nums=None, wm_sites=None, wm_maegz=None) -> Path:
     """
     Write a valid QSite/Jaguar QM/MM relaxed-scan .in for the SN2
     dehalogenation reaction coordinate (Nu_O···C_lig distance scan).
@@ -2731,7 +2731,9 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     QM region = LIG substrate + Asp110 (Nuc) + His280 (Base) + Asp134 (Acid)
     + His155 (StabH) sidechains + the fluoride-cradle aromatic/H-bond donors
     (TRP/TYR/HIS, `cradle_nums`) + up to `_QM_WATER_MAX` coordinating waters
-    within `_QM_WATER_RADIUS` of the reaction centre. Excluding Base/Acid from QM
+    within `_QM_WATER_RADIUS` of the reaction centre, chosen WaterMap-first (waters
+    on structural, F-stabilising WaterMap sites are preferred over the merely
+    nearest when `wm_sites` is supplied). Excluding Base/Acid from QM
     would push the proton-transfer half of the mechanism onto the MM force field;
     excluding the cradle donors / first-shell waters would leave the F⁻ leaving
     group under-stabilised and bias the QM/MM barrier upward.
@@ -2890,7 +2892,17 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         _sidechain_formal_charge(molid, chain, rn, cut_pairs)
         for rn, molid, chain, cut_pairs in _resolved_cuts
     )
-    qm_charge = int(round(lig_charge + _sidechain_charge))
+    # Frozen-orbital QM/MM charge convention. molchg for a QSite frozen-orbital run is NOT the bare
+    # formal charge of the QM atoms: each Cα–Cβ boundary bond is replaced by a doubly-occupied frozen
+    # localised orbital that keeps the bond's electron pair in the QM region while the Cα nucleus stays
+    # MM, so every cut shifts the QM electron count by −1. The correct molchg is therefore
+    #   (ligand + side-chain formal charges) − (number of frozen-orbital cuts).
+    # QSite's frozen-orbital driver re-derives the QM charge as (formal sum − n_frozen_cuts). Writing
+    # that value here matches what QSite actually uses, so it does not override molchg and the self-check
+    # (`_qsite_scan_failure_reason`) accepts the barrier; writing the bare formal sum instead lets QSite
+    # override to (sum − cuts) and the check then rejects an otherwise-correct barrier.
+    _n_frozen_cuts = sum(len(cut_pairs) for _rn, _mol, _ch, cut_pairs in _resolved_cuts)
+    qm_charge = int(round(lig_charge + _sidechain_charge)) - _n_frozen_cuts
 
     # ── &qmregion QM/MM cut table ──────────────────────────────────────────
     # One row per boundary bond: Cα–Cβ for a standard sidechain, two rows for a glycine
@@ -2916,15 +2928,52 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
             if a.pdbres.strip() == lig_resname and (a.element or "").strip() == "F":
                 _centres.append(np.array(a.xyz))
         _water_res = {r.strip().upper() for r in CFG.SOLVENT_RESTYPES}
+        # WaterMap-guided selection. Among the first-shell candidate waters (those within
+        # _QM_WATER_RADIUS of the reaction centre) prefer the ones that sit on a thermodynamically
+        # STRUCTURAL WaterMap site (dG < 0: a tightly bound, F-stabilising water), not merely the
+        # geometrically nearest. A candidate whose O lands within QSITE_WM_WATER_MATCH_A of a WaterMap
+        # site gets its effective distance discounted by QSITE_WM_WATER_WEIGHT * max(0, -dG), so a
+        # stable site pulls that water forward in the ranking. With no WaterMap data the bonus is 0 and
+        # this is exactly the previous nearest-first geometry selection.
+        # The WaterMap sites live in the WaterMap reference frame; this droplet `st` is the selected
+        # MD frame, so the sites are first superimposed onto it (Cα-Kabsch, the same rigid transform
+        # the frame scorer uses) before any distance is measured - two unrelated coordinate frames make
+        # every site match noise. Any failure (no maegz, <3 shared Cα, or a poor fold fit above
+        # MD_FOLD_RMSD_MAX) drops the WaterMap bias and the selection reverts to nearest-first geometry.
+        _wm_arr = np.empty((0, 3)); _wm_dg = np.empty((0,))
+        if wm_sites and wm_maegz:
+            try:
+                _wm_ref = load_watermap_reference_ca(wm_maegz)   # {resnum: Cα xyz} in the WaterMap frame
+                _ref_xyz, _frm_xyz = [], []
+                for _a in st.atom:
+                    if _a.pdbname.strip() == "CA" and int(_a.resnum) in _wm_ref:
+                        _ref_xyz.append(_wm_ref[int(_a.resnum)]); _frm_xyz.append(_a.xyz)
+                if len(_ref_xyz) >= 3:
+                    _wmR, _wmT, _wmRmsd = kabsch_transform(np.asarray(_ref_xyz, dtype=float),
+                                                           np.asarray(_frm_xyz, dtype=float))
+                    if _wmRmsd <= float(getattr(CFG, "MD_FOLD_RMSD_MAX", 3.0)):
+                        _wm_arr = np.asarray([s['pos'] for s in wm_sites], dtype=float) @ _wmR.T + _wmT
+                        _wm_dg  = np.asarray([s['dG'] for s in wm_sites], dtype=float)
+            except Exception:
+                _wm_arr = np.empty((0, 3)); _wm_dg = np.empty((0,))
+        _wm_match = float(getattr(CFG, "QSITE_WM_WATER_MATCH_A", 1.5))
+        _wm_w     = float(getattr(CFG, "QSITE_WM_WATER_WEIGHT", 1.0))
         if _centres:
             _cen_arr = np.asarray(_centres)
             _cand = []
             for a in st.atom:
                 if (a.element or "").strip() == "O" and a.pdbres.strip().upper() in _water_res:
-                    _d = float(np.min(np.linalg.norm(_cen_arr - np.array(a.xyz), axis=1)))
+                    _wp = np.array(a.xyz)
+                    _d = float(np.min(np.linalg.norm(_cen_arr - _wp, axis=1)))
                     if _d <= _QM_WATER_RADIUS:
-                        _cand.append((_d, a.molecule_number))
-            for _d, _mol in sorted(_cand):
+                        _bonus = 0.0
+                        if _wm_arr.shape[0]:
+                            _wd = np.linalg.norm(_wm_arr - _wp, axis=1)
+                            _j = int(np.argmin(_wd))
+                            if _wd[_j] <= _wm_match:
+                                _bonus = _wm_w * max(0.0, -float(_wm_dg[_j]))
+                        _cand.append((_d - _bonus, _d, a.molecule_number))
+            for _prio, _d, _mol in sorted(_cand):
                 if _mol != lig_mol and _mol not in _qm_water_mols:
                     _qm_water_mols.append(_mol)
                 if len(_qm_water_mols) >= _QM_WATER_MAX:
@@ -2940,11 +2989,13 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     _start = CFG.QSITE_SCAN_START
     _end   = CFG.QSITE_SCAN_START + CFG.QSITE_SCAN_STEP * (CFG.QSITE_SCAN_NSTEPS - 1)
 
-    # SCF robustness for the QM/MM relaxed scan. The diffuse 6-31+G** basis on a large QM
-    # region causes near-linear-dependence ("small singular value") and DIIS blow-ups that
+    # SCF + geometry robustness for the QM/MM relaxed scan. The diffuse 6-31+G** basis on a large
+    # QM region causes near-linear-dependence ("small singular value") and DIIS blow-ups that
     # abort scan points (observed: ~half the points fatal). Use a non-diffuse basis for the
-    # scan geometry (diffuse adds little to a RELATIVE barrier), a level shift + raised
-    # iteration cap to force convergence, and nofail so one hard point can't kill the scan.
+    # scan geometry (diffuse adds little to a RELATIVE barrier), a level shift + raised SCF
+    # iteration cap to force SCF convergence, a GEOMETRY-step cap (maxitg) so a hard TS-region
+    # point whose constrained optimiser oscillates cannot spin forever, and nofail so one hard
+    # point is skipped rather than killing (or freezing) the whole scan.
     _scan_basis = CFG.QSITE_SCAN_BASIS.replace("(d,p)", "**").replace("(d)", "*")
     _gen = [
         f"basis={_scan_basis}",
@@ -2955,6 +3006,11 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         f"impversion={CFG.QSITE_IMPVERSION}",   # memory/architecture tier (CFG SSOT)
         f"vshift={CFG.QSITE_SCF_VSHIFT:g}",    # SCF level shift (stabilises convergence)
         f"maxit={int(CFG.QSITE_SCF_MAXIT)}",   # max SCF iterations
+        f"maxitg={int(CFG.QSITE_GEOM_MAXITG)}",# max GEOMETRY-opt steps per scan point (CFG SSOT): bounds
+                                               # the constrained optimiser so a hard TS-region point that
+                                               # oscillates cannot spin indefinitely - with nofail=1 the
+                                               # scan skips it instead of freezing (observed R8/F2: 234 SCF
+                                               # cycles, 0 points, energy oscillating, at Jaguar default)
         f"iacc={int(CFG.QSITE_SCF_IACC)}",     # SCF accuracy grid (1 = robust/fast)
         "nofail=1",                                            # a non-converged point is skipped, not fatal
         "mulken=1",                                            # print the Mulliken population analysis:
@@ -3141,6 +3197,17 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                          f"after {_elapsed / 60:.1f} min - check {_log_path.name}.{ConsoleColours.ENDC}")
     except Exception:
         pass
+    # Immediately re-render the shared heartbeat so this just-finished scan shows its green ✔ (or red
+    # ✘) and the scan count stays complete, instead of appearing to drop out until another still-running
+    # scan's throttled (<=120 s) poll happens to repaint the line. Only while other scans are still live;
+    # once none are running the block-close below renders the final line.
+    with _PROGRESS_LOCK:
+        if _QSITE_BANNER[0] and any(_v[4] == "run" for _v in _QSITE_PROG.values()):
+            try:
+                sys.stdout.write(f"\r{_qsite_status_line(_QSITE_PROG)}\033[K")
+                sys.stdout.flush()
+            except Exception:
+                pass
     # Self-check: surface the common QSite failure where the QM-region charge /
     # electron count is inconsistent (Jaguar 'incorrect molecular charge', odd
     # electrons) and it silently skips every scan point → an empty/NaN barrier.
@@ -3205,24 +3272,24 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
                     f"skipped. Reduce CFG.QSITE_MAX_QM_RESIDUES or check molchg/protonation.")
 
         """
-        Charge-consistency check even when the SCF converges. QSite derives the QM
-        charge from the QM atoms' partial charges at the QM/MM boundary and can
-        override the `molchg` written in &gen (e.g. the intended −2 becomes a more
-        negative value when each Cα–Cβ cut leaks ~−1 of backbone charge into the QM
-        count). The SCF then runs on the wrong electron count and the barrier is
-        for the wrong charge state - an error that never raises. Compare the
-        `molchg` requested in the .in with the net charge Jaguar actually used and
-        warn on any mismatch so it is caught during the run, not after.
+        Charge-consistency check even when the SCF converges. The writer now sets molchg to the
+        frozen-orbital-correct value (formal charge − number of frozen-orbital cuts), which is exactly
+        what QSite's driver re-derives, so in the healthy case the requested and run charges MATCH and
+        nothing is reported. This check remains only to catch a GENUINE anomaly: if Jaguar's net charge
+        differs from what the writer put in &gen, the QM region / cut count is not what the writer
+        assumed (e.g. a mis-resolved residue, an unexpected charged QM water, or an electron-parity
+        problem) and the barrier would be for a charge state we did not intend. It is NOT tripped by the
+        ordinary −1-per-cut frozen-orbital shift, which the writer already accounts for.
         """
         _inp = next((p for p in ([qsite_dir / f"{qsite_dir.name}.in"] + sorted(qsite_dir.glob("*.in")))
                      if p.exists()), None)
         _mreq = re.search(r"molchg\s*=\s*(-?\d+)", _inp.read_text(errors="ignore")) if _inp else None
         _mrun = re.search(r"net molecular charge:\s*(-?\d+)", _t)
         if _mreq and _mrun and int(_mreq.group(1)) != int(_mrun.group(1)):
-            return (f"QM charge OVERRIDDEN - requested molchg={_mreq.group(1)} but Jaguar "
-                    f"ran net charge {_mrun.group(1)} (QM/MM boundary re-derivation). The "
-                    f"barrier is for the wrong charge state; verify QM-region protonation / "
-                    f"cut boundaries before trusting ΔE‡.")
+            return (f"QM charge INCONSISTENT - wrote molchg={_mreq.group(1)} (formal − frozen-orbital "
+                    f"cuts) but Jaguar ran net charge {_mrun.group(1)}. The QM region or cut count is "
+                    f"not as assumed (check residue resolution, QM waters, protonation); the barrier "
+                    f"is for an unintended charge state.")
     except Exception:
         return None
     return None
@@ -4017,7 +4084,7 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
                     "Scan_Start_A": _qm.get("scan_start", CFG.QSITE_SCAN_START),
                     "Scan_Step_A": _qm.get("scan_step", CFG.QSITE_SCAN_STEP),
                     "Scan_NSteps": _qm.get("scan_nsteps", CFG.QSITE_SCAN_NSTEPS),
-                    "QSite_Basis": getattr(CFG, "QSITE_SCAN_BASIS", ""), "QSite_Functional": "b3lyp",
+                    "QSite_Basis": getattr(CFG, "QSITE_SCAN_BASIS", ""), "QSite_Functional": getattr(CFG, "QSITE_FUNCTIONAL", "b3lyp"),
                 })
         _utils_mod.atomic_write_csv(pd.DataFrame(_rows), out_path)
         console_info(f"    QSite scan data saved        : {out_path.name} ({len(_rows)} rows)")
@@ -4109,7 +4176,7 @@ _QSITE_PROCS = CFG.QSITE_PROCS
 # actually available (ranks x QSITE_N_FRAMES).
 _FORCE_RECOMPUTE = False   # --force: recompute a rank even when its outputs exist
 # Records that THIS pipeline masked systemd-oomd, so a killed run is repaired on the next start.
-_OOMD_SENTINEL = Path.home() / ".cache" / "facds_step07_oomd_masked"
+_OOMD_SENTINEL = Path.home() / ".cache" / "defluorx_step07_oomd_masked"
 _OOMD_RESTORE = None       # set by _mask_oomd_at_start; also called from the signal handlers
 _QSITE_SEM = threading.Semaphore(1)   # reassigned in main() to the concurrency cap
 
@@ -4774,7 +4841,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     write_qsite_droplet(cms_model, _mae, lig_resname)
                     _inp = generate_qsite_inputs(_mae, job_name, _qm_nuc, _qm_stab, _lig_c, _nuc_o,
                                                  base_num=_qm_base, acid_num=_qm_acid,
-                                                 lig_resname=lig_resname, cradle_nums=_qm_cradle)
+                                                 lig_resname=lig_resname, cradle_nums=_qm_cradle,
+                                                 wm_sites=wm_sites, wm_maegz=wm_maegz)
                     if _k == 0:
                         console_qmm_ready(f"Best frame: {_f} | QSite input: {_inp.name}")
                     if _QSITE_RUN:
@@ -5200,7 +5268,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                         _p[_a2l[best_ca_idx]], _p[_wsub_li[0]],
                         _p[_wsub_li[1]], _p[_wsub_li[2]], box)
                     if abs(angle) < _WALDEN_IMPROPER_MAX:
-                        walden = 1.1; walden_flat = True
+                        walden = CFG.WALDEN_TS_FRAME_BONUS; walden_flat = True
                 except Exception:
                     pass
 
@@ -5587,7 +5655,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # ── Output: per-frame CSV with rolling EAF smoothing ──────────────────────
     df_res = pd.DataFrame(results)
     if 'EAF_MSA' in df_res.columns and df_res['EAF_MSA'].notna().any():
-        df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=50, min_periods=1).mean()
+        df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=int(CFG.MD_EAF_SMOOTH_WINDOW), min_periods=1).mean()
     _utils_mod.atomic_write_csv(df_res, job_out_dir / "NAC_Data.csv")
 
     """
@@ -5666,7 +5734,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 _mae, job_name, _qm_nuc, _qm_stab,
                 _geom['lig_c'], _geom['nuc_o'],
                 base_num=_qm_base, acid_num=_qm_acid, lig_resname=lig_resname,
-                cradle_nums=_qm_cradle)
+                cradle_nums=_qm_cradle, wm_sites=wm_sites, wm_maegz=wm_maegz)
             for _a in (_mae, _inp):
                 if not _a.exists() or _a.stat().st_size == 0:
                     console_info(f"    [!] QSite input missing/empty for {job_name}: {_a.name}")
@@ -5858,7 +5926,7 @@ def main():
 
 
     _utils_mod.print_script_banner(
-        "07_MD_QMMM_Defluorination_FAcDs.py",
+        "07_MD_QMMM_Defluorination_DeFluorX.py",
         "MD Thermodynamics  ·  QM/MM Frame Extraction  ·  NAC Validation",
     )
     console_info(f"Run Directory    : {work_dir.parent}")
@@ -5870,7 +5938,7 @@ def main():
     console_info(f"Frame Stride     : {args.stride} (requested){' - all frames' if args.stride == 1 else f' - 1-in-{args.stride} sampled'}")
     console_separator()
 
-    # ── Ranked CSV (6_Boltz2_FAcDs_Ranked_*.csv or any *_Ranked*.csv) ──────────
+    # ── Ranked CSV (6_Boltz2_DeFluorX_Ranked_*.csv or any *_Ranked*.csv) ──────────
     prod_dir     = work_dir.parent / "1_Boltz2_Production"
     ranked_csvs  = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                     sorted(prod_dir.glob("*_Ranked*.csv")))
@@ -6060,9 +6128,9 @@ def main():
                 _all_results.append((_rank_num, _rank_log, _rank_res))
                 _completed_count += 1
                 if sys.stdout.isatty():
-                    print(f"\r  [FAcDs Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed...", end="", flush=True)
+                    print(f"\r  [DeFluorX Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed...", end="", flush=True)
                 else:
-                    print(f"  [FAcDs Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed.", flush=True)
+                    print(f"  [DeFluorX Pipeline] Progress: {_completed_count}/{len(_rank_list)} ranks completed.", flush=True)
             except Exception as _exc:
                 _r = _futures[_fut]
                 _failed_ranks.append(_r)
@@ -6276,4 +6344,4 @@ def main():
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "07_MD_QMMM_Defluorination_FAcDs.py")
+    _utils_mod.print_elapsed(_t0, "07_MD_QMMM_Defluorination_DeFluorX.py")

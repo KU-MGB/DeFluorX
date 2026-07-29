@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# FAcDs Pipeline Runner
+# DeFluorX Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 # Date   : 30 July 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
-#   bash 00_00_run_pipeline_FAcDs.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
+#   bash 00_00_run_pipeline_DeFluorX.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
 #
 # Usage (interactive - default):
-#   bash 00_00_run_pipeline_FAcDs.sh
+#   bash 00_00_run_pipeline_DeFluorX.sh
 #   → prompted: Fresh or Resume?  (+ optional sudo password - press Enter to skip)
 #   → runs fully unattended thereafter
 #
@@ -67,7 +67,7 @@ RUN_ID=""
 # Exit code a step may return to mean "completed, but a complementary part was
 # deferred/failed" (e.g. 06 when MM-GBSA is skipped or a Prime job fails). The
 # runner renders this as WARN and continues rather than a false PASS or a hard
-# abort. Keep in sync with EXIT_WARN in 06_Physics_Validation_FAcDs.py.
+# abort. Keep in sync with EXIT_WARN in 06_Physics_Validation_DeFluorX.py.
 readonly WARN_EXIT_CODE=3
 
 # Terminal colours for the interactive prelude (mode/sudo prompts). Only emitted
@@ -156,7 +156,7 @@ else
 
     echo ""
     echo "  ══════════════════════════════════════════════════════════════════════════════"
-    echo "  FAcDs Pipeline - Run Mode Selection"
+    echo "  DeFluorX Pipeline - Run Mode Selection"
     echo "  ══════════════════════════════════════════════════════════════════════════════"
     echo ""
 
@@ -296,8 +296,8 @@ fi
 # long unattended runs); press Enter to skip and run in NORMAL mode (no sudo).
 #
 # Scripts/operations that use sudo (only when enabled):
-#   06_Physics_Validation_FAcDs.py      → systemctl stop / mask systemd-oomd
-#   07_MD_QMMM_Defluorination_FAcDs.py  → systemctl mask / unmask / start systemd-oomd
+#   06_Physics_Validation_DeFluorX.py      → systemctl stop / mask systemd-oomd
+#   07_MD_QMMM_Defluorination_DeFluorX.py  → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
 _SUDO_PROMPT="  ${_C_RED}${_C_BOLD}Sudo is used only by: 06 and 07 scripts, enter the password to continue (hit Enter for default without OOMD mask):${_C_RESET} "
@@ -341,10 +341,10 @@ echo ""
 
 # ── Log directory setup ───────────────────────────────────────────────────────
 if [[ "$_PIPELINE_MODE" == "resume" ]]; then
-    LOG_DIR="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
+    LOG_DIR="${SCRIPT_DIR}/${RUN_ID}/0_DeFluorX_Pipeline_Logs"
 else
     # Fresh: staging directory until Step 02 creates the real run directory
-    LOG_DIR="${SCRIPT_DIR}/0_FAcDs_Pipeline_Staging_Logs"
+    LOG_DIR="${SCRIPT_DIR}/0_DeFluorX_Pipeline_Staging_Logs"
 fi
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/00_Pipeline_$(date +%Y%m%d_%H%M%S).log"
@@ -622,7 +622,7 @@ trap '_cancel_schrodinger_jobs; exit 130' INT TERM HUP
 # ── Header ────────────────────────────────────────────────────────────────────
 
 _tee "$_sep"
-_tee "  FAcDs Pipeline Run"
+_tee "  DeFluorX Pipeline Run"
 _tee "  Started : $(date '+%Y-%m-%d %H:%M:%S')"
 _tee "  Env     : ${CONDA_DEFAULT_ENV:-unknown}"
 _tee "  Python  : $(python --version 2>&1)"
@@ -644,7 +644,7 @@ echo ""
 
 # Verify the environment is complete.
 run_step "00a  Environment check" \
-    python 00_03_Environment_FAcDs.py
+    python 00_03_Environment_DeFluorX.py
 
 # Refresh the canonical root PFAS.yml + requirements.txt every run (current host versions,
 # export timestamp in the header) so they are always present and up to date.
@@ -652,11 +652,11 @@ run_step "00a  Environment check" \
 # existing PFAS.yml / requirements.txt, so it neither re-runs 00_03 nor dirties git.
 if [[ "${_PIPELINE_MODE}" == "fresh" || ! -f PFAS.yml || ! -f requirements.txt ]]; then
     run_step --optional "00b  Environment export" \
-        python 00_03_Environment_FAcDs.py --export
+        python 00_03_Environment_DeFluorX.py --export
 fi
 
 run_step "01  Merge sequences" \
-    python 01_Merge_FAcDs.py \
+    python 01_Merge_DeFluorX.py \
         --master    A_Labelled_15-Seq.fasta \
         --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
         --output    "${_FRESH_FASTA}"
@@ -664,10 +664,10 @@ run_step "01  Merge sequences" \
 # ── Step 02: Production (Boltz-2 co-folding) ──────────────────────────────────
 if [[ "$_PIPELINE_MODE" == "resume" ]]; then
     run_step "02  Production (Boltz-2 scoring - resume)" \
-        python 02_Production_FAcDs.py --resume "$RUN_ID"
+        python 02_Production_DeFluorX.py --resume "$RUN_ID"
 else
     run_step "02  Production (Boltz-2 scoring - fresh)" \
-        python 02_Production_FAcDs.py \
+        python 02_Production_DeFluorX.py \
             --fasta "${_FRESH_FASTA}" \
             --smi   "${_FRESH_SMI}"
 
@@ -687,7 +687,7 @@ else
     _tee "  Fresh run directory: ${RUN_ID}"
 
     # Move / copy the staging log into the real run directory
-    _real_log_dir="${SCRIPT_DIR}/${RUN_ID}/0_FAcDs_Pipeline_Logs"
+    _real_log_dir="${SCRIPT_DIR}/${RUN_ID}/0_DeFluorX_Pipeline_Logs"
     mkdir -p "$_real_log_dir"
     _STAGING_SYNC_DEST="${_real_log_dir}/$(basename "$LOG_FILE")"
     # The EXIT trap (registered above) already calls _sync_staging_log on exit - do
@@ -700,10 +700,10 @@ fi
 # ── Steps 03–07: downstream analysis (all modes use RUN_ID) ──────────────────
 
 run_step "03  Validation figures" \
-    python 03_Validation_Figures_FAcDs.py "$RUN_ID"
+    python 03_Validation_Figures_DeFluorX.py "$RUN_ID"
 
 run_step "04  Dendrogram" \
-    python 04_Dendrogram_FAcDs.py "$RUN_ID"
+    python 04_Dendrogram_DeFluorX.py "$RUN_ID"
 
 # Ensure the local job server is up before the Schrödinger steps (05 PrepWizard/Jaguar ESP,
 # 06 WaterMap/build/MD/MM-GBSA, 07 QSite).
@@ -712,7 +712,7 @@ if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
 fi
 
 run_step "05  Top-N selection + CIF/PDB generation & preparation (MD-ready cohort)" \
-    python 05_TopN_and_PDB_Preparation_FAcDs.py "$RUN_ID"
+    python 05_TopN_and_PDB_Preparation_DeFluorX.py "$RUN_ID"
 
 # Mask systemd-oomd before Steps 06 (SID) and 07 (MD), the OOM-prone phase.
 # The SID script is called with --pipeline-mode so it does NOT unmask on exit,
@@ -728,10 +728,10 @@ if [[ $DRY_RUN -eq 0 && 7 -ge $RESUME_FROM ]]; then
 fi
 
 run_step "06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)" \
-    python 06_Physics_Validation_FAcDs.py "$RUN_ID" --pipeline-mode
+    python 06_Physics_Validation_DeFluorX.py "$RUN_ID" --pipeline-mode
 
 run_step "07  MD thermodynamics + QM/MM engine" \
-    python 07_MD_QMMM_Defluorination_FAcDs.py "$RUN_ID"
+    python 07_MD_QMMM_Defluorination_DeFluorX.py "$RUN_ID"
 
 # Restore systemd-oomd after both Steps 06 and 07 have completed (only if masked).
 if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then
