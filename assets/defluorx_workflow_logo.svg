@@ -64,7 +64,7 @@
   </g>
   <text x="480" y="410" font-size="20" font-weight="700" fill="#2b6f9e" text-anchor="middle">2 · Screen &amp; Tier</text>
   <text x="480" y="431" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">competence-floor tiers · SN2 geometry</text>
-  <text x="480" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Pareto fronts · 69 validation panels · phylogeny</text>
+  <text x="480" y="448" font-size="12.5" font-weight="500" fill="#5a6b67" text-anchor="middle">Pareto fronts · publication figure suite · phylogeny</text>
 
   <!-- ============ PHASE 3 - SIMULATE ============ -->
   <g filter="url(#ds)">
@@ -104,5 +104,5 @@
   <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,050 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
 
   <!-- ===== footer: the engineering weight behind it ===== -->
-  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   ~42,400 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
+  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   42,441 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
 </svg>
