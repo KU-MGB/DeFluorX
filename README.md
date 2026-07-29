@@ -1,19 +1,12 @@
 <div align="center">
 
-<img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
-
 # DeFluorX
 
-*Structure-guided discovery and physics validation of FAcD variants for PFAS defluorination*
+**Structure-guided discovery and physics-based mechanistic validation of fluoroacetate dehalogenase (FAcD) variants against 27 PFAS compounds**
 
-**Structure-based mechanistic validation of Fluoroacetate Dehalogenases against 27 PFAS compounds**
 *AI structure prediction · thermodynamic MD · QM/MM frame extraction - fully automated*
 
-<p align="center">
-  <img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-22C55E?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Python-3.10-22C55E?style=for-the-badge&logo=python&logoColor=white">
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20CUDA-22C55E?style=for-the-badge&logo=linux&logoColor=white">
-</p>
+<img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
 </div>
 
