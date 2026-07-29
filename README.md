@@ -1,8 +1,8 @@
 <div align="center">
 
-# DeFluorX
+# DeFluorX: Discovering FAcD Variants for PFAS Defluorination
 
-**AI-guided structure-based discovery and physics-guided mechanistic validation of FAcD variants for PFAS defluorination**
+**AI-guided Structure-based Discovery & Physics-based Mechanistic Validation of FAcD Variants for PFAS Defluorination**
 
 <img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
