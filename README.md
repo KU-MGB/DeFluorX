@@ -618,41 +618,11 @@ The runner prompts for the run mode (Fresh/Resume) and then for foreground or ba
 | §16 - Data Registry & Aesthetics | Master CSV column name constants (`COL_*`), tier marker sizes/alphas, alignment grade definitions |
 | §17 - Prime MM-GBSA | End-state binding free-energy parameters (Step 06) |
 
-**Missing is not zero (§16, §9).** The pipeline's most dangerous failure mode is not a crash - it is a
-measurement that could not be taken quietly becoming an *optimal* value. `0.0` is the **best** case for an
-inverted metric (a nucleophile distance, an active-site RMSD, a steric occlusion, a bond-dissociation
-energy), so it can never stand in for "unknown". Three defences are in place, and they are the reason the
-scoring can be trusted:
-
-- **`INVERTED_METRIC_COLUMNS`** - the 15 columns where smaller is better. A missing value in any of them is
-  written as `SENTINEL_UNDEFINED` (999.0), which every gate and every figure already filters out. A missing
-  `Dist_Nucleophile` filled with `0.0` would describe a nucleophile sitting *on top of* the carbon and would
-  clear every distance gate in the pipeline.
-- **`sigmoid()` saturates by the sign of `k`**, not by the sign of `(x − x0)`. Two of the soft-threshold
-  steepnesses are negative (`SOFT_K_NUC`, `SOFT_K_TRIAD`) because they must *fall* with distance; an
-  overflow branch that assumed a positive `k` returned **1.0 - a perfect score - for a nucleophile 999 Å
-  away**.
-- **`chem_verified`** - a complex whose scissile centre could not be resolved is **barred from Tier_1A**.
-  Its chemical penalties were *skipped*, not *passed*, and the elite tier is the claim that a candidate
-  deserves a week of GPU time. It keeps the rank its geometry earned and is flagged, so it is neither
-  silently at the top nor silently at the bottom.
-
-**Column registry (§16) - enforced, not merely defined.** The master-CSV column names live in CFG
-(`COL_TIER`, `COL_PROT`, `COL_LIG`, `COL_CONF`, `COL_SN2`, `COL_MECH_S`, …) and the scripts reference
-them rather than repeating the string: a column rename is one edit, not a grep across ten thousand
-lines. `CONTROL_JOB_PREFIX` likewise replaces the magic `"0000000"` that identifies a control job.
-Deliberately **excluded** from the registry are `ptm` / `iptm` where they name keys in Boltz-2's *own*
-confidence JSON - that is an external schema this project does not own, and routing it through CFG
-would assert an ownership that does not exist.
-
-**Figure palette (§13) - every colour, no exceptions.** `VIS_INK` (neutrals, strokes, text), `VIS_ACCENT`
-(Okabe–Ito colour-blind-safe base + the MD star, twin-axis pair, pass/warn/fail), `VIS_BAND`
-(strong/moderate/weak zones), `VIS_RAMP`, `VIS_TINT`, `BOND_TYPE_COLOUR` and the ordered series
-palettes. Step 03 contains **zero** hard-coded hex literals, so a restyle is one edit in CFG rather
-than a hunt through the plotting code - and a band label cannot be one green in one figure and a
-slightly different green in another, which a reader is entitled to read as two different meanings.
-
-**Backward-compatibility aliases (§3 - π–π stacking):** `THRESHOLD_PI_FACE` ↔ `PI_STACK_FACE_DIST_MAX` and `THRESHOLD_PI_EDGE` ↔ `PI_STACK_EDGE_DIST_MAX` hold identical values. Both names are intentionally retained so that older analysis and figure code importing the `PI_STACK_*` names continues to resolve against the single source of truth; edit only the `THRESHOLD_PI_*` definitions and the aliases follow.
+**Design guarantees enforced here:**
+- **Missing is not zero (§16, §9).** Unmeasured inverted metrics (nucleophile distance, RMSD, occlusion, BDE) are written `SENTINEL_UNDEFINED` (999.0), never `0.0` - a `0.0` would read as *optimal* and clear every gate. `sigmoid()` saturates by the sign of `k` (negative `SOFT_K_NUC`/`SOFT_K_TRIAD` fall with distance); `chem_verified=False` bars a complex from Tier_1A rather than letting skipped penalties pass.
+- **Column registry (§16).** Master-CSV names (`COL_*`, `CONTROL_JOB_PREFIX`) live in CFG so a rename is one edit; Boltz-2's own `ptm`/`iptm` keys are deliberately excluded (external schema).
+- **Figure palette (§13).** Every colour (`VIS_INK`/`VIS_ACCENT`/`VIS_BAND`/`VIS_RAMP`/`VIS_TINT`/`BOND_TYPE_COLOUR`, Okabe–Ito base) is CFG-defined; Step 03 holds zero hard-coded hex, so a restyle is one edit.
+- **Backward-compat aliases (§3):** `THRESHOLD_PI_FACE/EDGE` ↔ `PI_STACK_FACE/EDGE_DIST_MAX` hold identical values; edit the `THRESHOLD_PI_*` definitions and the aliases follow.
 
 **Usage:**
 ```python
@@ -910,8 +880,6 @@ python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 > [`00_01_Project_Config_DeFluorX.py`](./00_01_Project_Config_DeFluorX.py) §8–§9
 > (`TIER_NUC_DIST`, `TIER_ANGLE_MIN`, `TIER_NB_MAX`, `TIER_BA_MAX`, `TIER_MECH_MIN`,
 > `TIER_CONSTELLATION_MIN`, `TIER_ELITE_CONF_MIN`).
->
-> Note: Tier_1A, Tier_1B, and Tier_2A tiers enforce strict multi-gate mechanistic checks (including internal catalytic triad distances and cradle residue mappings). In contrast, the Tier_2B tier acts as a relaxed geometrical filter (shortlist) designed to capture candidates with reasonable docking geometries that are subsequently subjected to verification during downstream molecular dynamics simulations.
 </details>
 
 <details>
