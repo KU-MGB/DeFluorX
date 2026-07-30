@@ -1853,7 +1853,7 @@ For external databases, crystallographic references, and software dependencies, 
 
 ## 📜 License
 
-See [`LICENSE`](./LICENSE) for the full text. For commercial licensing enquiries, contact: shaban.ucph@gmail.com · tkn@plen.ku.dk
+See [`LICENSE`](./LICENSE) for the full text. For commercial licensing enquiries, contact: shaban@plen.ku.dk · tkn@plen.ku.dk
 
 ---
 
@@ -1876,7 +1876,7 @@ University of Copenhagen, Denmark
 
 <p>
   <a href="https://shabanahmad.github.io/"><img src="https://img.shields.io/badge/🌐 Website-dca11d?style=flat-square"></a>
-  <a href="mailto:shaban.ucph@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
+  <a href="mailto:shaban@plen.ku.dk"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white"></a>
   <a href="https://orcid.org/0000-0001-9832-2830"><img src="https://img.shields.io/badge/ORCID-A6CE39?style=flat-square&logo=orcid&logoColor=white"></a>
 </p>
 
