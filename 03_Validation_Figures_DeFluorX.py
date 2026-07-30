@@ -117,6 +117,7 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 10_Criterion_A_Gates_B.png                   <-- active-site integrity gates the catalytic constellation
     • 11_Criterion_B_ECDF_by_Tier.png             <-- the constellation score separates the tiers (ECDF)
     • 12_SN2_DeadEnd_Gate.png                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
+    • 16_Mechanistic_Gate_UpSet.png               <-- mechanistic-gate UpSet: gate-combination intersections + tier mix + mean score/coverage
 
     ── 06_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
     • 01_Molecular_Interaction_Profile.png         <-- Bond-type profile + fluorine engagement
@@ -1527,6 +1528,7 @@ _FIG_MAPPING = {
         "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
         "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
         "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
+        "Figure_31_Mechanistic_Gate_UpSet.png": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.png",
         "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
         "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
         # ── 06_Ligand_Interactions_and_Chemical_Space ──
@@ -4698,6 +4700,116 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
     except Exception as e:
         reporter.log(f"  ! Two-criteria figure skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
+
+    # --- Figure 31: Mechanistic-gate UpSet - which gate-combinations candidates clear ---
+    # Stacked-by-tier intersection bars + mean-score/cumulative-coverage right axis + gate dot-matrix.
+    # Every gate threshold, colour, font and dimension is sourced from CFG (single source of truth).
+    _upset_gcols = ["head_is_carboxylate", "scissile_is_alpha", "carboxylate_clamp_integrity",
+                    CFG.COL_SN2, "scissile_cf_bde", "sn2_backside_occlusion", "active_site_integrity"]
+    _upset_qcol = "mechanistic_score_effective"
+    if all(c in df.columns for c in _upset_gcols + [CFG.COL_TIER, _upset_qcol]):
+        try:
+            from matplotlib.lines import Line2D
+            _uq = df[_upset_gcols + [CFG.COL_TIER, _upset_qcol]].copy()
+            for _c in _upset_gcols + [_upset_qcol]:
+                _uq[_c] = pd.to_numeric(_uq[_c], errors="coerce")
+            _gates = {
+                "COO⁻ head":     _uq["head_is_carboxylate"] >= 0.5,
+                "α-C attack":    _uq["scissile_is_alpha"] >= 0.5,
+                "Clamp":              _uq["carboxylate_clamp_integrity"] >= CFG.GATE_CLAMP_MIN,
+                "S$_N$2 ≥%d°" % int(CFG.TIER_ANGLE_MIN["Tier_2A"]): _uq[CFG.COL_SN2] >= CFG.TIER_ANGLE_MIN["Tier_2A"],
+                "BDE ≤%d" % int(CFG.SCISSILE_CF_BDE_MAX): _uq["scissile_cf_bde"] <= CFG.SCISSILE_CF_BDE_MAX,
+                "Backside clear":     _uq["sn2_backside_occlusion"] <= CFG.SN2_BACKSIDE_OCCL_MAX,
+                "Site intact":        _uq["active_site_integrity"] >= CFG.GATE_ACTIVE_SITE_MIN,
+            }
+            _uB = pd.DataFrame(_gates).fillna(False)
+            _uN = len(_uB)
+            _unames = sorted(_gates, key=lambda n: _uB[n].sum())   # smallest set at the top of the matrix
+            _uB = _uB[_unames]
+            _uq["_combo"] = _uB.apply(lambda r: tuple(bool(r[n]) for n in _unames), axis=1)
+            _ucounts = _uq["_combo"].value_counts()
+            _utop = _ucounts.head(CFG.UPSET_TOPN)
+            _uall = tuple([True] * len(_unames))                   # fully-competent combination
+            _utc = {k: _uq.loc[_uq._combo == k, CFG.COL_TIER].value_counts() for k in _utop.index}
+            _umean = np.array([float(_uq.loc[_uq._combo == k, _upset_qcol].mean()) for k in _utop.index])
+            _ucov = np.cumsum(_utop.values) / _uN * 100.0
+
+            _ufig = plt.figure(figsize=(12.5, 5.9))
+            _ugs = _ufig.add_gridspec(2, 1, height_ratios=[3.1, 2.0], hspace=0.0,
+                                      left=0.085, right=0.94, top=0.965, bottom=0.095)
+            _uax = _ufig.add_subplot(_ugs[0]); _umat = _ufig.add_subplot(_ugs[1], sharex=_uax)
+            _uxs = np.arange(len(_utop))
+            _uax.set_xlim(-0.65, len(_uxs) - 0.35)
+            _ubot = np.zeros(len(_utop))
+            for _t in CFG.TIER_ORDER:
+                _seg = np.array([int(_utc[k].get(_t, 0)) for k in _utop.index])
+                if _seg.sum() == 0:
+                    continue
+                _uax.bar(_uxs, _seg, bottom=_ubot, width=CFG.UPSET_BAR_WIDTH,
+                         color=TIER_PALETTE.get(_t, CFG.VIS_INK["faint"]),
+                         label=_t.replace("Tier_", "").replace("_Decoy", "-Dec"))
+                _ubot += _seg
+            for _x, _v in zip(_uxs, _utop.values):
+                _uax.text(_x, _v, f"{_v:,}", ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT)
+            _uax.set_ylabel("Candidates (stacked by tier)", color=CFG.VIS_ACCENT["axis_left"])
+            _uax.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_left"], color=CFG.VIS_ACCENT["axis_left"])
+            _uax.set_ylim(0, _utop.values.max() * CFG.UPSET_HEADROOM)
+            _uax.spines[["top", "right"]].set_visible(False); _uax.set_xticks([])
+            _uax.spines["left"].set_color(CFG.VIS_ACCENT["axis_left"])
+            _uax.set_axisbelow(True)
+            _uax.grid(True, axis="y", color=CFG.VIS_ACCENT["axis_left"], alpha=0.15, linewidth=0.6, zorder=0)
+
+            _ur = _uax.twinx()   # one right axis (0-100): mean score x100 + cumulative coverage
+            _ur.plot(_uxs, _umean * 100.0, color=CFG.VIS_ACCENT["axis_right"], lw=1.8, marker="o", ms=5,
+                     mec="white", mew=0.8, zorder=6)                             # solid + circle = mean score
+            _ur.plot(_uxs, _ucov, color=CFG.VIS_ACCENT["axis_right"], lw=1.6, ls="--", marker="s", ms=4, zorder=5)  # dashed + square = coverage
+            _ur.axhline(CFG.UPSET_COVERAGE_GUIDE, color=CFG.VIS_ACCENT["axis_right"], lw=0.7, ls=":", alpha=0.6, zorder=1)
+            _ur.set_ylabel("Mean score (×100) · coverage (%)", color=CFG.VIS_ACCENT["axis_right"])
+            _ur.tick_params(axis="y", labelcolor=CFG.VIS_ACCENT["axis_right"], color=CFG.VIS_ACCENT["axis_right"])
+            _ur.set_ylim(0, 100)
+            _ur.spines[["top", "left"]].set_visible(False)
+            _ur.spines["right"].set_color(CFG.VIS_ACCENT["axis_right"])
+            _ur.set_axisbelow(True)
+            _ur.grid(True, axis="y", color=CFG.VIS_ACCENT["axis_right"], alpha=0.15, linewidth=0.6, zorder=0)
+
+            _uh = _uax.get_legend_handles_labels()[0] + [
+                Line2D([0], [0], color=CFG.VIS_ACCENT["axis_right"], marker="o", ms=5, label="mean score"),
+                Line2D([0], [0], color=CFG.VIS_ACCENT["axis_right"], ls="--", marker="s", ms=4, label="cum. coverage")]
+            _ul = _uax.get_legend_handles_labels()[1] + ["mean score", "cum. coverage"]
+            _uax.legend(_uh, _ul, ncol=len(_ul), fontsize=CFG.VIS_FONT_LEGEND, loc="upper left",
+                        framealpha=CFG.VIS_LEGEND_FRAME_ALPHA, columnspacing=0.8, handlelength=1.2)
+
+            _uny = len(_unames)
+            _ugatecols = CFG.DEFLUOR_JOB_PALETTE   # distinct per-gate colour: row band + its label share it
+            for _p in range(_uny):
+                _umat.axhline(_p, color=_ugatecols[_p % len(_ugatecols)], alpha=0.22, lw=8, zorder=0)
+            for _xi, _k in enumerate(_utop.index):
+                _on = [_uny - 1 - _i for _i, _v in enumerate(_k) if _v]
+                _off = [_uny - 1 - _i for _i, _v in enumerate(_k) if not _v]
+                _dc = TIER_PALETTE["Tier_1A"] if _k == _uall else CFG.VIS_INK["dark"]
+                _umat.scatter([_xi] * len(_off), _off, s=CFG.UPSET_DOT_SIZE, color=CFG.VIS_INK["palest"], zorder=2)
+                _umat.scatter([_xi] * len(_on), _on, s=CFG.UPSET_DOT_SIZE, color=_dc, zorder=3)
+                if _on:
+                    _umat.plot([_xi, _xi], [min(_on), max(_on)], color=_dc, lw=1.9, zorder=2)
+            _umat.set_yticks(range(_uny))
+            _umat.set_yticklabels(_unames[::-1], fontsize=CFG.VIS_FONT_TICK)
+            for _tl, _p in zip(_umat.get_yticklabels(), range(_uny)):
+                _tl.set_color(_ugatecols[_p % len(_ugatecols)])
+            _umat.set_xticks(_uxs)
+            _umat.set_xticklabels(range(1, len(_uxs) + 1), fontsize=CFG.VIS_FONT_TICK_DENSE, color=CFG.VIS_INK["near_black"])
+            _umat.set_xlabel("Gate combination (ranked by candidate count)", color=CFG.VIS_INK["near_black"])
+            _umat.set_ylim(-0.5, _uny - 0.5)
+            for _s in _umat.spines.values():
+                _s.set_visible(False)
+            _umat.tick_params(length=0)
+
+            _ufig.savefig(out_dir / "Figure_31_Mechanistic_Gate_UpSet.png", dpi=CFG.VIS_FIGURE_DPI)
+            plt.close(_ufig)
+        except Exception as e:
+            reporter.log(f"  ! Skipped: {_fig_path('31')} - {e}")
+            plt.close("all")   # release the figure left open by the failed savefig
+    else:
+        reporter.log(f"  ! Skipped: {_fig_path('31')} - gate columns not found")
 
 
 
@@ -11229,6 +11341,19 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: B clears the floor only once A is complete (a); tier order tracks Criterion B (b);",
         "            trifluoroacetate sits in the dead-end quadrant while FA/DFA stay feasible (c).",
         "",
+        "-" * 80,
+        "Figure 31 - Figure_31_Mechanistic_Gate_UpSet.png",
+        "  Title   : Mechanistic-gate UpSet - gate-combination intersections",
+        "  Type    : UpSet - stacked-by-tier intersection bars + gate dot-matrix, one right axis",
+        "  Top     : Each bar = candidates clearing one gate-combination, stacked by tier; the fully-",
+        "            competent combination (all gates cleared) is highlighted. Right axis (0-100): mean",
+        "            mechanistic score (x100, solid line) and cumulative coverage over the top combinations (dashed).",
+        "  Matrix  : Filled dots = gates cleared (COO- head, alpha-C attack, clamp, SN2 angle, C-F BDE,",
+        "            backside sterics, active-site integrity); every threshold sourced from CFG.",
+        "  Look for: clearing every gate is common but not sufficient - the mean-score line shows the",
+        "            fullest combination is not always the highest-scoring, and coverage shows how few",
+        "            combinations account for most candidates.",
+        "",
         "=" * 80,
     ]
     # Repoint every internal "Figure_NN_*.png" mention at its real folder-relative
@@ -11248,6 +11373,7 @@ def write_figure_descriptions(out_dir: Path):
         "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
         "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
         "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
+        "Figure_31_Mechanistic_Gate_UpSet.png": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.png",
         "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
         "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
         "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",

@@ -20,7 +20,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-42441-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-42574-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -185,7 +185,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** - `mechani
 
 ---
 
-## 🔄 Pipeline architecture (42,441 lines)
+## 🔄 Pipeline architecture (42,574 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">
@@ -902,11 +902,11 @@ python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z --no-varia
 > small-file reads, so on a spinning disk it is disk-bound and extra cores do not help. `--no-variance`
 > skips it; the geometry figure then draws its absolute-geometry panels and says so in the log.
 
-**Generated figures (64 panels across folders 03–08 + 5 Ramachandran control plots in folder 02 = 69; the Hidden-Gems panel is emitted only when rescue candidates exist, so the exact figure count is run-dependent), written to `3_Validation_Figures/` in seven numbered, content-matched figure folders (plus `01_Analysis_Data`):**
+**Generated figures (65 panels across folders 03–08 + 5 Ramachandran control plots in folder 02 = 70; the Hidden-Gems panel is emitted only when rescue candidates exist, so the exact figure count is run-dependent), written to `3_Validation_Figures/` in seven numbered, content-matched figure folders (plus `01_Analysis_Data`):**
 - **`02_Ramachandran/`** - control backbone-geometry validation: 3R3U crystal, DeHa4 and 3R3U Boltz-2 controls, each with a crystal-overlay comparison.
 - **`03_Dataset_and_Alignment_Overview/` (01–06):** active-site residue mapping coverage (data labels inside bars), tier distribution + model-selection pie, sequence-identity grades, tier × grade cross-tabulation, **evolutionary phylogeny of the cohort**, **candidate treemap (tier × ligand composition)**.
 - **`04_AI_Confidence_Quality/` (01–03):** Boltz-2 confidence assessment, Tier_1A pTM/ipTM quality space (structure thumbnails), pTM vs ipTM scatter.
-- **`05_Catalytic_Geometry_and_Mechanism/` (01–15):** active-site RMSD (median trend line), halide-stabilisation × clamp cross-tab, mechanistic score ± CI, SN2-angle ECDF, geometry scatter, Tier_1A mechanistic space, Spearman correlation heatmap, Cleveland dot plot, mechanistic fingerprint (parallel coordinates), **two-criteria tier logic (3-panel: Criterion A gates Criterion B · B-ECDF separates tiers · SN2 dead-end BDE×occlusion gate)**, **reaction geometry with multi-model uncertainty**, **mechanistic breakdown by tier**.
+- **`05_Catalytic_Geometry_and_Mechanism/` (01–16):** active-site RMSD (median trend line), halide-stabilisation × clamp cross-tab, mechanistic score ± CI, SN2-angle ECDF, geometry scatter, Tier_1A mechanistic space, Spearman correlation heatmap, Cleveland dot plot, mechanistic fingerprint (parallel coordinates), **two-criteria tier logic (3-panel: Criterion A gates Criterion B · B-ECDF separates tiers · SN2 dead-end BDE×occlusion gate)**, **reaction geometry with multi-model uncertainty**, **mechanistic breakdown by tier**, **mechanistic-gate UpSet (gate-combination intersections stacked by tier, with mean-score and cumulative-coverage lines)**.
 - **`06_Ligand_Interactions_and_Chemical_Space/` (01–08):** bond-type profile, Tier_1A interaction space, fluorine engagement, catalytic-quality vs inhibition, active-site contact density, UMAP chemical-space manifold, Tier_1A chemical-space landscape, **binding energetics (binding-probability violin + product-inhibition line)**, **binding affinity by tier**.
 - **`07_PFAS_Scope_and_Synthesis/` (01–05, 07–18):** radar profiles (top hits + tier reps), tier success rates, confidence × SN2 landscape, conflict composition, hidden gems, Euler overlap, top-25 multitarget proteins, top-tier PFAS breakdown, Sankey workflow, PFAS chain-length hexbin / composition / carbon-confidence-MW panels, **chain length by tier**, **Tier_1A cross-ligand heatmap**.
 - **`08_Diagnostic_and_MultiModel_Trends/` (01–15):** *(includes the merged **pillar divergence by tier**)* pocket-vs-ligand volume (Tier_1A highlighted; `ligand_volume` is a Bondi vdW-sphere molecular volume), pocket occupancy by carbon number, occupancy vs competence, ligand fit rate, multi-model consensus by tier, confidence vs consensus, quality & competence diagnostics, and **size preference** (effective-mech distribution + means + hit-rate + pocket containment vs ligand size), and **reactive-centre engagement** (reactive-C→catalytic-residue distance + properly-positioned fraction vs catalytic hit-rate by carbon number) - scatter panels annotated with Spearman ρ / p / n.

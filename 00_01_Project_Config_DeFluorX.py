@@ -876,6 +876,8 @@ class CFG:
     SCISSILE_CF_BDE: dict = field(default_factory=lambda: {1: 109.9, 2: 119.5, 3: 127.5})
     SCISSILE_CF_BDE_MAX: float   = 123.0   # kcal/mol; above → C–F too strong to cleave (3F=127.5 fails, 2F=119.5 passes)
     SN2_BACKSIDE_OCCL_MAX: float = 2.0     # Å (Σ vdW); above → backside SN2 approach sterically blocked (2×F=2.94 fails, 1×F=1.47 passes)
+    GATE_CLAMP_MIN: float        = 0.5     # carboxylate-clamp integrity at/above → clamp engaged for the gate census (one arm = 0.5, bidentate = 1.0)
+    GATE_ACTIVE_SITE_MIN: float  = 0.75    # active-site integrity at/above → catalytic machinery intact for the gate census
 
     # Graded chemical-feasibility factor (feasibility_factor) - continuous, never a veto.
     """
@@ -2219,6 +2221,11 @@ class CFG:
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
     VIS_NAC_DIST_WARN_MAX: float = 5.0   # Å - dashboard caution band: NAC_DIST_RELAXED ≤ dist < this → orange, ≥ this → red
+    UPSET_TOPN: int             = 16    # gate-combinations shown in the mechanistic-gate UpSet (ranked by candidate count)
+    UPSET_DOT_SIZE: float       = 46.0  # marker area for the UpSet dot-matrix
+    UPSET_BAR_WIDTH: float      = 0.72  # intersection-bar width (axis units)
+    UPSET_HEADROOM: float       = 1.16  # y-limit multiplier above the tallest intersection bar
+    UPSET_COVERAGE_GUIDE: float = 80.0  # % guide line drawn on the cumulative-coverage axis
     """
     Typography and canvas - ONE definition for every figure the pipeline draws, applied through
     utils.apply_figure_style(). The point sizes carry the hierarchy on their own: axis labels are
