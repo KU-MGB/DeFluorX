@@ -1888,7 +1888,7 @@ University of Copenhagen, Denmark
 <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://KU-MGB.github.io/1_People/1_Faculty/tue-nielsen.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
 **Tue K. Nielsen**<br>
-Tenure Track Assistant Professor · Principal Supervisor<br>
+Group Leader, Tenure Track Assistant Professor<br>
 Department of Plant and Environmental Sciences<br>
 University of Copenhagen, Denmark
 
