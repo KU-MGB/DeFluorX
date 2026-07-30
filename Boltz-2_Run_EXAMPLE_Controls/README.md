@@ -1,9 +1,9 @@
 # Boltz-2_Run_EXAMPLE_Controls
 
 An example run directory, retained in the repository so that the on-disk layout of a completed
-DeFluorX pipeline run can be inspected directly. It is a controls-only illustration, not a
-production run: it carries real, viewable data for the control cases while every other stage is
-represented by its empty folder skeleton.
+DeFluorX pipeline run can be inspected directly. It carries real, viewable data for nine
+representative cases - the six controls plus the three top-ranked identified hits - while every
+other stage is represented by its empty folder skeleton.
 
 ## Purpose
 
@@ -13,16 +13,25 @@ ranked tables are approximately 350 MB each, so a complete run cannot be committ
 file and repository limits. This directory therefore preserves the folder structure with a small,
 representative slice of genuine output.
 
-## Control cases
+## Included cases
 
-Six control complexes are included, formed from two reference proteins and three short-chain
-substrates:
+Nine complexes are included, each a reference protein or an identified hit co-folded with a
+short-chain substrate.
+
+**Six controls** (the `0000000_*` prediction jobs):
 
 - Proteins: 3R3U (the RPA1163 / 3R3U crystal fluoroacetate dehalogenase) and DeHa4 (the functional
   positive control).
 - Ligands: fluoroacetate (FA), difluoroacetate (DFA) and trifluoroacetate (TFA).
 
-These correspond to the six `0000000_*` prediction jobs.
+**Three identified hits** (the top-ranked bacterial FAcD variant for each substrate, drawn from the
+full-library screen):
+
+| Substrate | Protein | Scientific rank |
+|---|---|---|
+| Fluoroacetate (FA) | A0A2U3PT06_9BRAD | 1 |
+| Difluoroacetate (DFA) | GJE15807 | 2 |
+| Trifluoroacetate (TFA) | A0A4V6IMR0_METTU | 8 |
 
 ## Directories that contain data
 
@@ -30,13 +39,13 @@ Data is present only where it remains well within GitHub limits:
 
 - `1_Boltz2_Production/`
   - `1_Input_Data/` - input protein FASTA and PFAS SMILES roster.
-  - `2_Boltz2_YAML_Configs/` - the six control Boltz-2 job configurations.
-  - `3_Sequence_Reference_Data/Active_Site_Alignments/` - the 3R3U and DeHa4 control alignments.
-  - `4_Prediction_Jobs/` - the six control prediction jobs, each with its co-folded models, best
+  - `2_Boltz2_YAML_Configs/` - the nine Boltz-2 job configurations.
+  - `3_Sequence_Reference_Data/Active_Site_Alignments/` - the 3R3U, DeHa4 and three identified-hit alignments.
+  - `4_Prediction_Jobs/` - the nine prediction jobs, each with its co-folded models, best
     complex and interaction and summary files.
   - `5_Boltz2_DeFluorX_Master_*.csv` and `6_Boltz2_DeFluorX_Ranked_*.csv` - the master and ranked tables,
-    restricted to the six control rows.
-- `2_Best_Complexes_CIFs/` - the six best control complex CIF structures.
+    restricted to the nine rows.
+- `2_Best_Complexes_CIFs/` - the nine best complex CIF structures.
 
 Heavy, regenerable intermediates (multiple-sequence-alignment search caches and the `.npz`
 confidence tensors) are omitted from the prediction jobs to keep the example compact.
