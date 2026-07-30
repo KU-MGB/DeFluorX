@@ -1867,9 +1867,9 @@ See [`LICENSE`](./LICENSE) for the full text. For commercial licensing enquiries
 
 <a href="https://shabanahmad.github.io/"><img src="https://KU-MGB.github.io/1_People/2_Postdocs/shaban-ahmad.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
-**Shaban Ahmad**
-Postdoctoral Researcher
-Department of Plant and Environmental Sciences
+**Shaban Ahmad**<br>
+Postdoctoral Researcher<br>
+Department of Plant and Environmental Sciences<br>
 University of Copenhagen, Denmark
 
 *Bioinformatics · AI in Drug Discovery · PFAS Biodegradation · Molecular Simulation*
@@ -1887,9 +1887,9 @@ University of Copenhagen, Denmark
 
 <a href="https://researchprofiles.ku.dk/en/persons/tue-kj%C3%A6rgaard-nielsen/"><img src="https://KU-MGB.github.io/1_People/1_Faculty/tue-nielsen.webp" width="150" height="150" style="border-radius: 50%;" /></a><br>
 
-**Tue K. Nielsen**
-Tenure Track Assistant Professor · Principal Supervisor
-Department of Plant and Environmental Sciences
+**Tue K. Nielsen**<br>
+Tenure Track Assistant Professor · Principal Supervisor<br>
+Department of Plant and Environmental Sciences<br>
 University of Copenhagen, Denmark
 
 *Microbial Biochemistry · Enzyme Characterisation · PFAS Biodegradation · Fluoroacetate Dehalogenases*
