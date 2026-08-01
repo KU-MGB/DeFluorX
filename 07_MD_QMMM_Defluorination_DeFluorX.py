@@ -2509,6 +2509,11 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
             def _one(col, _d=_cd):
                 return _d[col].iloc[0] if col in _d.columns and len(_d) else np.nan
             _fqp, _bar = _one("Frame_F_Charge_Product"), _one("QSite_Barrier_Ensemble_kcal")
+            # The full Is_Defluorinating gate (dwell + viability + barrier + DErxn + fluoride) is
+            # written into the scan CSV, so the cross-job figure reads that verdict rather than
+            # re-deriving a looser fluoride+barrier proxy that would disagree with the master ranking.
+            # The fluoride+barrier proxy is kept only as a fallback for a CSV predating the column.
+            _isdef = _one("Is_Defluorinating")
             _jobs.append({
                 "label": (f"R_{int(_one('Rank'))}" if "Rank" in _cd.columns and pd.notna(_one("Rank")) else _rd.name),
                 "ligand": (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else ""),
@@ -2517,7 +2522,8 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
                 "barrier_ens": (float(_bar) if pd.notna(_bar) else np.nan),
                 "derxn_ens": (float(_one("QSite_dErxn_Ensemble_kcal")) if pd.notna(_one("QSite_dErxn_Ensemble_kcal")) else np.nan),
                 "fq_final": (float(_fqp) if pd.notna(_fqp) else np.nan),
-                "is_defluor": bool(pd.notna(_fqp) and float(_fqp) <= CFG.QSITE_F_CHARGE_CLEAVED and pd.notna(_bar)),
+                "is_defluor": (bool(int(float(_isdef))) if pd.notna(_isdef)
+                               else bool(pd.notna(_fqp) and float(_fqp) <= CFG.QSITE_F_CHARGE_CLEAVED and pd.notna(_bar))),
             })
         if _jobs:
             plot_qsite_profiles_all_jobs(out_dir / "08_QSite_Profiles_AllJobs.png", _jobs)
@@ -2712,6 +2718,19 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
         return f"full (droplet trim failed: {exc})"
 
 
+def _read_qsite_molchg(fold: Path) -> "int | None":
+    """The QM-region net charge written into a job's .in (`molchg=`), read back for the scan CSV's
+    QM_Charge provenance column. The .in always sits at fold/<fold.name>.in, so this works for a fresh
+    job just written and a resumed job found on disk alike; the charge is identical across a job's
+    frames (same QM region), so the best frame's file is representative."""
+    try:
+        _m = re.search(r"molchg\s*=\s*(-?\d+)",
+                       (fold / f"{fold.name}.in").read_text(errors="ignore"))
+        return int(_m.group(1)) if _m else None
+    except Exception:
+        return None
+
+
 def generate_qsite_inputs(mae_path: Path, job_name: str,
                           nuc_num, stab_f_num, lig_c_idx, nuc_o_idx,
                           base_num=None, acid_num=None,
@@ -2893,17 +2912,13 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         _sidechain_formal_charge(molid, chain, rn, cut_pairs)
         for rn, molid, chain, cut_pairs in _resolved_cuts
     )
-    # Frozen-orbital QM/MM charge convention. molchg for a QSite frozen-orbital run is NOT the bare
-    # formal charge of the QM atoms: each Cα–Cβ boundary bond is replaced by a doubly-occupied frozen
-    # localised orbital that keeps the bond's electron pair in the QM region while the Cα nucleus stays
-    # MM, so every cut shifts the QM electron count by −1. The correct molchg is therefore
-    #   (ligand + side-chain formal charges) − (number of frozen-orbital cuts).
-    # QSite's frozen-orbital driver re-derives the QM charge as (formal sum − n_frozen_cuts). Writing
-    # that value here matches what QSite actually uses, so it does not override molchg and the self-check
-    # (`_qsite_scan_failure_reason`) accepts the barrier; writing the bare formal sum instead lets QSite
-    # override to (sum − cuts) and the check then rejects an otherwise-correct barrier.
-    _n_frozen_cuts = sum(len(cut_pairs) for _rn, _mol, _ch, cut_pairs in _resolved_cuts)
-    qm_charge = int(round(lig_charge + _sidechain_charge)) - _n_frozen_cuts
+    # Frozen-orbital QM/MM charge convention. molchg is the BARE formal charge of the QM atoms
+    # (ligand + side-chain formal charges). QSite's frozen-orbital driver then subtracts one electron
+    # per Cα-Cβ boundary cut itself, so the SCF net charge it runs is (molchg - n_frozen_cuts). Writing
+    # the already-subtracted value double-counts the cuts (the driver subtracts them a second time),
+    # over-reducing the QM region and producing a divergent, unphysical scan; the bare formal charge
+    # lets the driver apply the single, correct shift and reports (bare - cuts) as the run charge.
+    qm_charge = int(round(lig_charge + _sidechain_charge))
 
     # ── &qmregion QM/MM cut table ──────────────────────────────────────────
     # One row per boundary bond: Cα–Cβ for a standard sidechain, two rows for a glycine
@@ -3001,7 +3016,11 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     _gen = [
         f"basis={_scan_basis}",
         "igeopt=1",                       # relaxed (constrained-optimised) scan
-        f"molchg={qm_charge}",            # QM-region net charge (authoritative - see per-step patch in run_qsite)
+        f"molchg={qm_charge}",            # QM-region net charge: the BARE formal charge of the QM atoms.
+                                          # The frozen-orbital driver subtracts one electron per Cα-Cβ cut
+                                          # itself, so the SCF runs (molchg - n_cuts); see the charge-
+                                          # convention note above. This value is authoritative and is
+                                          # never re-patched after the file is written.
         f"dftname={CFG.QSITE_FUNCTIONAL}",
         "mmqm=1",                         # enable QM/MM
         f"impversion={CFG.QSITE_IMPVERSION}",   # memory/architecture tier (CFG SSOT)
@@ -3090,8 +3109,8 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                      f"at {qsite_exe} - skipping launch (input written).{ConsoleColours.ENDC}")
         return False
 
-    jobname = inp_path.stem
-    cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS),
+    jobname = inp_path.stem + (f"_{_RUN_TAG}" if _RUN_TAG else "")
+    cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS), "-max_threads", str(_QSITE_THREADS),
            "-jobname", jobname, inp_path.name]
 
     # Live progress: QM/MM relaxed scans run for many minutes per frame, during
@@ -3273,24 +3292,30 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
                     f"skipped. Reduce CFG.QSITE_MAX_QM_RESIDUES or check molchg/protonation.")
 
         """
-        Charge-consistency check even when the SCF converges. The writer now sets molchg to the
-        frozen-orbital-correct value (formal charge − number of frozen-orbital cuts), which is exactly
-        what QSite's driver re-derives, so in the healthy case the requested and run charges MATCH and
-        nothing is reported. This check remains only to catch a GENUINE anomaly: if Jaguar's net charge
-        differs from what the writer put in &gen, the QM region / cut count is not what the writer
-        assumed (e.g. a mis-resolved residue, an unexpected charged QM water, or an electron-parity
-        problem) and the barrier would be for a charge state we did not intend. It is NOT tripped by the
-        ordinary −1-per-cut frozen-orbital shift, which the writer already accounts for.
+        Charge-consistency check even when the SCF converges. The writer sets molchg to the bare formal
+        charge of the QM atoms; QSite's frozen-orbital driver then subtracts one electron per Cα-Cβ cut,
+        so the healthy run charge is (molchg - n_frozen_cuts). This check compares Jaguar's actual net
+        charge against that expected value and reports only a GENUINE anomaly: if it differs, the QM
+        region / cut count is not what the writer assumed (a mis-resolved residue, an unexpected charged
+        QM water, or an electron-parity problem) and the barrier would be for a charge state we did not
+        intend. The ordinary -1-per-cut shift is expected, not flagged.
         """
         _inp = next((p for p in ([qsite_dir / f"{qsite_dir.name}.in"] + sorted(qsite_dir.glob("*.in")))
                      if p.exists()), None)
-        _mreq = re.search(r"molchg\s*=\s*(-?\d+)", _inp.read_text(errors="ignore")) if _inp else None
+        _intxt = _inp.read_text(errors="ignore") if _inp else ""
+        _mreq = re.search(r"molchg\s*=\s*(-?\d+)", _intxt)
         _mrun = re.search(r"net molecular charge:\s*(-?\d+)", _t)
-        if _mreq and _mrun and int(_mreq.group(1)) != int(_mrun.group(1)):
-            return (f"QM charge INCONSISTENT - wrote molchg={_mreq.group(1)} (formal − frozen-orbital "
-                    f"cuts) but Jaguar ran net charge {_mrun.group(1)}. The QM region or cut count is "
-                    f"not as assumed (check residue resolution, QM waters, protonation); the barrier "
-                    f"is for an unintended charge state.")
+        # Frozen-orbital cuts = rows of the &qmregion cut table (molid chain resnum qmatom mmatom).
+        _qmblk = re.search(r"&qmregion(.*?)^&", _intxt, re.S | re.M)
+        _ncuts = len(re.findall(r"^\s*\d+\s+\S+\s+\d+\s+\S+\s+\S+\s*$", _qmblk.group(1), re.M)) if _qmblk else 0
+        if _mreq and _mrun:
+            _expected = int(_mreq.group(1)) - _ncuts
+            if int(_mrun.group(1)) != _expected:
+                return (f"QM charge INCONSISTENT - wrote molchg={_mreq.group(1)} (bare formal) with "
+                        f"{_ncuts} frozen-orbital cuts, so the expected run charge is {_expected}, but "
+                        f"Jaguar ran net charge {_mrun.group(1)}. The QM region or cut count is not as "
+                        f"assumed (check residue resolution, QM waters, protonation); the barrier is "
+                        f"for an unintended charge state.")
     except Exception:
         return None
     return None
@@ -3302,38 +3327,68 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
 # departing-F charge. Best-effort regex parsing (Jaguar output varies by version);
 # every failure path returns NaN/empty and is non-fatal.
 # -----------------------------------------------------------------------------
+def _qsite_scan_segments(text: str) -> "list[str]":
+    """Split the .out into ONE text segment per converged relaxed-scan point.
+
+    QSite closes every completed scan point with a banner line, `end of geometry scan step N`, so the
+    text between one banner and the next is exactly the output of point N: its geometry-optimisation
+    iterations, their per-iteration energies and the converged Mulliken table. Segmenting on this
+    banner is what makes every per-point quantity below (energy, coordinate, fluoride charge) resolve
+    to the CONVERGED value for that point rather than to some intermediate optimiser iteration. A tail
+    after the last banner is an incomplete point (the job stopped mid-optimisation) and is dropped."""
+    _bounds = [_m.end() for _m in re.finditer(r"end of geometry scan step", text, re.IGNORECASE)]
+    _segs, _prev = [], 0
+    for _b in _bounds:
+        _segs.append(text[_prev:_b]); _prev = _b
+    return _segs
+
+
+def _extract_scan_points(text: str) -> "tuple[list[float], list[float]]":
+    """Aligned (reaction-coordinate Å, QM/MM energy kcal/mol) pairs, ONE per converged scan point.
+
+    The barrier PES is the QM/MM total energy, which QSite prints as
+    ``Total Energy of the system...... -X.XXXXXE+03 kcal/mol``. That line is emitted once per
+    GEOMETRY-OPTIMISATION STEP (tens per scan point, up to maxitg), NOT once per converged point, so
+    the per-point energy is the LAST such line inside each scan-point segment. Taking every occurrence
+    instead would resolve the optimiser trajectory rather than the reaction coordinate and make max(E)
+    a mid-optimisation geometry - a spurious barrier. The coordinate is read from the same segment's
+    scanner summary (``scan:   r = 3.5   energy = ...``), falling back to the constraint echo
+    ``r = 3.5#``, so the coordinate and the energy always describe the same converged geometry.
+
+    NOTE the two energies in the file are distinct: the scanner's ``energy =`` value is the Jaguar
+    QM-only energy in hartree (it excludes the MM environment), whereas ``Total Energy of the system``
+    is the QM/MM total in kcal - the physically correct PES for a reaction inside the enzyme - so the
+    QM/MM kcal line is used for the energy and only the coordinate is taken from the scanner line."""
+    _coords, _energies = [], []
+    for _seg in _qsite_scan_segments(text):
+        _te = re.findall(
+            r"Total Energy of the system\.*\s*(-?\d[\d.]*(?:[eE][+-]?\d+)?)\s*kcal", _seg, re.IGNORECASE)
+        if not _te:
+            continue   # a point with no converged QM/MM energy is dropped, coordinate with it
+        _rc = re.findall(r"scan:\s*r\s*=\s*(-?\d+(?:\.\d+)?)\s+energy", _seg)
+        if not _rc:
+            _rc = re.findall(r"^\s*r\s*=\s*(-?\d+(?:\.\d+)?)#", _seg, re.M)
+        _coords.append(float(_rc[-1]) if _rc else np.nan)
+        _energies.append(float(_te[-1]))
+    return _coords, _energies
+
+
 def _extract_scan_energies(text: str) -> "list[float]":
-    """Per-scan-point energy series, returned in KCAL/MOL, from a Jaguar/QSite
-    relaxed-scan .out.
-
-    QSite prints each converged scan point's QM/MM total as
-    ``Total Energy of the system...... -X.XXXXXE+03 kcal/mol`` - already kcal/mol,
-    so this layout is read as-is. Hartree-based Jaguar layouts (scan-summary table,
-    SCFE) are supported as fallbacks and converted with HARTREE_TO_KCAL. Returns []
-    if fewer than two points parse.
-
-    CAVEAT: a scan whose .out contains 'Skipping to next scan point' has NOT fully
-    converged (points were dropped); the returned series is then short and any
-    barrier from it is only a partial estimate - check QSite_NScan against
-    CFG.QSITE_SCAN_NSTEPS before trusting ΔE‡."""
+    """Per-scan-point QM/MM energy series in KCAL/MOL (see _extract_scan_points for why the last
+    ``Total Energy of the system`` in each scan-point segment is the converged per-point value).
+    Hartree-based Jaguar layouts (scan-summary table, SCFE) are kept as fallbacks for outputs that
+    lack the segmented QM/MM print, converted with HARTREE_TO_KCAL. Returns [] if under two points."""
+    _en = _extract_scan_points(text)[1]
+    if len(_en) >= 2:
+        return _en
     _h2k = float(getattr(CFG, "HARTREE_TO_KCAL", 627.509474))
-    # Restrict to the scan region: any 'Total Energy' printed BEFORE the first
-    # 'Geometry scan coordinates' block is the pre-scan initial-structure reference,
-    # not a scan point, and would corrupt the reactant baseline (a huge false barrier).
+    # Restrict fallbacks to the scan region: an energy printed BEFORE the first 'Geometry scan
+    # coordinates' block is the pre-scan reference, not a scan point, and would corrupt the baseline.
     _scan0 = re.search(r"Geometry scan coordinates", text, re.IGNORECASE)
     _body = text[_scan0.start():] if _scan0 else text
-    # (1) PRIMARY - QSite QM/MM per-point total energy, ALREADY in kcal/mol.
-    _qmmm = re.findall(
-        r"Total Energy of the system\.*\s*(-?\d[\d.]*(?:[eE][+-]?\d+)?)\s*kcal", _body, re.IGNORECASE)
-    if len(_qmmm) >= 2:
-        return [float(x) for x in _qmmm]
-    # (2) Fallback - Jaguar geometry-scan summary table (hartree → kcal).
-    # Search _body (post geometry-scan header), not raw text, so a pre-scan baseline energy
-    # cannot be captured as a scan point.
     _tbl = re.findall(r"^\s*\d+\s+[-\d.]+\s+(-\d+\.\d{4,})\s*$", _body, re.MULTILINE)
     if len(_tbl) >= 2:
         return [float(x) * _h2k for x in _tbl]
-    # (3) Fallback - Jaguar SCFE converged energies (hartree → kcal); _body only, same reason.
     _scfe = re.findall(r"SCFE:.*?(-\d+\.\d{4,})", _body)
     if len(_scfe) >= 2:
         return [float(x) * _h2k for x in _scfe]
@@ -3341,13 +3396,12 @@ def _extract_scan_energies(text: str) -> "list[float]":
 
 
 def _extract_scan_coordinates(text: str) -> "list[float]":
-    """The constrained scan value actually used at each point, read from the Jaguar output.
-
-    Jaguar echoes the active constraint ("  r = 3.5#") before EVERY geometry-optimisation step, not
-    once per scan point, so consecutive duplicates are collapsed - leaving one value per point (the
-    constraint is monotonic along the scan). Reading it is the only way to keep the PES aligned when
-    nofail=1 drops a non-converged point.
-    """
+    """The reaction coordinate at each converged scan point, aligned with _extract_scan_energies
+    (both come from the same per-point segments). Falls back to the deduplicated constraint echo
+    ``r = 3.5#`` only when the segmented output is unavailable."""
+    _co = _extract_scan_points(text)[0]
+    if _co:
+        return _co
     _raw = [float(_m) for _m in re.findall(r"^\s*r\s*=\s*(-?\d+(?:\.\d+)?)#", text, re.M)]
     _out = []
     for _v in _raw:
@@ -3357,7 +3411,7 @@ def _extract_scan_coordinates(text: str) -> "list[float]":
 
 
 def _extract_fluoride_charge_series(text: str) -> "list[float]":
-    """The departing fluorine's Mulliken charge at each scan point.
+    """The departing fluorine's Mulliken charge at each converged scan point.
 
     Jaguar prints the population analysis as a label row over a charge row:
 
@@ -3368,22 +3422,29 @@ def _extract_fluoride_charge_series(text: str) -> "list[float]":
     instead would return a carboxylate oxygen (~-0.7, squarely inside any fluoride window) and report
     it as the fluoride.
 
+    The table is printed once per geometry-optimisation step, so the converged charges for a point are
+    the LAST Mulliken block inside that point's segment (_qsite_scan_segments); reading every block
+    would return one charge per optimiser iteration, not one per scan point, and misalign the series
+    against the per-point PES.
+
     ONE fluorine is followed across the whole scan, identified by its Jaguar atom label. The departing
     F is resolved at the PRODUCT end, where it has become fluoride (→ ~-0.9) and the spectators remain
     near -0.3, and that same label is then read back at every scan point. Taking the most negative F
     independently at each point would let a spectator fluorine stand in for the leaving group at the
     reactant end - where all the fluorines are still near-degenerate - so the reported reactant and
-    product charges could describe two different atoms.
-    """
-    series = []
+    product charges could describe two different atoms. A point whose segment carries no Mulliken table
+    is kept as NaN so the series stays aligned with the energy series rather than silently shifting."""
+    _segs = _qsite_scan_segments(text) or [text]
     _blocks = []
-    for _blk in re.split(r"(?i)Atomic charges from Mulliken population analysis", text)[1:]:
-        """
-        The block is read to its own end - the 'sum of atomic charges' line Jaguar prints after the
-        table - not to a fixed character budget. A QM region of eight residues plus waters wraps the
-        charge table over many label/charge row pairs, and a fixed cut can fall in the middle of it
-        and silently drop the fluorine.
-        """
+    for _seg in _segs:
+        _mulls = re.split(r"(?i)Atomic charges from Mulliken population analysis", _seg)[1:]
+        if not _mulls:
+            _blocks.append({}); continue
+        # The converged geometry's charges = the LAST Mulliken block in the point's segment. It is read
+        # to the 'sum of atomic charges' line (not a fixed character budget): a QM region of eight
+        # residues plus waters wraps the table over many label/charge row pairs, and a fixed cut can
+        # fall in the middle of it and silently drop the fluorine.
+        _blk = _mulls[-1]
         _end = re.search(r"(?i)sum of atomic charges", _blk)
         _lines = _blk[:_end.start() if _end else len(_blk)].splitlines()
         _labels, _charges = [], []
@@ -3400,22 +3461,23 @@ def _extract_fluoride_charge_series(text: str) -> "list[float]":
                     _f[_lab] = float(_c)
                 except ValueError:
                     continue
-        if _f:
-            _blocks.append(_f)
+        _blocks.append(_f)
 
-    if not _blocks:
-        return series
-    # The leaving fluorine, fixed at the product end and then followed backwards through the scan.
-    _leaving = min(_blocks[-1], key=_blocks[-1].get)
+    _nonempty = [_b for _b in _blocks if _b]
+    if not _nonempty:
+        return []
+    # The leaving fluorine, fixed at the product end (last point that HAS charges) and followed back.
+    _leaving = min(_nonempty[-1], key=_nonempty[-1].get)
+    series = []
     for _blk_f in _blocks:
-        series.append(_blk_f.get(_leaving, min(_blk_f.values())))
+        series.append(_blk_f.get(_leaving, min(_blk_f.values())) if _blk_f else float("nan"))
     return series
 
 def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
     """Parse the QM/MM SN2 relaxed scan into a full reaction profile: the barrier
     and reaction energy (kcal/mol), the per-point PES, the reconstructed reaction
     coordinate (Nu_O···C distance, Å), and a best-effort departing-fluoride charge.
-    The scan runs NAC (reactant, r≈3.5 Å) → product (r≈1.3 Å); ΔE‡ = E_max−E_react
+    The scan runs NAC (reactant, r≈3.5 Å) → product (r≈1.42 Å); ΔE‡ = E_max−E_react
     proves C–F cleavage is surmountable, ΔE_rxn = E_product−E_react whether it is
     downhill, and the fluoride charge → ~−0.9 whether F actually leaves as F⁻."""
     _empty = {"QSite_Barrier_kcal": np.nan, "QSite_dErxn_kcal": np.nan, "QSite_NScan": 0,
@@ -3471,6 +3533,13 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
                          "wall or a scan window that stops short of it). Barrier reported as NaN.")
             return _empty
         _react = min(e[:_imax])          # reactant well: strictly before the TS, never the product
+        # A ΔE‡ above the physical ceiling is a non-converged scan point (nofail keeps it with a garbage
+        # energy) that landed short of the last index, not a real saddle; the endpoint checks above only
+        # catch divergence AT the final point. Report NaN rather than a spurious large barrier.
+        if e[_imax] - _react > float(getattr(CFG, "QSITE_BARRIER_MAX_KCAL", 200.0)):
+            console_info("    [!] QSite barrier exceeds the physical ceiling - a non-converged scan point, "
+                         "not a transition state. Barrier reported as NaN.")
+            return _empty
         _energy_kcal = [round(x - _react, 3) for x in e]   # relative to the reactant minimum
         """
         The reaction coordinate is READ from the output, never rebuilt by index: nofail=1 means a
@@ -3493,15 +3562,22 @@ def parse_qsite_profile(qsite_dir: Path, job_name: str) -> dict:
         two different states as one.
         """
         _i_react = e.index(_react) if _react in e else 0
-        # Map the reactant's energy-series index onto the charge series proportionally: the Mulliken
-        # cadence need not equal the energy cadence, so a raw shared index could read the wrong point.
+        # The charge series is now per scan point, aligned 1:1 with the energy series, so the reactant
+        # charge is read at the reactant's own index. The proportional map is retained only for the
+        # fallback case where the charge series came from an unsegmented output and is a different
+        # length. A point whose segment carried no Mulliken table is NaN, so the reactant charge falls
+        # back to the nearest earlier finite point rather than reporting NaN for a resolvable reactant.
         if _fq:
             _fq_i = (min(int(_i_react * (len(_fq) - 1) / (len(e) - 1)), len(_fq) - 1)
                      if len(_fq) != len(e) and len(e) > 1 else min(_i_react, len(_fq) - 1))
             _fq_react = _fq[_fq_i]
+            if _fq_react != _fq_react:   # NaN at the reactant point: use the nearest earlier finite one
+                _fq_react = next((v for v in reversed(_fq[:_fq_i + 1]) if v == v), np.nan)
         else:
             _fq_react = np.nan
-        _fq_prod = _fq[-1] if _fq else np.nan
+        # The product charge is the LAST FINITE point (the leaving fluoride at the product end); a
+        # trailing NaN from a point with no Mulliken table must not mask a genuinely cleaved product.
+        _fq_prod = next((v for v in reversed(_fq) if v == v), np.nan) if _fq else np.nan
         return {
             # The barrier is the post-reactant maximum minus the reactant minimum - e[_imax], not
             # max(e), so a downhill-from-the-start profile cannot report a 0.0 kcal/mol barrier.
@@ -4166,6 +4242,10 @@ _SOL_SPHERE_SAMPLE_FRAMES = max(1, int(CFG.SOLVENT_SPHERE_SAMPLE_FRAMES))
 # mutated). Read-only inside the worker threads.
 _QSITE_RUN = CFG.QSITE_RUN
 _QSITE_PROCS = CFG.QSITE_PROCS
+# OpenMP threads per Jaguar SCF (qsite -max_threads) and job-name suffix for an isolated parallel run;
+# both reassigned in main() from the CPU budget and the --run-tag CLI option.
+_QSITE_THREADS = CFG.QSITE_PROCS
+_RUN_TAG = ""
 
 # QSite/Jaguar QM/MM engine (Impact `main1h`) is effectively SINGLE-THREADED for these small
 # frozen-cut QM regions - measured at ~100% of ONE core regardless of `-PARALLEL N`. Serialising
@@ -4392,6 +4472,47 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
     print(f"  {ConsoleColours.OKGREEN}✔ [Rank {rank}] Trajectory figures done.{ConsoleColours.ENDC}", flush=True)
 
 
+def defluor_propensity(p_strict: float, barrier_kcal: float) -> float:
+    """Ranking proxy P(strict-NAC)*exp(-DE!/RT). NaN when the barrier is unresolved, so a
+    candidate whose scan never yielded a TS is withheld rather than scored as zero-propensity."""
+    if barrier_kcal != barrier_kcal:
+        return np.nan
+    _rt = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+    return max(0.0, float(p_strict or 0.0)) * float(np.exp(-float(barrier_kcal) / _rt))
+
+
+def defluor_verdict(strict_viability_pct, dwell_ns, barrier_kcal, derxn_kcal,
+                    f_charge_product, stride) -> "tuple[int, str]":
+    """The Is_Defluorinating gate as one pure function: strict persistence AND real dwell AND a
+    surmountable barrier AND a non-uphill SN2 product AND a released fluoride. Every leg must be
+    MEASURED and PASS; a quantity that could not be computed WITHHOLDS the verdict (0, '<x> pending'),
+    it never satisfies it. Shared by the per-job QSite CSV and the master ranking so the two cannot
+    diverge - the per-job row and the master row for the same job return the identical call."""
+    _sv  = float(strict_viability_pct or 0)
+    _dw  = float(dwell_ns or 0)
+    _std = int(stride or 1)
+    if _std > 1:
+        # The dwell leg cannot be evaluated on sub-sampled frames, and a defluorination verdict
+        # must not be able to change with an I/O performance flag.
+        return 0, f"Dwell unmeasurable at stride {_std} - re-run at stride 1"
+    if barrier_kcal != barrier_kcal:
+        return 0, "Barrier pending"
+    if derxn_kcal != derxn_kcal:
+        return 0, "Reaction energy pending"
+    # C-F cleavage is the definition of defluorination: the product fluoride must have delocalised to
+    # free fluoride (Mulliken <= QSITE_F_CHARGE_CLEAVED). A low barrier and downhill DErxn are
+    # necessary but not sufficient; treat a missing charge as pending, not as a fail.
+    if f_charge_product != f_charge_product:
+        return 0, "Fluoride charge pending"
+    if float(f_charge_product) > CFG.QSITE_F_CHARGE_CLEAVED:
+        return 0, "C–F not cleaved (fluoride not released)"
+    _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
+           and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
+           and float(barrier_kcal) <= CFG.DEFLUOR_BARRIER_MAX_KCAL
+           and float(derxn_kcal) <= CFG.DEFLUOR_DERXN_MAX_KCAL)
+    return (1, "Defluorination-competent") if _ok else (0, "Binds, not competent")
+
+
 def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
                            n_attempted: int, stats: dict, ligand: str = "", qmmeta: dict = None) -> None:
     """Parse every QM/MM scan folder and fold the result into `stats`.
@@ -4492,8 +4613,19 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.png", job_name, rank, _pr)
         if _profs:
             plot_qsite_ensemble_profiles(job_out_dir / "08_QSite_Ensemble_Profiles.png", rank, _profs)
-            _ens = {"n_attempted": n_attempted, "is_defluor": stats.get("Is_Defluorinating"),
-                    "propensity": stats.get("Defluor_Propensity")}
+            # The verdict is computed here from this job's own metrics (not read back from a stats key
+            # the master only fills later), so the per-frame scan CSV carries the SAME
+            # Is_Defluorinating / Defluor_Propensity the master ranking will report - both go through
+            # defluor_verdict / defluor_propensity, so the two rows cannot disagree.
+            _sv_pct = stats.get("Strict_Viability_Pct", 0.0)
+            _v_flag, _ = defluor_verdict(_sv_pct, stats.get("NAC_Dwell_Max_ns", np.nan),
+                                         stats.get("QSite_Barrier_kcal", np.nan),
+                                         stats.get("QSite_dErxn_kcal", np.nan),
+                                         stats.get("F_Charge_Product", np.nan),
+                                         stats.get("MD_Analysis_Stride", 1))
+            _ens = {"n_attempted": n_attempted, "is_defluor": _v_flag,
+                    "propensity": defluor_propensity(max(0.0, float(_sv_pct or 0.0)) / 100.0,
+                                                     stats.get("QSite_Barrier_kcal", np.nan))}
             write_qsite_scan_csv(job_out_dir / "09_QSite_Scan_Data.csv", rank, job_name,
                                  ligand, _profs, _ens, qmmeta)
     except Exception as _exc:
@@ -4859,7 +4991,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                         list(_qpool.map(_run_one, _runjobs))
                 _qmmeta = {"nuc": _qm_nuc, "base": _qm_base, "acid": _qm_acid, "stabh": _qm_stab,
                            "cradle": ";".join(str(_c) for _c in (_qm_cradle or [])),
-                           "nuc_o_idx": _nuc_o, "lig_c_idx": _lig_c, "qm_charge": None}
+                           "nuc_o_idx": _nuc_o, "lig_c_idx": _lig_c,
+                           "qm_charge": (_read_qsite_molchg(_folds[0]) if _folds else None)}
                 _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel_frames), stats,
                                        ligand=job_name.split("_")[-1], qmmeta=_qmmeta)
             else:
@@ -5771,7 +5904,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _qmmeta = {"nuc": _qm_nuc, "base": _qm_base, "acid": _qm_acid, "stabh": _qm_stab,
                    "cradle": ";".join(str(_c) for _c in (_qm_cradle or [])),
                    "nuc_o_idx": (_sel[0][2] if _sel else None), "lig_c_idx": (_sel[0][3] if _sel else None),
-                   "qm_charge": None}
+                   "qm_charge": (_read_qsite_molchg(_folds[0]) if _folds else None)}
         _collect_qsite_results(job_out_dir, job_name, rank, _folds, len(_sel), stats,
                                ligand=job_name.split("_")[-1], qmmeta=_qmmeta)
 
@@ -5852,18 +5985,30 @@ def main():
                         help="Only write QSite .in/.mae inputs; do not launch the QSite executable.")
     parser.add_argument("--qsite-procs", type=int, default=None,
                         help="CPUs per QSite job, qsite -PARALLEL (default 1 - the QM engine is single-threaded; scans run concurrently instead).")
+    parser.add_argument("--results-dirname", default="7_MD_Thermodynamics_Results",
+                        help="Name of the Step-07 output directory under the run root. Set to a distinct name "
+                             "(e.g. 7_MD_Thermodynamics_Results_NEW) to run a second, isolated Step-07 alongside "
+                             "an existing one without overwriting it.")
+    parser.add_argument("--run-tag", default="",
+                        help="Suffix appended to QSite job names so a parallel Step-07 run does not collide with "
+                             "another in the shared Schrodinger job store. Use together with a distinct "
+                             "--results-dirname.")
+    parser.add_argument("--qsite-threads", type=int, default=None,
+                        help="OpenMP threads per QSite/Jaguar scan (qsite -max_threads). Default auto: the CPU "
+                             "budget (cores - reserve) split across the concurrent scans, capped at "
+                             "CFG.QSITE_MAX_THREADS, so idle cores accelerate each scan's SCF.")
     args = parser.parse_args()
 
     # QSite execution policy: CFG default, overridable per-run from the CLI.
-    global _QSITE_RUN, _QSITE_PROCS, _QSITE_SEM, _FORCE_RECOMPUTE
+    global _QSITE_RUN, _QSITE_PROCS, _QSITE_SEM, _FORCE_RECOMPUTE, _QSITE_THREADS, _RUN_TAG
     _FORCE_RECOMPUTE = bool(args.force)
     _QSITE_RUN = CFG.QSITE_RUN and not args.no_run_qsite
-    # The QM engine is single-threaded (CFG.QSITE_PROCS = 1): -PARALLEL >1 only spawns idle helpers,
-    # so throughput comes from running many scans concurrently (see _qsite_concurrency).
+    _RUN_TAG = re.sub(r"[^0-9A-Za-z_]", "", str(args.run_tag or ""))
     _QSITE_PROCS = args.qsite_procs if args.qsite_procs is not None else int(CFG.QSITE_PROCS)
+    # Threads-per-scan and concurrency are co-derived from the CPU budget below, once the number of
+    # ranks (and therefore concurrent scans) is known.
+    _QSITE_THREADS = int(CFG.QSITE_PROCS)
     _QSITE_SEM = threading.Semaphore(_qsite_concurrency())
-    console_info(f"QSite concurrency: up to {_qsite_concurrency()} single-threaded QM/MM scans in "
-                 f"parallel (cores-2 vs RAM cap), {_QSITE_PROCS} proc/job")
 
     # Optional sudo up front so the run is fully unattended (systemd-oomd masked for the QSite phase).
     _atexit.register(_mask_oomd_at_start())
@@ -5902,7 +6047,7 @@ def main():
     for _scan_root in [
         work_dir / "05_MD_Simulations",
         work_dir / "03_WaterMaps",
-        work_dir.parent / "7_MD_Thermodynamics_Results",
+        work_dir.parent / args.results_dirname,
     ]:
         if _scan_root.exists():
             for _d in sorted(_scan_root.iterdir()):
@@ -5917,7 +6062,25 @@ def main():
     else:
         _auto_rank_list = _avail[:args.ranks] if _avail else list(range(1, args.ranks + 1))
 
-    master_out_dir = work_dir.parent / "7_MD_Thermodynamics_Results"
+    # QSite parallelism, co-derived from the CPU budget now the concurrent-scan count is known.
+    # Each Jaguar scan runs OpenMP-threaded (qsite -max_threads); the budget (cores - reserve) is split
+    # across the concurrent scans so idle cores accelerate each SCF, capped at the point where Jaguar's
+    # OpenMP scaling saturates (CFG.QSITE_MAX_THREADS). Concurrency is then bounded so threads x scans
+    # never oversubscribe the budget. When --qsite-threads is given it overrides the auto split.
+    _budget = max(1, (os.cpu_count() or 4) - int(getattr(CFG, "PREP_CPU_RESERVE", 2)))
+    _n_scans = max(1, len(_auto_rank_list) * max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1))))
+    _thr_cap = max(1, int(getattr(CFG, "QSITE_MAX_THREADS", 8)))
+    if args.qsite_threads is not None:
+        _QSITE_THREADS = max(1, int(args.qsite_threads))
+    else:
+        _QSITE_THREADS = max(1, min(_thr_cap, _budget // _n_scans))
+    _QSITE_PROCS = _QSITE_THREADS
+    _QSITE_SEM = threading.Semaphore(min(_n_scans, max(1, _budget // _QSITE_THREADS)))
+    console_info(f"QSite: {_n_scans} scans, budget {_budget} cores -> {_QSITE_THREADS} OpenMP thread(s)/scan, "
+                 f"up to {min(_n_scans, max(1, _budget // _QSITE_THREADS))} concurrent"
+                 + (f", job-name tag '_{_RUN_TAG}'" if _RUN_TAG else ""))
+
+    master_out_dir = work_dir.parent / args.results_dirname
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
@@ -6111,7 +6274,8 @@ def main():
 
     console_info(f"Parallel workers : {_n_workers} (of {len(_rank_list)} ranks) - "
                  f"frame/SN2 analysis parallel @ cores-2={_cores_budget}; QSite QM/MM up to "
-                 f"{_qsite_concurrency()} scans concurrent (single-threaded engine, 1 core/job)")
+                 f"{_qsite_concurrency()} scans concurrent x {_QSITE_THREADS} OpenMP thread(s)/scan "
+                 f"({_qsite_concurrency() * _QSITE_THREADS} of {_cores_budget} cores at QSite peak)")
     console_separator(heavy=False)
     print(f"  {ConsoleColours.BOLD}Per-rank analysis - trajectory NAC -> QM/MM defluorination "
           f"({len(_rank_list)} ranks in parallel, lines interleave){ConsoleColours.ENDC}", flush=True)
@@ -6204,10 +6368,8 @@ def main():
         _RT = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         def _p_strict(r) -> float:
             return max(0.0, float(r.get("Strict_Viability_Pct", 0.0) or 0.0)) / 100.0
-        _prop = []
-        for _, _r in df_master.iterrows():
-            _bar = _r.get("QSite_Barrier_kcal", np.nan)
-            _prop.append(_p_strict(_r) * float(np.exp(-float(_bar) / _RT)) if _bar == _bar else np.nan)
+        _prop = [defluor_propensity(_p_strict(_r), _r.get("QSite_Barrier_kcal", np.nan))
+                 for _, _r in df_master.iterrows()]
         df_master["Defluor_Propensity"] = _prop
 
         '''
@@ -6254,36 +6416,12 @@ def main():
             downhill ΔE_rxn - the thermodynamic leg asserts the SN2 product is not uphill, and an
             absent number is no evidence that it isn't. The barrier and the reaction energy are
             treated identically for that reason; both come from the same QSite parse, and if that
-            parse gave only one of them the surviving number cannot carry the other's claim.
+            parse gave only one of them the surviving number cannot carry the other's claim. The gate
+            itself lives in defluor_verdict so the per-job QSite CSV returns the identical call.
             """
-            _sv  = float(r.get("Strict_Viability_Pct", 0) or 0)
-            _dw  = float(r.get("NAC_Dwell_Max_ns", 0) or 0)
-            _bar = r.get("QSite_Barrier_kcal", np.nan)
-            _der = r.get("QSite_dErxn_kcal", np.nan)
-            _std = int(r.get("MD_Analysis_Stride", 1) or 1)
-            if _std > 1:
-                # The dwell leg cannot be evaluated on sub-sampled frames, and a defluorination
-                # verdict must not be able to change with an I/O performance flag.
-                return 0, f"Dwell unmeasurable at stride {_std} - re-run at stride 1"
-            if _bar != _bar:
-                return 0, "Barrier pending"
-            if _der != _der:
-                return 0, "Reaction energy pending"
-            # Defluorination is, by definition, the C–F bond breaking: the product fluoride must have
-            # actually delocalised to free-fluoride (Mulliken charge ≤ QSITE_F_CHARGE_CLEAVED). A low
-            # barrier and downhill ΔE_rxn are necessary but not sufficient - a scan can look favourable
-            # without releasing the fluoride. Same parse as the barrier, so treat a missing value as
-            # pending, not as a fail.
-            _fqp = r.get("F_Charge_Product", np.nan)
-            if _fqp != _fqp:
-                return 0, "Fluoride charge pending"
-            if float(_fqp) > CFG.QSITE_F_CHARGE_CLEAVED:
-                return 0, "C–F not cleaved (fluoride not released)"
-            _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
-                   and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
-                   and float(_bar) <= CFG.DEFLUOR_BARRIER_MAX_KCAL
-                   and float(_der) <= CFG.DEFLUOR_DERXN_MAX_KCAL)
-            return (1, "Defluorination-competent") if _ok else (0, "Binds, not competent")
+            return defluor_verdict(r.get("Strict_Viability_Pct", 0), r.get("NAC_Dwell_Max_ns", 0),
+                                   r.get("QSite_Barrier_kcal", np.nan), r.get("QSite_dErxn_kcal", np.nan),
+                                   r.get("F_Charge_Product", np.nan), r.get("MD_Analysis_Stride", 1))
         _v = [_verdict(r) for _, r in df_master.iterrows()]
         df_master["Is_Defluorinating"] = [x[0] for x in _v]
         df_master["Defluor_Verdict"]   = [x[1] for x in _v]

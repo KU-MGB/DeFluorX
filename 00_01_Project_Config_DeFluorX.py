@@ -1974,9 +1974,19 @@ class CFG:
     explicit-solvent QM/MM-FEP or thermodynamic integration downstream.
     '''
     QSITE_QM_INCLUDE_CRADLE: bool = True     # include the full fluoride cradle (Trp156 + Tyr219 alongside His155) in the QM region - the departing F⁻ is a hard base whose charge-transfer/polarisation with the aromatic cradle is poorly captured by MM point charges; only the handful of Tier_1A candidates reach QSite, so the added DFT cost is bounded. Set False for the cheaper His155-only QM region.
-    QSITE_SCAN_START: float = 3.5            # Å  scan start (pre-reaction approach; 3.5 → 1.3 Å = full SN2 coordinate)
-    QSITE_SCAN_STEP: float  = -0.1           # Å  step per point (negative = bond compression)
-    QSITE_SCAN_NSTEPS: int  = 23             # points total → covers 3.5 → 1.3 Å (last point: 3.5 + −0.1×22 = 1.3 Å)
+    QSITE_SCAN_START: float = 3.5            # Å  scan start (reactant near-attack complex)
+    QSITE_SCAN_STEP: float  = -0.13          # Å  step per point (negative = Nu approaches, bond compresses)
+    QSITE_SCAN_NSTEPS: int  = 17             # points → covers 3.5 → 1.42 Å (3.5 + −0.13×16). The endpoint
+                                             # sits AT the covalent aspartyl-ester O-C minimum (sp3 C-O bond
+                                             # ~1.42-1.45 Å), so ΔE_rxn and the departing-fluoride charge are
+                                             # read at the product WELL - the fluoride has fully delocalised
+                                             # (Mulliken → ~−0.9) and the reaction energy is the true product
+                                             # depth, not a value sampled short of it on the approach side.
+                                             # It does NOT compress past equilibrium toward 1.3 Å, where the
+                                             # O-C bond is strained up the repulsive wall: those points are
+                                             # slow to converge and the main source of divergent scan tails.
+                                             # The 0.13 Å spacing lands a grid point on the ~2.2 Å SN2 saddle,
+                                             # so the barrier maximum is sampled directly.
     """
     Execution of the generated QSite jobs from Step 07. When True, Step 07
     launches `$SCHRODINGER/qsite` on each freshly extracted frame, writing all
@@ -1986,11 +1996,16 @@ class CFG:
     """
     QSITE_IMPVERSION: str   = "huge"         # Jaguar &gen impversion (memory/architecture tier; tune per cluster). igeopt=1 (relaxed scan) and mmqm=1 (QM/MM) are required mode flags for this calculation and stay fixed in the writer.
     QSITE_RUN: bool         = True
-    QSITE_PROCS: int        = 1              # CPUs per QSite job (qsite -PARALLEL). The QM engine is
-                                            # SINGLE-THREADED for these frozen-cut QM regions - measured
-                                            # at ~100% of ONE core regardless of -PARALLEL N, which only
-                                            # spawns idle helpers. Throughput comes from running many
-                                            # scans CONCURRENTLY (QSITE_RAM_* below), not from -PARALLEL.
+    QSITE_PROCS: int        = 1              # fallback CPUs per QSite job (qsite -PARALLEL) when the CPU
+                                            # budget cannot be split. Step 07 normally auto-derives
+                                            # threads-per-scan from (cores - reserve) / concurrent scans.
+    QSITE_MAX_THREADS: int  = 8              # cap on OpenMP threads per Jaguar SCF (qsite -max_threads).
+                                            # Jaguar's SCF is OpenMP-parallel but scales sublinearly and
+                                            # saturates near 8 threads for a frozen-cut QM region, so
+                                            # allocating beyond this wastes cores. Step 07 gives each scan
+                                            # min(QSITE_MAX_THREADS, (cores - reserve) / concurrent scans)
+                                            # threads, using otherwise-idle cores to speed each SCF while
+                                            # keeping threads x concurrency within the CPU budget.
     """
     QSite concurrency budget. Each Jaguar QM job holds ~QSITE_RAM_PER_JOB_GB resident, so the number of
     scans that may run at once is min(total_cpu - PREP_CPU_RESERVE, RAM budget). The RAM budget mirrors
@@ -2007,6 +2022,7 @@ class CFG:
 
     # --- Step 10.2: Multi-frame QM/MM barrier (defensible ensemble, not a single-frame lower bound) ---
     QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 scans only the single best frame, which reports a lower bound rather than an ensemble
+    QSITE_BARRIER_MAX_KCAL: float = 200.0    # kcal/mol; a parsed ΔE‡ above this is not a physical transition state but a non-converged (nofail-retained) scan point, so the barrier is reported as NaN rather than a spurious large value that would inflate the ensemble.
 
     # Step 07 phase orchestration. The SN2 / pose analysis (Phase A) is cheap and embarrassingly
     # parallel, so it runs across all ranks at once behind a single live \r progress line. QSite

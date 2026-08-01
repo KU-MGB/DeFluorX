@@ -20,7 +20,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-42574-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-42728-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -185,7 +185,7 @@ The tier ladder gates on a **feasibility-weighted mechanistic score** - `mechani
 
 ---
 
-## 🔄 Pipeline architecture (42,574 lines)
+## 🔄 Pipeline architecture (42,728 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">
@@ -487,7 +487,7 @@ python 03_Validation_Figures_DeFluorX.py  Boltz-2_Run_20260309T085406Z [--no-var
 python 04_Dendrogram_DeFluorX.py           Boltz-2_Run_20260309T085406Z
 python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
 python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z [--stages merge,watermap,build,md] [--test]
-python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z [--workers N] [--no-run-qsite] [--force]
+python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z [--workers N] [--no-run-qsite] [--force] [--results-dirname NAME] [--run-tag TAG] [--qsite-threads N]
 ```
 
 `06 --stages` runs a subset of the physics phases (SID + MM-GBSA run inside `md`); `07 --no-run-qsite` writes the QSite inputs without launching the scans, and `--force` recomputes a rank from the trajectory instead of resuming from its cached frame table.
