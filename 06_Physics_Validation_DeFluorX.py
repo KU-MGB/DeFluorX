@@ -76,11 +76,11 @@ Dependency Map
                   <out>/04_System_Builder/desmond_setup_R_N/desmond_setup_R_N-out.cms
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
-                  <out>/06_Analysis/{00_MMGBSA_Summary.csv, 01_Physics_Build_Solvation_QC.png,
-                       02_MD_Trajectory_QC.png, 03_MMGBSA_Combined_AllRanks.png,
-                       04_Defluorination_Combined_AllRanks.png,
-                       Prime-MMGBSA/MMGBSA_Profile_R{N}.png,
-                       Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.png … 06_Figure_Descriptions.txt}
+                  <out>/06_Analysis/{00_MMGBSA_Summary.csv, 01_Physics_Build_Solvation_QC.svg,
+                       02_MD_Trajectory_QC.svg, 03_MMGBSA_Combined_AllRanks.svg,
+                       04_Defluorination_Combined_AllRanks.svg,
+                       Prime-MMGBSA/MMGBSA_Profile_R{N}.svg,
+                       Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.svg … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_DeFluorX.py (prepared PDBs + ESP charges).
   Downstream    : 07_MD_QMMM_Defluorination_DeFluorX.py (reads 05_MD_Simulations + 03_WaterMaps).
@@ -163,7 +163,7 @@ import matplotlib.colors as _mcolors  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 import matplotlib.patheffects as pe  # noqa: E402
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 import atexit
 import math as _math
 import shutil as _sh
@@ -2286,7 +2286,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     # shared) - so a ΔG value can be read straight across from one panel to the other.
     ax2.tick_params(labelleft=False, left=True)
     ax2.grid(alpha=0.25, linewidth=0.5)
-    out_path = out_dir / f"MMGBSA_Profile_R{rank}.png"
+    out_path = out_dir / f"MMGBSA_Profile_R{rank}.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     if not quiet:
@@ -2497,7 +2497,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         for _sp in ("left", "bottom"):
             _ax.spines[_sp].set_linewidth(1.0)
 
-    out_path = out_dir / "03_MMGBSA_Combined_AllRanks.png"
+    out_path = out_dir / "03_MMGBSA_Combined_AllRanks.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _echo(f"  MM-GBSA combined figure saved: {_utils_mod.deflx_fig_name(out_path.resolve())}")
@@ -3157,7 +3157,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     axC.set_xlabel("Time (ns)", labelpad=2, color=_DEFL_AXTXT)
     axC.set_xticks(np.arange(0, total_ns + 1, 50)); axC.tick_params(axis="x", labelcolor=_DEFL_AXTXT)
     axA.set_xlim(_xleft, total_ns * 1.005)
-    fig.tight_layout(h_pad=0.6); fig.savefig(out / "01_Reactive_Pose_Trajectory.png", dpi=_dpi); plt.close(fig)
+    fig.tight_layout(h_pad=0.6); fig.savefig(out / "01_Reactive_Pose_Trajectory.svg", dpi=_dpi); plt.close(fig)
 
     # 02 reactive summary - each bar's y-tick label AND its value (written just right of the bar, never
     # inside) take that bar's colour, so residue/criterion, bar and number all read as one coloured unit.
@@ -3184,7 +3184,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         _lbl.set_color(_col)
     for i, (c, _col) in enumerate(zip(crit, _txt_b)):
         axb2.text(c[1] + 0.3, i, f"{c[1]:.1f}%", va="center", fontsize=CFG.VIS_FONT_TICK, color=_col)
-    fig.tight_layout(); fig.savefig(out / "02_Reactive_Summary.png", dpi=_dpi); plt.close(fig)
+    fig.tight_layout(); fig.savefig(out / "02_Reactive_Summary.svg", dpi=_dpi); plt.close(fig)
 
     # 03 binding vs reactivity (only when MM-GBSA is available for this rank)
     if np.isfinite(dG).any():
@@ -3211,7 +3211,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.set_xlabel("attack distance (Å)")
         ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
         ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
-        fig.tight_layout(); fig.savefig(out / "03_Binding_vs_Reactivity.png", dpi=_dpi); plt.close(fig)
+        fig.tight_layout(); fig.savefig(out / "03_Binding_vs_Reactivity.svg", dpi=_dpi); plt.close(fig)
 
     # The MM-GBSA energy-component decomposition (reactive vs rest) is drawn once, in Step 07's
     # per-rank MMGBSA_NAC_Decomposition figure, from the same per-frame Prime terms; the per-component
@@ -3344,10 +3344,10 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         else:
             a.tick_params(labelbottom=False)
     fig.tight_layout()
-    fig.savefig(analysis / "04_Defluorination_Combined_AllRanks.png",
+    fig.savefig(analysis / "04_Defluorination_Combined_AllRanks.svg",
                 dpi=int(CFG.VIS_FIGURE_DPI))
     plt.close(fig)
-    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/{_utils_mod.deflx_fig_name('04_Defluorination_Combined_AllRanks.png')}")
+    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/{_utils_mod.deflx_fig_name('04_Defluorination_Combined_AllRanks.svg')}")
 
 
 # =============================================================================
@@ -4412,7 +4412,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
 
     fig.tight_layout()
     qc_dir = _analysis_dir(out_root)
-    out_path = qc_dir / "01_Physics_Build_Solvation_QC.png"
+    out_path = qc_dir / "01_Physics_Build_Solvation_QC.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _ok(f"[qc] ✔ physics build/solvation QC → {qc_dir.name}/{_utils_mod.deflx_fig_name(out_path.name)}  ({len(recs)} rank(s))")
@@ -4582,7 +4582,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
                  f"are restraint-enforced, not spontaneous. The unrestrained SN2 barrier is the Step-07 QM/MM ΔE‡.",
                  ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT - 1, color=CFG.VIS_INK["soft"], wrap=True)
     qc_dir = _analysis_dir(out_root)
-    out_path = qc_dir / "02_MD_Trajectory_QC.png"
+    out_path = qc_dir / "02_MD_Trajectory_QC.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{_utils_mod.deflx_fig_name(out_path.name)}  ({len(recs)} rank(s))")

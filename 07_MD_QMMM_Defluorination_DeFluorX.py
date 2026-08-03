@@ -41,32 +41,32 @@ Date   : 05 August 2026 <──────────────────�
   Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N/
                     - 02_NAC_Data.csv                 (per-frame geometry + DT)
                     - 01_MD_Stats.json                (per-rank statistics cache; drives the resume path)
-                    - 03_NAC_Dashboard.png         (2-panel figure)
-                    - 04_Active_Site_Dynamics.png  (all catalytic distances: time-traces + violin bank + NAC dwell)
-                    - 05_Free_Energy_Landscapes.png (3D FEL: reaction coordinates + essential dynamics)
-                    - 06_MMGBSA_Decomposition_and_Trace.png (ONE figure: ΔG component decomposition bars - whole trajectory vs reactive pose, with the whole->reactive Δ shift + IQR whiskers - over the per-frame ΔG_bind trajectory trace with rolling mean and ±1 SD)
-                    - 07_Machinery_Engagement.png  (per-residue median distance + mean marker + IQR + contact occupancy vs the warhead C)
+                    - 03_NAC_Dashboard.svg         (2-panel figure)
+                    - 04_Active_Site_Dynamics.svg  (all catalytic distances: time-traces + violin bank + NAC dwell)
+                    - 05_Free_Energy_Landscapes.svg (3D FEL: reaction coordinates + essential dynamics)
+                    - 06_MMGBSA_Decomposition_and_Trace.svg (ONE figure: ΔG component decomposition bars - whole trajectory vs reactive pose, with the whole->reactive Δ shift + IQR whiskers - over the per-frame ΔG_bind trajectory trace with rolling mean and ±1 SD)
+                    - 07_Machinery_Engagement.svg  (per-residue median distance + mean marker + IQR + contact occupancy vs the warhead C)
                     - Ideal_Final.maegz            (best frame for QSite)
-                    - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index; each holds 01_Reaction_Profile.png)
-                    - 08_QSite_BestFrame_Reaction_Profile.png (3-panel PES + departing-F charge + verdict card for the BEST-preorg single frame; the RANK verdict rides its card so it agrees with 09. The 09 ensemble is the headline; this is the single-frame supplement)
-                    - 09_QSite_Ensemble_Profiles.png (all sampled frames overlaid + cleavage-semantic colours + verdict card; the headline QM/MM figure)
+                    - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index; each holds 01_Reaction_Profile.svg)
+                    - 08_QSite_BestFrame_Reaction_Profile.svg (3-panel PES + departing-F charge + verdict card for the BEST-preorg single frame; the RANK verdict rides its card so it agrees with 09. The 09 ensemble is the headline; this is the single-frame supplement)
+                    - 09_QSite_Ensemble_Profiles.svg (all sampled frames overlaid + cleavage-semantic colours + verdict card; the headline QM/MM figure)
                     - 10_QSite_Scan_Data.csv       (long-format raw PES + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
                      the Defluor_Propensity / Is_Defluorinating verdict)
-                  <Run>/7_MD_Thermodynamics_Results/02_MD_Comparative_Analysis.png
+                  <Run>/7_MD_Thermodynamics_Results/02_MD_Comparative_Analysis.svg
                     (cross-rank comparative dashboard)
-                  <Run>/7_MD_Thermodynamics_Results/03_MD_Viability_Summary.png
+                  <Run>/7_MD_Thermodynamics_Results/03_MD_Viability_Summary.svg
                     (per-candidate MD viability bar chart)
-                  <Run>/7_MD_Thermodynamics_Results/04_Comparative_Residue_Engagement.png
+                  <Run>/7_MD_Thermodynamics_Results/04_Comparative_Residue_Engagement.svg
                     (cross-rank catalytic-residue engagement heatmap)
-                  <Run>/7_MD_Thermodynamics_Results/05_Defluorination_Landscape.png
+                  <Run>/7_MD_Thermodynamics_Results/05_Defluorination_Landscape.svg
                     (whole-story figure: persistence × QM/MM barrier × binding)
-                  <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.png
-                  <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.png
+                  <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.svg
+                  <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.svg
                     (the same two reactive-pose figures, merged across candidates)
-                  <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.png
+                  <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.svg
                     (every job's best-frame QM/MM PES overlaid + defluorination ranking by ensemble ΔE‡)
   Upstream      : 06_Physics_Validation_DeFluorX.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
                                                     produces the MD trajectories, WaterMap CSVs,
@@ -435,7 +435,7 @@ logger    = None  # Initialised in main()
 # =============================================================================
 
 import threading
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 import atexit as _atexit
 import glob as _glob
 import re as _re
@@ -1660,7 +1660,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "02_MD_Comparative_Analysis.png"
+    out_path = out_dir / "02_MD_Comparative_Analysis.svg"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Comparative Dashboard Saved : {deflx_fig_name(out_path.resolve())}")
@@ -1725,7 +1725,7 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     ax.tick_params(axis="y", labelrotation=0)
     plt.setp(ax.get_yticklabels(), fontsize=CFG.VIS_FONT_LEGEND)
 
-    out_path = out_dir / "04_Comparative_Residue_Engagement.png"
+    out_path = out_dir / "04_Comparative_Residue_Engagement.svg"
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
@@ -1904,7 +1904,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "03_MD_Viability_Summary.png"
+    out_path = out_dir / "03_MD_Viability_Summary.svg"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Viability Bar Chart Saved   : {deflx_fig_name(out_path.resolve())}")
@@ -1990,7 +1990,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
                      "NAC dwell measured under the Step-06 ligand positional restraint - persistence is "
                      "restraint-sustained, not spontaneous; the QM/MM ΔE‡ is the unrestrained turnover arbiter.",
                      ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT, color="0.45", wrap=True)
-        out_path = out_dir / "05_Defluorination_Landscape.png"
+        out_path = out_dir / "05_Defluorination_Landscape.svg"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches="tight")
@@ -2155,7 +2155,7 @@ def _draw_reactive_pose_for_rank(master_out_dir: Path, rank: int) -> None:
     if entry is None:
         return
     with PLOT_LOCK:
-        plot_mmgbsa_combined(entry, _rank_dir / "06_MMGBSA_Decomposition_and_Trace.png")
+        plot_mmgbsa_combined(entry, _rank_dir / "06_MMGBSA_Decomposition_and_Trace.svg")
         plot_machinery_engagement(master_out_dir, [entry], merged=False)
 
 
@@ -2371,7 +2371,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
 
         if _external_ax:
             return   # bars drawn onto the caller's axes; the combined overview owns the save
-        out_path = out_dir / "06_MMGBSA_Decomposition_AllRanks.png"
+        out_path = out_dir / "06_MMGBSA_Decomposition_AllRanks.svg"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -2567,8 +2567,8 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True,
                   ncol=len(_hdl) if not merged else 4)
 
-        out_path = (out_dir / "07_Machinery_Engagement_AllRanks.png" if merged
-                    else rr[0]["dir"] / "07_Machinery_Engagement.png")
+        out_path = (out_dir / "07_Machinery_Engagement_AllRanks.svg" if merged
+                    else rr[0]["dir"] / "07_Machinery_Engagement.svg")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             plt.savefig(out_path, dpi=_dpi, bbox_inches="tight")
@@ -2624,7 +2624,7 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
                                else bool(pd.notna(_fqp) and float(_fqp) <= CFG.QSITE_F_CHARGE_CLEAVED and pd.notna(_bar))),
             })
         if _jobs:
-            plot_qsite_profiles_all_jobs(out_dir / "08_QSite_Profiles_AllJobs.png", _jobs)
+            plot_qsite_profiles_all_jobs(out_dir / "08_QSite_Profiles_AllJobs.svg", _jobs)
     except Exception as _exc:
         console_info(f"    [!] QSite all-jobs figure skipped ({_exc}).")
 
@@ -3157,8 +3157,8 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
                                                                # without it Jaguar writes NO charge table
                                                                # and the departing-fluoride charge - the
                                                                # electronic proof of C–F cleavage - cannot
-                                                               # be parsed at all (verified 13 July 2026;
-                                                               # 'mulliken' and 'ipop' are rejected)
+                                                               # be parsed at all ('mulliken' and
+                                                               # 'ipop' are rejected)
     ]
     if CFG.QSITE_MULT != 1:
         _gen.append(f"multip={CFG.QSITE_MULT}")
@@ -4748,12 +4748,12 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
     """
     print(f"  [Rank {rank}] Generating trajectory figures...", flush=True)
     generate_individual_dashboard(
-        df_res, job_name, job_out_dir / "03_NAC_Dashboard.png", stats)
+        df_res, job_name, job_out_dir / "03_NAC_Dashboard.svg", stats)
     generate_active_site_dynamics(
-        df_res, row, job_out_dir / "04_Active_Site_Dynamics.png")
+        df_res, row, job_out_dir / "04_Active_Site_Dynamics.svg")
     generate_free_energy_landscapes(
-        df_res, job_out_dir / "05_Free_Energy_Landscapes.png")
-    # 04 (MM-GBSA overview = decomposition bars + ΔG_bind trace, merged into one figure) and 05
+        df_res, job_out_dir / "05_Free_Energy_Landscapes.svg")
+    # 06 (MM-GBSA overview = decomposition bars + ΔG_bind trace, merged into one figure) and 07
     # (machinery engagement) for THIS rank, drawn now so both are readable the moment the rank lands;
     # the trace's ΔG_bind data + the reactive-pose decomposition both ride the entry built inside
     # _draw_reactive_pose_for_rank, so the MM-GBSA CSV is read once there. Merged cross-rank versions
@@ -4921,17 +4921,17 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             _pr["water"] = _qsite_qm_water_count(_fold)
             _profs.append(_pr)
             # Per-frame figure = that frame's own verdict (honest per frame: a dewetted frame is intact).
-            plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.png", job_name, rank, _pr)
+            plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.svg", job_name, rank, _pr)
         if _profs:
             # Rank-level 08 (best frame) uses the RANK verdict (cleaved N/M) so it agrees with the 09
             # ensemble overview even when the best-preorg frame it plots is a dewetted-intact outlier.
             _ncl_all = sum(1 for p in _profs if p.get("cleaved"))
             _best_dewet = (_profs[0].get("water") == 0) and not _profs[0].get("cleaved")
             plot_qsite_reaction_profile(
-                job_out_dir / "08_QSite_BestFrame_Reaction_Profile.png", job_name, rank, _profs[0],
+                job_out_dir / "08_QSite_BestFrame_Reaction_Profile.svg", job_name, rank, _profs[0],
                 rank_verdict={"cleaved": _ncl_all > 0, "n_cleaved": _ncl_all,
                               "n_total": len(_profs), "best_dewetted": _best_dewet})
-            plot_qsite_ensemble_profiles(job_out_dir / "09_QSite_Ensemble_Profiles.png", rank, _profs,
+            plot_qsite_ensemble_profiles(job_out_dir / "09_QSite_Ensemble_Profiles.svg", rank, _profs,
                                          job_name=job_name, ligand=ligand)
             # The verdict is computed here from this job's own metrics (not read back from a stats key
             # the master only fills later), so the per-frame scan CSV carries the SAME

@@ -52,7 +52,7 @@
 <text x="389" y="354.59999999999997" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">6-tier ladder · elite-angle + floor</text>
 <text x="389" y="367.79999999999995" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">controls FA→2A · DFA→2B · TFA→3</text>
 <text x="389" y="380.99999999999994" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">→ ranked + master CSV · best CIFs</text>
-<text x="597" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~7,431</text>
+<text x="597" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~7,436</text>
 <g filter="url(#ds)"><rect x="616" y="278" width="236" height="134" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="633" y="298" font-size="10.4" font-weight="800" fill="#9d174d">03_Validation_Figures_DeFluorX.py</text>
 <text x="633" y="315" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">the judge - 69 panels · 7 folders</text>
@@ -60,7 +60,7 @@
 <text x="633" y="341.4" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">BH stats · Ramachandran · control★</text>
 <text x="633" y="354.59999999999997" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">multi-model variance · separators</text>
 <text x="633" y="367.79999999999995" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">→ Figure_Enriched_Dataset.csv</text>
-<text x="841" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,676</text>
+<text x="841" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,671</text>
 <g filter="url(#ds)"><rect x="860" y="278" width="224" height="134" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="877" y="298" font-size="10.4" font-weight="800" fill="#9d174d">04_Dendrogram_DeFluorX.py</text>
 <text x="877" y="315" font-size="9.2" fill="#9d174d" textLength="190" lengthAdjust="spacing">alignment-free k-mer (k=3)</text>
@@ -89,7 +89,7 @@
 <text x="389" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="389" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="389" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~4,920</text>
+<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~4,918</text>
 <g filter="url(#ds)"><rect x="736" y="476" width="348" height="134" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="753" y="496" font-size="10.4" font-weight="800" fill="#1e40af">07_MD_QMMM_Defluorination_DeFluorX.py</text>
 <text x="753" y="513" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">turns MD trajectories into a defluorination verdict</text>
@@ -98,7 +98,7 @@
 <text x="753" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="753" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">departing-F Mulliken charge → cleavage check</text>
 <text x="753" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~6,805</text>
+<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~6,806</text>
 <path d="M210 166 L150 166 L150 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M930 166 L990 166 L990 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M210 166 L22 166 L22 505 L40 505" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>

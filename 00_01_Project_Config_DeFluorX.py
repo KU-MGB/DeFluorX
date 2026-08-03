@@ -2085,8 +2085,8 @@ class CFG:
     re-evaluation of the barrier rather than for the scan itself.
     """
     QSITE_SCF_IACC: int = 1
-    QSITE_SCF_VSHIFT: float = 5.0    # SCF level shift (stabilises convergence) - read at 07:2759
-    QSITE_SCF_MAXIT: int    = 200    # max SCF iterations - read at 07:2760
+    QSITE_SCF_VSHIFT: float = 5.0    # SCF level shift (stabilises convergence) - read by the 07 QSite _gen writer
+    QSITE_SCF_MAXIT: int    = 200    # max SCF iterations - read by the 07 QSite _gen writer
     QSITE_GEOM_MAXITG: int  = 50     # max GEOMETRY-optimisation steps per relaxed-scan point (Jaguar
                                      # maxitg). The SCF converges fine (~10 iters); the failure mode is
                                      # the CONSTRAINED GEOMETRY optimiser oscillating on a hard TS-region
@@ -3185,7 +3185,7 @@ class CFG:
     LIGAND_MIN_ATOMS: int      = 5              # fallback floor: if MMGBSA_LIGAND_ASL matches no atoms, Step 06 pins the smallest non-protein / non-solvent molecule with at least this many atoms (a bare fluoroacetate has 7) rather than dropping to size-blind auto-detect.
     MMGBSA_DG_COLUMN: str   = "r_psp_MMGBSA_dG_Bind"   # primary per-frame dG_bind column in the thermal_mmgbsa CSV
     MMGBSA_TIMEOUT_SEC: int = 0               # 0 = no timeout (Prime can run for hours); >0 caps each job
-    MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/06_Analysis/ (flat MMGBSA_Profile_R{N}.png per rank)
+    MMGBSA_OUTPUT_SUBDIR: str = "Prime-MMGBSA"  # figures folder under <run>/6_Physics_Validation/06_Analysis/ (flat MMGBSA_Profile_R{N}.svg per rank)
 
     # Defluorination geometry - native per-rank trajectory analysis in Step 06 (Section 8b)
     DEFLUOR_RUN: bool         = True             # run the per-rank SN2-defluorination geometry analysis

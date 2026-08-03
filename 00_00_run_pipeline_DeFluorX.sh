@@ -43,7 +43,7 @@
 #   2. Log Interleaving: Concurrent runs in the same directory will interleave
 #      output in the same log file unless unique --run-id is provided.
 #   3. Environment: Assumes the 'PFAS' conda environment is correctly configured
-#      via Step 00; lacks internal dependency verification.
+#      via Step 00, whose 00a package gate hard-fails on any missing dependency.
 #   4. Fresh mode RUN_ID: The run directory created by Step 02 is auto-detected
 #      after that step completes; if Step 02 creates no directory, the pipeline
 #      halts with a diagnostic message.

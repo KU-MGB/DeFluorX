@@ -24,13 +24,13 @@ Date   : 05 August 2026 <──────────────────�
   Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
                   (Master CSV written by 02_Production_DeFluorX.py; latest file selected)
   Writes        : <Run>/3_Validation_Figures/  (figures grouped folder-by-folder)
-                    02_Ramachandran/                          Ramachandran_*.png
-                    03_Dataset_and_Alignment_Overview/        01_*.png onward
-                    04_AI_Confidence_Quality/                 01_*.png onward
-                    05_Catalytic_Geometry_and_Mechanism/      01_*.png onward
-                    06_Ligand_Interactions_and_Chemical_Space/ 01_*.png onward
-                    07_PFAS_Scope_and_Synthesis/              01_*.png onward
-                    08_Diagnostic_and_MultiModel_Trends/      01_*.png onward
+                    02_Ramachandran/                          Ramachandran_*.svg
+                    03_Dataset_and_Alignment_Overview/        01_*.svg onward
+                    04_AI_Confidence_Quality/                 01_*.svg onward
+                    05_Catalytic_Geometry_and_Mechanism/      01_*.svg onward
+                    06_Ligand_Interactions_and_Chemical_Space/ 01_*.svg onward
+                    07_PFAS_Scope_and_Synthesis/              01_*.svg onward
+                    08_Diagnostic_and_MultiModel_Trends/      01_*.svg onward
                                                               (pocket-fit + consensus + competence)
                   Every folder numbers its figures from 01 in the order the step draws them;
                   the authoritative per-figure list is written to 05_Figure_Descriptions.txt
@@ -91,72 +91,72 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
 
     [Figures - grouped folder-by-folder; each folder numbered in narrative order]
     ── 02_Ramachandran/ ── backbone-geometry validation of the controls
-    • Ramachandran_3R3U_Crystal.png · Ramachandran_{DeHa4,3R3U}_Control.png (+ _vs_Crystal)
+    • Ramachandran_3R3U_Crystal.svg · Ramachandran_{DeHa4,3R3U}_Control.svg (+ _vs_Crystal)
 
     ── 03_Dataset_and_Alignment_Overview/ ── dataset + sequence-alignment overview
-    • 01_Active_Site_Residue_Mapping_Coverage.png  <-- Per-residue alignment coverage (+ MISSED.csv)
-    • 02_Tier_Distribution.png                     <-- Catalytic tier counts + model-selection pie
-    • 03_Alignment_Grades.png                      <-- Sequence-identity grades + KDE by tier
-    • 04_Tier_Grade_Distribution.png               <-- Tier × alignment-grade cross-tabulation
+    • 01_Active_Site_Residue_Mapping_Coverage.svg  <-- Per-residue alignment coverage (+ MISSED.csv)
+    • 02_Tier_Distribution.svg                     <-- Catalytic tier counts + model-selection pie
+    • 03_Alignment_Grades.svg                      <-- Sequence-identity grades + KDE by tier
+    • 04_Tier_Grade_Distribution.svg               <-- Tier × alignment-grade cross-tabulation
 
     ── 04_AI_Confidence_Quality/ ── Boltz-2 confidence metrics
-    • 01_AI_Quality_Assessment.png                 <-- Boltz confidence boxes + pTM/ipTM panel
-    • 02_AI_Quality_Space.png                      <-- {CFG.TIER_TOP} pTM/ipTM density + thumbnails
-    • 03_pTM_vs_ipTM_by_Tier.png                   <-- pTM vs ipTM 2-D scatter by tier
+    • 01_AI_Quality_Assessment.svg                 <-- Boltz confidence boxes + pTM/ipTM panel
+    • 02_AI_Quality_Space.svg                      <-- {CFG.TIER_TOP} pTM/ipTM density + thumbnails
+    • 03_pTM_vs_ipTM_by_Tier.svg                   <-- pTM vs ipTM 2-D scatter by tier
 
     ── 05_Catalytic_Geometry_and_Mechanism/ ── structural + mechanistic geometry
-    • 01_ActiveSite_RMSD_by_Tier.png               <-- Active-site RMSD vs reference control (median bar)
-    • 02_Feature_Correlations.png                  <-- Spearman ρ correlation heatmap of 17 features (incl. mechanistic/chemistry drivers), family-grouped
-    • 03_Tier_Quality_DotPlot.png                  <-- Multi-metric tier-quality Cleveland dot plot
-    • 04_Mech_State_CrossTab.png                   <-- Halide stabilisation × carboxylate clamp heatmap
-    • 05_Mechanistic_Score_by_Tier.png             <-- Mechanistic score mean ± CI (median annotated)
-    • 06_Mechanistic_Fingerprint.png               <-- Per-tier catalytic feature profile (radar / spider; config §5 components)
-    • 07_SN2_Angle_by_Tier.png                     <-- SN2 attack-angle ECDF by tier
-    • 08_Mechanism_Geometry_Scatter.png            <-- SN2 angle vs nucleophile-distance scatter
-    • 09_Mechanistic_Quality_Space.png             <-- {CFG.TIER_TOP} mechanistic density + thumbnails
-    • 10_Criterion_A_Gates_B.png                   <-- active-site integrity gates the catalytic constellation
-    • 11_Criterion_B_ECDF_by_Tier.png             <-- the constellation score separates the tiers (ECDF)
-    • 12_SN2_DeadEnd_Gate.png                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
-    • 13_Geometry_and_Uncertainty.png             <-- Nucleophile distance + SN2 angle with multi-model uncertainty
-    • 14_Mechanistic_Breakdown_by_Tier.png        <-- Mechanistic components broken down per tier
-    • 16_Mechanistic_Gate_UpSet.png               <-- mechanistic-gate UpSet: gate-combination intersections + tier mix + mean score/coverage
+    • 01_ActiveSite_RMSD_by_Tier.svg               <-- Active-site RMSD vs reference control (median bar)
+    • 02_Feature_Correlations.svg                  <-- Spearman ρ correlation heatmap of 17 features (incl. mechanistic/chemistry drivers), family-grouped
+    • 03_Tier_Quality_DotPlot.svg                  <-- Multi-metric tier-quality Cleveland dot plot
+    • 04_Mech_State_CrossTab.svg                   <-- Halide stabilisation × carboxylate clamp heatmap
+    • 05_Mechanistic_Score_by_Tier.svg             <-- Mechanistic score mean ± CI (median annotated)
+    • 06_Mechanistic_Fingerprint.svg               <-- Per-tier catalytic feature profile (radar / spider; config §5 components)
+    • 07_SN2_Angle_by_Tier.svg                     <-- SN2 attack-angle ECDF by tier
+    • 08_Mechanism_Geometry_Scatter.svg            <-- SN2 angle vs nucleophile-distance scatter
+    • 09_Mechanistic_Quality_Space.svg             <-- {CFG.TIER_TOP} mechanistic density + thumbnails
+    • 10_Criterion_A_Gates_B.svg                   <-- active-site integrity gates the catalytic constellation
+    • 11_Criterion_B_ECDF_by_Tier.svg             <-- the constellation score separates the tiers (ECDF)
+    • 12_SN2_DeadEnd_Gate.svg                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
+    • 13_Geometry_and_Uncertainty.svg             <-- Nucleophile distance + SN2 angle with multi-model uncertainty
+    • 14_Mechanistic_Breakdown_by_Tier.svg        <-- Mechanistic components broken down per tier
+    • 16_Mechanistic_Gate_UpSet.svg               <-- mechanistic-gate UpSet: gate-combination intersections + tier mix + mean score/coverage
 
     ── 06_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
-    • 01_Molecular_Interaction_Profile.png         <-- Bond-type profile + fluorine engagement
-    • 02_Interaction_Quality_Space.png             <-- {CFG.TIER_TOP} interaction density + thumbnails
-    • 03_Fluorine_Engagement_by_Tier.png           <-- Fluorine engagement ratio box + trend line
-    • 04_Catalytic_Quality_vs_Inhibition.png       <-- Soft-catalytic-score violin + active-site contact density
-    • 05_ActiveSite_Contact_Density_by_Tier.png    <-- Active-site contact density box + strip
-    • 06_Binding_Energetics.png                    <-- Binding-probability violin by tier
-    • 07_Chemical_Space_Map.png                    <-- UMAP chemical-space manifold, competence hexbin + {CFG.TIER_TOP} structure thumbnails
-    • 08_Binding_Affinity_Metrics.png              <-- Binding-affinity distribution by tier (2-column legend + stats)
+    • 01_Molecular_Interaction_Profile.svg         <-- Bond-type profile + fluorine engagement
+    • 02_Interaction_Quality_Space.svg             <-- {CFG.TIER_TOP} interaction density + thumbnails
+    • 03_Fluorine_Engagement_by_Tier.svg           <-- Fluorine engagement ratio box + trend line
+    • 04_Catalytic_Quality_vs_Inhibition.svg       <-- Soft-catalytic-score violin + active-site contact density
+    • 05_ActiveSite_Contact_Density_by_Tier.svg    <-- Active-site contact density box + strip
+    • 06_Binding_Energetics.svg                    <-- Binding-probability violin by tier
+    • 07_Chemical_Space_Map.svg                    <-- UMAP chemical-space manifold, competence hexbin + {CFG.TIER_TOP} structure thumbnails
+    • 08_Binding_Affinity_Metrics.svg              <-- Binding-affinity distribution by tier (2-column legend + stats)
 
     ── 07_PFAS_Scope_and_Synthesis/ ── multi-metric synthesis + publication assembly
-    • 01_Radar_TopHits.png                         <-- Radar: top-5 hits vs worst-tier baseline
-    • 02_Radar_TierReps.png                        <-- Radar: one representative per tier
-    • 03_Tier_Success_Rates.png                    <-- Tier % success: substrate vs inhibitor geometry
-    • 04_Conf_SN2_Landscape.png                    <-- Per-tier medians in confidence × SN2-angle space
-    • 05_Conflict_Composition.png                  <-- Conflict category × tier stacked bar
-    • 06_Hidden_Gems_DeepDive.png                  <-- Physics-good / AI-missed slope chart
-    • 07_Category_Overlap_Euler.png                <-- Multi-set overlap Euler diagram
-    • 08_Top25_Multitarget_Proteins.png            <-- Top-25 multitarget proteins, stacked by tier
-    • 09_TopTier_Protein_PFAS_Breakdown.png        <-- Top-tier proteins: PFAS degraded (colour=ligand)
-    • 10_Sankey_Workflow.png                       <-- Sankey: nuc-dist → SN2 angle → final tier
-    • 11_PFAS_Size_Hexbin_Landscape.png            <-- Chain-length hexbin + tier scatter + rolling median
-    • 12_PFAS_Size_Composition_Merged.png          <-- Per bin: outcome + degrader-tier stacked bars
-    • 13_PFAS_Carbon_Confidence.png             <-- Catalytic competence vs MW per carbon group
+    • 01_Radar_TopHits.svg                         <-- Radar: top-5 hits vs worst-tier baseline
+    • 02_Radar_TierReps.svg                        <-- Radar: one representative per tier
+    • 03_Tier_Success_Rates.svg                    <-- Tier % success: substrate vs inhibitor geometry
+    • 04_Conf_SN2_Landscape.svg                    <-- Per-tier medians in confidence × SN2-angle space
+    • 05_Conflict_Composition.svg                  <-- Conflict category × tier stacked bar
+    • 06_Hidden_Gems_DeepDive.svg                  <-- Physics-good / AI-missed slope chart
+    • 07_Category_Overlap_Euler.svg                <-- Multi-set overlap Euler diagram
+    • 08_Top25_Multitarget_Proteins.svg            <-- Top-25 multitarget proteins, stacked by tier
+    • 09_TopTier_Protein_PFAS_Breakdown.svg        <-- Top-tier proteins: PFAS degraded (colour=ligand)
+    • 10_Sankey_Workflow.svg                       <-- Sankey: nuc-dist → SN2 angle → final tier
+    • 11_PFAS_Size_Hexbin_Landscape.svg            <-- Chain-length hexbin + tier scatter + rolling median
+    • 12_PFAS_Size_Composition_Merged.svg          <-- Per bin: outcome + degrader-tier stacked bars
+    • 13_PFAS_Carbon_Confidence.svg             <-- Catalytic competence vs MW per carbon group
     • (folded panels) 14_Chain_Length_by_Tier · 15_Tier1A_Cross_Ligand_Heatmap · 16_Swimmer_Top_Per_Tier · 17_Circos_Ligand_Tier_Assignment
-    • 18_Pocket_Residue_Reaction_Readiness.png     <-- Pocket + 8-residue reaction-readiness per ligand, size-ordered (composite = geometry × 02 competence)
+    • 18_Pocket_Residue_Reaction_Readiness.svg     <-- Pocket + 8-residue reaction-readiness per ligand, size-ordered (composite = geometry × 02 competence)
 
     ── 08_Diagnostic_and_MultiModel_Trends/ ── pocket-fit + multi-model consensus diagnostics
-    • 01_Pocket_vs_Ligand_Volume.png               <-- Cavity vs ligand volume, y=x steric fit boundary
-    • 02_Pocket_Occupancy_by_Carbon_Number.png     <-- Whole-cavity coverage (violin) + 8-residue active-site coverage (box) per PFAS carbon number, both means trended
-    • 03_MultiModel_Consensus_by_Tier.png          <-- Multi-model degrader consensus, mean ± CI by tier
-    • 04_Confidence_vs_Consensus.png               <-- Confidence vs cross-model consensus hexbin + trend
-    • 05_Quality_and_Competence_Diagnostics.png    <-- Confidence×competence + mech-score×penalty scatter (tier)
-    • 06_Size_Preference_Containment.png           <-- Effective-mech distribution + means + hit-rate + pocket containment vs ligand size
-    • 07_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
-    • 08_Model_Agreement.png                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
+    • 01_Pocket_vs_Ligand_Volume.svg               <-- Cavity vs ligand volume, y=x steric fit boundary
+    • 02_Pocket_Occupancy_by_Carbon_Number.svg     <-- Whole-cavity coverage (violin) + 8-residue active-site coverage (box) per PFAS carbon number, both means trended
+    • 03_MultiModel_Consensus_by_Tier.svg          <-- Multi-model degrader consensus, mean ± CI by tier
+    • 04_Confidence_vs_Consensus.svg               <-- Confidence vs cross-model consensus hexbin + trend
+    • 05_Quality_and_Competence_Diagnostics.svg    <-- Confidence×competence + mech-score×penalty scatter (tier)
+    • 06_Size_Preference_Containment.svg           <-- Effective-mech distribution + means + hit-rate + pocket containment vs ligand size
+    • 07_Reactive_Engagement.svg                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
+    • 08_Model_Agreement.svg                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
 
     ── Folded panels (distributed into the folders above by _PANEL_FIG_PATHS; folder/NN authoritative) ──
     • 05/13_Geometry_and_Uncertainty · 05/14_Mechanistic_Breakdown_by_Tier · 06/08_Binding_Affinity_Metrics
@@ -1422,7 +1422,7 @@ def _fig_13b_tt_mechanistic(df, pa, imgs, out_dir: Path, reporter):
                   "")
         _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_ylim(ylo, yhi)
-        out = out_dir / "Figure_13b_TT_Mechanistic_Quality_Space.png"
+        out = out_dir / "Figure_13b_TT_Mechanistic_Quality_Space.svg"
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
@@ -1458,7 +1458,7 @@ def _fig_05b_tt_ai_quality(df, pa, imgs, out_dir: Path, reporter):
                   "")
         _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-        out = out_dir / "Figure_05b_TT_AI_Quality_Space.png"
+        out = out_dir / "Figure_05b_TT_AI_Quality_Space.svg"
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
@@ -1501,7 +1501,7 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
                   "")
         _tt_add_legend(fig, _tt_legend_handles(dv))
         ax.set_xlim(0, xhi); ax.set_ylim(0, yhi)
-        out = out_dir / "Figure_14b_TT_Interaction_Quality_Space.png"
+        out = out_dir / "Figure_14b_TT_Interaction_Quality_Space.svg"
         fig.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig)
     except Exception as e:
@@ -1511,69 +1511,69 @@ def _fig_14b_tt_interactions(df, pa, imgs, out_dir: Path, reporter):
 
 _FIG_MAPPING = {
         # ── 03_Dataset_and_Alignment_Overview ──
-        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
-        "Figure_02_Tier_Distribution.png": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
-        "Figure_03_Alignment_Grades.png": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
-        "Figure_04_Tier_Grade_Distribution.png": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
+        "Figure_01_Active_Site_Residue_Mapping_Coverage.svg": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.svg",
+        "Figure_02_Tier_Distribution.svg": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.svg",
+        "Figure_03_Alignment_Grades.svg": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.svg",
+        "Figure_04_Tier_Grade_Distribution.svg": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.svg",
         # ── 04_AI_Confidence_Quality ──
-        "Figure_05a_AI_Quality_Assessment.png": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
-        "Figure_05b_TT_AI_Quality_Space.png": "04_AI_Confidence_Quality/02_AI_Quality_Space.png",
-        "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
+        "Figure_05a_AI_Quality_Assessment.svg": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.svg",
+        "Figure_05b_TT_AI_Quality_Space.svg": "04_AI_Confidence_Quality/02_AI_Quality_Space.svg",
+        "Figure_06_pTM_vs_ipTM_by_Tier.svg": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.svg",
         # ── 05_Catalytic_Geometry_and_Mechanism ──
-        "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_11b_Mechanistic_Fingerprint.png": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.png",
-        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
-        "Figure_31_Mechanistic_Gate_UpSet.png": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
+        "Figure_07_ActiveSite_RMSD_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.svg",
+        "Figure_11b_Mechanistic_Fingerprint.svg": "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.svg",
+        "Figure_08_Feature_Correlations.svg": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.svg",
+        "Figure_09_Tier_Quality_DotPlot.svg": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.svg",
+        "Figure_10_Mech_State_CrossTab.svg": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.svg",
+        "Figure_11_Mechanistic_Score_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.svg",
+        "Figure_12_SN2_Angle_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.svg",
+        "Figure_31_Mechanistic_Gate_UpSet.svg": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.svg",
+        "Figure_13a_Mechanism_Geometry_Scatter.svg": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.svg",
+        "Figure_13b_TT_Mechanistic_Quality_Space.svg": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.svg",
         # ── 06_Ligand_Interactions_and_Chemical_Space ──
-        "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
-        "Figure_17b_Binding_Energetics.png": "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.png",
-        "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
-        "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
-        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
-        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
+        "Figure_14a_Molecular_Interaction_Profile.svg": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.svg",
+        "Figure_17b_Binding_Energetics.svg": "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.svg",
+        "Figure_14b_TT_Interaction_Quality_Space.svg": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.svg",
+        "Figure_15_Fluorine_Engagement_by_Tier.svg": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.svg",
+        "Figure_16_Catalytic_Quality_vs_Inhibition.svg": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.svg",
+        "Figure_17_ActiveSite_Contact_Density_by_Tier.svg": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.svg",
+        "Figure_18a_Chemical_Space_Map.svg": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.svg",
         # ── 07_PFAS_Scope_and_Synthesis ──
-        "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
-        "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
-        "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
-        "Figure_20b_Conf_SN2_Landscape.png": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
-        "Figure_21_Conflict_Composition.png": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
-        "Figure_22_Hidden_Gems_DeepDive.png": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
-        "Figure_23_Category_Overlap_Euler.png": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
-        "Figure_24a_Top25_Multitarget_Proteins.png": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
-        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
-        "Figure_25_Sankey_Workflow.png": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
-        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
-        "Figure_26b_PFAS_Size_Composition_Merged.png": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence.png": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
+        "Figure_19a_Radar_TopHits.svg": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.svg",
+        "Figure_19b_Radar_TierReps.svg": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.svg",
+        "Figure_20a_Tier_Success_Rates.svg": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.svg",
+        "Figure_20b_Conf_SN2_Landscape.svg": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.svg",
+        "Figure_21_Conflict_Composition.svg": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.svg",
+        "Figure_22_Hidden_Gems_DeepDive.svg": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.svg",
+        "Figure_23_Category_Overlap_Euler.svg": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.svg",
+        "Figure_24a_Top25_Multitarget_Proteins.svg": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.svg",
+        "Figure_24b_TopTier_Protein_PFAS_Breakdown.svg": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.svg",
+        "Figure_25_Sankey_Workflow.svg": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.svg",
+        "Figure_26a_PFAS_Size_Hexbin_Landscape.svg": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.svg",
+        "Figure_26b_PFAS_Size_Composition_Merged.svg": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.svg",
+        "Figure_26c_PFAS_Carbon_Confidence.svg": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.svg",
         # ── Two-criteria tier logic + dead-end feasibility (single 3-panel figure,
         #    filed in the catalytic folder) ──
-        "Figure_30a_Criterion_A_Gates_B.png": "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
-        "Figure_30b_Criterion_B_ECDF_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
-        "Figure_30c_SN2_DeadEnd_Gate.png": "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
+        "Figure_30a_Criterion_A_Gates_B.svg": "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.svg",
+        "Figure_30b_Criterion_B_ECDF_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.svg",
+        "Figure_30c_SN2_DeadEnd_Gate.svg": "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.svg",
 }
 
 
 # Folded per-folder analysis panels are routed by _panel (not _FIG_MAPPING); their skip logs map here.
 _PANEL_FIG_PATHS = {
-    "01C": "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
-    "05b": "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
-    "02A": "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.png",
-    "04A": "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
-    "05c": "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
-    "06A": "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
-    "05a": "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
+    "01C": "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.svg",
+    "05b": "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.svg",
+    "02A": "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.svg",
+    "04A": "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.svg",
+    "05c": "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.svg",
+    "06A": "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.svg",
+    "05a": "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.svg",
 }
 
 
 def _fig_path(fig_key: str) -> str:
-    """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.png for skip logs - the folded
+    """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.svg for skip logs - the folded
     panels via _PANEL_FIG_PATHS, the main suite via _FIG_MAPPING. Falls back to 'Figure <key>'."""
     if fig_key in _PANEL_FIG_PATHS:
         return deflx_fig_name(_PANEL_FIG_PATHS[fig_key])
@@ -1583,7 +1583,7 @@ def _fig_path(fig_key: str) -> str:
 
 @contextlib.contextmanager
 def _redirect_savefig(out_dir: Path, reporter):
-    """Route each Figure_NN_*.png save to its numbered folder (per _FIG_MAPPING)
+    """Route each Figure_NN_*.svg save to its numbered folder (per _FIG_MAPPING)
     for the duration of the block, restoring the original savefig on exit - even
     on exception, so a failure mid-suite can never leak the patched savefig into
     later routines or the rest of the process. Target folders are created on entry.
@@ -1630,15 +1630,15 @@ def _text_color(hex_bg: str, threshold: float = 0.5) -> str:
 # ADDITIONAL JOURNAL FIGURE TYPES (folded panels, routed through _panel)
 # Seven figure types 03 does not otherwise produce - volcano, Manhattan, swimmer,
 # feature-importance + tier streams, circos, metric network, treemap.
-# Each is a folded panel: fn(df, folder_dir, reporter) that saves folder_dir/NN_name.png,
-# so _panel logs it '  ✔ Saved: folder/NN_name.png' in the owning step's block, exactly like
+# Each is a folded panel: fn(df, folder_dir, reporter) that saves folder_dir/NN_name.svg,
+# so _panel logs it '  ✔ Saved: folder/NN_name.svg' in the owning step's block, exactly like
 # every other figure. Styling stays inside a private rc-context so 03's global figure style is
 # untouched; names are prefixed _jf_/_JF_ to avoid any collision with the rest of the module.
 # =============================================================================
 from matplotlib.patches import Rectangle as _JF_Rect, PathPatch as _JF_PathPatch, Patch as _JF_Patch
 from matplotlib.lines import Line2D as _JF_Line
 from matplotlib.path import Path as _JF_MPath
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 import math
 from collections import Counter as _Counter01
 from scipy import stats as _sc_stats12
@@ -1814,7 +1814,7 @@ def _jf_volcano(df, folder_dir, reporter):
                         arrowprops=dict(arrowstyle="-", lw=0.5, color=CFG.VIS_INK["palest"]))
         ax.set_xlim(right=_xr + 0.55 * _espan)
         ax.set_xlabel("Effect size  (Cohen's d)"); ax.set_ylabel(r"$-\log_{10}$ p  (Mann–Whitney)"); _jf_box(ax)
-        _jf_save(fig, folder_dir, "10_Volcano_Metric_Significance.png")
+        _jf_save(fig, folder_dir, "10_Volcano_Metric_Significance.svg")
 
 
 def _jf_manhattan(df, folder_dir, reporter):
@@ -1831,7 +1831,7 @@ def _jf_manhattan(df, folder_dir, reporter):
         ax.axhline(-np.log10(0.05), ls="--", lw=0.7, color=_JF_SIG["up"])
         ax.set_xticks(ticks); ax.set_xticklabels(ligs, rotation=90, fontsize=_JF_FD)
         ax.set_ylabel(r"$-\log_{10}$ p  (rank-based)"); ax.set_xlabel("Ligand locus"); ax.margins(x=0.01); _jf_box(ax)
-        _jf_save(fig, folder_dir, "11_Manhattan_Candidate_Significance.png")
+        _jf_save(fig, folder_dir, "11_Manhattan_Candidate_Significance.svg")
 
 
 def _jf_importance(df, folder_dir, reporter):
@@ -1871,7 +1871,7 @@ def _jf_importance(df, folder_dir, reporter):
                    bbox_to_anchor=(0.5, 1.0)); axR.grid(False)   # spacing/handles inherit the CFG legend SSOT
         for s in axR.spines.values():
             s.set_visible(False)
-        _jf_save(fig, folder_dir, "12_Feature_Importance_Tier_Streams.png")
+        _jf_save(fig, folder_dir, "12_Feature_Importance_Tier_Streams.svg")
 
 
 def _jf_swimmer(df, folder_dir, reporter):
@@ -1897,7 +1897,7 @@ def _jf_swimmer(df, folder_dir, reporter):
                                  _JF_Line([0], [0], marker="o", ls="", mfc=_JF_SIG["up"], mec=_JF_SIG["up"], label="degrader")],
                         loc="lower right", fontsize=_JF_FA, frameon=True, edgecolor="none")  # framealpha ← CFG SSOT
         leg.get_frame().set_facecolor("white"); ax.margins(y=0.01); _jf_box(ax)
-        _jf_save(fig, folder_dir, "16_Swimmer_Top_Per_Tier.png")
+        _jf_save(fig, folder_dir, "16_Swimmer_Top_Per_Tier.svg")
 
 
 def _jf_circos(df, folder_dir, reporter):
@@ -1936,7 +1936,7 @@ def _jf_circos(df, folder_dir, reporter):
                 if w > 0:
                     _bez(ax, ang[lg], ang[t], _JF_TCOL[t], 0.3 + 3.0*w/mx)
         ax.set_xlim(-1.5, 1.5); ax.set_ylim(-1.5, 1.5)
-        _jf_save(fig, folder_dir, "17_Circos_Ligand_Tier_Assignment.png")
+        _jf_save(fig, folder_dir, "17_Circos_Ligand_Tier_Assignment.svg")
 
 
 def _jf_network(df, folder_dir, reporter):
@@ -1979,7 +1979,7 @@ def _jf_network(df, folder_dir, reporter):
                   loc="lower center", bbox_to_anchor=(0.5, -0.02), ncol=2, frameon=False,
                   title=f"chord = |r| ≥ {THR:g}  ·  width ∝ |r|  ·  node size ∝ # strong links")
         ax.set_xlim(-1.45, 1.45); ax.set_ylim(-1.45, 1.45)
-        _jf_save(fig, folder_dir, "15_Metric_CoVariation_Network.png")
+        _jf_save(fig, folder_dir, "15_Metric_CoVariation_Network.svg")
 
 
 def _jf_treemap(df, folder_dir, reporter):
@@ -2024,7 +2024,7 @@ def _jf_treemap(df, folder_dir, reporter):
         ax.legend(handles=[_JF_Patch(color=_JF_TCOL[t], label=t)
                            for t in _JF_TORDER], ncol=7, fontsize=_JF_FA, loc="upper center",
                   bbox_to_anchor=(0.5, -0.01))
-        _jf_save(fig, folder_dir, "06_Treemap_Tier_Ligand_Composition.png")
+        _jf_save(fig, folder_dir, "06_Treemap_Tier_Ligand_Composition.svg")
 
 
 # =============================================================================
@@ -2143,7 +2143,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax.legend(handles=_handles01, loc="upper left", ncol=len(_handles01),
                    frameon=True)
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_01_Active_Site_Residue_Mapping_Coverage.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_01_Active_Site_Residue_Mapping_Coverage.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
     else:
         reporter.log(f"  ! Skipped Figure 01: Alignment_Stats.csv not found at {_aln_csv}")
@@ -2291,7 +2291,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         ax.legend(handles=_star_leg6, loc="upper right", fontsize=CFG.VIS_FONT_LEGEND)
 
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_02_Tier_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_02_Tier_Distribution.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 03: Sequence Identity - Histogram (grade bands) overlaid with tier KDE lines ---
@@ -2542,7 +2542,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
         _leg7.set_zorder(20)
 
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_03_Alignment_Grades.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_03_Alignment_Grades.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 04: Tier × Alignment Grade - Stacked 100% Horizontal Bar Chart ---
@@ -2739,7 +2739,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                         bbox=dict(boxstyle="round,pad=0.25", fc="white",
                                   ec=CFG.VIS_INK["palest"], alpha=0.88, linewidth=0.6))
             plt.tight_layout()
-            plt.savefig(out_dir / "Figure_04_Tier_Grade_Distribution.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_04_Tier_Grade_Distribution.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('04')} - {e}")
@@ -2933,7 +2933,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
             plt.tight_layout()
             _stat_box(ax, _kruskal_by_tier(df, CFG.COL_CONF), "lower centre")
             _tier_seps(plt.gca())   # consistent tier separators
-            plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_05a_AI_Quality_Assessment.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('05')} - {e}")
@@ -3178,7 +3178,7 @@ def _fig_folder04_ai_confidence(df, features, out_dir, reporter, existing_tiers,
                           bbox_to_anchor=(0.0, 1.0))
             plt.tight_layout()
             _stat_box(ax, _wilcoxon_ptm_iptm(df), "lower right")
-            plt.savefig(out_dir / "Figure_06_pTM_vs_ipTM_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_06_pTM_vs_ipTM_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('06')} - {e}")
@@ -3394,7 +3394,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                       loc="upper left")
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
-            plt.savefig(out_dir / "Figure_07_ActiveSite_RMSD_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_07_ActiveSite_RMSD_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('07')} - {e}")
@@ -3633,7 +3633,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
 
 
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_08_Feature_Correlations.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_08_Feature_Correlations.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 09: Tier Quality Summary - Cleveland Dot Plot (multi-metric) ---
@@ -3863,7 +3863,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                                    ncol=max(1, (len(_leg08) + 1) // 2),
                                      fancybox=True)
                 plt.tight_layout()
-                plt.savefig(out_dir / "Figure_09_Tier_Quality_DotPlot.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+                plt.savefig(out_dir / "Figure_09_Tier_Quality_DotPlot.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('09')} - {e}")
@@ -3970,7 +3970,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 tick.set_color(TIER_PALETTE.get(tier_name, "black"))
                 tick.set_rotation(0)
             plt.tight_layout()
-            plt.savefig(out_dir / "Figure_10_Mech_State_CrossTab.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_10_Mech_State_CrossTab.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('10')} - {e}")
@@ -4092,7 +4092,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                   fontsize=CFG.VIS_FONT_LEGEND - 1.0).set_zorder(20)
         plt.tight_layout()
         _tier_seps(plt.gca())   # consistent vertical tier separators
-        plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_11_Mechanistic_Score_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 11b: Mechanistic Fingerprint - per-tier catalytic feature profile ---
@@ -4196,7 +4196,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             for _lt, _t in zip(_leg11b.get_texts(), _fp_tiers):
                 _lt.set_color(TIER_PALETTE.get(_t, "black"))
             plt.tight_layout(rect=[0, 0.15, 1, 1])
-            plt.savefig(out_dir / "Figure_11b_Mechanistic_Fingerprint.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_11b_Mechanistic_Fingerprint.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('11b')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
@@ -4313,7 +4313,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.yaxis.grid(True, color=CFG.VIS_INK["tick"], linewidth=0.6, linestyle="-", alpha=0.85, zorder=0)
         ax.xaxis.grid(True, color=CFG.VIS_INK["grid"], linewidth=0.5, linestyle=":", alpha=0.7, zorder=0)
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_12_SN2_Angle_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_12_SN2_Angle_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 13a: SN2 Mechanism Geometry Scatter ---
@@ -4441,7 +4441,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
         ax.set_axisbelow(True)
         ax.grid(color=CFG.VIS_INK["wash"], linewidth=0.5, alpha=0.7)
         plt.tight_layout()
-        plt.savefig(out_dir / "Figure_13a_Mechanism_Geometry_Scatter.png",
+        plt.savefig(out_dir / "Figure_13a_Mechanism_Geometry_Scatter.svg",
                     dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
@@ -4689,11 +4689,11 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _a.set_axisbelow(True)
 
             _tier_seps(_axa, len(_abins))   # consistent separators (replaces ad-hoc grid)
-            _figa.savefig(out_dir / "Figure_30a_Criterion_A_Gates_B.png",
+            _figa.savefig(out_dir / "Figure_30a_Criterion_A_Gates_B.svg",
                           dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            _figb.savefig(out_dir / "Figure_30b_Criterion_B_ECDF_by_Tier.png",
+            _figb.savefig(out_dir / "Figure_30b_Criterion_B_ECDF_by_Tier.svg",
                           dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            _figc.savefig(out_dir / "Figure_30c_SN2_DeadEnd_Gate.png",
+            _figc.savefig(out_dir / "Figure_30c_SN2_DeadEnd_Gate.svg",
                           dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close(_figa); plt.close(_figb); plt.close(_figc)
     except Exception as e:
@@ -4802,7 +4802,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
                 _s.set_visible(False)
             _umat.tick_params(length=0)
 
-            _ufig.savefig(out_dir / "Figure_31_Mechanistic_Gate_UpSet.png", dpi=CFG.VIS_FIGURE_DPI)
+            _ufig.savefig(out_dir / "Figure_31_Mechanistic_Gate_UpSet.svg", dpi=CFG.VIS_FIGURE_DPI)
             plt.close(_ufig)
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('31')} - {e}")
@@ -5014,11 +5014,11 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
                 ax_hm.set_visible(False)
 
             plt.tight_layout()
-            plt.savefig(out_dir / "Figure_14a_Molecular_Interaction_Profile.png",
+            plt.savefig(out_dir / "Figure_14a_Molecular_Interaction_Profile.svg",
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('14')} - {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('14a')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # Figure 14b: PA companion (interaction profile overlay)
@@ -5169,7 +5169,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
-            plt.savefig(out_dir / "Figure_15_Fluorine_Engagement_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_15_Fluorine_Engagement_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('15')} - {e}")
@@ -5285,7 +5285,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent tier separators
-            plt.savefig(out_dir / "Figure_16_Catalytic_Quality_vs_Inhibition.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_16_Catalytic_Quality_vs_Inhibition.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('16')} - {e}")
@@ -5403,7 +5403,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
 
                 plt.tight_layout()
                 _tier_seps(plt.gca())   # consistent vertical tier separators
-                plt.savefig(out_dir / "Figure_17_ActiveSite_Contact_Density_by_Tier.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+                plt.savefig(out_dir / "Figure_17_ActiveSite_Contact_Density_by_Tier.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close()
             else:
                 reporter.log(f"  ! Skipped: {_fig_path('17')} - no valid tier groups for Interaction_Density_Norm.")
@@ -5475,7 +5475,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
             plt.tight_layout()
             _stat_box(ax, _kruskal_by_tier(_bedata, _be_bind, tiers=existing_tiers), "lower left")
             _tier_seps(plt.gca())   # consistent tier separators
-            plt.savefig(out_dir / "Figure_17b_Binding_Energetics.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+            plt.savefig(out_dir / "Figure_17b_Binding_Energetics.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         except Exception as e:
             reporter.log(f"  ! Skipped: {_fig_path('17b')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
@@ -5552,7 +5552,7 @@ def _fig_folder06_ligand(df, features, out_dir, reporter, existing_tiers, _pa, _
         # share the colour of the star it points to.
         if _pax is not None and not _pax.empty:
             _tt_draw_thumbnails(fig, ax, _pax, _imgs)
-        plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_18a_Chemical_Space_Map.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
 
@@ -5701,7 +5701,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             # Cap plotted hits so the radar stays readable (top-N by ranking key).
             _pa18a = _pa18a.head(CFG.VIS_RADAR_MAX_HITS)
             _draw_radar(_pa18a, worst_avg, metrics_r,
-                        out_dir / "Figure_19a_Radar_TopHits.png",
+                        out_dir / "Figure_19a_Radar_TopHits.svg",
                         f"{_radar_src} vs. worst-tier baseline",
                         label_mode="rank")
 
@@ -5713,7 +5713,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                     reps_b.append(sub_t.sort_values(CFG.COL_CONF, ascending=False).iloc[[0]])
             rep_df = pd.concat(reps_b) if reps_b else df.head(len(existing_tiers))
             _draw_radar(rep_df, pd.DataFrame(), metrics_r,
-                        out_dir / "Figure_19b_Radar_TierReps.png",
+                        out_dir / "Figure_19b_Radar_TierReps.svg",
                         f"One best representative per tier ({CFG.TIER_TOP} → worst)",
                         label_mode="tier")
     except Exception as e:
@@ -5897,14 +5897,14 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                          ncol=2,   fancybox=True,
                          markerscale=0.45)
 
-            fig19a.savefig(out_dir / "Figure_20a_Tier_Success_Rates.png",
+            fig19a.savefig(out_dir / "Figure_20a_Tier_Success_Rates.svg",
                            dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            fig19b.savefig(out_dir / "Figure_20b_Conf_SN2_Landscape.png",
+            fig19b.savefig(out_dir / "Figure_20b_Conf_SN2_Landscape.svg",
                            dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close(fig19a)
             plt.close(fig19b)
         except Exception as e:
-            reporter.log(f"  ! Skipped: {_fig_path('20')} - {e}")
+            reporter.log(f"  ! Skipped: {_fig_path('20a')} - {e}")
             plt.close("all")   # release the figure left open by the failed savefig
 
     # --- Figure 21: Conflict Composition - 100% Stacked Horizontal Bar per Tier ---
@@ -6128,7 +6128,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
         _leg02_obj.set_zorder(20)
 
         fig_f2.tight_layout(rect=[0, 0.07, 1, 1])
-        plt.savefig(out_dir / "Figure_21_Conflict_Composition.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+        plt.savefig(out_dir / "Figure_21_Conflict_Composition.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close()
 
     # --- Figure 22: Hidden Gems - Slope Chart (SN2 Angle vs AI Confidence) ---
@@ -6302,7 +6302,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
 
                 plt.tight_layout()
                 df.drop(columns=["_phys_pct21", "_ai_pct21"], errors="ignore", inplace=True)
-                plt.savefig(out_dir / "Figure_22_Hidden_Gems_DeepDive.png",
+                plt.savefig(out_dir / "Figure_22_Hidden_Gems_DeepDive.svg",
                             dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
                 plt.close(fig21)
             else:
@@ -6497,7 +6497,7 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
                         ncol=3,   fancybox=True)
 
             plt.tight_layout()
-            plt.savefig(out_dir / "Figure_23_Category_Overlap_Euler.png",
+            plt.savefig(out_dir / "Figure_23_Category_Overlap_Euler.svg",
                         dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close()
         else:
@@ -6550,7 +6550,7 @@ def _mm_variance_by_model(df, out_dir, reporter):
     """Fig 13 - per-Boltz-model SN2 distance/angle spread by tier (are the 5 models consistent?)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name('13_MultiModel_Geometry_Variance_by_Model.png')} - variance CSV unavailable.")
+        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name('13_MultiModel_Geometry_Variance_by_Model.svg')} - variance CSV unavailable.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _models = sorted(str(m) for m in mv["model_name"].dropna().unique())
@@ -6581,7 +6581,7 @@ def _mm_variance_by_model(df, out_dir, reporter):
     ax_d.legend(_h, _labs, loc="upper left", ncol=len(_labs),
                 fontsize=CFG.VIS_FONT_LEGEND)   # framealpha/handletextpad/columnspacing ← CFG SSOT via apply_figure_style
     fig.tight_layout()
-    fig.savefig(out_dir / "13_MultiModel_Geometry_Variance_by_Model.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    fig.savefig(out_dir / "13_MultiModel_Geometry_Variance_by_Model.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -6589,12 +6589,12 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
     """Shared box+strip of per-model geometry for a high-quality subset (confidence / ipTM ≥ thr)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name(f'{num}_{fname}.png')} - variance CSV unavailable.")
+        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name(f'{num}_{fname}.svg')} - variance CSV unavailable.")
         return
     if filt_col in mv.columns:
         mv = mv[pd.to_numeric(mv[filt_col], errors="coerce") >= thr]
     if mv.empty:
-        reporter.log(f"  ! Skipped: {deflx_fig_name(f'{num}_{fname}.png')} - no rows with {filt_col} ≥ {thr}.")
+        reporter.log(f"  ! Skipped: {deflx_fig_name(f'{num}_{fname}.svg')} - no rows with {filt_col} ≥ {thr}.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _tpal = [TIER_PALETTE.get(t, CFG.VIS_INK["faint"]) for t in _tiers]   # each tier its own CFG colour
@@ -6614,7 +6614,7 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
     ax_d.legend(loc="upper right", fontsize=CFG.VIS_FONT_LEGEND)
     ax_a.legend(loc="lower right", fontsize=CFG.VIS_FONT_LEGEND)
     fig.tight_layout()
-    fig.savefig(out_dir / f"{num}_{fname}.png", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    fig.savefig(out_dir / f"{num}_{fname}.svg", dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -6693,7 +6693,7 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     def _panel(fn, folder, name):
         """Render one folded per-folder analysis panel into its folder and buffer the save; a failure is
         logged and the rest still run. The save is flushed (in numeric order) with the folder's block."""
-        _saved = deflx_fig_name(f"{name}.png")   # actual routed filename (CFG.VIS_FIGURE_FORMAT)
+        _saved = deflx_fig_name(f"{name}.svg")   # actual routed filename (CFG.VIS_FIGURE_FORMAT)
         try:
             (out_dir / folder).mkdir(parents=True, exist_ok=True)   # folder created at its turn
             fn(df, out_dir / folder, reporter)
@@ -6854,14 +6854,14 @@ def _fig23_multitarget(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                       bbox_to_anchor=(0.5, 0.045),   # lift up toward the panel, clear of the x-axis label
                       title=_title23, )
         plt.tight_layout(rect=[0, 0.07, 1, 1])
-        plt.savefig(out_dir / "Figure_24a_Top25_Multitarget_Proteins.png",
+        plt.savefig(out_dir / "Figure_24a_Top25_Multitarget_Proteins.svg",
                     dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close(fig23a)
 
         _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, reporter)
 
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('24')} - {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('24a')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -6971,7 +6971,7 @@ def _fig23b_toptier_breakdown(best_pairs, tier_order, tier_colors, out_dir, repo
         ax.legend(handles=leg, loc="center left", bbox_to_anchor=(1.01, 0.5),
                    frameon=False, title="PFAS ligand", )
         plt.tight_layout()
-        out = out_dir / "Figure_24b_TopTier_Protein_PFAS_Breakdown.png"
+        out = out_dir / "Figure_24b_TopTier_Protein_PFAS_Breakdown.svg"
         plt.savefig(out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close(fig)
     except Exception as e:
@@ -7397,7 +7397,7 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         No legend or title - the Final Tier column already carries the tier names and colours.
         """
         plt.tight_layout(pad=0.3)
-        plt.savefig(out_dir / "Figure_25_Sankey_Workflow.png",
+        plt.savefig(out_dir / "Figure_25_Sankey_Workflow.svg",
                     dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", facecolor="white")
         plt.close(fig24)
 
@@ -7412,7 +7412,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _req25 = ["total_fluorine_count", CFG.COL_SN2, CFG.COL_CONF, CFG.COL_TIER]
         _miss25 = [c for c in _req25 if c not in df.columns]
         if _miss25:
-            reporter.log(f"  ! Skipped: {_fig_path('26')} - missing columns {_miss25}")
+            reporter.log(f"  ! Skipped: {_fig_path('26a')} - missing columns {_miss25}")
             return
 
         # MD_Selected is carried through: subsetting to _req25 alone drops it, and the MD stars then
@@ -7424,7 +7424,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _d25 = _d25.dropna(subset=_req25)
         _d25 = _d25[_d25[CFG.COL_TIER].isin(TIER_ORDER_LOGIC)]
         if len(_d25) < 30:
-            reporter.log(f"  ! Skipped: {_fig_path('26')} - insufficient data after filtering")
+            reporter.log(f"  ! Skipped: {_fig_path('26a')} - insufficient data after filtering")
             return
 
         # PFAS chain-length bins (F-count as proxy: C4≈9F, C6≈13F, C8≈17F, C10≈21F) - from CFG (SSOT)
@@ -7539,7 +7539,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                    ncol=max(_nleg25, 1),  markerscale=0.55,
                     fancybox=True)
         plt.tight_layout()
-        _out25a = out_dir / "Figure_26a_PFAS_Size_Hexbin_Landscape.png"
+        _out25a = out_dir / "Figure_26a_PFAS_Size_Hexbin_Landscape.svg"
         fig25a.savefig(_out25a, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
         plt.close(fig25a)
 
@@ -7667,7 +7667,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _leg_ti25.get_title().set_fontweight("bold")
         _leg_ti25._legend_box.align = "right"
         plt.tight_layout()
-        _out25b = out_dir / "Figure_26b_PFAS_Size_Composition_Merged.png"
+        _out25b = out_dir / "Figure_26b_PFAS_Size_Composition_Merged.svg"
         fig25b.savefig(_out25b, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight",
                        bbox_extra_artists=(_leg_oc25, _leg_ti25))
         plt.close(fig25b)
@@ -7833,12 +7833,12 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             axL.legend(handles=_handles25, loc="lower left", bbox_to_anchor=(0.0, 1.01),
                        ncol=len(_handles25))
             plt.tight_layout()
-            _out25c = out_dir / "Figure_26c_PFAS_Carbon_Confidence.png"
+            _out25c = out_dir / "Figure_26c_PFAS_Carbon_Confidence.svg"
             fig25c.savefig(_out25c, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             plt.close(fig25c)
 
     except Exception as e:
-        reporter.log(f"  ! Skipped: {_fig_path('26')} - {e}")
+        reporter.log(f"  ! Skipped: {_fig_path('26a')} - {e}")
         plt.close("all")   # release the figure left open by the failed savefig
 
 
@@ -8007,7 +8007,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
 
                       title=_ss01, )
             plt.tight_layout()
-            _o = out_dir / "01_Pocket_vs_Ligand_Volume.png"
+            _o = out_dir / "01_Pocket_vs_Ligand_Volume.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8126,7 +8126,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             ax.yaxis.grid(True, ls=":", alpha=0.35)
             ax.set_axisbelow(True)
             plt.tight_layout()
-            _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
+            _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         elif len(sub) >= 5 and sub["_nC"].nunique() >= 2:
@@ -8174,7 +8174,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _tier_seps(ax, len(groups))   # consistent per-carbon separators
             ax.legend(loc="upper left",   ncol=1)
             plt.tight_layout()
-            _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
+            _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8227,7 +8227,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                         fancybox=True, fontsize=CFG.VIS_FONT_LEGEND - 1.0)
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
-            _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
+            _o = out_dir / "03_MultiModel_Consensus_by_Tier.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8281,7 +8281,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                       title=_ss06, )
             plt.tight_layout()
             _tier_seps(plt.gca())   # consistent vertical tier separators
-            _o = out_dir / "04_Confidence_vs_Consensus.png"
+            _o = out_dir / "04_Confidence_vs_Consensus.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8368,7 +8368,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                        ncol=12)
             plt.tight_layout()
             for _qax in axes[0]: _tier_seps(_qax)   # consistent tier separators
-            _o = out_dir / "05_Quality_and_Competence_Diagnostics.png"
+            _o = out_dir / "05_Quality_and_Competence_Diagnostics.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8465,7 +8465,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             axL.legend(handles=_handles08, loc="lower left", bbox_to_anchor=(0.0, 1.01),
                        ncol=5)
             plt.tight_layout()
-            _o = out_dir / "06_Size_Preference_Containment.png"
+            _o = out_dir / "06_Size_Preference_Containment.svg"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
             reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
@@ -8625,7 +8625,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                           _rln09, _rcl09, _mln09, _hln09]
                 axL.legend(handles=_leg09, loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=8)
                 plt.tight_layout()
-                _o = out_dir / "07_Reactive_Engagement.png"
+                _o = out_dir / "07_Reactive_Engagement.svg"
                 fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
                 reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
     except Exception as e:
@@ -8721,7 +8721,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
                     _ctrl_star(ax, np.full(len(_cy10), _t10.index(_t)), _cy10.to_numpy(), size=220)
         plt.tight_layout()
         _tier_seps(plt.gca())   # consistent vertical tier separators
-        _o = out_dir / "08_Model_Agreement.png"
+        _o = out_dir / "08_Model_Agreement.svg"
         fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
         reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
     except Exception as e:                                   # noqa: BLE001
@@ -9097,14 +9097,14 @@ def _ext_match_03_style(fig) -> None:
 
 
 def _xn__save(fig, out_dir: Path, name: str, reporter) -> None:
-    """Persist a figure as a PNG at the pipeline's publication resolution, then free its memory.
+    """Persist a figure at the pipeline's publication resolution, then free its memory.
 
     The DPI comes from CFG.VIS_FIGURE_DPI - the same value every other step renders at, so a
     sandbox figure and a Step-03 figure are the same physical object at the same scale.
     """
     _ext_match_03_style(fig)
     stem = Path(name).stem
-    png = out_dir / f'{stem}.png'
+    png = out_dir / f'{stem}.svg'
     fig.savefig(png, dpi=CFG.VIS_FIGURE_DPI)
     plt.close(fig)
 
@@ -9999,7 +9999,7 @@ def _xn_fig_reaction_readiness(df: pd.DataFrame, out_dir: Path, reporter) -> Non
     axC.set_xlabel("ligand, ordered by molecular size (small → large)", fontsize=fx)
     fig.colorbar(im, ax=axC, fraction=0.012, pad=0.01).set_label("mean sub-score (0-1)", fontsize=fl)
 
-    _xo__save(fig, out_dir, "18_Pocket_Residue_Reaction_Readiness.png", reporter)
+    _xo__save(fig, out_dir, "18_Pocket_Residue_Reaction_Readiness.svg", reporter)
 
 
 def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
@@ -10328,7 +10328,7 @@ def _xo__fig_02A_binding_affinity_metrics(df, out_dir, reporter, controls=None):
     # frame and reads as a separate object floating beside the panel. Semi-transparent box so the
     # violins behind it stay visible.
     _xo__legend_with_stats(ax, handles, labels, stat_lines, (0.012, 0.985), ncol=2)
-    _xo__save(fig, out_dir, '08_Binding_Affinity_Metrics.png', reporter)
+    _xo__save(fig, out_dir, '08_Binding_Affinity_Metrics.svg', reporter)
 
 def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
     idc = _xo__col(df, CFG.COL_ID_PCT, 'Identity_to_Control')
@@ -10474,7 +10474,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
         _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left')
     plt.tight_layout()
-    _xo__save(fig, out_dir, '05_Evolutionary_Phylogeny.png', reporter)
+    _xo__save(fig, out_dir, '05_Evolutionary_Phylogeny.svg', reporter)
 
 def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
     fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
@@ -10552,7 +10552,7 @@ def _xo__fig_05b_mechanistic_size_modified(df, out_dir, reporter):
     for _ax in axes:
         _tier_seps(_ax)   # consistent per-class separators
     fig.tight_layout()
-    _xo__save(fig, out_dir, '14_Mechanistic_Breakdown_by_Tier.png', reporter)
+    _xo__save(fig, out_dir, '14_Mechanistic_Breakdown_by_Tier.svg', reporter)
 
 def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
     fcol = _xo__col(df, 'total_fluorine_count') if '_xo__col' in globals() else _xo_get_col(df, 'total_fluorine_count')
@@ -10595,7 +10595,7 @@ def _xo__fig_05c_size_by_tier_modified(df, out_dir, reporter):
                 transform=ax.transAxes, ha='left', va='top', fontsize=CFG.VIS_FONT_LEGEND_TITLE,
                 bbox=dict(facecolor='white', alpha=0.85, edgecolor=CFG.VIS_INK["palest"], linewidth=0.6,
                           boxstyle='round,pad=0.3'))
-    _xo__save(fig, out_dir, '14_Chain_Length_by_Tier.png', reporter)
+    _xo__save(fig, out_dir, '14_Chain_Length_by_Tier.svg', reporter)
 
 
 """
@@ -10649,8 +10649,8 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
 
     rama_ref = _utils_mod.compute_ramachandran_angles(_load(crystal))
     _utils_mod.save_ramachandran_plot(rama_ref, "3R3U Crystal Structure",
-                                      rama_dir / "01_Ramachandran_3R3U_Crystal.png", dpi=dpi, cfg=CFG)
-    reporter.log(f"  ✔ Saved: 02_Ramachandran/{deflx_fig_name('01_Ramachandran_3R3U_Crystal.png')}")
+                                      rama_dir / "01_Ramachandran_3R3U_Crystal.svg", dpi=dpi, cfg=CFG)
+    reporter.log(f"  ✔ Saved: 02_Ramachandran/{deflx_fig_name('01_Ramachandran_3R3U_Crystal.svg')}")
 
     _rn = 1   # running plot number within 02_Ramachandran (crystal was 01)
     for label, token in [("DeHa4", "DeHa4_Control"), ("3R3U", "3R3U_Control")]:
@@ -10659,10 +10659,10 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
             reporter.log(f"  ! Ramachandran: no {label} control CIF found")
             continue
         rama_con = _utils_mod.compute_ramachandran_angles(_load(cif))
-        _rn += 1; _c_con = f"{_rn:02d}_Ramachandran_{label}_Control.png"
+        _rn += 1; _c_con = f"{_rn:02d}_Ramachandran_{label}_Control.svg"
         _utils_mod.save_ramachandran_plot(rama_con, f"{label} Control (Boltz-2)",
                                           rama_dir / _c_con, dpi=dpi, cfg=CFG)
-        _rn += 1; _c_cmp = f"{_rn:02d}_Ramachandran_{label}_vs_Crystal.png"
+        _rn += 1; _c_cmp = f"{_rn:02d}_Ramachandran_{label}_vs_Crystal.svg"
         _utils_mod.save_ramachandran_comparison(rama_ref, rama_con,
                                                 "3R3U (Crystal)", f"{label} (Boltz-2)",
                                                 rama_dir / _c_cmp, dpi=dpi, cfg=CFG)
@@ -10684,7 +10684,7 @@ disagreement exists: on this corpus every surviving elite complex also carries h
 so there is nothing to rescue. An empty rescue list is the strong outcome, not a missing figure.
 """
 _ABSENT_FIGURE_REASON: dict = {
-    "06_Hidden_Gems_DeepDive.png":
+    "06_Hidden_Gems_DeepDive.svg":
         "No Hidden Gems: no complex sits in a high-quality tier while falling below the "
         "confidence threshold. Physics and model confidence agree across every elite hit.",
 }
@@ -10717,7 +10717,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 01 - Figure_01_Active_Site_Residue_Mapping_Coverage.png",
+        "Figure 01 - Figure_01_Active_Site_Residue_Mapping_Coverage.svg",
         "  Title   : Active-site residue mapping coverage across all FAcD variants",
         "  Type    : Vertical bar chart - one bar per canonical catalytic residue",
         "  X-axis  : The 8 canonical FAcD active-site residues, ordered by mechanistic role:",
@@ -10732,7 +10732,7 @@ def write_figure_descriptions(out_dir: Path):
         "            least often - the family diverges most there.",
         "",
         "-" * 80,
-        "Figure 02 - Figure_02_Tier_Distribution.png",
+        "Figure 02 - Figure_02_Tier_Distribution.svg",
         "  Title   : Distribution of Catalytic Tiers",
         "  Type    : Vertical bar chart - count + percentage annotations inside bars",
         f"  X-axis  : Tier name (ordered best→worst: {CFG.TIER_TOP}, {CFG.TIER_ORDER[1]}, {CFG.TIER_ORDER[2]}, Tier_2B, {CFG.TIER_ORDER[4]}, {CFG.TIER_POOR})",
@@ -10742,7 +10742,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Inset reveals whether one Boltz model dominates (~model_0 ≈ 70%).",
         "",
         "-" * 80,
-        "Figure 03 - Figure_03_Alignment_Grades.png",
+        "Figure 03 - Figure_03_Alignment_Grades.svg",
         "  Title   : Sequence Identity Distribution - Alignment Grade Counts + KDE by Tier  [2-panel]",
         "  Panel A : Horizontal bar chart of protein counts per identity grade band",
         "            (Grade A = 90–100% identity → Grade I = <20%); bars labelled with count and %",
@@ -10753,7 +10753,7 @@ def write_figure_descriptions(out_dir: Path):
         "            cluster at higher identity (more conserved sequence) compared to lower tiers.",
         "",
         "-" * 80,
-        "Figure 04 - Figure_04_Tier_Grade_Distribution.png",
+        "Figure 04 - Figure_04_Tier_Grade_Distribution.svg",
         "  Title   : Tier x Alignment Grade - Stacked 100% Horizontal Bar Chart",
         "  Type    : 100% stacked horizontal bars (one row per tier)",
         "  Y-axis  : Degrader tiers (each row normalised to 100%)",
@@ -10768,7 +10768,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 05a - Figure_05a_AI_Quality_Assessment.png",
+        "Figure 05a - Figure_05a_AI_Quality_Assessment.svg",
         "  Title   : AI Quality Assessment - Confidence by Tier + pTM vs. ipTM  [2-panel]",
         "  Panel A : Box plot of Boltz Model Confidence Score per tier (Y-axis zoomed >=0.70)",
         "            Median annotated above each box; green dashed = high (>=0.90); yellow dotted = acceptable (>=0.80)",
@@ -10780,7 +10780,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Panel B: best-tier points should sit above the diagonal and cluster top-right.",
         "",
         "-" * 80,
-        "Figure 05b - Figure_05b_TT_AI_Quality_Space.png",
+        "Figure 05b - Figure_05b_TT_AI_Quality_Space.svg",
         f"  Title   : {CFG.TIER_TOP} AI Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of pTM vs. ipTM; inset PyMOL structure thumbnails",
         "  Axes    : X = pTM (global fold confidence, 0-1); Y = ipTM (interface confidence, 0-1)",
@@ -10790,7 +10790,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Structure thumbnails show the active-site geometry at a glance.",
         "",
         "-" * 80,
-        "Figure 06 - Figure_06_pTM_vs_ipTM_by_Tier.png",
+        "Figure 06 - Figure_06_pTM_vs_ipTM_by_Tier.svg",
         "  Title   : pTM vs. ipTM - 2-D Scatter by Tier",
         "  Type    : Scatter with diagonal reference line (pTM = ipTM) + coloured deviation zones",
         "  X-axis  : pTM - overall protein fold confidence (0-1); 1.0 = perfect fold prediction",
@@ -10806,7 +10806,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 07 - Figure_07_ActiveSite_RMSD_by_Tier.png",
+        "Figure 07 - Figure_07_ActiveSite_RMSD_by_Tier.svg",
         "  Title   : Active Site RMSD vs. Reference Control by Tier",
         "  Type    : Violin + strip plot with coloured quality zones",
         "  X-axis  : Catalytic tier (ordered best to worst)",
@@ -10819,7 +10819,7 @@ def write_figure_descriptions(out_dir: Path):
         "            A flat RMSD profile across tiers confirms fold conservation regardless of tier.",
         "",
         "-" * 80,
-        "Figure 08 - Figure_08_Feature_Correlations.png",
+        "Figure 08 - Figure_08_Feature_Correlations.svg",
         "  Title   : Feature Correlation Matrix (Spearman rho) with Significance",
         "  Type    : Triangular heatmap (lower triangle only); pairwise-complete Spearman",
         "  Cells   : Spearman rank correlation coefficient (-1 to +1) + significance stars",
@@ -10836,7 +10836,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Competence + Mech.eff track the Tier outcome; C-F BDE opposes it.",
         "",
         "-" * 80,
-        "Figure 09 - Figure_09_Tier_Quality_DotPlot.png",
+        "Figure 09 - Figure_09_Tier_Quality_DotPlot.svg",
         "  Title   : Tier Quality Summary - Normalised Multi-metric Cleveland Dot Plot",
         "  Type    : Horizontal Cleveland dot plot; one metric per row, tiers as coloured dots",
         "  Y-axis  : 6 normalised metrics (0=worst, 1=best within each metric):",
@@ -10852,7 +10852,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 10 - Figure_10_Mech_State_CrossTab.png",
+        "Figure 10 - Figure_10_Mech_State_CrossTab.svg",
         "  Title   : Mechanistic State Cross-Tab (Halide Stabilisation x Carboxylate Clamp by Tier)",
         "  Type    : Heatmap (count + row %) - rows = tiers; columns = mechanistic state combinations",
         "  States  : Stabilised/Unstabilised (TRP/TYR aromatic shield) x Clamped/Unclamped (ASP carboxylate)",
@@ -10861,7 +10861,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Any tier deviating from 100% warrants structural inspection.",
         "",
         "-" * 80,
-        "Figure 11 - Figure_11_Mechanistic_Score_by_Tier.png",
+        "Figure 11 - Figure_11_Mechanistic_Score_by_Tier.svg",
         "  Title   : Mechanistic Score by Tier",
         "  Type    : Mean +/- 95% CI dot plot with jittered individual data points behind",
         "  X-axis  : Catalytic tier (ordered best to worst)",
@@ -10876,7 +10876,7 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_POOR} tier has the widest spread.",
         "",
         "-" * 80,
-        "Figure 12 - Figure_12_SN2_Angle_by_Tier.png",
+        "Figure 12 - Figure_12_SN2_Angle_by_Tier.svg",
         "  Title   : SN2 Attack Angle - Empirical Cumulative Distribution (ECDF) by Tier",
         "  Type    : ECDF step plot per tier",
         "  X-axis  : SN2 attack angle (degrees); 180 deg = ideal linear nucleophilic back-attack",
@@ -10888,7 +10888,7 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR}: curves shifted left. Tier thresholds show what % meet each criterion.",
         "",
         "-" * 80,
-        "Figure 13a - Figure_13a_Mechanism_Geometry_Scatter.png",
+        "Figure 13a - Figure_13a_Mechanism_Geometry_Scatter.svg",
         "  Title   : SN2 Attack Angle vs. Nucleophile-Ligand Distance",
         "  Type    : Scatter plot with tier threshold lines and ideal-zone shading",
         "  X-axis  : mapped catalytic Asp (nucleophile, per-variant) to electrophilic carbon distance (Ang); shorter = reaction-ready",
@@ -10901,7 +10901,7 @@ def write_figure_descriptions(out_dir: Path):
         f"            {CFG.TIER_ORDER[4]}/{CFG.TIER_POOR} tier points scatter widely - geometry less constrained.",
         "",
         "-" * 80,
-        "Figure 13b - Figure_13b_TT_Mechanistic_Quality_Space.png",
+        "Figure 13b - Figure_13b_TT_Mechanistic_Quality_Space.svg",
         f"  Title   : {CFG.TIER_TOP} Mechanistic Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter; inset PyMOL protein-ligand structure thumbnails",
         "  Axes    : X = SN2_Attack_Angle (degrees, higher = near-ideal); Y = Boltz_Model_Confidence (AI structural quality)",
@@ -10915,7 +10915,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 14a - Figure_14a_Molecular_Interaction_Profile.png",
+        "Figure 14a - Figure_14a_Molecular_Interaction_Profile.svg",
         "  Title   : Molecular Interaction Profile - Bond Types + Fluorine Engagement  [2-panel]",
         "  Panel A : Grouped bar chart - bond type on X-axis, tier as colour hue",
         "            Bond types: H-Bond, Salt Bridge, Halogen, F-Polar, F-Hydrophobic, Hydrophobic",
@@ -10929,7 +10929,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Panel B: Tier_1/Tier_2 tiers engage a higher fraction of ligand fluorine.",
         "",
         "-" * 80,
-        "Figure 14b - Figure_14b_TT_Interaction_Quality_Space.png",
+        "Figure 14b - Figure_14b_TT_Interaction_Quality_Space.svg",
         f"  Title   : {CFG.TIER_TOP} Interaction Quality Space (hexbin density + structure thumbnails)",
         "  Type    : Hexbin density scatter of interaction density vs. total interactions; inset PyMOL structures",
         "  Axes    : X = Interaction Density Norm (interactions per ligand heavy atom); Y = Total Interactions (num_interactions, all contact types)",
@@ -10938,7 +10938,7 @@ def write_figure_descriptions(out_dir: Path):
         f"  Look for: {CFG.TIER_TOP} stars clustered top-right (dense, numerous active-site contacts).",
         "",
         "-" * 80,
-        "Figure 15 - Figure_15_Fluorine_Engagement_by_Tier.png",
+        "Figure 15 - Figure_15_Fluorine_Engagement_by_Tier.svg",
         "  Title   : Fluorine Engagement Ratio by Tier (box + strip + median trend line)",
         "  Type    : Dual-axis (box + strip plot on left; median trend line on right)",
         "  Left axis : Box + strip of Fluorine Engagement Ratio (FER) per tier",
@@ -10953,7 +10953,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 16 - Figure_16_Catalytic_Quality_vs_Inhibition.png",
+        "Figure 16 - Figure_16_Catalytic_Quality_vs_Inhibition.svg",
         "  Title   : Catalytic quality vs active-site contact density per tier  [dual-axis]",
         "  Panel A : Violin plot of soft_catalytic_score (continuous SN2-geometry composite) per tier",
         "            A genuinely varying catalytic-quality metric (Binding Probability is omitted - it",
@@ -10966,7 +10966,7 @@ def write_figure_descriptions(out_dir: Path):
         "            assessed downstream by the Step-06 MM-GBSA stage, not here.",
         "",
         "-" * 80,
-        "Figure 17 - Figure_17_ActiveSite_Contact_Density_by_Tier.png",
+        "Figure 17 - Figure_17_ActiveSite_Contact_Density_by_Tier.svg",
         "  Title   : Active-site contact density by tier",
         "  Type    : Box + strip plot",
         "  X-axis  : Catalytic tier (ordered best to worst)",
@@ -10981,7 +10981,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 18a - Figure_18a_Chemical_Space_Map.png",
+        "Figure 18a - Figure_18a_Chemical_Space_Map.svg",
         "  Title   : Chemical Space Map (UMAP manifold, competence hexbin)",
         f"  Type    : Hexbin over the UMAP embedding coloured by mean competence per bin; {CFG.TIER_TOP} ★ overlaid, with inset PyMOL active-site thumbnails",
         "  Axes    : UMAP dimensions 1 & 2 - distances reflect chemical similarity",
@@ -10995,7 +10995,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure 19a - Figure_19a_Radar_TopHits.png",
+        "Figure 19a - Figure_19a_Radar_TopHits.svg",
         f"  Title   : Candidate Radar - Top-5 Hits vs. {CFG.TIER_POOR}-Tier Baseline  [Radar]",
         "  Type    : Radar / spider chart with normalised metric spokes (0-1 each)",
         "  Spokes  : 5 normalised metrics: AI Confidence, ipTM, Interaction Density, mean pLDDT, Binding Prob.",
@@ -11005,7 +11005,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Spokes where baseline and hits overlap = metric does not discriminate.",
         "",
         "-" * 80,
-        "Figure 19b - Figure_19b_Radar_TierReps.png",
+        "Figure 19b - Figure_19b_Radar_TierReps.svg",
         "  Title   : Candidate Radar - One Representative per Tier  [Radar]",
         "  Type    : Radar / spider chart; one line per tier (best Boltz confidence per tier selected)",
         "  Spokes  : Same 5 normalised metrics as Figure 19a",
@@ -11013,14 +11013,14 @@ def write_figure_descriptions(out_dir: Path):
         "            Which metrics most differentiate tiers (largest gap between lines)?",
         "",
         "-" * 80,
-        "Figure 20a - Figure_20a_Tier_Success_Rates.png",
+        "Figure 20a - Figure_20a_Tier_Success_Rates.svg",
         "  Title   : Tier success rates - substrate vs inhibitor geometry",
         "  Type    : Grouped horizontal bar chart (one tier per row)",
         "  X-axis  : Percentage of complexes (%)",
         f"  Bars    : Substrate (SN2≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° + Conf≥{CFG.SUBSTRATE_CONF_MIN:.2f}); SN2≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° (any conf); Potential inhibitor (SN2<{CFG.INHIBITOR_ANGLE_MAX:.0f}°)",
         "  Look for: Top tiers carry higher substrate-geometry pass rates and lower inhibitor fractions.",
         "",
-        "Figure 20b - Figure_20b_Conf_SN2_Landscape.png",
+        "Figure 20b - Figure_20b_Conf_SN2_Landscape.svg",
         "  Title   : Tier medians in Confidence × SN2-angle space",
         "  Type    : Scatter of per-tier median diamonds (IQR error bars) over a hexbin density background",
         "  X-axis  : Boltz Model Confidence",
@@ -11030,7 +11030,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Top tiers sit inside the substrate zone, right of the 0.75 confidence threshold.",
         "",
         "-" * 80,
-        "Figure 21 - Figure_21_Conflict_Composition.png",
+        "Figure 21 - Figure_21_Conflict_Composition.svg",
         "  Title   : Conflict Category x Tier Composition - Stacked Bar",
         "  Type    : Side-by-side stacked bar (absolute counts left, % composition right)",
         f"  X-axis  : Conflict category (Consensus High, Hidden Gem, Ambiguous, Consensus Low, {CFG.TIER_DECOY})",
@@ -11048,7 +11048,7 @@ def write_figure_descriptions(out_dir: Path):
         "            The % panel shows tier composition normalised - compare categories fairly.",
         "",
         "-" * 80,
-        "Figure 22 - Figure_22_Hidden_Gems_DeepDive.png",
+        "Figure 22 - Figure_22_Hidden_Gems_DeepDive.svg",
         f"  Title   : Hidden Gems - Physics-{CFG.TIER_ORDER[4]} / AI-Missed Conflicts",
         "  Type    : Horizontal dual-dot lollipop slope chart (only generated if Hidden Gems exist)",
         "  X-axis  : Percentile rank (0-100%; 0 = worst, 100 = best)",
@@ -11062,7 +11062,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Wide connecting lines = large AI/physics disagreement - worth manual rescue.",
         "",
         "-" * 80,
-        "Figure 23 - Figure_23_Category_Overlap_Euler.png",
+        "Figure 23 - Figure_23_Category_Overlap_Euler.svg",
         "  Title   : Category Overlap - Euler / Venn Diagram",
         f"  Type    : Manual circle patches (3 main circles + {CFG.TIER_TOP} dashed overlay)",
         "  Sets    :",
@@ -11079,7 +11079,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Reference controls (3R3U, DeHa4) should land in the A+B+C region.",
         "",
         "-" * 80,
-        "Figure 24a - Figure_24a_Top25_Multitarget_Proteins.png",
+        "Figure 24a - Figure_24a_Top25_Multitarget_Proteins.svg",
         "  Type    : Horizontal stacked bar chart (one bar per protein, stacked by tier)",
         "  X-axis  : Number of unique PFAS ligands degraded (best tier per protein–ligand pair)",
         "  Y-axis  : Protein (top 25, ranked by quality-weighted degradation breadth)",
@@ -11087,7 +11087,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Wide bars = broad-spectrum PFAS degraders. Deep-green left stack = top-tier activity across many ligands.",
         "",
         "-" * 80,
-        "Figure 24b - Figure_24b_TopTier_Protein_PFAS_Breakdown.png",
+        "Figure 24b - Figure_24b_TopTier_Protein_PFAS_Breakdown.svg",
         f"  Type    : Horizontal stacked bar; one bar per protein that reaches {CFG.TIER_TOP} on ≥1 PFAS",
         "  X-axis  : Number of PFAS degraded (each block = one PFAS ligand)",
         "  Blocks  : Colour = PFAS ligand identity; printed label = that ligand's tier (T1A, T1B, T2A, …)",
@@ -11095,7 +11095,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Whether the elite proteins also degrade many OTHER PFAS, and at what tiers (substrate breadth of the best hits).",
         "",
         "-" * 80,
-        "Figure 25 - Figure_25_Sankey_Workflow.png",
+        "Figure 25 - Figure_25_Sankey_Workflow.svg",
         "  Title   : Sankey Pathway - full FAcD tier-decision rules → Final Tier",
         "  Type    : Flat Sankey (ribbon polygons); node boxes labelled with COUNTS",
         "  Columns : Nuc Distance (CFG cuts) · Carboxylate Clamp (Arg/Lys) ·",
@@ -11109,7 +11109,7 @@ def write_figure_descriptions(out_dir: Path):
         f"            + tight triad + ≥{CFG.TIER_ANGLE_MIN['Tier_1A']:.0f}° + mech ≥{CFG.MECH_ELITE_HI:.2f}); the narrowing chain shows the attrition.",
         "",
         "-" * 80,
-        "Figure 26a - Figure_26a_PFAS_Size_Hexbin_Landscape.png",
+        "Figure 26a - Figure_26a_PFAS_Size_Hexbin_Landscape.svg",
         "  Title   : PFAS Chain-Length vs SN2 Geometry - Substrate Preference and Inhibition Risk",
         "  Type    : Hexbin density (F-count × SN2 angle) with tier scatter overlay and rolling median",
         "  X-axis  : Total fluorine count (proxy for carbon chain length); ticks every 2 units",
@@ -11118,7 +11118,7 @@ def write_figure_descriptions(out_dir: Path):
         "            distribution relative to substrate zone.",
         "",
         "-" * 80,
-        "Figure 26b - Figure_26b_PFAS_Size_Composition_Merged.png",
+        "Figure 26b - Figure_26b_PFAS_Size_Composition_Merged.svg",
         "  Title   : Chain-length Composition - Mechanistic Outcome + Degrader Tier (merged)",
         "  Type    : Single panel; per chain-length bin a LEFT stacked bar (outcome) and",
         "            a RIGHT stacked bar (degrader tier) side by side.",
@@ -11128,7 +11128,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Substrate % peaks at short/medium chains; inhibition risk rises with chain length.",
         "",
         "-" * 80,
-        "Figure 26c - Figure_26c_PFAS_Carbon_Confidence.png",
+        "Figure 26c - Figure_26c_PFAS_Carbon_Confidence.svg",
         "  Title   : Catalytic competence vs molecular weight by PFAS carbon number",
         "  Type    : Dual-axis per carbon-number group - LEFT (0–1): soft_catalytic_score box + degrader fraction line; RIGHT: median MW",
         "  X-axis  : Carbon number C2…Cn; fluorine counts present per group in parentheses (e.g. C2 (1F, 2F, 3F))",
@@ -11136,7 +11136,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: catalytic competence (soft score / degrader fraction) is roughly flat across chain length, whereas confidence declines with size - i.e. any apparent 'small-molecule preference' from confidence is a prediction artefact, not a catalytic one.",
         "",
         "-" * 80,
-        "07_PFAS_Scope_and_Synthesis/18_Pocket_Residue_Reaction_Readiness.png",
+        "07_PFAS_Scope_and_Synthesis/18_Pocket_Residue_Reaction_Readiness.svg",
         "  Title   : Pocket + 8-residue reaction-readiness, aggregated per ligand and ordered by size  [4-panel]",
         "  Composite: geometry_readiness (pocket fit + proximity to the 8 catalytic residues + SN2 angle +",
         "             model confidence) GATED by reaction feasibility. Feasibility is 02_Production's",
@@ -11153,24 +11153,13 @@ def write_figure_descriptions(out_dir: Path):
         "             accurately docked on large PFAS but their scissile C-F cannot break. TFA / sulfonates",
         "             follow 02's competence_score, not any judgement added by this figure.",
         "",
-        "=" * 80,
-        "BACKBONE GEOMETRY - RAMACHANDRAN (subfolder: Ramachandran/)",
-        "=" * 80,
-        "",
-        "-" * 80,
-        "Ramachandran_3R3U_Crystal.png - phi/psi of the 3R3U crystal reference.",
-        "Ramachandran_<Control>_Control.png - phi/psi of each Boltz-2 control prediction",
-        "  (DeHa4 and 3R3U sequences against fluoroacetate).",
-        "Ramachandran_<Control>_vs_Crystal.png - control overlaid on the crystal.",
-        "  Look for: control backbones occupying the same favoured basins as the crystal,",
-        "            confirming the predictions reproduce native secondary structure.",
         "",
         "=" * 80,
         "DIAGNOSTIC & MULTI-MODEL TRENDS (subfolder: 08_Diagnostic_and_MultiModel_Trends/)",
         "=" * 80,
         "",
         "-" * 80,
-        "01_Pocket_vs_Ligand_Volume.png",
+        "01_Pocket_vs_Ligand_Volume.svg",
         "  Title   : Pocket capacity vs ligand size - steric fit boundary",
         "  Type    : Scatter (one point per complex), coloured by tier, equal-aspect axes",
         "  X-axis  : Active-site cavity volume (Å³); Y-axis: ligand molecular volume (Å³)",
@@ -11179,7 +11168,7 @@ def write_figure_descriptions(out_dir: Path):
         "            perfluoro chains approach it. Annotation reports the overfill count.",
         "",
         "-" * 80,
-        "02_Pocket_Occupancy_by_Carbon_Number.png",
+        "02_Pocket_Occupancy_by_Carbon_Number.svg",
         "  Title   : Ligand containment by PFAS carbon number",
         "  Type    : Per carbon group (C2…Cn, fluorine counts in parentheses) - whole-cavity",
         "            coverage as a violin (full distribution) with the 8-residue active-site",
@@ -11203,7 +11192,7 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: small ligands pass universally; fit rate erodes for the largest PFAS.",
         "",
         "-" * 80,
-        "03_MultiModel_Consensus_by_Tier.png",
+        "03_MultiModel_Consensus_by_Tier.svg",
         "  Title   : Multi-model degrader consensus by tier",
         "  Type    : Strip + tier mean (diamond) + 95% CI; coloured tier ticks with μ/median/n",
         "  Y-axis  : Fraction of the 5 Boltz-2 diffusion models that independently called a degrader",
@@ -11211,7 +11200,7 @@ def write_figure_descriptions(out_dir: Path):
         "confirming tier ordering reflects cross-model agreement.",
         "",
         "-" * 80,
-        "04_Confidence_vs_Consensus.png",
+        "04_Confidence_vs_Consensus.svg",
         "  Title   : AI confidence vs cross-model consensus",
         "  Type    : Density hexbin (log count) + binned-median trend",
         "  Axes    : X = Boltz-2 model confidence; Y = multi-model degrader consensus",
@@ -11219,7 +11208,7 @@ def write_figure_descriptions(out_dir: Path):
         "            still split the ensemble are robustness outliers.",
         "",
         "-" * 80,
-        "05_Quality_and_Competence_Diagnostics.png",
+        "05_Quality_and_Competence_Diagnostics.svg",
         "  Title   : Quality & competence diagnostics (2-panel scatter, tier-coloured)",
         "  Panel A : Boltz model confidence (x) vs catalytic competence (y) - whether confident",
         "            predictions are also catalytically competent, or whether the two diverge",
@@ -11233,21 +11222,21 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "06_Size_Preference_Containment.png",
+        "06_Size_Preference_Containment.svg",
         "  Title   : Size preference - effective mechanistic score vs ligand size",
         "  Type    : Per-size-bin distribution + bin means + catalytic hit-rate + mean containment",
         "  Look for: competence falls with ligand size; containment falls with it too. FAcD is a",
         "            small-substrate hydrolase, and this is where that shows.",
         "",
         "-" * 80,
-        "07_Reactive_Engagement.png",
+        "07_Reactive_Engagement.svg",
         "  Title   : Reactive-carbon engagement with the catalytic residues by carbon number",
         "  Type    : Nucleophile-distance box + 8-residue spread + properly-positioned fraction",
         "  Look for: the properly-positioned fraction collapses beyond ~C6 while the ligand is",
         "            still nominally bound - reach is not engagement.",
         "",
         "-" * 80,
-        "08_Model_Agreement.png",
+        "08_Model_Agreement.svg",
         "  Title   : Diffusion-sample consensus by tier - are the elite hits reproducible?",
         "  Type    : Consensus distribution per tier (violin + box), per-tier mean, MD-selected starred",
         "  X-axis  : Degrader tier; Y-axis: fraction of diffusion samples independently reaching a",
@@ -11261,46 +11250,46 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.png",
+        "05_Catalytic_Geometry_and_Mechanism/13_Geometry_and_Uncertainty.svg",
         "  Title   : Reaction geometry with multi-model uncertainty",
         "  Look for: nucleophile distance and SN2 angle per tier, with the spread across the",
         "            diffusion samples - a tight tier is a reproducible one.",
         "",
         "-" * 80,
-        "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/08_Binding_Affinity_Metrics.svg",
         "  Title   : Binding affinity by tier",
         "  Look for: affinity does NOT order the tiers - a high-affinity binder that presents the",
         "            wrong face to the mapped catalytic aspartate is not a degrader. This figure is the evidence.",
         "",
         "-" * 80,
-        "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.png",
+        "03_Dataset_and_Alignment_Overview/05_Evolutionary_Phylogeny.svg",
         "  Title   : Evolutionary phylogeny of the cohort",
         "  Look for: whether the degrader tiers cluster phylogenetically or are scattered across",
         "            the tree. Scattered = catalytic competence is not a clade property.",
         "",
         "-" * 80,
-        "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.png",
+        "08_Diagnostic_and_MultiModel_Trends/09_Pillar_Divergence_by_Tier.svg",
         "  Title   : Divergence of the scoring pillars across tiers",
         "  Look for: which pillar actually separates the tiers, and which merely follows.",
         "",
         "-" * 80,
-        "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.png",
+        "05_Catalytic_Geometry_and_Mechanism/14_Mechanistic_Breakdown_by_Tier.svg",
         "  Title   : Mechanistic components per tier",
         "  Look for: the component that collapses first as the tier falls.",
         "",
         "-" * 80,
-        "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.png",
+        "07_PFAS_Scope_and_Synthesis/14_Chain_Length_by_Tier.svg",
         "  Title   : PFAS chain length by tier",
         "  Look for: the elite tiers are short-chain. FAcD is a small-substrate hydrolase.",
         "",
         "-" * 80,
-        "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.png",
+        "07_PFAS_Scope_and_Synthesis/15_Tier1A_Cross_Ligand_Heatmap.svg",
         "  Title   : Tier_1A proteins x ligands",
         "  Look for: whether an elite protein is elite for ONE ligand or several - a protein that",
         "            is Tier_1A across ligands is a genuinely promiscuous defluorinase.",
         "",
         "-" * 80,
-        "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.png",
+        "05_Catalytic_Geometry_and_Mechanism/06_Mechanistic_Fingerprint.svg",
         "  Title   : Mechanistic fingerprint - per-tier catalytic feature profile",
         "  Type    : Radar / spider chart; one feature spoke per axis,",
         "            one tier-coloured filled polygon across them",
@@ -11314,7 +11303,7 @@ def write_figure_descriptions(out_dir: Path):
         "            Complements the scalar Figure 11 (mech-score mean ± CI).",
         "",
         "-" * 80,
-        "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.png",
+        "06_Ligand_Interactions_and_Chemical_Space/06_Binding_Energetics.svg",
         "  Title   : Binding energetics - binding probability by tier",
         "  Type    : Binding-probability violin per tier (red median bar)",
         "  Look for: how binding probability (sigmoid of interaction density, cross-PAE and",
@@ -11325,9 +11314,9 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.png",
-        "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.png",
-        "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.png",
+        "05_Catalytic_Geometry_and_Mechanism/10_Criterion_A_Gates_B.svg",
+        "05_Catalytic_Geometry_and_Mechanism/11_Criterion_B_ECDF_by_Tier.svg",
+        "05_Catalytic_Geometry_and_Mechanism/12_SN2_DeadEnd_Gate.svg",
         "  Title   : Two-criteria tier logic + dead-end feasibility (single 3-panel figure)",
         "  Panel a : Criterion A (active-site integrity, fraction of the 8 catalytic residues correctly",
         "            placed) vs Criterion B (catalytic constellation score) violins per A-bin, with the",
@@ -11342,7 +11331,7 @@ def write_figure_descriptions(out_dir: Path):
         "            trifluoroacetate sits in the dead-end quadrant while FA/DFA stay feasible (c).",
         "",
         "-" * 80,
-        "Figure 31 - Figure_31_Mechanistic_Gate_UpSet.png",
+        "Figure 31 - Figure_31_Mechanistic_Gate_UpSet.svg",
         "  Title   : Mechanistic-gate UpSet - gate-combination intersections",
         "  Type    : UpSet - stacked-by-tier intersection bars + gate dot-matrix, one right axis",
         "  Top     : Each bar = candidates clearing one gate-combination, stacked by tier; the fully-",
@@ -11356,46 +11345,46 @@ def write_figure_descriptions(out_dir: Path):
         "",
         "=" * 80,
     ]
-    # Repoint every internal "Figure_NN_*.png" mention at its real folder-relative
+    # Repoint every internal "Figure_NN_*.svg" mention at its real folder-relative
     # path so the description log matches the on-disk 7-folder layout. Entries stay
     # in thematic reading order; each carries its folder path.
     _fig_paths = {
-        "Figure_01_Active_Site_Residue_Mapping_Coverage.png": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.png",
-        "Figure_02_Tier_Distribution.png": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.png",
-        "Figure_03_Alignment_Grades.png": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.png",
-        "Figure_04_Tier_Grade_Distribution.png": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.png",
-        "Figure_05a_AI_Quality_Assessment.png": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.png",
-        "Figure_05b_TT_AI_Quality_Space.png": "04_AI_Confidence_Quality/02_AI_Quality_Space.png",
-        "Figure_06_pTM_vs_ipTM_by_Tier.png": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.png",
-        "Figure_07_ActiveSite_RMSD_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.png",
-        "Figure_08_Feature_Correlations.png": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.png",
-        "Figure_09_Tier_Quality_DotPlot.png": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.png",
-        "Figure_10_Mech_State_CrossTab.png": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.png",
-        "Figure_11_Mechanistic_Score_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.png",
-        "Figure_12_SN2_Angle_by_Tier.png": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.png",
-        "Figure_31_Mechanistic_Gate_UpSet.png": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.png",
-        "Figure_13a_Mechanism_Geometry_Scatter.png": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.png",
-        "Figure_13b_TT_Mechanistic_Quality_Space.png": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.png",
-        "Figure_14a_Molecular_Interaction_Profile.png": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.png",
-        "Figure_14b_TT_Interaction_Quality_Space.png": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.png",
-        "Figure_15_Fluorine_Engagement_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.png",
-        "Figure_16_Catalytic_Quality_vs_Inhibition.png": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.png",
-        "Figure_17_ActiveSite_Contact_Density_by_Tier.png": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.png",
-        "Figure_18a_Chemical_Space_Map.png": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.png",
-        "Figure_19a_Radar_TopHits.png": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.png",
-        "Figure_19b_Radar_TierReps.png": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.png",
-        "Figure_20a_Tier_Success_Rates.png": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.png",
-        "Figure_20b_Conf_SN2_Landscape.png": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.png",
-        "Figure_21_Conflict_Composition.png": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.png",
-        "Figure_22_Hidden_Gems_DeepDive.png": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.png",
-        "Figure_23_Category_Overlap_Euler.png": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.png",
-        "Figure_24a_Top25_Multitarget_Proteins.png": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.png",
-        "Figure_24b_TopTier_Protein_PFAS_Breakdown.png": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.png",
-        "Figure_25_Sankey_Workflow.png": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.png",
-        "Figure_26a_PFAS_Size_Hexbin_Landscape.png": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.png",
-        "Figure_26b_PFAS_Size_Composition_Merged.png": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.png",
-        "Figure_26c_PFAS_Carbon_Confidence.png": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.png",
-        "02_Pocket_Occupancy_by_Ligand.png": "02_Pocket_Occupancy_by_Carbon_Number.png",
+        "Figure_01_Active_Site_Residue_Mapping_Coverage.svg": "03_Dataset_and_Alignment_Overview/01_Active_Site_Residue_Mapping_Coverage.svg",
+        "Figure_02_Tier_Distribution.svg": "03_Dataset_and_Alignment_Overview/02_Tier_Distribution.svg",
+        "Figure_03_Alignment_Grades.svg": "03_Dataset_and_Alignment_Overview/03_Alignment_Grades.svg",
+        "Figure_04_Tier_Grade_Distribution.svg": "03_Dataset_and_Alignment_Overview/04_Tier_Grade_Distribution.svg",
+        "Figure_05a_AI_Quality_Assessment.svg": "04_AI_Confidence_Quality/01_AI_Quality_Assessment.svg",
+        "Figure_05b_TT_AI_Quality_Space.svg": "04_AI_Confidence_Quality/02_AI_Quality_Space.svg",
+        "Figure_06_pTM_vs_ipTM_by_Tier.svg": "04_AI_Confidence_Quality/03_pTM_vs_ipTM_by_Tier.svg",
+        "Figure_07_ActiveSite_RMSD_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/01_ActiveSite_RMSD_by_Tier.svg",
+        "Figure_08_Feature_Correlations.svg": "05_Catalytic_Geometry_and_Mechanism/02_Feature_Correlations.svg",
+        "Figure_09_Tier_Quality_DotPlot.svg": "05_Catalytic_Geometry_and_Mechanism/03_Tier_Quality_DotPlot.svg",
+        "Figure_10_Mech_State_CrossTab.svg": "05_Catalytic_Geometry_and_Mechanism/04_Mech_State_CrossTab.svg",
+        "Figure_11_Mechanistic_Score_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/05_Mechanistic_Score_by_Tier.svg",
+        "Figure_12_SN2_Angle_by_Tier.svg": "05_Catalytic_Geometry_and_Mechanism/07_SN2_Angle_by_Tier.svg",
+        "Figure_31_Mechanistic_Gate_UpSet.svg": "05_Catalytic_Geometry_and_Mechanism/16_Mechanistic_Gate_UpSet.svg",
+        "Figure_13a_Mechanism_Geometry_Scatter.svg": "05_Catalytic_Geometry_and_Mechanism/08_Mechanism_Geometry_Scatter.svg",
+        "Figure_13b_TT_Mechanistic_Quality_Space.svg": "05_Catalytic_Geometry_and_Mechanism/09_Mechanistic_Quality_Space.svg",
+        "Figure_14a_Molecular_Interaction_Profile.svg": "06_Ligand_Interactions_and_Chemical_Space/01_Molecular_Interaction_Profile.svg",
+        "Figure_14b_TT_Interaction_Quality_Space.svg": "06_Ligand_Interactions_and_Chemical_Space/02_Interaction_Quality_Space.svg",
+        "Figure_15_Fluorine_Engagement_by_Tier.svg": "06_Ligand_Interactions_and_Chemical_Space/03_Fluorine_Engagement_by_Tier.svg",
+        "Figure_16_Catalytic_Quality_vs_Inhibition.svg": "06_Ligand_Interactions_and_Chemical_Space/04_Catalytic_Quality_vs_Inhibition.svg",
+        "Figure_17_ActiveSite_Contact_Density_by_Tier.svg": "06_Ligand_Interactions_and_Chemical_Space/05_ActiveSite_Contact_Density_by_Tier.svg",
+        "Figure_18a_Chemical_Space_Map.svg": "06_Ligand_Interactions_and_Chemical_Space/07_Chemical_Space_Map.svg",
+        "Figure_19a_Radar_TopHits.svg": "07_PFAS_Scope_and_Synthesis/01_Radar_TopHits.svg",
+        "Figure_19b_Radar_TierReps.svg": "07_PFAS_Scope_and_Synthesis/02_Radar_TierReps.svg",
+        "Figure_20a_Tier_Success_Rates.svg": "07_PFAS_Scope_and_Synthesis/03_Tier_Success_Rates.svg",
+        "Figure_20b_Conf_SN2_Landscape.svg": "07_PFAS_Scope_and_Synthesis/04_Conf_SN2_Landscape.svg",
+        "Figure_21_Conflict_Composition.svg": "07_PFAS_Scope_and_Synthesis/05_Conflict_Composition.svg",
+        "Figure_22_Hidden_Gems_DeepDive.svg": "07_PFAS_Scope_and_Synthesis/06_Hidden_Gems_DeepDive.svg",
+        "Figure_23_Category_Overlap_Euler.svg": "07_PFAS_Scope_and_Synthesis/07_Category_Overlap_Euler.svg",
+        "Figure_24a_Top25_Multitarget_Proteins.svg": "07_PFAS_Scope_and_Synthesis/08_Top25_Multitarget_Proteins.svg",
+        "Figure_24b_TopTier_Protein_PFAS_Breakdown.svg": "07_PFAS_Scope_and_Synthesis/09_TopTier_Protein_PFAS_Breakdown.svg",
+        "Figure_25_Sankey_Workflow.svg": "07_PFAS_Scope_and_Synthesis/10_Sankey_Workflow.svg",
+        "Figure_26a_PFAS_Size_Hexbin_Landscape.svg": "07_PFAS_Scope_and_Synthesis/11_PFAS_Size_Hexbin_Landscape.svg",
+        "Figure_26b_PFAS_Size_Composition_Merged.svg": "07_PFAS_Scope_and_Synthesis/12_PFAS_Size_Composition_Merged.svg",
+        "Figure_26c_PFAS_Carbon_Confidence.svg": "07_PFAS_Scope_and_Synthesis/13_PFAS_Carbon_Confidence.svg",
+        "02_Pocket_Occupancy_by_Ligand.svg": "02_Pocket_Occupancy_by_Carbon_Number.svg",
     }
     # Additional journal figure types (folded panels). Colours, fonts and DPI are the CFG values every
     # other figure uses; no titles. Full folder paths are given so each entry sits with its figure.
@@ -11406,7 +11395,7 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "Figure - 03_Dataset_and_Alignment_Overview/06_Treemap_Tier_Ligand_Composition.png",
+        "Figure - 03_Dataset_and_Alignment_Overview/06_Treemap_Tier_Ligand_Composition.svg",
         "  Type    : Treemap (squarified) - one rectangle per tier × ligand cell",
         "  Area    : Number of protein–ligand candidates in that tier for that ligand",
         "  Colour  : Degrader tier (CFG.TIER_COLOUR)",
@@ -11414,28 +11403,28 @@ def write_figure_descriptions(out_dir: Path):
         "            most-populated tier/ligand combinations.",
         "",
         "-" * 80,
-        "Figure - 05_Catalytic_Geometry_and_Mechanism/15_Metric_CoVariation_Network.png",
+        "Figure - 05_Catalytic_Geometry_and_Mechanism/15_Metric_CoVariation_Network.svg",
         "  Type    : Force-directed network of the scoring metrics",
         "  Nodes   : Metrics; edges drawn where |Pearson r| ≥ 0.5; node size ∝ degree",
         "  Colour  : Connected component (CFG Okabe-Ito accents)",
         "  Look for: Clusters of metrics that co-vary - redundant vs. independent signal.",
         "",
         "-" * 80,
-        "Figure - 07_PFAS_Scope_and_Synthesis/16_Swimmer_Top_Per_Tier.png",
+        "Figure - 07_PFAS_Scope_and_Synthesis/16_Swimmer_Top_Per_Tier.svg",
         "  Type    : Swimmer (horizontal bars) - top 3 candidates per tier (Tier_1A → Tier_5_Decoy)",
         "  X-axis  : Effective mechanistic score;  bar colour = tier (CFG.TIER_COLOUR)",
         "  Markers : ▶ MD-selected, ● degrader (CFG.VIS_ACCENT)",
         "  Look for: The score gradient down the tiers and which representatives were MD-selected.",
         "",
         "-" * 80,
-        "Figure - 07_PFAS_Scope_and_Synthesis/17_Circos_Ligand_Tier_Assignment.png",
+        "Figure - 07_PFAS_Scope_and_Synthesis/17_Circos_Ligand_Tier_Assignment.svg",
         "  Type    : Circos / chord diagram",
         "  Arcs    : Ligand → tier assignment; ribbon width ∝ candidate count",
         "  Colour  : Tier (CFG.TIER_COLOUR); grey ticks = ligands",
         "  Look for: Which tiers each ligand feeds, and the dominant ligand→tier flows.",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/10_Volcano_Metric_Significance.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/10_Volcano_Metric_Significance.svg",
         "  Type    : Volcano plot - one point per scoring metric",
         "  X-axis  : Effect size (Cohen's d, degrader − non-degrader)",
         "  Y-axis  : −log10 p (Mann–Whitney, degrader vs non-degrader)",
@@ -11443,32 +11432,32 @@ def write_figure_descriptions(out_dir: Path):
         "  Look for: Which metrics most separate degraders from non-degraders.",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/11_Manhattan_Candidate_Significance.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/11_Manhattan_Candidate_Significance.svg",
         "  Type    : Manhattan plot - one point per candidate, grouped by ligand 'locus'",
         "  X-axis  : Candidates ordered by ligand;  Y-axis : rank-based −log10 significance",
         "  Colour  : Ligand locus (CFG Okabe-Ito accents); dashed line = p 0.05",
         "  Look for: Ligands with many high-significance candidates rising above the line.",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/12_Feature_Importance_Tier_Streams.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/12_Feature_Importance_Tier_Streams.svg",
         "  Type    : Feature-importance bars (left) + tier-composition streamgraph (right)",
         "  Left    : |PC1 loading| per metric (importance); Right : tier stream across ligands",
         "  Colour  : Degrader tier (CFG.TIER_COLOUR)",
         "  Look for: Which metrics drive PC1, and how tier composition varies across ligands.",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.svg",
         "  Type    : Per-Boltz-model SN2 distance (top) + angle (bottom) box-by-tier",
         "  X-axis  : Degrader tier;  Hue : the 5 Boltz diffusion models;  dashed = strict-NAC references",
         "  Look for: Whether the 5 models agree on the geometry within a tier (tight boxes = consistent).",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/14_MultiModel_Geometry_Variance_conf90.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/14_MultiModel_Geometry_Variance_conf90.svg",
         "  Type    : Per-tier SN2 distance/angle box + strip, restricted to confidence ≥ 0.90",
         "  Look for: Does the geometry–tier trend hold when only high-confidence models are kept?",
         "",
         "-" * 80,
-        "Figure - 08_Diagnostic_and_MultiModel_Trends/15_MultiModel_Geometry_Variance_iptm90.png",
+        "Figure - 08_Diagnostic_and_MultiModel_Trends/15_MultiModel_Geometry_Variance_iptm90.svg",
         "  Type    : As figure 14 but restricted to ipTM ≥ 0.90 (high interface confidence)",
         "  Look for: Whether the high-interface-confidence subset preserves the per-tier geometry trend.",
         "",
@@ -11489,21 +11478,21 @@ def write_figure_descriptions(out_dir: Path):
         "=" * 80,
         "",
         "-" * 80,
-        "02_Ramachandran/Ramachandran_3R3U_Crystal.png",
+        "02_Ramachandran/Ramachandran_3R3U_Crystal.svg",
         "  Title   : Ramachandran plot - 3R3U crystal structure",
         "  Type    : phi/psi scatter over the favoured/allowed contour map",
         "  Look for: the reference. Every Boltz-2 prediction is judged against this distribution.",
         "",
         "-" * 80,
-        "02_Ramachandran/Ramachandran_DeHa4_Control.png",
-        "02_Ramachandran/Ramachandran_3R3U_Control.png",
+        "02_Ramachandran/Ramachandran_DeHa4_Control.svg",
+        "02_Ramachandran/Ramachandran_3R3U_Control.svg",
         "  Title   : Ramachandran plot - Boltz-2 control prediction (DeHa4 / 3R3U sequence)",
         "  Look for: outliers in the disallowed regions. A prediction with good ipTM but a strained",
         "            backbone has bought its confidence with geometry the protein cannot hold.",
         "",
         "-" * 80,
-        "02_Ramachandran/Ramachandran_DeHa4_vs_Crystal.png",
-        "02_Ramachandran/Ramachandran_3R3U_vs_Crystal.png",
+        "02_Ramachandran/Ramachandran_DeHa4_vs_Crystal.svg",
+        "02_Ramachandran/Ramachandran_3R3U_vs_Crystal.svg",
         "  Title   : Prediction overlaid on the crystal",
         "  Look for: whether the predicted backbone occupies the SAME basins as the crystal, not",
         "            merely allowed ones. This is the check that Boltz-2 folded the enzyme rather",
@@ -11518,11 +11507,19 @@ def write_figure_descriptions(out_dir: Path):
     that is not there. Blocks whose figure is absent are moved to a closing section that says so, and
     why, rather than being silently deleted: 'this figure has no data' is itself a finding.
     """
+    def _fig_present(_rel):
+        # a produced figure may carry a runtime NN_ numeric prefix (e.g. 01_Ramachandran_...svg);
+        # match the exact path first, then any basename that is this name with an NN_ prefix.
+        if (out_dir / _rel).exists():
+            return True
+        _d, _n = _os.path.split(_rel)
+        _dd = out_dir / _d
+        return _dd.is_dir() and any(_f.name == _n or _f.name.endswith("_" + _n) for _f in _dd.glob("*.svg"))
     _blocks = _txt.split("-" * 80)
     _kept, _absent = [], []
     for _b in _blocks:
-        _pngs = re.findall(r"([0-9A-Za-z_]+/[0-9A-Za-z_]+\.png)", _b)
-        if _pngs and not any((out_dir / _p).exists() for _p in _pngs):
+        _pngs = re.findall(r"([0-9A-Za-z_]+/[0-9A-Za-z_]+\.svg)", _b)
+        if _pngs and not any(_fig_present(_p) for _p in _pngs):
             _absent.append((_pngs[0], _b))
         else:
             _kept.append(_b)

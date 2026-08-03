@@ -361,7 +361,7 @@ _DEFLX_IMG_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pdf", ".eps",
 def deflx_fig_name(path) -> str:
     """Return a figure path with its suffix swapped to the ACTIVE SSOT format (CFG.VIS_FIGURE_FORMAT,
     as recorded on matplotlib by apply_figure_style) - so a LOG line names the file savefig actually
-    wrote, not the source-literal '.png'. Non-image suffixes (e.g. .csv) are returned unchanged, so it
+    wrote, not the source-literal suffix. Non-image suffixes (e.g. .csv) are returned unchanged, so it
     is safe to apply even where a path might not be a figure."""
     try:
         p = Path(path)
@@ -414,7 +414,7 @@ def apply_figure_style(cfg) -> None:
 
     # ---- Central figure-format SSOT ----------------------------------------------------------------
     # Every matplotlib save (fig.savefig / plt.savefig) is routed to cfg.VIS_FIGURE_FORMAT regardless
-    # of the ".png" a call site happens to name: the suffix and the write format are rewritten here, so
+    # of the suffix a call site happens to name: the suffix and the write format are rewritten here, so
     # one CFG edit re-targets all plots (svg / pdf / tiff / png / jpg). A call that passes an explicit
     # format= (a PIL-composited or PyMOL raster tile that must stay png) is left untouched. The patch is
     # installed once at the class level (idempotent guard) and reads the format from matplotlib each

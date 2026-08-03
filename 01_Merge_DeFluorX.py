@@ -18,7 +18,7 @@ Date   : 05 August 2026 <──────────────────�
                   00_01_Project_Config_DeFluorX.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   - merged, deduplicated sequence set
-                  <output>.log     - inclusion/exclusion statistics
+                  00_Merge.log      - inclusion/exclusion statistics
                   <output>          - QC dashboard (throughput + KDE); format per CFG.VIS_FIGURE_FORMAT
   Upstream      : None (standalone data-curation step)
   Downstream    : 02_Production_DeFluorX.py → consumes the merged FASTA as Boltz-2 input
@@ -125,7 +125,8 @@ from Bio import SeqIO
 # Step 1.4: Pipeline utilities (00_02) + config (00_01) via importlib
 # -------------------------------------------------------------------------------
 """
-CFG supplies only PREP_AMBIGUOUS_AA for QC (no geometric thresholds used here).
+CFG supplies the QC thresholds (PREP_AMBIGUOUS_AA / PREP_MAX_AMBIGUOUS_PCT), the Secondary length
+filters and the dashboard palette/format; no geometric (structural) thresholds are used here.
 """
 import importlib.util as _ilu
 # Consolidated top-level imports; any optional/heavy dependency stays local to its caller.
@@ -394,7 +395,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 
     # Configure Matplotlib fonts
     plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = ["Arial", "Helvetica", "DejaVu Sans"]
+    plt.rcParams["font.sans-serif"] = list(CFG.VIS_FONT_FAMILY)
 
     # Setup Data
     data_map = [

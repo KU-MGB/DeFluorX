@@ -161,7 +161,7 @@ import gemmi
 Filenames begin with digits and cannot be imported with standard `import`.
 """
 import importlib.util as _ilu
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 from collections import Counter as _Counter
 import re as _re
 import select as _select
@@ -809,7 +809,7 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
         fig.tight_layout(rect=(0, 0.045, 1, 0.90))
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "02_Pose_Drift_CIF_to_Prepared.png"
+    _path = out_dir / "02_Pose_Drift_CIF_to_Prepared.svg"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -1059,7 +1059,7 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
         warnings.simplefilter("ignore", UserWarning)
         fig.tight_layout(rect=(0, 0.0, 1, 0.95))
     out_dir.mkdir(parents=True, exist_ok=True)
-    _path = out_dir / "03_Machinery_Engagement_Distribution.png"
+    _path = out_dir / "03_Machinery_Engagement_Distribution.svg"
     fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _path
@@ -1656,7 +1656,7 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         fig.tight_layout()
-    _p = out_dir / "01_ESP_Alpha_Carbon_Charge.png"
+    _p = out_dir / "01_ESP_Alpha_Carbon_Charge.svg"
     fig.savefig(_p, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     return _p
@@ -2513,7 +2513,7 @@ def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C, role_resnums=None):
                 continue
             lig_2d, res_2d = _im_project(lig, contacts)
             lig_2d = _im_separate_atoms(lig_2d)
-            out_png = out_dir / f"{base_name}_PLIP.png"
+            out_png = out_dir / f"{base_name}_PLIP.svg"
             _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="plip", role_resnums=role_resnums)
             rendered = True
 
@@ -2889,7 +2889,7 @@ def _draw_interaction_diagram(pdb_path, fig_root, base_name, C, role_resnums=Non
     """Render a publication-quality 2D protein–ligand interaction map (no PyMOL)."""
     out_dir = fig_root / "InteractionMap"
     out_dir.mkdir(exist_ok=True, parents=True)
-    out_png = out_dir / f"{base_name}_interaction.png"
+    out_png = out_dir / f"{base_name}_interaction.svg"
     try:
         lig, pro, lig_hb = _im_parse_pdb(pdb_path)
         if not lig:
@@ -3049,7 +3049,7 @@ class SoftwareManager:
 def run_figure_generation(run_dir: Path, ext_dir: Path):
     """
     Phase 2: Run PyMOL and PLIP rendering on all PDB files under ext_dir.
-    Called at the end of main() after Phase 1 (extraction) has completed.
+    Called during Phase 2, after the Top-N extraction has completed.
     """
     global _fig_logger
 
@@ -3282,7 +3282,7 @@ def prep_and_convert_phase(args):
     console_separator()
 
     # -------------------------------------------------------------------------------
-    # Step 5.1: Raw PDB Generation (With Source Validation)
+    # Step 6.1: Raw PDB Generation (With Source Validation)
     # -------------------------------------------------------------------------------
     print(SEPARATOR_LIGHT, flush=True)
     console_info("Generating Raw PDBs")
@@ -3375,7 +3375,7 @@ def prep_and_convert_phase(args):
         sys.exit(1)
 
     # -------------------------------------------------------------------------------
-    # Step 5.2: Protein Preparation via PrepWizard (With Stale Check)
+    # Step 6.2: Protein Preparation via PrepWizard (With Stale Check)
     # -------------------------------------------------------------------------------
     print(SEPARATOR_LIGHT, flush=True)
     console_info("Protein Preparation")
@@ -3610,7 +3610,7 @@ def topn_extraction_phase(args):
     """Phase 2 - extract, validate and render the MD-ready complexes for handover."""
 
     # -------------------------------------------------------------------------------
-    # Step 5.3: Path validation
+    # Step 6.3: Path validation
     # -------------------------------------------------------------------------------
     run_dir = DEFAULT_BASE_PATH / args.run_folder_name
     if not run_dir.exists():
@@ -3636,7 +3636,7 @@ def topn_extraction_phase(args):
     prep_pdb_dir = prep_dir / "2_Prepared_PDBs"
 
     # -------------------------------------------------------------------------------
-    # Step 5.4: Load ranking logic
+    # Step 6.4: Load ranking logic
     # -------------------------------------------------------------------------------
     # Primary: DeFluorX Ranked CSV written by 02_Production_DeFluorX.py
     rank_csvs = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
@@ -3667,14 +3667,14 @@ def topn_extraction_phase(args):
         console_info("Warning: Rank column missing. Using default sort.")
 
     # -------------------------------------------------------------------------------
-    # Step 5.5: Load reference data (FASTA/SMILES)
+    # Step 6.5: Load reference data (FASTA/SMILES)
     # -------------------------------------------------------------------------------
     console_info("Loading reference sequences and SMILES...")
     seq_map, smi_map, fasta_count, smi_count = load_reference_data(input_data_dir)
     console_info(f"Loaded {fasta_count} Sequences, {smi_count} SMILES.")
 
     # -------------------------------------------------------------------------------
-    # Step 5.6: Tier / MD-ready selection
+    # Step 6.6: Tier / MD-ready selection
     # -------------------------------------------------------------------------------
 
     TIER_ORDER = CFG.TIER_ORDER
@@ -3784,7 +3784,7 @@ def topn_extraction_phase(args):
     console_separator()
 
     # -------------------------------------------------------------------------------
-    # Step 5.7: Prepare output folders
+    # Step 6.7: Prepare output folders
     # -------------------------------------------------------------------------------
     folder_tag = f"{tier_label}_{top_n}hits" if top_n else "Selected"
 
@@ -3809,7 +3809,7 @@ def topn_extraction_phase(args):
     try:
 
         # -------------------------------------------------------------------------------
-        # Step 5.7.1: Control-case extraction (always automatic)
+        # Step 6.7.1: Control-case extraction (always automatic)
         # -------------------------------------------------------------------------------
         ctrl_extracted_raw  = 0
         ctrl_extracted_prep = 0
@@ -3850,7 +3850,7 @@ def topn_extraction_phase(args):
         console_separator()
 
         # -------------------------------------------------------------------------------
-        # Step 5.8: Extraction loop with unique aggregation
+        # Step 6.8: Extraction loop with unique aggregation
         # -------------------------------------------------------------------------------
         extracted_raw_count = 0
         extracted_prep_count = 0
@@ -3917,7 +3917,7 @@ def topn_extraction_phase(args):
                         angles_prep = compute_ramachandran_angles(st_prep)
 
                     if angles_raw or angles_prep:
-                        rama_path = out_rama / f"Rank_{rank}_{fname_prep.replace('.pdb', '_Rama_Comparison.png')}"
+                        rama_path = out_rama / f"Rank_{rank}_{fname_prep.replace('.pdb', '_Rama_Comparison.svg')}"
                         save_ramachandran_comparison(
                             angles_raw, angles_prep,
                             f"Rank {rank}: {p_name} (Raw)",
@@ -3994,7 +3994,7 @@ def topn_extraction_phase(args):
                     console_info(f"    ! Failed to copy MD-ready PDB to handover: {e}")
 
         # -------------------------------------------------------------------------------
-        # Step 5.9: Unique ligand writing (SDF & SMILES)
+        # Step 6.9: Unique ligand writing (SDF & SMILES)
         # -------------------------------------------------------------------------------
 
         # Iterate through unique SMILES found
@@ -4023,7 +4023,7 @@ def topn_extraction_phase(args):
                 sdf_writer.write(mol)
 
         # -------------------------------------------------------------------------------
-        # Step 5.10: Save data & summary
+        # Step 6.10: Save data & summary
         # -------------------------------------------------------------------------------
 
         # Save CSV Data (hits + controls merged; controls appended with is_control flag). It lives in the
