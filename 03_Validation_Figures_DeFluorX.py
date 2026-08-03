@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, and pocket-fit / multi-mo
 diagnostics).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <────────────────────────────────────────────────────────
+Date   : 05 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_DeFluorX.py
@@ -47,7 +47,7 @@ Date   : 30 July 2026 <───────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
-  1. Memory overhead: Generating 24+ high-resolution figures simultaneously can
+  1. Memory overhead: Generating the full figure suite (dozens of high-resolution figures) simultaneously can
      spike RAM usage; recommended 32GB+ for large (>10k row) datasets.
   2. CSV Schema Sensitivity: Relies on the exact column naming convention from
      Step 02; custom CSV modifications will break the scoring logic.
@@ -73,7 +73,7 @@ Purpose:
 
     1. Audits Physics (Geometry) vs. AI (Confidence).
     2. Performs Pareto Optimisation (Non-dominated sorting) to find optimal trade-offs.
-       * NOTE: Uses Fast Sort-and-Sweep algorithm for large datasets (>50k rows).
+       * NOTE: Uses the Fast Sort-and-Sweep for the 2-objective case (its sole current use); the vectorised O(N^2) path handles >2 objectives.
     3. Rescues "Hidden Gems" that AI missed but Physics loves.
     4. Generates a complete suite of high-resolution scientific figures.
 
@@ -106,17 +106,19 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
 
     ── 05_Catalytic_Geometry_and_Mechanism/ ── structural + mechanistic geometry
     • 01_ActiveSite_RMSD_by_Tier.png               <-- Active-site RMSD vs reference control (median bar)
-    • 02_Mech_State_CrossTab.png                   <-- Halide stabilisation × carboxylate clamp heatmap
-    • 03_Mechanistic_Score_by_Tier.png             <-- Mechanistic score mean ± CI (median annotated)
-    • 04_SN2_Angle_by_Tier.png                     <-- SN2 attack-angle ECDF by tier
-    • 05_Mechanism_Geometry_Scatter.png            <-- SN2 angle vs nucleophile-distance scatter
-    • 06_Mechanistic_Quality_Space.png             <-- {CFG.TIER_TOP} mechanistic density + thumbnails
-    • 07_Feature_Correlations.png                  <-- Spearman ρ correlation heatmap of 17 features (incl. mechanistic/chemistry drivers), family-grouped
-    • 08_Tier_Quality_DotPlot.png                  <-- Multi-metric tier-quality Cleveland dot plot
-    • 09_Mechanistic_Fingerprint.png               <-- Per-tier catalytic feature profile (radar / spider; config §5 components)
+    • 02_Feature_Correlations.png                  <-- Spearman ρ correlation heatmap of 17 features (incl. mechanistic/chemistry drivers), family-grouped
+    • 03_Tier_Quality_DotPlot.png                  <-- Multi-metric tier-quality Cleveland dot plot
+    • 04_Mech_State_CrossTab.png                   <-- Halide stabilisation × carboxylate clamp heatmap
+    • 05_Mechanistic_Score_by_Tier.png             <-- Mechanistic score mean ± CI (median annotated)
+    • 06_Mechanistic_Fingerprint.png               <-- Per-tier catalytic feature profile (radar / spider; config §5 components)
+    • 07_SN2_Angle_by_Tier.png                     <-- SN2 attack-angle ECDF by tier
+    • 08_Mechanism_Geometry_Scatter.png            <-- SN2 angle vs nucleophile-distance scatter
+    • 09_Mechanistic_Quality_Space.png             <-- {CFG.TIER_TOP} mechanistic density + thumbnails
     • 10_Criterion_A_Gates_B.png                   <-- active-site integrity gates the catalytic constellation
     • 11_Criterion_B_ECDF_by_Tier.png             <-- the constellation score separates the tiers (ECDF)
     • 12_SN2_DeadEnd_Gate.png                     <-- SN2 dead-end chemistry gate (C–F BDE × backside occlusion)
+    • 13_Geometry_and_Uncertainty.png             <-- Nucleophile distance + SN2 angle with multi-model uncertainty
+    • 14_Mechanistic_Breakdown_by_Tier.png        <-- Mechanistic components broken down per tier
     • 16_Mechanistic_Gate_UpSet.png               <-- mechanistic-gate UpSet: gate-combination intersections + tier mix + mean score/coverage
 
     ── 06_Ligand_Interactions_and_Chemical_Space/ ── interaction profile + chemical space
@@ -156,13 +158,9 @@ Outputs (Saved in <Run_Folder>/3_Validation_Figures/):
     • 07_Reactive_Engagement.png                   <-- Reactive-C→catalytic-residue distance + properly-positioned fraction (vs hit-rate) by carbon number
     • 08_Model_Agreement.png                       <-- Diffusion-sample consensus by tier: are the elite hits reproducible across samples
 
-    • 01_Geometry_and_Uncertainty.png              <-- Nucleophile distance + SN2 angle with multi-model uncertainty
-    • 02_Binding_Affinity_Metrics.png              <-- Binding-affinity distribution by tier (2-column legend + stats)
-    • 03_Evolutionary_Phylogeny.png       <-- Evolutionary phylogeny, detailed variant
-    • 04_Pillar_Divergence_by_Tier.png             <-- Divergence of the scoring pillars across tiers
-    • 05_Mechanistic_Breakdown_by_Tier.png         <-- Mechanistic components broken down per tier
-    • 06_Chain_Length_by_Tier.png                  <-- PFAS chain-length distribution by tier (stats top-left)
-    • 07_Tier1A_Cross_Ligand_Heatmap.png           <-- Tier_1A proteins × ligands cross-tabulation heatmap
+    ── Folded panels (distributed into the folders above by _PANEL_FIG_PATHS; folder/NN authoritative) ──
+    • 05/13_Geometry_and_Uncertainty · 05/14_Mechanistic_Breakdown_by_Tier · 06/08_Binding_Affinity_Metrics
+    • 03/05_Evolutionary_Phylogeny · 07/14_Chain_Length_by_Tier · 07/15_Tier1A_Cross_Ligand_Heatmap · 08/09_Pillar_Divergence_by_Tier
 
 -------------------------------------------------------------------------------
 Scientific References:
@@ -313,6 +311,7 @@ _utils_mod = _load_module("ProjectUtils",  Path(__file__).resolve().parent / "00
 CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
+deflx_fig_name  = _utils_mod.deflx_fig_name    # log a figure by the format savefig actually wrote (SSOT)
 latest_by_mtime = _utils_mod.latest_by_mtime   # newest ranked/master CSV by mtime (prefix-agnostic)
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
@@ -1577,9 +1576,9 @@ def _fig_path(fig_key: str) -> str:
     """Map a figure key (e.g. '22', '13b', '01C') to its folder/NN_name.png for skip logs - the folded
     panels via _PANEL_FIG_PATHS, the main suite via _FIG_MAPPING. Falls back to 'Figure <key>'."""
     if fig_key in _PANEL_FIG_PATHS:
-        return _PANEL_FIG_PATHS[fig_key]
+        return deflx_fig_name(_PANEL_FIG_PATHS[fig_key])
     m = next((v for k, v in _FIG_MAPPING.items() if k.startswith(f"Figure_{fig_key}_")), None)
-    return m if m else f"Figure {fig_key}"
+    return deflx_fig_name(m) if m else f"Figure {fig_key}"
 
 
 @contextlib.contextmanager
@@ -1596,7 +1595,7 @@ def _redirect_savefig(out_dir: Path, reporter):
         if name in _FIG_MAPPING:
             _target = out_dir / _FIG_MAPPING[name]
             _target.parent.mkdir(parents=True, exist_ok=True)   # folder created lazily, at its turn
-            reporter.log(f'  ✔ Saved: {_FIG_MAPPING[name]}')
+            reporter.log(f'  ✔ Saved: {deflx_fig_name(_FIG_MAPPING[name])}')
             return _target
         return fname
     plt.savefig = lambda fname, *a, **k: _orig_plt(_redirect(fname), *a, **k)
@@ -6551,7 +6550,7 @@ def _mm_variance_by_model(df, out_dir, reporter):
     """Fig 13 - per-Boltz-model SN2 distance/angle spread by tier (are the 5 models consistent?)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log("  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/13_MultiModel_Geometry_Variance_by_Model.png - variance CSV unavailable.")
+        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name('13_MultiModel_Geometry_Variance_by_Model.png')} - variance CSV unavailable.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _models = sorted(str(m) for m in mv["model_name"].dropna().unique())
@@ -6590,12 +6589,12 @@ def _mm_variance_cut(df, out_dir, reporter, *, filt_col, thr, num, fname):
     """Shared box+strip of per-model geometry for a high-quality subset (confidence / ipTM ≥ thr)."""
     mv = _mm_load_variance_df(out_dir.parent, df)
     if mv is None:
-        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{num}_{fname}.png - variance CSV unavailable.")
+        reporter.log(f"  ! Skipped: 08_Diagnostic_and_MultiModel_Trends/{deflx_fig_name(f'{num}_{fname}.png')} - variance CSV unavailable.")
         return
     if filt_col in mv.columns:
         mv = mv[pd.to_numeric(mv[filt_col], errors="coerce") >= thr]
     if mv.empty:
-        reporter.log(f"  ! Skipped: {num}_{fname}.png - no rows with {filt_col} ≥ {thr}.")
+        reporter.log(f"  ! Skipped: {deflx_fig_name(f'{num}_{fname}.png')} - no rows with {filt_col} ≥ {thr}.")
         return
     _tiers = [t for t in TIER_ORDER_LOGIC if t in set(mv[CFG.COL_TIER].dropna())]
     _tpal = [TIER_PALETTE.get(t, CFG.VIS_INK["faint"]) for t in _tiers]   # each tier its own CFG colour
@@ -6640,8 +6639,8 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     _utils_mod.apply_figure_style(CFG)
     existing_tiers = [t for t in TIER_ORDER_LOGIC if t in df[CFG.COL_TIER].unique()]
     # ── Companion thumbnail setup (shared by Figs 04b, 12b, 13b, 17b) ─────────
-    # Source the PyMOL structure thumbnails from the MD-ready cohort (MD_Selected,
-    # SECTION 18) so only the ~9-10 complexes actually taken to MD are rendered -
+    # Source the PyMOL structure thumbnails from the MD-ready cohort (MD_Selected, set
+    # upstream in Step 02) so only the ~9-10 complexes actually taken to MD are rendered -
     # not all Tier_1A. Falls back to the top tier if the flag is absent (older CSV).
     _md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
     if _md_col in df.columns:
@@ -6694,13 +6693,14 @@ def _generate_comprehensive_figures_impl(df: pd.DataFrame, features: list[str], 
     def _panel(fn, folder, name):
         """Render one folded per-folder analysis panel into its folder and buffer the save; a failure is
         logged and the rest still run. The save is flushed (in numeric order) with the folder's block."""
+        _saved = deflx_fig_name(f"{name}.png")   # actual routed filename (CFG.VIS_FIGURE_FORMAT)
         try:
             (out_dir / folder).mkdir(parents=True, exist_ok=True)   # folder created at its turn
             fn(df, out_dir / folder, reporter)
-            if (out_dir / folder / f"{name}.png").exists():
-                reporter.log(f"  ✔ Saved: {folder}/{name}.png")
+            if (out_dir / folder / _saved).exists():
+                reporter.log(f"  ✔ Saved: {folder}/{_saved}")
         except Exception as _e:                                  # noqa: BLE001
-            reporter.log(f"  ! Skipped: {folder}/{name}.png - {type(_e).__name__}: {_e}")
+            reporter.log(f"  ! Skipped: {folder}/{_saved} - {type(_e).__name__}: {_e}")
             plt.close("all")
 
     _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers)
@@ -8009,7 +8009,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             plt.tight_layout()
             _o = out_dir / "01_Pocket_vs_Ligand_Volume.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 01 skipped: insufficient pocket/ligand volume data")
     except Exception as e:
@@ -8128,7 +8128,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             plt.tight_layout()
             _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         elif len(sub) >= 5 and sub["_nC"].nunique() >= 2:
             sub["_nC"] = sub["_nC"].astype(int)
             groups = sorted(sub["_nC"].unique())
@@ -8176,7 +8176,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             plt.tight_layout()
             _o = out_dir / "02_Pocket_Occupancy_by_Carbon_Number.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 02 skipped: insufficient occupancy/carbon data")
     except Exception as e:
@@ -8229,7 +8229,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _tier_seps(plt.gca())   # consistent vertical tier separators
             _o = out_dir / "03_MultiModel_Consensus_by_Tier.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 03 skipped: insufficient consensus data")
     except Exception as e:
@@ -8283,7 +8283,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             _tier_seps(plt.gca())   # consistent vertical tier separators
             _o = out_dir / "04_Confidence_vs_Consensus.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 04 skipped: insufficient confidence/consensus data")
     except Exception as e:
@@ -8370,7 +8370,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             for _qax in axes[0]: _tier_seps(_qax)   # consistent tier separators
             _o = out_dir / "05_Quality_and_Competence_Diagnostics.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 05 skipped: quality/competence columns absent")
     except Exception as e:
@@ -8467,7 +8467,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
             plt.tight_layout()
             _o = out_dir / "06_Size_Preference_Containment.png"
             fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-            reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+            reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
         else:
             reporter.log("  ! Diag 06 skipped: insufficient size/tier data")
     except Exception as e:
@@ -8627,7 +8627,7 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 plt.tight_layout()
                 _o = out_dir / "07_Reactive_Engagement.png"
                 fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-                reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+                reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
     except Exception as e:
         reporter.log(f"  ! Diag 07 skipped: {e}")
         plt.close("all")   # release the figure left open by the failed savefig
@@ -8723,7 +8723,7 @@ def _diag10_model_agreement(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _tier_seps(plt.gca())   # consistent vertical tier separators
         _o = out_dir / "08_Model_Agreement.png"
         fig.savefig(_o, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight"); plt.close(fig)
-        reporter.log(f"  ✔ Saved: {_o.parent.name}/{_o.name}")
+        reporter.log(f"  ✔ Saved: {_o.parent.name}/{deflx_fig_name(_o.name)}")
     except Exception as e:                                   # noqa: BLE001
         reporter.log(f"  ! Diag 08 skipped: {e}")
         plt.close("all")
@@ -10650,7 +10650,7 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
     rama_ref = _utils_mod.compute_ramachandran_angles(_load(crystal))
     _utils_mod.save_ramachandran_plot(rama_ref, "3R3U Crystal Structure",
                                       rama_dir / "01_Ramachandran_3R3U_Crystal.png", dpi=dpi, cfg=CFG)
-    reporter.log("  ✔ Saved: 02_Ramachandran/01_Ramachandran_3R3U_Crystal.png")
+    reporter.log(f"  ✔ Saved: 02_Ramachandran/{deflx_fig_name('01_Ramachandran_3R3U_Crystal.png')}")
 
     _rn = 1   # running plot number within 02_Ramachandran (crystal was 01)
     for label, token in [("DeHa4", "DeHa4_Control"), ("3R3U", "3R3U_Control")]:
@@ -10666,8 +10666,8 @@ def generate_ramachandran_figures(prod_dir: Path, out_dir: Path, reporter: Repor
         _utils_mod.save_ramachandran_comparison(rama_ref, rama_con,
                                                 "3R3U (Crystal)", f"{label} (Boltz-2)",
                                                 rama_dir / _c_cmp, dpi=dpi, cfg=CFG)
-        reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_con}")
-        reporter.log(f"  ✔ Saved: 02_Ramachandran/{_c_cmp}")
+        reporter.log(f"  ✔ Saved: 02_Ramachandran/{deflx_fig_name(_c_con)}")
+        reporter.log(f"  ✔ Saved: 02_Ramachandran/{deflx_fig_name(_c_cmp)}")
 
 
 # =============================================================================

@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <────────────────────────────────────────────────────────
+Date   : 05 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_DeFluorX.py
@@ -138,7 +138,7 @@ Scientific References:
 """
 
 from dataclasses import dataclass, field
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 import math
 import multiprocessing
 
@@ -1465,7 +1465,7 @@ class CFG:
     })
 
     """
-    Step 8.4b: Feasibility (competence_score) floors for the FUNCTIONAL band.
+    Step 8.4a: Feasibility (competence_score) floors for the FUNCTIONAL band.
     mech_score (mechanistic_score_effective) is largely geometry and is too flat to
     separate substrate feasibility - the 3R3U references score mech 0.99/0.90/0.80 for
     FA/DFA/TFA, all above the 2A mech floor. competence_score is the feasibility-weighted
@@ -1508,7 +1508,7 @@ class CFG:
     mechanism can plausibly reach; it remains eligible as a lead rather than being ruled out a priori.
     The bond strength is not waived: it is carried as a flat, non-fading
     penalty on mechanistic_score_effective (CHEM_PEN_W_BDE × the excess over SCISSILE_CF_BDE_MAX),
-    which costs an α-CF3 pose ~0.11 of mech score. Only the most crystal-perfect α-CF3 pose therefore
+    which costs an α-CF3 pose ~0.07 of mech score. Only the most crystal-perfect α-CF3 pose therefore
     survives the coupled elite gate - one lead, not a chemotype.
 
     The ceiling is chemically specific: only an α-CF3 carbon reaches 127.5. The long perfluoro
@@ -1546,7 +1546,7 @@ class CFG:
     TIER_ELITE_CONF_MIN: float = 0.85       # global Boltz confidence floor - fallback when active_site_plddt is absent
 
     # -------------------------------------------------------------------------------
-    # Step 8.4a: Catalytic-constellation (Criterion B) per-tier floors (0–1, lower bound)
+    # Step 8.4b: Catalytic-constellation (Criterion B) per-tier floors (0–1, lower bound)
     # -------------------------------------------------------------------------------
     """
     TWO active-site criteria. Criterion A - active_site_integrity - asks only whether the eight
@@ -1582,7 +1582,7 @@ class CFG:
     TIER_1A_MAX_LIGAND_EXTENT: float = 5.0   # Å - threshold defining the controls-only validation subset (ligands ≤ this, ≈2-carbon haloacetate controls ~3.5 Å; long-chain PFAS exceed it). The tier ladder itself is size-agnostic.
 
     # -------------------------------------------------------------------------------
-    # Step 8.4b: Substrate / inhibitor classification (Figs 19, 25)
+    # Step 8.4c: Substrate / inhibitor classification (Figs 19, 25)
     # -------------------------------------------------------------------------------
     # Derived from the tier gates so every figure classifies identically.
     SUBSTRATE_ANGLE_MIN: float = 165.0   # = TIER_ANGLE_MIN['Tier_1B']: SN2 ≥ this → substrate geometry
@@ -1590,7 +1590,7 @@ class CFG:
     SUBSTRATE_CONF_MIN:  float = 0.75    # Boltz confidence ≥ this → AI-confident pose
 
     # -------------------------------------------------------------------------------
-    # Step 8.4c: Confidence-vs-tier conflict thresholds (Fig 20 / Hidden-Gem rescue)
+    # Step 8.4d: Confidence-vs-tier conflict thresholds (Fig 20 / Hidden-Gem rescue)
     # -------------------------------------------------------------------------------
     """
     Used by 03_Validation_Figures analyse_conflicts() to split structures into
@@ -1691,7 +1691,7 @@ class CFG:
     })
     # Role-group colours (Okabe–Ito colourblind-safe palette, matching TIER_COLOUR).
     ACTIVE_SITE_ROLE_GROUP_COLOUR: dict = field(default_factory=lambda: {
-        "Nucleophile":          "#0072B2",
+        "Nucleophile":          "#6A2CBF",
         "Acid/base catalysis":  "#D55E00",
         "Carboxylate clamp":    "#009E73",
         "Fluoride pocket":      "#CC79A7",
@@ -1914,7 +1914,7 @@ class CFG:
     It cannot be fixed by switching functional. QSite's frozen-orbital cuts - required for a
     residue-selective QM region - reject dispersion-corrected and meta-GGA functionals outright;
     Jaguar aborts with "ERROR 5029: Disallowed QM Method for QSite with Frozen Orbital Cuts:
-    DFT(b3lyp-d3)" (verified against a real QM/MM input, 13 July 2026). Dispersion would require
+    DFT(b3lyp-d3)" (verified against a real QM/MM input). Dispersion would require
     abandoning the frozen-cut QM region, which is a larger change than it buys. The limitation is
     declared in the paper rather than hidden.
     """
@@ -2053,7 +2053,7 @@ class CFG:
     """
     The droplet's boundary, in three zones around the ligand. QSite reads them from a per-atom
     property on the structure (`i_i_constraint`), and Jaguar reports back exactly how many atoms it
-    took as frozen and as constrained - verified against a live QM/MM job (13 July 2026), where the
+    took as frozen and as constrained - verified against a live QM/MM job, where the
     property values map as 0 = free, 1 = FROZEN, 2 = CONSTRAINED.
 
     Without it the droplet has a free surface: the periodic box is cut to a finite ball of water,
@@ -2178,6 +2178,12 @@ class CFG:
     # comparison (per-rank) reaction-profile overlays. Distinct hues, colour-blind aware.
     DEFLUOR_FRAME_PALETTE: list = field(default_factory=lambda: [
         "#1D4ED8", "#0E7490", "#B45309", "#7C3AED", "#BE185D"])
+    # QSite all-frames overview: the departing-F verdict drives frame colour - an INTACT (or
+    # dewetted-artifact) frame reads red, CLEAVED frames cycle a green/blue palette. Best frame bold.
+    QSITE_FRAME_INTACT_COLOUR: str = "#C1121F"
+    QSITE_FRAME_CLEAVED_PALETTE: list = field(default_factory=lambda: [
+        "#16A34A", "#2563EB", "#0E7490", "#7C3AED", "#BE185D"])
+    QSITE_CLEAVED_BOX: str = "#2A9D8F"   # verdict-card frame + accent for "C-F cleaved (N/M frames)"
     DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
         "#1D4ED8", "#B45309", "#0E7490", "#BE185D", "#7C3AED", "#15803D",
         "#B91C1C", "#0F766E", "#A16207", "#6D28D9"])
@@ -2241,6 +2247,13 @@ class CFG:
     VIS_IMG_HEIGHT: int  = 2400   # px  export height
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
+    VIS_FIGURE_FORMAT: str = "svg"  # SSOT figure format for EVERY matplotlib save across 00-07:
+                                    # "svg" (vector) | "pdf" | "tiff"/"tif" | "png" | "jpg". One edit
+                                    # here re-targets all plots (apply_figure_style patches savefig to
+                                    # rewrite the extension + format). Raster-only outputs are NOT
+                                    # affected - PyMOL molecular renders and PIL composites stay raster
+                                    # (a molecular image cannot be a true vector); a call that passes an
+                                    # explicit format= is honoured unchanged.
     VIS_NAC_DIST_WARN_MAX: float = 5.0   # Å - dashboard caution band: NAC_DIST_RELAXED ≤ dist < this → orange, ≥ this → red
     UPSET_TOPN: int             = 16    # gate-combinations shown in the mechanistic-gate UpSet (ranked by candidate count)
     UPSET_DOT_SIZE: float       = 46.0  # marker area for the UpSet dot-matrix
@@ -2465,6 +2478,10 @@ class CFG:
         "residue_default":  "#717D7E",   # residue with no type-specific colour
         "label_box":        "#C0C0C0",   # residue label box face
     })
+    # Interaction-diagram layout (PLIP + InteractionMap share one renderer).
+    INTERACTION_DIAGRAM_LIGAND_SCALE: float = 2.3    # 2D ligand size in data units; the pocket circle hugs it
+    INTERACTION_DIAGRAM_UPPER_ARC_MAX: int = 8       # <= this many residues -> upper arc; more -> full ring
+    INTERACTION_DIAGRAM_MIN_RES_SEP: float = 1.35    # min residue centre-to-centre spacing when packing the ring
     INTERACTION_DIAGRAM_STYLE: dict = field(default_factory=lambda: {
         "hbond":       (2.2, (0, (6, 3)),        True),
         "arom_hbond":  (1.9, (0, (5, 2, 1, 2)),  True),
@@ -3248,6 +3265,10 @@ class CFG:
         "series":  "#0072B2",   # the single-series per-rank profile (no candidate to colour by)
         "hist":    "#1B9E77",   # the per-rank profile's histogram
     })
+    # Whole->reactive Δ-shift badge colours on the single-case decomposition: a more-negative shift
+    # strengthens binding (favourable pre-organisation) and reads green; a positive shift reads amber.
+    MMGBSA_DELTA_FAVOURABLE:   str = "#16A34A"
+    MMGBSA_DELTA_UNFAVOURABLE: str = "#B45309"
     """
     ── Step 07: the reactive-pose figures (MM-GBSA decomposition · machinery engagement) ──
     Both figures compare the whole trajectory against the frames in which the pose is reactive, so

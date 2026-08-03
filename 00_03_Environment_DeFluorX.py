@@ -9,7 +9,7 @@ for reproducibility. Provides an automated installation routine to
 re-synchronise environments across compute nodes.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <─────────────────────────────────────────────────────────
+Date   : 05 August 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 00_03_Environment_DeFluorX.py
@@ -41,7 +41,7 @@ import sys
 import argparse
 from datetime import datetime
 from pathlib import Path
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 import importlib.util as _ilu
 import shutil
 import time as _time

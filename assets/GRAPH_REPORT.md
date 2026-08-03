@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-30)
+# Graph Report - .  (2026-08-03)
 
 ## Corpus Check
-- 12 files · ~99,999 words
+- 12 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1097 nodes · 2384 edges · 12 communities (11 shown, 1 thin omitted)
-- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 150 edges (avg confidence: 0.71)
+- 1122 nodes · 2456 edges · 12 communities (11 shown, 1 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 172 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -24,18 +24,20 @@
 - [[_COMMUNITY_git_push|git_push]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CFG` - 81 edges
+1. `CFG` - 85 edges
 2. `main()` - 34 edges
 3. `main()` - 34 edges
-4. `_generate_comprehensive_figures_impl()` - 32 edges
-5. `process_single_job()` - 32 edges
-6. `_echo()` - 31 edges
-7. `console_info()` - 27 edges
+4. `process_single_job()` - 33 edges
+5. `_generate_comprehensive_figures_impl()` - 32 edges
+6. `_echo()` - 30 edges
+7. `console_info()` - 28 edges
 8. `prep_and_convert_phase()` - 25 edges
 9. `run_mmgbsa_phase()` - 22 edges
 10. `process_single_job()` - 21 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `generate_plots()` --indirect_call--> `CFG`  [INFERRED]
+  01_Merge_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
 - `calculate_sn2_metrics()` --indirect_call--> `CFG`  [INFERRED]
   02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
 - `check_catalytic_geometry()` --indirect_call--> `CFG`  [INFERRED]
@@ -43,8 +45,6 @@
 - `generate_scientific_ranking_csv()` --indirect_call--> `CFG`  [INFERRED]
   02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
 - `main()` --indirect_call--> `CFG`  [INFERRED]
-  02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
-- `map_active_site_residues()` --indirect_call--> `CFG`  [INFERRED]
   02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
 
 ## Import Cycles
@@ -62,7 +62,7 @@ Nodes (7): CFG, ================================================================
 
 ### Community 2 - "00_02_Project_Utils"
 Cohesion: 0.03
-Nodes (88): ConsoleColours, _ConsoleRuleFilter, install_console_rule_filter(), safe_name(), setup_logging(), Path, Logger, _strip_ansi() (+80 more)
+Nodes (90): ConsoleColours, _ConsoleRuleFilter, install_console_rule_filter(), safe_name(), setup_logging(), Path, Logger, _strip_ansi() (+82 more)
 
 ### Community 3 - "00_03_Environment"
 Cohesion: 0.33
@@ -86,15 +86,15 @@ Nodes (18): _load_module(), Path, console_info(), console_separator(), _make_rep
 
 ### Community 8 - "05_TopN_and_PDB_Preparation"
 Cohesion: 0.03
-Nodes (116): _load_module(), Path, setup_logging(), console_info(), console_separator(), index_existing_files(), collect_best_cifs(), load_rank_map() (+108 more)
+Nodes (119): _load_module(), Path, setup_logging(), console_info(), console_separator(), index_existing_files(), collect_best_cifs(), load_rank_map() (+111 more)
 
 ### Community 9 - "06_Physics_Validation"
 Cohesion: 0.02
 Nodes (223): _load_module(), Path, _open_step_log(), _progress_line(), _close_bar(), _worker_progress(), _echo(), _log() (+215 more)
 
 ### Community 10 - "07_MD_QMMM_Defluorination"
-Cohesion: 0.03
-Nodes (159): LazyTrajectory, _load_module(), Path, console_title(), console_info(), _mask_oomd_at_start(), console_separator(), _print_labeled() (+151 more)
+Cohesion: 0.02
+Nodes (179): LazyTrajectory, _load_module(), Path, console_title(), console_info(), _mask_oomd_at_start(), console_separator(), _print_labeled() (+171 more)
 
 ## Knowledge Gaps
 - **5 isolated node(s):** `WARN_EXIT_CODE`, `_TT_W_NAME`, `_TT_W_TIME`, `_TT_W_STAT`, `git_push_DeFluorX.sh script`
@@ -104,17 +104,17 @@ Nodes (159): LazyTrajectory, _load_module(), Path, console_title(), console_info
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CFG` connect `00_01_Project_Config` to `02_Production`, `03_Validation_Figures`, `04_Dendrogram`, `05_TopN_and_PDB_Preparation`, `06_Physics_Validation`, `07_MD_QMMM_Defluorination`?**
-  _High betweenness centrality (0.635) - this node is a cross-community bridge._
+- **Why does `CFG` connect `00_01_Project_Config` to `01_Merge`, `02_Production`, `03_Validation_Figures`, `04_Dendrogram`, `05_TopN_and_PDB_Preparation`, `06_Physics_Validation`, `07_MD_QMMM_Defluorination`?**
+  _High betweenness centrality (0.630) - this node is a cross-community bridge._
 - **Why does `main()` connect `02_Production` to `00_01_Project_Config`, `00_02_Project_Utils`?**
-  _High betweenness centrality (0.100) - this node is a cross-community bridge._
+  _High betweenness centrality (0.126) - this node is a cross-community bridge._
 - **Why does `_generate_comprehensive_figures_impl()` connect `03_Validation_Figures` to `00_01_Project_Config`, `00_02_Project_Utils`?**
-  _High betweenness centrality (0.092) - this node is a cross-community bridge._
-- **Are the 66 inferred relationships involving `CFG` (e.g. with `calculate_sn2_metrics()` and `check_catalytic_geometry()`) actually correct?**
-  _`CFG` has 66 INFERRED edges - model-reasoned connections that need verification._
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **Are the 70 inferred relationships involving `CFG` (e.g. with `generate_plots()` and `calculate_sn2_metrics()`) actually correct?**
+  _`CFG` has 70 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 4 inferred relationships involving `main()` (e.g. with `CFG` and `safe_name()`) actually correct?**
   _`main()` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `WARN_EXIT_CODE`, `_TT_W_NAME`, `_TT_W_TIME` to the rest of the system?**
-  _469 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _481 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `00_01_Project_Config` be split into smaller, more focused modules?**
   _Cohesion score 0.1 - nodes in this community are weakly interconnected._

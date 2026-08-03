@@ -12,7 +12,7 @@ Restricting both phases to the ~10 MD-ready complexes keeps this step cheap
 instead of converting/preparing the entire predicted library.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <────────────────────────────────────────────────────────
+Date   : 05 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 05_TopN_and_PDB_Preparation_DeFluorX.py
@@ -66,6 +66,9 @@ Usage:
     converted or prepared.
   • Top-N extraction: prepared-complex handover (FASTA/SMILES/SDF), Ramachandran
     validation, and PyMOL/PLIP/matplotlib interaction figures for each complex.
+  • Interaction diagrams: PLIP (validated typing) plus a distance-based InteractionMap,
+    both role-coloured from CFG (nucleophile / acid-base / clamp / fluoride pocket) with
+    adaptive residue placement - upper-arc when few contacts, full ring when many.
 ───────────────────────────────────────────────────────────────────────────────
 
 -------------------------------------------------------------------------------
@@ -131,7 +134,9 @@ matplotlib.use("Agg")  # non-interactive backend; must be set before pyplot impo
 from matplotlib.ticker import MultipleLocator
 import matplotlib.pyplot as plt
 import matplotlib.patches as _mpatches
-from matplotlib.patches import FancyBboxPatch as _FancyBboxPatch
+from matplotlib.patches import FancyBboxPatch as _FancyBboxPatch, Rectangle as _Rectangle
+from matplotlib.offsetbox import (HPacker as _HPacker, TextArea as _TextArea,
+                                  DrawingArea as _DrawingArea, AnchoredOffsetbox as _AnchoredOffsetbox)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.lines import Line2D as _Line2D
@@ -1577,14 +1582,14 @@ def generate_esp_charges(prep_dir: Path, out_dir: Path) -> Path | None:
             console_info(f"  Removed {_n} Jaguar scratch file(s); the .in/.out/.mae/.csv are kept for audit.")
 
     console_info(f"  \u2714 {_ok}/{len(_pdbs)} ligand(s) charged  \u2192  {_sum_path.name}")
-    console_info("  NEXT (Step 06 \u2014 applied automatically, no Maestro step):")
+    console_info("  NEXT (Step 06 - applied automatically, no Maestro step):")
     console_info(f"    1. In {out_dir.name}/ there is one *_ESP.mae per prepared complex ({_ok} total).")
     console_info("    2. Step 06 name-matches each complex's own _ESP.mae by stem and merges the charges.")
     console_info("    3. They are written into the built .cms force field and verified against the MD engine.")
     try:
         _f = plot_esp_alpha_carbon(_summary, out_dir)
         if _f:
-            console_info(f"  ESP figure  →  {_f.name}")
+            console_info(f"  ESP figure  →  {_utils_mod.deflx_fig_name(_f.name)}")
     except Exception as _e:                                       # noqa: BLE001
         console_info(f"  ! ESP figure skipped: {type(_e).__name__}: {_e}")
     return _sum_path
@@ -1739,8 +1744,8 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     the enforcement agree on exactly one atom); there is no Glu HE2 here, the nucleophile is an ASP.
 
     This is a WARNING, not an edit: enforce_catalytic_protonation strips exactly this hydrogen from the
-    nucleophile, so the chemistry is already imposed. What was missing was the report telling you when
-    the preparation had handed over a dead enzyme in the first place.
+    nucleophile, so the chemistry is already imposed. The warning's job is to report when the preparation
+    has handed over a dead enzyme in the first place, which the enforcement step alone never surfaces.
     """
     _CARBOXYL_H = {h.upper() for h in cfg.CATALYTIC_PROTONATION_POLICY["Nuc"]["strip_H"]}
     if nuc_found is not None:
@@ -1919,9 +1924,9 @@ ANGLE CRITERIA - the half of the definition that a distance-only clamp cannot en
 A hydrogen bond is not "an N or O within 3.5 Å"; a halogen bond is not "a halogen within 3.5 Å". Both
 are defined by GEOMETRY: a donor angle that says the interaction points the right way, and an acceptor
 angle that says the lone pair is oriented to receive it. CFG §3-4 carries those angles - the
-Schrödinger-Maestro values - and until now nothing applied them. PLIP was clamped on DISTANCE only, so
-PLIP's own looser internal angles decided which contacts survived, and the CFG angle constants were
-config nobody read.
+Schrödinger-Maestro values - and this gate enforces them on PLIP's reported geometry. A distance-only
+clamp cannot: it lets PLIP's looser internal angles decide which contacts survive and leaves the CFG
+angle constants unapplied. Reading each PLIP angle and holding it to the CFG criterion closes that half.
 
 PLIP reports each angle in its XML, so the criteria can be enforced on its output rather than
 re-implemented. Each entry is (xml_tag, minimum, maximum); None means unbounded on that side.
@@ -2346,180 +2351,133 @@ def _parse_plip_xml(xml_path, lig, pro):
     return sorted(contacts_by_key.values(), key=lambda x: x["dist"])
 
 
-def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance"):
+def _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance", role_resnums=None):
+    """Shared 2D interaction renderer for InteractionMap (mode='distance') and PLIP (mode='plip').
+
+    The pocket circle hugs the ligand; residues sit outside it (upper arc when few, full ring when
+    many - see _im_project). Each residue box shows its name and interaction type and is coloured by
+    catalytic role (CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR) when its number is in role_resnums, else the
+    neutral contact colour. The measured distance rides each line - for InteractionMap always, for
+    PLIP only where CFG.INTERACTION_DIAGRAM_STYLE marks it. Ligand atoms are labelled on the atom; the
+    legend is one row of role swatches. Emitted in CFG.VIS_FIGURE_FORMAT (true-vector SVG by default).
     """
-    Shared matplotlib renderer for both InteractionMap (distance-based) and
-    PLIP (XML-based) diagrams.  mode='distance' or 'plip'.
-    """
-    # Interaction type → colour, unified with CFG.BOND_TYPE_COLOUR (shared bond types) so the H-bond
-    # here is the H-bond in every other figure; the diagram-only types come from CFG. Line geometry
-    # (width, dash, show-distance) is CFG.INTERACTION_DIAGRAM_STYLE. Nothing is hardcoded here.
+    _chrome = CFG.INTERACTION_DIAGRAM_CHROME
     _bond = CFG.BOND_TYPE_COLOUR
     _itype_col = {
-        "hbond":       _bond["H-Bond"],
-        "salt":        _bond["Salt Bridge"],
-        "halogen":     _bond["Halogen"],
-        "hydrophobic": _bond["Hydrophobic"],
-        "contact":     _bond["Hydrophobic"],
-        **CFG.INTERACTION_DIAGRAM_EXTRA_COLOUR,       # arom_hbond, water, pistack, pication
+        "hbond": _bond["H-Bond"], "salt": _bond["Salt Bridge"], "halogen": _bond["Halogen"],
+        "hydrophobic": _bond["Hydrophobic"], "contact": _bond["Hydrophobic"],
+        **CFG.INTERACTION_DIAGRAM_EXTRA_COLOUR,
     }
-    # (linewidth, linestyle, colour, show_dist_label) per interaction type
     _ITYPE_STYLE = {_k: (_lw, _ls, _itype_col[_k], _sd)
                     for _k, (_lw, _ls, _sd) in CFG.INTERACTION_DIAGRAM_STYLE.items()}
-    # Distance-label pill: text + edge in the interaction colour, on a white fill (derived, not a
-    # second hand-picked palette).
     _DIST_COL = {_k: (_itype_col[_k], CFG.VIS_INK["white"], _itype_col[_k])
                  for _k in ("hbond", "arom_hbond", "halogen", "salt", "water")}
+    _BADGE = {
+        "hbond": "H-bond", "arom_hbond": "arom. H-bond", "halogen": "halogen bond",
+        "salt": "salt bridge", "water": "water bridge", "pistack": "π-stack",
+        "pication": "π-cation", "hydrophobic": "hydrophobic", "contact": "contact",
+    }
+    role_resnums = role_resnums or {}
 
-    # Dynamic axis bounds - zoom in when few residues to eliminate blank space
-    _all_x = [p[0] for p in lig_2d] + [v[0] for v in res_2d.values()]
-    _all_y = [p[1] for p in lig_2d] + [v[1] for v in res_2d.values()]
-    if _all_x and _all_y:
-        _pad = max(1.5, (max(_all_x) - min(_all_x)) * 0.20, (max(_all_y) - min(_all_y)) * 0.20)
-        _xlo = min(_all_x) - _pad - 1.0   # 1.0 for residue box half-width
-        _xhi = max(_all_x) + _pad + 1.0
-        _ylo = min(_all_y) - _pad - 0.6
-        _yhi = max(_all_y) + _pad + 0.6
-        # Square view required for aspect='equal'
-        _span = max(_xhi - _xlo, _yhi - _ylo)
-        _cx = (_xlo + _xhi) / 2;  _cy = (_ylo + _yhi) / 2
-        _xlo, _xhi = _cx - _span / 2, _cx + _span / 2
-        _ylo, _yhi = _cy - _span / 2, _cy + _span / 2
+    circ_r = (max(float(np.linalg.norm(p)) for p in lig_2d) + 0.55) if len(lig_2d) else 4.2
+    _rc = list(res_2d.values())
+    _bhw, _bhh = 0.46, 0.24
+    if _rc:
+        _xlo = min(min(v[0] - _bhw for v in _rc), -circ_r) - 0.12
+        _xhi = max(max(v[0] + _bhw for v in _rc),  circ_r) + 0.12
+        _yhi = max(max(v[1] + _bhh for v in _rc),  circ_r) + 0.12
+        _content_bot = min(min(v[1] - _bhh for v in _rc), -circ_r)
     else:
-        _xlo, _xhi, _ylo, _yhi = -7.5, 7.5, -7.5, 7.5
+        _xlo, _xhi, _yhi, _content_bot = -circ_r - 0.12, circ_r + 0.12, circ_r + 0.12, -circ_r
+    _ylo = _content_bot - 0.10
 
     fig = Figure(figsize=(12, 12), facecolor="white")
     canvas = FigureCanvasAgg(fig)
-    ax  = fig.add_subplot(111, aspect="equal")
+    ax = fig.add_subplot(111, aspect="equal")
     ax.axis("off")
     ax.set_xlim(_xlo, _xhi)
     ax.set_ylim(_ylo, _yhi)
 
-    # Binding pocket background
-    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color=CFG.INTERACTION_DIAGRAM_CHROME["pocket_fill"], zorder=0, alpha=0.6))
-    ax.add_patch(_mpatches.Circle((0, 0), 4.2, color=CFG.INTERACTION_DIAGRAM_CHROME["pocket_edge"], fill=False,
-                            linewidth=1.2, linestyle="--", zorder=0, alpha=0.4))
-    ax.text(0, -3.7, "Binding Pocket", ha="center", fontsize=CFG.VIS_FONT_ANNOT,
-            color=CFG.INTERACTION_DIAGRAM_CHROME["annotation"], style="italic", zorder=1)
+    ax.add_patch(_mpatches.Circle((0, 0), circ_r, color=_chrome["pocket_fill"], zorder=0, alpha=0.6))
+    ax.add_patch(_mpatches.Circle((0, 0), circ_r, color=_chrome["pocket_edge"], fill=False,
+                                  linewidth=1.2, linestyle="--", zorder=0, alpha=0.4))
+    ax.text(0, -(circ_r - 0.35), "Binding Pocket", ha="center", fontsize=CFG.VIS_FONT_ANNOT,
+            color=_chrome["annotation"], style="italic", zorder=1)
 
-    # Interaction lines
     name2idx = {a["name"]: i for i, a in enumerate(lig)}
     for c in contacts:
         rpos = res_2d[c["key"]]
-        li   = name2idx.get(c["lig_atom"]["name"], 0) if c.get("lig_atom") else 0
-        lap  = lig_2d[li]
-        itype = c.get("itype", "hbond" if c.get("is_hbond") else
-                      "salt" if c.get("is_salt") else "contact")
+        li = name2idx.get(c["lig_atom"]["name"], 0) if c.get("lig_atom") else 0
+        lap = lig_2d[li]
+        itype = c.get("itype", "hbond" if c.get("is_hbond") else "salt" if c.get("is_salt") else "contact")
         lw, ls, col, show_dist = _ITYPE_STYLE.get(itype, _ITYPE_STYLE["contact"])
-        ax.plot([lap[0], rpos[0]], [lap[1], rpos[1]],
-                lw=lw, ls=ls, color=col, alpha=0.9, zorder=2,
-                solid_capstyle="round")
-        if show_dist:
-            mx, my = (lap[0]+rpos[0])/2, (lap[1]+rpos[1])/2
-            tc, fc, ec = _DIST_COL.get(itype, ("#555","#EEE","#999"))
-            ax.text(mx, my, f"{c['dist']:.1f} Å",
-                    fontsize=CFG.VIS_FONT_LEGEND_TITLE, ha="center", va="center", fontweight="bold",
-                    color=tc,
-                    bbox=dict(fc=fc, ec=ec, alpha=0.88,
-                              boxstyle="round,pad=0.22", linewidth=0.8),
-                    zorder=8)
+        ax.plot([lap[0], rpos[0]], [lap[1], rpos[1]], lw=lw, ls=ls, color=col, alpha=0.9,
+                zorder=2, solid_capstyle="round")
+        if (show_dist or mode == "distance") and c.get("dist"):
+            mx, my = (lap[0] + rpos[0]) / 2, (lap[1] + rpos[1]) / 2
+            tc, fc, ec = _DIST_COL.get(itype, (col, CFG.VIS_INK["white"], col))
+            ax.text(mx, my, f"{c['dist']:.1f} Å", fontsize=CFG.VIS_FONT_ANNOT, ha="center", va="center",
+                    fontweight="bold", color=tc,
+                    bbox=dict(fc=fc, ec=ec, alpha=0.88, boxstyle="round,pad=0.2", linewidth=0.8), zorder=8)
 
-    # Ligand bonds
     for i, a in enumerate(lig):
-        for j, b in enumerate(lig):
-            if j <= i: continue
-            if np.linalg.norm(a["pos"] - b["pos"]) < CFG.LIG_COVALENT_BOND_DIST:
+        for j in range(i + 1, len(lig)):
+            if np.linalg.norm(a["pos"] - lig[j]["pos"]) < CFG.LIG_COVALENT_BOND_DIST:
                 p1, p2 = lig_2d[i], lig_2d[j]
-                ax.plot([p1[0], p2[0]], [p1[1], p2[1]],
-                        color=CFG.VIS_INK["ink_deep"], lw=2.8, solid_capstyle="round",
-                        zorder=4, alpha=0.85)
-
-    # Ligand atoms
+                ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=CFG.VIS_INK["ink_deep"], lw=2.8,
+                        solid_capstyle="round", zorder=4, alpha=0.85)
     for i, a in enumerate(lig):
-        xy  = lig_2d[i]
+        xy = lig_2d[i]
         col = _IM_ELEM_COLORS.get(a["elem"], _IM_ELEM_COLORS["other"])
-        r   = {"C":0.17,"N":0.19,"O":0.19,"F":0.17,"S":0.22}.get(a["elem"], 0.15)
+        r = {"C": 0.17, "N": 0.19, "O": 0.19, "F": 0.17, "S": 0.22}.get(a["elem"], 0.15)
         ax.add_patch(_mpatches.Circle(xy, r, color=col, zorder=5, ec="white", lw=1.4))
-        if a["elem"] not in ("C",):
-            ax.text(xy[0], xy[1], a["elem"],
-                    ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
-                    color="white", fontweight="bold", zorder=6)
+        ax.text(xy[0], xy[1], a["elem"], ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT - 1,
+                color="white", fontweight="bold", zorder=6)
 
-    # Residue boxes
-    bw, bh = 1.5, 0.68
+    bw, bh = 0.82, 0.38
     for c in contacts:
-        rpos  = res_2d[c["key"]]
-        col   = _IM_RES_COLORS.get(c["resname"], CFG.INTERACTION_DIAGRAM_CHROME["residue_default"])
-        label = f"{c['resname']} {c['resnum']}"
+        rpos = res_2d[c["key"]]
+        _grp = CFG.ACTIVE_SITE_ROLE_GROUP.get(role_resnums.get(_im_resnum(c.get("resnum")), ""), "")
+        col = CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR.get(_grp, _chrome["residue_default"])
+        label = f"{c['resname']}{c['resnum']}"
         itype = c.get("itype", "contact")
-        _BADGE = {
-            "hbond": "H-bond", "arom_hbond": "arom. H-bond",
-            "halogen": "halogen bond", "salt": "salt bridge",
-            "water": "water bridge", "pistack": "π-stack", "pication": "π-cation",
-            "hydrophobic": "hydrophobic", "contact": "contact",
-        }
         badge = _BADGE.get(itype, "contact")
-        # Annotate steric-contact quality (Bondi vdW ratio: good/bad/severe)
         if itype == "contact" and c.get("quality") in ("bad", "severe"):
             badge = f"contact ({c['quality']})"
-        ax.add_patch(_FancyBboxPatch(
-            (rpos[0]-bw/2+0.04, rpos[1]-bh/2-0.04), bw, bh,
-            boxstyle="round,pad=0.1", facecolor=CFG.INTERACTION_DIAGRAM_CHROME["label_box"],
-            alpha=0.22, zorder=5, linewidth=0))
-        ax.add_patch(_FancyBboxPatch(
-            (rpos[0]-bw/2, rpos[1]-bh/2), bw, bh,
-            boxstyle="round,pad=0.1", facecolor=col,
-            edgecolor="white", linewidth=1.6, alpha=0.95, zorder=6))
-        ax.text(rpos[0], rpos[1]+0.10, label,
-                ha="center", va="center", fontsize=CFG.VIS_FONT_TICK,
+        ax.add_patch(_FancyBboxPatch((rpos[0] - bw / 2 + 0.025, rpos[1] - bh / 2 - 0.025), bw, bh,
+                     boxstyle="round,pad=0.035", facecolor=_chrome["label_box"], alpha=0.22, zorder=5, linewidth=0))
+        ax.add_patch(_FancyBboxPatch((rpos[0] - bw / 2, rpos[1] - bh / 2), bw, bh, boxstyle="round,pad=0.035",
+                     facecolor=col, edgecolor="white", linewidth=1.2, alpha=0.95, zorder=6))
+        ax.text(rpos[0], rpos[1] + 0.075, label, ha="center", va="center", fontsize=CFG.VIS_FONT_TICK - 1,
                 fontweight="bold", color="white", zorder=7)
-        ax.text(rpos[0], rpos[1]-0.18, badge,
-                ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
-                color="white", alpha=0.9, zorder=7)
+        ax.text(rpos[0], rpos[1] - 0.085, badge, ha="center", va="center", fontsize=CFG.VIS_FONT_ANNOT,
+                color="white", alpha=0.92, zorder=7)
 
-    # Unified legend (bottom, one block). Every swatch reads the SAME source the diagram drew from:
-    # interaction colours from _itype_col, residues from _IM_RES_COLORS, atoms from _IM_ELEM_COLORS -
-    # so a legend key can never disagree with the mark it explains.
-    _leg = [_mpatches.Patch(color=_itype_col[_k], label=_lbl) for _k, _lbl in (
-        ("hbond", "H-bond"), ("arom_hbond", "Aromatic H-bond"), ("halogen", "Halogen bond"),
-        ("salt", "Salt bridge"), ("water", "Water bridge"), ("pistack", "π-stack"),
-        ("pication", "π-cation"), ("contact", "Contact"))]
-    _leg.append(_Line2D([], [], color="none", label=""))
-    _leg += [_mpatches.Patch(color=_IM_RES_COLORS[_rep], label=_lbl) for _rep, _lbl in (
-        ("ASP", "ASP/GLU"), ("ARG", "ARG/LYS"), ("HIS", "HIS"), ("TRP", "TRP/PHE"),
-        ("TYR", "TYR"), ("SER", "SER/THR/ASN/GLN"), ("LEU", "Hydrophobic"))]
-    _leg.append(_Line2D([], [], color="none", label=""))
-    # Append atom entries inline so everything sits in one box
-    for elem in ("C", "N", "O", "F"):
-        _leg.append(_mpatches.Patch(color=_IM_ELEM_COLORS[elem], label=f"Lig {elem}"))
+    def _swatch(colour, lbl):
+        _da = _DrawingArea(16, 11, 0, 0)
+        _da.add_artist(_Rectangle((0, 1), 13, 9, fc=colour, ec="none"))
+        return _HPacker(children=[_da, _TextArea(lbl, textprops=dict(fontsize=CFG.VIS_FONT_LEGEND))],
+                        align="center", pad=0, sep=3)
+    _roles = [("Nucleophile", "Nucleophile"), ("Acid/base catalysis", "Acid / base catalysis"),
+              ("Carboxylate clamp", "Carboxylate clamp"), ("Fluoride pocket", "Fluoride pocket")]
+    _sw = [_swatch(CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR[g], lbl) for g, lbl in _roles]
+    _sw.append(_swatch(_chrome["residue_default"], "Other contact"))
+    _leg = _AnchoredOffsetbox(loc="upper center",
+                              child=_HPacker(children=_sw, pad=0, sep=14, align="center"),
+                              frameon=True, pad=0.4, borderpad=0,
+                              bbox_to_anchor=((_xlo + _xhi) / 2, _ylo), bbox_transform=ax.transData)
+    _leg.patch.set_edgecolor(CFG.VIS_INK["palest"])
+    _leg.patch.set_linewidth(1.0)
+    _leg.set_clip_on(False)
+    ax.add_artist(_leg)
 
-    """
-    Dynamic legend: anchor just below the lowest content point (circle bottom
-    or lowest residue box, whichever is further down), with a small gap.
-    Uses data-space coordinates so placement adapts to content density.
-    """
-    _y_res_bottom = (min(pos[1] - bh / 2 for pos in res_2d.values())
-                     if res_2d else -4.2)
-    _y_legend_top = min(_y_res_bottom, -4.2) - 0.35
-    _cx_data      = (_xlo + _xhi) / 2
-    ax.legend(handles=_leg, loc="upper center", ncol=4,
-              bbox_to_anchor=(_cx_data, _y_legend_top),
-              bbox_transform=ax.transData,
-               frameon=True,
-              edgecolor=CFG.VIS_INK["palest"],
-              title=f'{"PLIP interactions" if mode=="plip" else "Interactions"}  |  Residue type  |  Ligand atoms',
-              )
-
-    try:
-        canvas.print_figure(str(out_png), dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight",
-                            pad_inches=0.04, facecolor="white", edgecolor="none")
-    except Exception as _render_err:
-        raise _render_err
-    finally:
-        del fig, canvas
+    _out = out_png.with_suffix("." + CFG.VIS_FIGURE_FORMAT)
+    fig.savefig(str(_out), dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight", pad_inches=0.05,
+                facecolor="white", edgecolor="none")
+    del fig, canvas
 
 
-def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C):
+def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C, role_resnums=None):
     """Run PLIP (XML only), parse typed interactions, render matplotlib diagram."""
     if not sw["PLIP"]: return "Missing"
     out_dir = fig_root / "PLIP"
@@ -2556,7 +2514,7 @@ def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C):
             lig_2d, res_2d = _im_project(lig, contacts)
             lig_2d = _im_separate_atoms(lig_2d)
             out_png = out_dir / f"{base_name}_PLIP.png"
-            _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="plip")
+            _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="plip", role_resnums=role_resnums)
             rendered = True
 
         return "Success" if rendered else "Failed"
@@ -2596,9 +2554,45 @@ _IM_RING_ATOMS = {
     "TRP": {"CG","CD1","CD2","NE1","CE2","CE3","CZ2","CZ3","CH2"},
     "HIS": {"CG","ND1","CD2","CE1","NE2"},
 }
-_IM_RES_COLORS = CFG.RESIDUE_TYPE_COLOUR       # node fill + legend, single source
 _IM_ELEM_COLORS = CFG.LIGAND_ELEMENT_COLOUR
 _IM_HYDROPHOBIC = {"LEU","ILE","VAL","PHE","TRP","PRO","MET","ALA","GLY","CYS"}
+
+# Catalytic-role colouring for the interaction diagrams: residue number -> role -> CFG role-group colour.
+_IM_ROLE_MAPPED_COLS = {
+    "Mapped_Nucleophile": "Nuc", "Mapped_Acid": "Acid", "Mapped_Base": "Base",
+    "Mapped_Clamp1": "Carb1", "Mapped_Clamp2": "Carb2",
+    "Mapped_Stabiliser_H": "Stab_H", "Mapped_Stabiliser_W": "Stab_W", "Mapped_Stabiliser_Y": "Stab_Y",
+}
+
+
+def _im_resnum(value) -> "int | None":
+    _m = _re.search(r"(\d+)\s*$", str(value))
+    return int(_m.group(1)) if _m else None
+
+
+def _im_role_resnums(run_dir: Path) -> dict:
+    """{job_name: {residue_number: role_key}} from the ranked CSV Mapped_* columns, so each
+    interaction-diagram residue box can be coloured by its catalytic role."""
+    prod = run_dir / "1_Boltz2_Production"
+    rank_csvs = sorted(prod.glob(CFG.GLOB_RANKED_CSV)) or sorted(prod.glob("*_Ranked_*.csv"))
+    if not rank_csvs:
+        return {}
+    try:
+        df = pd.read_csv(_utils_mod.latest_by_mtime(rank_csvs), low_memory=False)
+    except Exception:
+        return {}
+    if "job_name" not in df.columns:
+        return {}
+    _cols = [(c, r) for c, r in _IM_ROLE_MAPPED_COLS.items() if c in df.columns]
+    out = {}
+    for _, row in df.iterrows():
+        _m = {}
+        for col, role in _cols:
+            _n = _im_resnum(row.get(col))
+            if _n is not None:
+                _m[_n] = role
+        out[str(row["job_name"])] = _m
+    return out
 _IM_AA3 = {
     "ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE",
     "LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL",
@@ -2808,47 +2802,63 @@ def _im_find_contacts(lig, pro, lig_hb=None):
 
 
 def _im_project(lig, contacts):
-    """SVD project onto ligand principal plane; place residues on fixed ring."""
+    """SVD-project the ligand onto its principal plane and place each interacting residue outside the
+    pocket. Few residues (<= CFG.INTERACTION_DIAGRAM_UPPER_ARC_MAX) spread across the upper arc so the
+    bottom stays clear for the legend; more take the full ring with collision separation."""
     lig_c3 = np.mean([a["pos"] for a in lig], axis=0)
     L = np.array([a["pos"] - lig_c3 for a in lig])
     if len(L) >= 2:
         _, _, Vt = np.linalg.svd(L, full_matrices=False)
         u1, u2 = Vt[0], Vt[1]
     else:
-        u1, u2 = np.array([1.,0.,0.]), np.array([0.,1.,0.])
-    lig_2d = np.array([[np.dot(a["pos"]-lig_c3, u1),
-                        np.dot(a["pos"]-lig_c3, u2)] for a in lig])
+        u1, u2 = np.array([1., 0., 0.]), np.array([0., 1., 0.])
+    lig_2d = np.array([[np.dot(a["pos"] - lig_c3, u1),
+                        np.dot(a["pos"] - lig_c3, u2)] for a in lig])
     span = np.max(np.linalg.norm(lig_2d, axis=1)) if len(lig_2d) else 1.0
-    scale = 3.0 / max(span, 0.5)
-    lig_2d *= scale
-    ring_r = 5.5
+    lig_2d *= CFG.INTERACTION_DIAGRAM_LIGAND_SCALE / max(span, 0.5)
+    lig_r = float(np.max(np.linalg.norm(lig_2d, axis=1))) if len(lig_2d) else 1.0
+
     res_2d = {}
+    if not contacts:
+        return lig_2d, res_2d
+
+    upper = len(contacts) <= CFG.INTERACTION_DIAGRAM_UPPER_ARC_MAX
+    # Residues hug the pocket edge; the full ring only grows if too many to fit at that radius.
+    ring_r = lig_r + 1.1 if upper else max(
+        lig_r + 1.1, len(contacts) * CFG.INTERACTION_DIAGRAM_MIN_RES_SEP / (2 * np.pi) + 0.3)
     for c in contacts:
         v = c["center"] - lig_c3
-        x2 = np.dot(v, u1) * scale
-        y2 = np.dot(v, u2) * scale
-        d  = np.sqrt(x2**2 + y2**2)
-        if d < 0.1: d = ring_r
-        res_2d[c["key"]] = np.array([ring_r * x2/d, ring_r * y2/d])
-    # Angular collision separation
+        x2, y2 = np.dot(v, u1), np.dot(v, u2)
+        d = np.hypot(x2, y2) or ring_r
+        res_2d[c["key"]] = np.array([ring_r * x2 / d, ring_r * y2 / d])
+
     keys = list(res_2d.keys())
-    for _ in range(60):
-        moved = False
-        for i in range(len(keys)):
-            for j in range(i+1, len(keys)):
-                a, b = res_2d[keys[i]], res_2d[keys[j]]
-                d = np.linalg.norm(a - b)
-                if d < 2.0:
-                    push = (a - b) / max(d, 0.01) * (2.0 - d) * 0.5
-                    res_2d[keys[i]] = a + push
-                    res_2d[keys[j]] = b - push
-                    for k in (keys[i], keys[j]):
-                        r = np.linalg.norm(res_2d[k])
-                        if r > 0.1:
-                            res_2d[k] = res_2d[k] * ring_r / r
-                    moved = True
-        if not moved:
-            break
+    if upper:
+        nat = {k: np.degrees(np.arctan2(res_2d[k][1], res_2d[k][0])) for k in keys}
+        order = sorted(keys, key=lambda k: nat[k], reverse=True)
+        _hi, _lo, _n = 200.0, -20.0, len(order)
+        for i, k in enumerate(order):
+            ang = np.radians(_hi - ((i + 0.5) / _n) * (_hi - _lo))
+            res_2d[k] = ring_r * np.array([np.cos(ang), np.sin(ang)])
+    else:
+        _sep = CFG.INTERACTION_DIAGRAM_MIN_RES_SEP
+        for _ in range(90):
+            moved = False
+            for i in range(len(keys)):
+                for j in range(i + 1, len(keys)):
+                    a, b = res_2d[keys[i]], res_2d[keys[j]]
+                    dd = float(np.linalg.norm(a - b))
+                    if dd < _sep:
+                        push = (a - b) / max(dd, 0.01) * (_sep - dd) * 0.5
+                        res_2d[keys[i]] = a + push
+                        res_2d[keys[j]] = b - push
+                        for k in (keys[i], keys[j]):
+                            r = float(np.linalg.norm(res_2d[k]))
+                            if r > 0.1:
+                                res_2d[k] = res_2d[k] * ring_r / r
+                        moved = True
+            if not moved:
+                break
     return lig_2d, res_2d
 
 
@@ -2875,7 +2885,7 @@ def _im_separate_atoms(lig_2d, min_sep=0.28):
     return coords
 
 
-def _draw_interaction_diagram(pdb_path, fig_root, base_name, C):
+def _draw_interaction_diagram(pdb_path, fig_root, base_name, C, role_resnums=None):
     """Render a publication-quality 2D protein–ligand interaction map (no PyMOL)."""
     out_dir = fig_root / "InteractionMap"
     out_dir.mkdir(exist_ok=True, parents=True)
@@ -2896,7 +2906,7 @@ def _draw_interaction_diagram(pdb_path, fig_root, base_name, C):
                 c["itype"] = "hydrophobic"
         lig_2d, res_2d = _im_project(lig, contacts)
         lig_2d = _im_separate_atoms(lig_2d)
-        _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance")
+        _im_render_diagram(lig_2d, lig, res_2d, contacts, out_png, mode="distance", role_resnums=role_resnums)
         return "Success"
     except Exception as _e:
         _fig_log(f"  [!] InteractionMap failed for {base_name}: {_e}")
@@ -3068,6 +3078,13 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
     # Resolve figure constants
     C = _fig_constants()
 
+    # Residue-number -> catalytic-role map per job, for role-coloured interaction-diagram boxes.
+    _role_by_job = _im_role_resnums(run_dir)
+
+    def _roles_for(stem: str) -> dict:
+        _j = max((j for j in _role_by_job if stem.startswith(j)), key=len, default=None)
+        return _role_by_job.get(_j, {}) if _j else {}
+
     sw_mgr    = SoftwareManager()
     sw_status = sw_mgr.check_all()
     workers   = CFG.GLOBAL_MAX_WORKERS
@@ -3100,7 +3117,7 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
             lig_name, lig_num, has_f = sw_mgr.get_ligand_info(pdb, smi_map=_smi_map_fig)
             task_base = (pdb, fig_root, log_dir, pdb.stem)
             subprocess_tasks.append(("PyMOL", _run_pymol, task_base + (lig_name, lig_num, has_f, sw_status, C)))
-            subprocess_tasks.append(("PLIP",  _run_plip,  task_base + (sw_status, C)))
+            subprocess_tasks.append(("PLIP",  _run_plip,  task_base + (sw_status, C, _roles_for(pdb.stem))))
             imap_tasks.append((pdb.stem, pdb, fig_root))
 
     _plip_tasks  = [t for t in subprocess_tasks if t[0] == "PLIP"]
@@ -3149,7 +3166,7 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
     # Phase B: InteractionMap - serial (matplotlib Agg is not thread-safe)
     _fig_log(f"\n  Running {len(imap_tasks)} InteractionMap diagrams (serial)...")
     for idx, (cname, pdb, fig_root) in enumerate(imap_tasks, 1):
-        status = _draw_interaction_diagram(pdb, fig_root, cname, C)
+        status = _draw_interaction_diagram(pdb, fig_root, cname, C, _roles_for(cname))
         if cname not in results:
             results[cname] = {}
         results[cname]["InteractionMap"] = status
@@ -3515,22 +3532,22 @@ def prep_and_convert_phase(args):
             _a0, _a1 = _r.get("raw_sn2_angle"), _r.get("prep_sn2_angle")
             _d0, _d1 = _r.get("raw_dist_nuc"), _r.get("prep_dist_nuc")
             _ang = (f"{_a0:.1f}\u2192{_a1:.1f} ({_r.get('prep_d_angle'):+.1f}\u00b0)"
-                    if pd.notna(_a0) and pd.notna(_a1) else "\u2014")
+                    if pd.notna(_a0) and pd.notna(_a1) else "-")
             _nuc = (f"{_d0:.2f}\u2192{_d1:.2f} ({_r.get('prep_d_dist'):+.2f})"
-                    if pd.notna(_d0) and pd.notna(_d1) else "\u2014")
+                    if pd.notna(_d0) and pd.notna(_d1) else "-")
             _nac = "OUT" if int(_r.get("prep_left_nac", 0) or 0) else "in"
             console_info(f"  \u2502 {_short_name(_r['job']):<{_c1}} \u2502 {_ang:>22} \u2502 {_nuc:>22} \u2502 {str(_r.get('prep_attack_o','')):<11} \u2502 {_nac:>3} \u2502")
         console_info("  \u2514\u2500" + _hn + "\u2500\u2534\u2500" + _h22 + "\u2500\u2534\u2500" + _h22 + "\u2500\u2534\u2500" + _h11 + "\u2500\u2534\u2500" + _h4 + "\u2518")
         if len(_da):
             _sfx = (f"  \u00b7  [!] {_n_left} pose(s) left the relaxed NAC envelope "
-                    f"(angle < {CFG.NAC_ANGLE_RELAXED:.0f}\u00b0 or nuc > {CFG.NAC_DIST_RELAXED:.1f} \u00c5) \u2014 flagged, not dropped"
+                    f"(angle < {CFG.NAC_ANGLE_RELAXED:.0f}\u00b0 or nuc > {CFG.NAC_DIST_RELAXED:.1f} \u00c5) - flagged, not dropped"
                     if _n_left else "")
             console_info(f"  Drift  \u00b7  angle mean|\u0394| {_da.abs().mean():.1f}\u00b0 (max {_da.abs().max():.1f}\u00b0)  \u00b7  "
                          f"nucleophile mean {_dd.mean():+.2f} \u00c5 (max {_dd.max():+.2f}){_sfx}")
         try:
             _fig_p = plot_pose_drift(_prep_geom_rows, _pg_path.parent)
             if _fig_p:
-                console_info(f"  \u2714 Comparative figure  \u2192  {_fig_p.name}")
+                console_info(f"  \u2714 Comparative figure  \u2192  {_utils_mod.deflx_fig_name(_fig_p.name)}")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Pose-drift figure skipped: {type(_e).__name__}: {_e}")
 
@@ -3552,7 +3569,7 @@ def prep_and_convert_phase(args):
             if _mach_rows:
                 _dfig = plot_machinery_distribution(_mach_rows, _pg_path.parent)
                 if _dfig:
-                    console_info(f"  \u2714 Comparative figure  \u2192  {_dfig.name}  ({len(_mach_rows)} complexes \u00d7 8 residues)")
+                    console_info(f"  \u2714 Comparative figure  \u2192  {_utils_mod.deflx_fig_name(_dfig.name)}  ({len(_mach_rows)} complexes \u00d7 8 residues)")
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 

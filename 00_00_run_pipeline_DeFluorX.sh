@@ -2,7 +2,7 @@
 # =============================================================================
 # DeFluorX Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-# Date   : 30 July 2026
+# Date   : 05 August 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_DeFluorX.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
@@ -478,7 +478,7 @@ readonly _TT_W_TIME=10
 readonly _TT_W_STAT=8
 
 # Pad to a field width counted in CHARACTERS. `printf '%-Ns'` counts bytes, so a step label
-# holding multi-byte glyphs (the '·' separators in 06, the em dash in 02) pads short and pushes
+# holding multi-byte glyphs (the '·' separators in the step 06 label) pads short and pushes
 # the right-hand border out of alignment. ${#s} is character-aware under a UTF-8 locale.
 _pad_l() {   # $1 text, $2 width - left-aligned
     local s="$1" w="$2" n

@@ -14,7 +14,7 @@ re-run, not the ligand/protein list. Only the canonical directory layout and
 job-naming scheme are supported.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <────────────────────────────────────────────────────────
+Date   : 05 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_DeFluorX.py
@@ -131,22 +131,27 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
      config and may drift; the CFG dicts are the single source of truth.)
 
 -------------------------------------------------------------------------------
-RANKING LOGIC (Sorting the Master CSV):
-The final ranked CSV (CFG.RANKED_CSV_STEM) uses a hierarchical scoring system to prioritise
-catalytic mechanism over generic binding affinity.
+RANKING LOGIC (sorting the ranked CSV, CFG.RANKED_CSV_STEM; the Master CSV is sorted by job_name):
+The final ranked CSV is mechanism-first - it prioritises catalytic mechanism over
+generic binding affinity. Sort keys, in strict order (generate_scientific_ranking_csv):
 
-    1. Tier Value (Primary Sort Key):
-       Candidates are strictly grouped by Tier. The top tier always ranks above the subsequent tier.
-       (Tier_1A=50 > Tier_1B=40 > Tier_2A=30 > Tier_2B=20 > Tier_3=10)
+    1. tier_val (primary): candidates are strictly grouped by Tier; the top tier
+       always ranks above the next. (illustrative CFG.TIER_SORT_WEIGHT values, CFG is SSOT:
+       Tier_1A=50 > Tier_1B=40 > Tier_2A=30 > Tier_2B=20 > Tier_3=10)
 
-    2. Active-Site Conservation / Likelihood (Secondary Sort Key):
-       Within the same Tier, candidates are ranked by the sequence/structure
-       conservation score.
+    2. competence_score (within a tier): the gated continuous competence (CFG §5.5 -
+       angle, nucleophile distance, carboxylate clamp, trajectory deviation, triad
+       relay and halide, each once).
 
-    3. SN2 Attack Angle (Tertiary Sort Key):
-       Proximity of the backside-attack angle to the ideal 180°.
+    3. catalytic_constellation_score: Criterion-B eight-residue geometric fidelity
+       against the 3R3U crystal.
 
-    4. Binding score (Final tie-breaker).
+    4. active-site conservation / likelihood (CFG.COL_LIKE_S).
+
+    5. model_degrader_consensus (LAST tiebreaker): fraction of Boltz diffusion samples
+       that independently reach a degrader tier; a tiebreaker only, never crossing a
+       tier or competence boundary. mechanistic_score / soft_catalytic_score are shown
+       for reference but NOT sorted on. mergesort keeps the order stable + reproducible.
 
 -------------------------------------------------------------------------------
 Design Principles:
@@ -3716,7 +3721,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         """
         WHERE C–F BOND STRENGTH ENTERS, STATED HONESTLY.
 
-        The previous note here claimed "competence/ranking keep the raw geometry". They do not:
+        Competence and ranking do NOT keep the raw geometry:
         CFG.competence_score multiplies the geometric sum by feasibility_factor(scissile_cf_bde,
         beta_f_count). Bond strength therefore enters in THREE places, deliberately and for three
         different purposes, and a reader is entitled to know all three:
@@ -4832,7 +4837,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     data["elite_demotion"] = _etag if _eprev in ("", "none") else f"{_eprev}+{_etag}"
                     # Regenerate the verdict so a row demoted here does not still ship the Tier_1A
                     # "Elite-Grade …" meaning and "| Tier: Tier_1A" Justification (the constellation and
-                    # pLDDT demotions already do this; this branch did not).
+                    # pLDDT demotions already do this; this branch does the same).
                     _meaning = (f"Elite machinery incomplete ({'; '.join(_fail)}); the near-ideal SN2 pose "
                                 f"is not backed by complete catalytic machinery or a crystal-exact "
                                 f"constellation - demoted to {_demoted_to}.")
@@ -5441,7 +5446,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             decided downstream by Step-06 MM-GBSA and Step-07 QM/MM, which are the arbiters.
             '''
             df_rank["Classification_Basis"] = (
-                "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step08")
+                "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step07")
 
             """
             Control read-out + VALIDATION. The ranking is geometry-driven and applies NO

@@ -45,7 +45,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) - in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <─────────────────────────────────────────────────────────
+Date   : 05 August 2026 <─────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_DeFluorX.py [Boltz-2_Run_Directory] [options]
@@ -418,7 +418,8 @@ def _timed(phase: str, rank):
     finally:
         dt = time.perf_counter() - _t
         _TIMINGS.append({"phase": phase, "rank": rank, "seconds": round(dt, 1)})
-        _log(f"       ⏱ {phase} R_{rank} took {_fmt_dur(dt)}")
+        if dt >= 1.0:   # skip sub-second echoes (all-cached reruns); still recorded for the phase totals
+            _log(f"       ⏱ {phase} R_{rank} took {_fmt_dur(dt)}")
 
 
 def _emit_timings(out_root: Path) -> None:
@@ -2186,7 +2187,7 @@ def _failure_windows(bad: "pd.Series", ns_per_frame: float = 0.0, gap_ns: float 
 
 
 def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Series",
-                           ns_per_frame: float = 0.0) -> None:
+                           ns_per_frame: float = 0.0, quiet: bool = False) -> None:
     """Per-job MM-GBSA: ΔG_bind against simulation time, plus its distribution.
 
     Two things this figure must get right:
@@ -2268,9 +2269,11 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     """
     _xmax = float(np.ceil(_x.max() / 100.0) * 100) if ns_per_frame > 0 else float(_x.max())
     ax1.set_xlim(0, _xmax)
-    # Compact 3-column legend inside the panel: tight column/handle spacing keeps it narrow
-    # enough to sit in the sparse lower-left corner without covering the data.
-    ax1.legend(frameon=True,  ncol=3, loc="lower left")
+    # Single-row legend inside the panel: one column per entry so it never wraps to a second row;
+    # tight column/handle spacing keeps it narrow enough to sit in the sparse lower-left corner.
+    _lh, _ll = ax1.get_legend_handles_labels()
+    ax1.legend(_lh, _ll, frameon=True, ncol=max(1, len(_lh)), loc="lower left",
+               columnspacing=1.0, handletextpad=0.5)
     ax1.grid(alpha=0.25, linewidth=0.5)
 
     # ── Panel 2: distribution of the core ensemble (shares the y-axis) ────────────────────
@@ -2286,7 +2289,8 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     out_path = out_dir / f"MMGBSA_Profile_R{rank}.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
-    _echo(f"    ✔ Figure       : {out_path.name}")
+    if not quiet:
+        _echo(f"    ✔ Figure       : {_utils_mod.deflx_fig_name(out_path.name)}")
 
 
 def plot_mmgbsa_combined(out_dir: Path, per_job: list,
@@ -2312,7 +2316,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         _echo("  [!] MM-GBSA combined skipped - no parsed ΔG_bind series.")
         return
     out_dir.mkdir(parents=True, exist_ok=True)
-    per_job.sort(key=lambda x: int(x[0]))
+    # Consistent order across every combined figure: non-controls by rank, the 3R3U control LAST.
+    per_job.sort(key=lambda x: (int(x[0]) in controls, int(x[0])))
     ligands, nspf, controls = ligands or {}, nspf or {}, controls or set()
 
     _pal    = list(CFG.MMGBSA_RANK_PALETTE)
@@ -2340,8 +2345,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     # The top panels carry their definitions in their own legends, so the row gap only needs to
     # clear the tick labels.
     gs  = fig.add_gridspec(2, 2, height_ratios=[1, 1.1], hspace=0.22, wspace=0.22)
-    ax1 = fig.add_subplot(gs[0, 0])     # distribution
-    ax3 = fig.add_subplot(gs[0, 1])     # ranking
+    ax1 = fig.add_subplot(gs[0, 0])     # distribution (top-left)
+    ax3 = fig.add_subplot(gs[0, 1])     # ranking (top-right)
     ax4 = fig.add_subplot(gs[1, :])     # time + cumulative, spanning the row
 
     # ── Panel 1: distribution, with median vs mean ───────────────────────────────────────
@@ -2394,8 +2399,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         Line2D([], [], color=_INK["warn"], marker="D", linestyle="--", linewidth=1.6, markersize=7,
                label="mean (outlier-dragged)"),
     ]
-    ax1.legend(handles=_hdlA, loc="lower right", frameon=True,
-               ncol=1)
+    # Top-left, single column (one row per entry).
+    ax1.legend(handles=_hdlA, loc="upper left", frameon=True, ncol=1)
     ax1.grid(alpha=0.25, linewidth=0.5, axis="y")
 
     # ── Panel 3: the ranking, with an honest interval and an effect size ─────────────────
@@ -2426,10 +2431,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         for j in range(i + 1, len(per_job)):
             d = _cliffs_delta(per_job[i][1], per_job[j][1])
             _pairs.append(f"#{per_job[i][0]} vs #{per_job[j][0]}: δ = {d:+.2f} ({_delta_word(d)})")
-    # The pairwise deltas become the legend's title - inside the panel, never a caption below it.
-    # One pair per line keeps the legend narrow enough to sit clear of the tallest bar.
-    _delta_title = ("Cliff's δ - δ > 0: the first binds more weakly\n"
-                    + "\n".join(_pairs)) if _pairs else None
+    # The pairwise deltas are the legend's entries (one pair per line) under the "Cliff's δ" title -
+    # inside the panel, never a caption below it, and narrow enough to sit clear of the tallest bar.
     ax3.axhline(0.0, color=_INK["outline"], linewidth=0.8)
     ax3.set_xticks(_x); ax3.set_xticklabels(_labels)
     ax3.set_ylabel("Median ΔG$_{bind}$ (kcal/mol)")
@@ -2455,11 +2458,17 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                  f"{getattr(CFG, 'MMGBSA_BOOTSTRAP_CI', 95):.0f}% CI", fontsize=CFG.VIS_FONT_LEGEND,
                  color=_INK["dark"], fontweight="bold", va="center", ha="left", zorder=9,
                  path_effects=_stroke_b)
-    if _delta_title:
-        ax3.text(0.03, 0.97, _delta_title, transform=ax3.transAxes, va="top", ha="left",
-                 fontsize=CFG.VIS_FONT_ANNOT, color=_INK["soft"],
-                 bbox=dict(boxstyle="round,pad=0.45", facecolor=_INK["light"],
-                           edgecolor=_INK["faint"], linewidth=0.8, alpha=0.93))
+    if _pairs:
+        # Two-column, text-only legend (blank handles): the pairwise deltas read as a compact grid
+        # rather than a tall single column. Header is the legend title.
+        _dh3 = [Line2D([], [], color="none") for _ in _pairs]
+        _leg3 = ax3.legend(_dh3, _pairs, loc="upper left", ncol=2,
+                           title="Cliff's δ - δ > 0: the first binds more weakly",
+                           fontsize=CFG.VIS_FONT_ANNOT, title_fontsize=CFG.VIS_FONT_ANNOT,
+                           frameon=True, handlelength=0, handletextpad=0,
+                           columnspacing=1.2, labelspacing=0.3, borderpad=0.5)
+        _leg3.get_frame().set_facecolor(_INK["light"]); _leg3.get_frame().set_edgecolor(_INK["faint"])
+        _leg3.get_frame().set_alpha(0.93); _leg3.get_frame().set_linewidth(0.8)
     ax3.grid(alpha=0.25, linewidth=0.5, axis="y")
     ax3.invert_yaxis()
 
@@ -2491,7 +2500,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     out_path = out_dir / "03_MMGBSA_Combined_AllRanks.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
-    _echo(f"  MM-GBSA combined figure saved: {out_path.resolve()}")
+    _echo(f"  MM-GBSA combined figure saved: {_utils_mod.deflx_fig_name(out_path.resolve())}")
 
 
 def _effective_n(dg: "pd.Series") -> float:
@@ -2627,7 +2636,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
-def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv: Path) -> None:
+def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv: Path, quiet: bool = False) -> None:
     """Draw ONE rank's MM-GBSA profile from an existing CSV - never re-scores.
 
     A rank is finished the moment its own MD → SID → MM-GBSA has landed, so its profile is readable
@@ -2643,7 +2652,7 @@ def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv
     _nspf = (_span / (_nfr - 1)) if (_span > 0 and _nfr > 1) else 0.0
     _out = _analysis_dir(md_dir.parent) / getattr(CFG, "MMGBSA_OUTPUT_SUBDIR", "Prime-MMGBSA")
     _out.mkdir(parents=True, exist_ok=True)
-    plot_mmgbsa_individual(_out, job_name, rank, dg, ns_per_frame=_nspf)
+    plot_mmgbsa_individual(_out, job_name, rank, dg, ns_per_frame=_nspf, quiet=quiet)
 
 
 def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> str:
@@ -2670,6 +2679,8 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     _echo(_SEP)
     _echo(f"Prime MM-GBSA - rescoring binding free energy for {len(job_dirs)} completed MD job(s)")
     _echo(_SEP)
+    _echo(f"  {_C.DIM}Note: GB implicit solvent overstabilises anionic PFAS - compare ΔG_bind BETWEEN "
+          f"ranks, never as an absolute affinity.{_C.ENDC}")
     # MM-GBSA data (the summary CSV) stays in its own compute subdir; the FIGURES go to the single
     # 06_Analysis folder alongside every other Step-06 figure. md_dir.parent is 6_Physics_Validation.
     fig_dir = _analysis_dir(md_dir.parent)                                  # 06_Analysis (all Step-06 figures)
@@ -2731,8 +2742,6 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
                     _echo(f"    ↳ when         : {_wins}. Failures that CLUSTER in time point at "
                           f"unstable stretches of the trajectory (inspect those frames); failures "
                           f"scattered evenly are ordinary Prime convergence noise.")
-            _echo("    Interpretation : GB implicit solvent overstabilises anionic PFAS - compare "
-                  "ΔG_bind BETWEEN ranks, never as an absolute affinity.")
         try:
             _plot_rank_mmgbsa(md_dir, d, job_name, rank, csv)
         except Exception as e:
@@ -3253,7 +3262,14 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     if not root.is_dir():
         return
     rows = []
-    for d in sorted(root.glob("Defluorination_R*"), key=lambda p: _natural_rank(p)):
+    # Rank from the 'Defluorination_R{N}' folder name (note: _natural_rank expects the '_R_N' spelling
+    # and does NOT match this one). Non-controls by rank, the 3R3U control LAST - consistent with every
+    # other combined figure.
+    def _defl_rank(p: Path) -> int:
+        m = re.search(r"_R(\d+)", p.name)
+        return int(m.group(1)) if m else 0
+    for d in sorted(root.glob("Defluorination_R*"),
+                    key=lambda p: (_defl_rank(p) in controls, _defl_rank(p))):
         csv = d / "04_Defluorination_Geometry.csv"
         if not csv.is_file():
             continue
@@ -3289,17 +3305,23 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     fig, _axg = plt.subplots(2, 2, figsize=(11, 8.6))   # 2×2, balanced
     ax = _axg.flatten()
     nac_vals = [r[1] for r in rows]
-    ax[0].bar(rks, nac_vals, color=_DEFL_OKABE[2])
+    # Per-rank colours (one colour per rank, consistent across all four panels; the control distinct) -
+    # mirrors 01_Physics_Build_Solvation_QC so a rank reads the same colour everywhere.
+    _palette = [CFG.VIS_ACCENT["green"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"],
+                CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["magenta"], CFG.VIS_ACCENT["sky"]]
+    _rank_ints = [int(re.sub(r"\D", "", str(rk)) or 0) for rk in rks]
+    cols = _ctrl_palette(_rank_ints, controls, _palette)
+    ax[0].bar(rks, nac_vals, color=cols)
     ax[0].set_ylabel("NAC-competent (%)"); ax[0].set_ylim(0, max(max(nac_vals), 1.0) * 1.2)
     _labels(ax[0], nac_vals, "{:.2f}%")
-    ax[1].bar(rks, [r[2] for r in rows], color=_DEFL_OKABE[0]); ax[1].set_ylabel("min attack distance (Å)")
+    ax[1].bar(rks, [r[2] for r in rows], color=cols); ax[1].set_ylabel("min attack distance (Å)")
     ax[1].axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY); _labels(ax[1], [r[2] for r in rows], "{:.2f}")
-    ax[2].bar(rks, [r[4] for r in rows], color=_DEFL_OKABE[1]); ax[2].set_ylabel("mean SN2 angle (°)")
+    ax[2].bar(rks, [r[4] for r in rows], color=cols); ax[2].set_ylabel("mean SN2 angle (°)")
     ax[2].axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_GREY); _labels(ax[2], [r[4] for r in rows], "{:.1f}°")
     _used = [ax[0], ax[1], ax[2]]
     if _have_dg:
         _fin = [v if np.isfinite(v) else 0.0 for v in _dgs]
-        ax[3].bar(rks, _fin, color=_DEFL_OKABE[3])
+        ax[3].bar(rks, _fin, color=cols)
         ax[3].set_ylabel("median MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative")
         ax[3].axhline(0, color=_DEFL_GREY, lw=0.8)
         for i, v in enumerate(_dgs):
@@ -3308,15 +3330,24 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         _used.append(ax[3])
     else:
         ax[3].axis("off")
+    # X-axis labels only on the BOTTOM row (top panels share the same categories); tick labels coloured
+    # per rank to match the bars - the 01_Physics_Build_Solvation_QC convention.
+    _bottom_axes = {ax[2], ax[3] if _have_dg else ax[1]}
     for a in _used:
         a.grid(axis="y", alpha=0.3)
-        a.set_xticks(range(len(rks))); a.set_xticklabels(_labs)
-        a.set_xlabel("MD-selected complex")
+        a.set_xticks(range(len(rks)))
+        if a in _bottom_axes:
+            a.set_xticklabels(_labs)
+            for _t, _c in zip(a.get_xticklabels(), cols):
+                _t.set_color(_c); _t.set_fontweight("bold")
+            a.set_xlabel("MD-selected complex")
+        else:
+            a.tick_params(labelbottom=False)
     fig.tight_layout()
     fig.savefig(analysis / "04_Defluorination_Combined_AllRanks.png",
                 dpi=int(CFG.VIS_FIGURE_DPI))
     plt.close(fig)
-    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/04_Defluorination_Combined_AllRanks.png")
+    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/{_utils_mod.deflx_fig_name('04_Defluorination_Combined_AllRanks.png')}")
 
 
 # =============================================================================
@@ -3663,7 +3694,7 @@ def merge_esp(prepared_pdb: Path, esp_mae: Path, out_mae: Path, base_resnum: int
 
 
 # -----------------------------------------------------------------------------
-# SECTION 12: STAGE 2 - SYSTEM BUILDER (minimise-volume + build + ESP into force field)
+# SECTION 12: STAGE 3 - SYSTEM BUILDER (minimise-volume + build + ESP into force field)
 # -----------------------------------------------------------------------------
 def _lig_atom_indices(complex_mae: Path) -> str:
     from schrodinger import structure
@@ -3793,7 +3824,7 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
 
 
 # -----------------------------------------------------------------------------
-# SECTION 13: STAGE 3 - MOLECULAR DYNAMICS
+# SECTION 13: STAGE 4 - MOLECULAR DYNAMICS
 # -----------------------------------------------------------------------------
 def _md_msj(time_ps: float, interval_ps: float) -> str:
     relax = Path(f"{SCHRO}/mmshare-v7.3/data/desmond/desmond_npt_relax.msj")
@@ -3978,7 +4009,7 @@ def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int
 
 
 # -----------------------------------------------------------------------------
-# SECTION 14: STAGE 4 - WATERMAP (+ CSV export for Step 07)
+# SECTION 14: STAGE 2 - WATERMAP (+ CSV export for Step 07)
 # -----------------------------------------------------------------------------
 def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_dist: float) -> Path:
     """Run WaterMap through Schrödinger's own WaterMapInput, on a local scratch, and copy the result back.
@@ -4133,7 +4164,7 @@ def export_watermap_csv(wm_maegz: Path, csv_path: Path) -> int:
 # =============================================================================
 def _parse_args_merged():
     ap = argparse.ArgumentParser(
-        description=f"{CFG.PROJECT_NAME} Step 06 - ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA",
+        description=f"{CFG.PROJECT_NAME} Step 06 - ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination",
         epilog=("examples:\n"
                 "  production : python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z/\n"
                 "  quick test : python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z/ --test"),
@@ -4384,7 +4415,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
     out_path = qc_dir / "01_Physics_Build_Solvation_QC.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
-    _ok(f"[qc] ✔ physics build/solvation QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
+    _ok(f"[qc] ✔ physics build/solvation QC → {qc_dir.name}/{_utils_mod.deflx_fig_name(out_path.name)}  ({len(recs)} rank(s))")
 
 
 def _read_md_qc(job_dir: Path, jobname: str) -> "dict | None":
@@ -4502,7 +4533,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
         a.plot(r["t"], r["ca"], color=cols[i], lw=1.3, label=labs[i])
     a.set_xlabel("time (ns)")
     a.set_ylabel("Protein Cα-RMSD (Å)\nvs the minimised start - lower = more stable")
-    a.legend(loc="upper left", fontsize=fl, title="MD-selected")
+    a.legend(loc="lower right", fontsize=fl, title="MD-selected", ncol=max(1, len(labs)))
 
     # B - ligand RMSD after fitting on the protein (did the PFAS stay in the pocket).
     b = ax[0, 1]
@@ -4513,7 +4544,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
                 if getattr(CFG, "MD_RESTRAIN_LIGAND", False)
                 else "Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
     b.set_ylabel(_lg_ylab)
-    b.legend(loc="upper left", fontsize=fl)
+    b.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
 
     # C - system temperature vs the target (thermostat stability), zoomed to a tight band.
     c = ax[1, 0]
@@ -4528,7 +4559,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
            fontsize=CFG.VIS_FONT_ANNOT - 1, color=_INK["soft"])
     if has_T:
         c.set_ylim(tgt - 12, tgt + 10)
-        c.legend(loc="lower left", fontsize=fl)
+        c.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
     c.set_xlabel("time (ns)")
     c.set_ylabel("System temperature (K)\nthermostat stability around the target")
 
@@ -4538,7 +4569,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
         dd.plot(r["res"], r["rf"], color=cols[i], lw=1.0, label=labs[i])
     dd.set_xlabel("residue number")
     dd.set_ylabel("Protein Cα-RMSF (Å)\nper-residue flexibility over the run")
-    dd.legend(loc="upper right", fontsize=fl)
+    dd.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
 
     fig.tight_layout()
     # Honest disclosure: when the production is positionally restrained, retention/equilibration in
@@ -4554,7 +4585,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
     out_path = qc_dir / "02_MD_Trajectory_QC.png"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
-    _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{out_path.name}  ({len(recs)} rank(s))")
+    _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{_utils_mod.deflx_fig_name(out_path.name)}  ({len(recs)} rank(s))")
 
 
 def _phase_merge(entry: dict, ranked_map: dict, dirs: dict) -> None:
@@ -4571,7 +4602,7 @@ def _phase_merge(entry: dict, ranked_map: dict, dirs: dict) -> None:
     rep = merge_esp(prepared, esp, entry["complex_mae"], base)
     _base_ok = rep["base_state"] == "HID"
     _base_c = _C.OKGREEN if _base_ok else _C.WARNING
-    _echo(f"\n  {_C.BOLD}{_complex_label(entry, ranked_map)}{_C.ENDC}")
+    _echo(f"  {_C.BOLD}{_complex_label(entry, ranked_map)}{_C.ENDC}")
     _echo(f"       {_C.OKGREEN}✔{_C.ENDC} imported     → {dirs['prot'].name}/")
     _echo(f"       {_C.OKGREEN}✔{_C.ENDC} ESP merged   → {dirs['esp_cx'].name}/")
     _echo(f"         ligand    {rep['lig_atoms']} atoms · charge {rep['lig_charge_sum']:+.3f} e")
@@ -4623,7 +4654,6 @@ def _phase_build(entry: dict, dirs: dict) -> None:
         try:
             q = reapply_esp_to_cms(setup_cms, entry["esp"])
             _ok(f"[build] R_{rank} ✔ already built - ESP re-verified (sum {q:+.3f} e)")
-            _echo("")                                 # one rank's build block per paragraph
             return
         except RuntimeError as _e:
             _bad = setup_cms.with_suffix(setup_cms.suffix + f".corrupt.{time.strftime('%Y%m%d_%H%M%S')}")
@@ -4636,7 +4666,6 @@ def _phase_build(entry: dict, dirs: dict) -> None:
     entry["setup_cms"] = setup_cms
     q = reapply_esp_to_cms(setup_cms, entry["esp"])
     _ok(f"[build] R_{rank} ✔ {setup_cms.name} · ESP applied to force field (sum {q:+.3f} e)")
-    _echo("")                                         # one rank's build block per paragraph
 
 
 def _phase_md(entry: dict, dirs: dict, a) -> "Path | None":
@@ -4688,7 +4717,7 @@ def main() -> int:
 
     _open_step_log(out_root)   # 6_Physics_Validation/00_Physics_Validation.log (colour-preserving, fresh)
     print_script_banner("06_Physics_Validation_DeFluorX.py",
-                        "ESP Physics - WaterMap → System Builder → MD → SID → MM-GBSA")
+                        "ESP Physics - WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination")
 
     ranked = newest_ranked_csv(run)
     ranked_map = ranked_rows_by_jobname(ranked)
@@ -4800,9 +4829,7 @@ def main() -> int:
                         with _timed("sid", _rank):
                             _sid_todo = scan_jobs([_jd])
                             if not _sid_todo:
-                                _echo(""); _echo(_SEP)
-                                _echo(f"[Job {_jp}/{_job_total}] Rank {_rank}: SID already done - advancing to MM-GBSA.")
-                                _echo(_SEP)
+                                _echo(f"  {_C.CYAN}▸{_C.ENDC} [Job {_jp}/{_job_total}] Rank {_rank}: SID already done - advancing to MM-GBSA.")
                             process_jobs(_sid_todo, _jp, _job_total)          # SID  (blocking, CPU)
                         with _timed("mmgbsa", _rank):
                             _mg = run_mmgbsa(_jd, _jd.name, _rank_of(_jd.name))   # MM-GBSA (blocking, CPU)
@@ -4812,7 +4839,7 @@ def main() -> int:
                             # This rank is complete - draw its own MM-GBSA profile now rather than
                             # waiting for the cross-rank Finalise pass.
                             try:
-                                _plot_rank_mmgbsa(md_dir, _jd, _jd.name, _rank, _mg)
+                                _plot_rank_mmgbsa(md_dir, _jd, _jd.name, _rank, _mg, quiet=True)
                             except Exception as _exc:
                                 _warn(f"[mmgbsa] R_{_rank} per-rank figure skipped - "
                                       f"{str(_exc).splitlines()[0]}")

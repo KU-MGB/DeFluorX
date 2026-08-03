@@ -8,7 +8,7 @@ protein sequence sources using a strict, master-guided deduplication strategy.
 Produces a merged FASTA, a detailed log, and a high-resolution QC dashboard.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <─────────────────────────────────────────────────────────
+Date   : 05 August 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_DeFluorX.py
@@ -19,7 +19,7 @@ Date   : 30 July 2026 <───────────────────
   Reads         : User-supplied *.fasta files (master + secondary)
   Writes        : <output>.fasta   - merged, deduplicated sequence set
                   <output>.log     - inclusion/exclusion statistics
-                  <output>.png     - QC dashboard (throughput + KDE)
+                  <output>          - QC dashboard (throughput + KDE); format per CFG.VIS_FIGURE_FORMAT
   Upstream      : None (standalone data-curation step)
   Downstream    : 02_Production_DeFluorX.py → consumes the merged FASTA as Boltz-2 input
 ───────────────────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ Input FASTA Files:
 Output:
     - A single merged, non-redundant FASTA file.
     - A detailed console log (.log) summarising inclusion/exclusion statistics.
-    - A High-Resolution PNG Visualisation Dashboard.
+    - A High-Resolution Visualisation Dashboard (format per CFG.VIS_FIGURE_FORMAT).
 -------------------------------------------------------------------------------
 Scientific References:
     1. Sequence parsing (Biopython SeqIO):
@@ -143,6 +143,7 @@ _utils_mod      = _load_module("ProjectUtils", Path(__file__).resolve().parent /
 _cfg_mod        = _load_module("ProjectConfig", Path(__file__).resolve().parent / "00_01_Project_Config_DeFluorX.py")
 CFG             = _cfg_mod.CFG()
 clean_spines    = _utils_mod.clean_spines
+apply_figure_style = _utils_mod.apply_figure_style
 
 # -------------------------------------------------------------------------------
 # Step 1.5: Global Constants
@@ -384,6 +385,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     Generates a high-resolution dashboard.
     Features smart label placement and colourful KDE fillings.
     """
+    apply_figure_style(CFG)   # installs the CFG-driven savefig format router (SSOT: VIS_FIGURE_FORMAT)
 
     # -------------------------------------------------------------------------------
     # Step 5.1: Palette Definition (Unified Consistency)
@@ -569,10 +571,11 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax3.spines["left"].set_visible(False)
     ax3.set_yticks([])
 
-    # Save
-    plt.savefig(output_path.with_suffix(".png"), dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    # Save (extension follows the CFG.VIS_FIGURE_FORMAT SSOT; the savefig router writes that format)
+    _fig_out = output_path.with_suffix("." + CFG.VIS_FIGURE_FORMAT)
+    plt.savefig(_fig_out, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close()
-    return output_path.with_suffix(".png")
+    return _fig_out
 
 
 # =============================================================================

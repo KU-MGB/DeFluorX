@@ -21,7 +21,7 @@ build an MSA (MAFFT / Clustal-Ω) and a maximum-likelihood or Bayesian tree
 tier classification produced here.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <─────────────────────────────────────────────────────────
+Date   : 05 August 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_DeFluorX.py
@@ -647,8 +647,8 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 <div id="export-module" class="space-y-3 pt-4 border-t border-slate-200 pb-6">
                     <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Export Matrix</h2>
                     <div class="grid grid-cols-2 gap-2">
-                        <button id="btn-export-png" class="col-span-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded transition flex items-center justify-center gap-1 border border-slate-300">
-                            <i class="ph ph-image"></i> High-Res PNG
+                        <button id="btn-export-svg" class="col-span-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded transition flex items-center justify-center gap-1 border border-slate-300">
+                            <i class="ph ph-vector-two"></i> Vector SVG
                         </button>
                     </div>
                 </div>
@@ -816,8 +816,9 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
 
-        function createHighResCanvas() {
-            return new Promise((resolve) => {
+        // Serialise the live dendrogram/matrix SVG (with print styles, tier legend and a padded
+        // viewBox) into a standalone, self-contained SVG string - TRUE VECTOR, no canvas raster step.
+        function buildExportSvgData() {
                 const svgNode = document.getElementById("dendrogram-svg");
                 const gNode = svgNode.querySelector("g");
                 const originalViewBox = svgNode.getAttribute("viewBox");
@@ -874,28 +875,22 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 if(originalViewBox) svgNode.setAttribute("viewBox", originalViewBox); else svgNode.removeAttribute("viewBox");
                 gNode.setAttribute("transform", originalTransform);
 
-                const canvas = document.createElement("canvas");
-                const ctx = canvas.getContext("2d");
-                const img = new Image();
-                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-                const url = URL.createObjectURL(svgBlob);
-
-                img.onload = function() {
-                    const scale = 3;
-                    canvas.width = finalWidth * scale; canvas.height = finalHeight * scale;
-                    ctx.scale(scale, scale); ctx.fillStyle = "#f8fafc"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url); resolve(canvas);
-                };
-                img.src = url;
-            });
+                return { svgData, finalWidth, finalHeight };
         }
 
-        document.getElementById('btn-export-png').addEventListener('click', async () => {
+        document.getElementById('btn-export-svg').addEventListener('click', () => {
             if (!state.root) return alert("Please plot a tree first.");
-            showLoading("Generating High-Res PNG...");
-            const canvas = await createHighResCanvas();
-            triggerDownload(canvas.toDataURL("image/png"), "PFAS_Matrix_Export.png");
-            hideLoading();
+            showLoading("Generating Vector SVG...");
+            try {
+                const { svgData } = buildExportSvgData();
+                // Prepend the XML declaration so the file opens as a standalone SVG in any viewer/editor.
+                const doc = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + svgData;
+                const url = URL.createObjectURL(new Blob([doc], {type: 'image/svg+xml;charset=utf-8'}));
+                triggerDownload(url, "PFAS_Matrix_Export.svg");
+                URL.revokeObjectURL(url);
+            } finally {
+                hideLoading();
+            }
         });
 
         // View Controls

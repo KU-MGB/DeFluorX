@@ -7,7 +7,7 @@ spine helpers, MIC vector arithmetic, and geometric angle/dihedral functions.
 All downstream scripts import from here - never duplicate these definitions.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 30 July 2026 <────────────────────────────────────────────────────────
+Date   : 05 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_02_Project_Utils_DeFluorX.py
@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-# --- consolidated imports (hoisted from function bodies; optional/heavy + Schrodinger stay local) ---
+# --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 from datetime import datetime as _dt
 import json
 import math
@@ -354,6 +354,25 @@ class ReportManager:
 # SECTION 4: MATPLOTLIB UTILITIES
 # =============================================================================
 
+# Image suffixes the SSOT format router (installed in apply_figure_style) rewrites at savefig time.
+_DEFLX_IMG_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pdf", ".eps", ".ps", ".svg"}
+
+
+def deflx_fig_name(path) -> str:
+    """Return a figure path with its suffix swapped to the ACTIVE SSOT format (CFG.VIS_FIGURE_FORMAT,
+    as recorded on matplotlib by apply_figure_style) - so a LOG line names the file savefig actually
+    wrote, not the source-literal '.png'. Non-image suffixes (e.g. .csv) are returned unchanged, so it
+    is safe to apply even where a path might not be a figure."""
+    try:
+        p = Path(path)
+        if p.suffix.lower() in _DEFLX_IMG_SUFFIXES:
+            fmt = str(getattr(matplotlib, "_deflx_fig_fmt", "png")).lower().lstrip(".")
+            return str(p.with_suffix("." + fmt))
+    except Exception:
+        pass
+    return str(path)
+
+
 def apply_figure_style(cfg) -> None:
     """The pipeline's one typography and canvas definition, applied to matplotlib's rcParams.
 
@@ -392,6 +411,43 @@ def apply_figure_style(cfg) -> None:
         "savefig.dpi": cfg.VIS_FIGURE_DPI,
         "savefig.bbox": "tight",
     })
+
+    # ---- Central figure-format SSOT ----------------------------------------------------------------
+    # Every matplotlib save (fig.savefig / plt.savefig) is routed to cfg.VIS_FIGURE_FORMAT regardless
+    # of the ".png" a call site happens to name: the suffix and the write format are rewritten here, so
+    # one CFG edit re-targets all plots (svg / pdf / tiff / png / jpg). A call that passes an explicit
+    # format= (a PIL-composited or PyMOL raster tile that must stay png) is left untouched. The patch is
+    # installed once at the class level (idempotent guard) and reads the format from matplotlib each
+    # call, so a later apply_figure_style with a different CFG re-targets without re-patching. It
+    # composes with Step-03's savefig redirect: that wrapper rewrites the folder, then delegates to this
+    # one which rewrites the extension.
+    matplotlib._deflx_fig_fmt = str(getattr(cfg, "VIS_FIGURE_FORMAT", "png")).lower().lstrip(".")
+    if not getattr(matplotlib, "_deflx_savefig_patched", False):
+        _SWAP = {"png", "jpg", "jpeg", "tif", "tiff", "pdf", "svg", "eps", "ps"}
+        _orig_fig_savefig = plt.Figure.savefig
+        _orig_plt_savefig = plt.savefig
+        def _deflx_route(fname):
+            try:
+                _p = Path(fname)
+                if _p.suffix.lower().lstrip(".") in _SWAP:
+                    return str(_p.with_suffix("." + getattr(matplotlib, "_deflx_fig_fmt", "png")))
+            except Exception:
+                pass
+            return fname
+        def _deflx_fig_savefig(self, fname, *a, **k):
+            if "format" not in k:
+                fname = _deflx_route(fname)
+            return _orig_fig_savefig(self, fname, *a, **k)
+        def _deflx_plt_savefig(*a, **k):
+            if "format" not in k:
+                if a:
+                    a = (_deflx_route(a[0]),) + a[1:]
+                elif "fname" in k:
+                    k["fname"] = _deflx_route(k["fname"])
+            return _orig_plt_savefig(*a, **k)
+        plt.Figure.savefig = _deflx_fig_savefig
+        plt.savefig = _deflx_plt_savefig
+        matplotlib._deflx_savefig_patched = True
 
 
 def latest_by_mtime(paths):
@@ -599,7 +655,7 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                                  label_ref: str, label_con: str, out_path: Path | str,
                                  critical_res: dict[int, tuple[str, str]] = None,
                                  dpi: int = 300, cfg=None) -> None:
-    """Save a side-by-side comparison Ramachandran PNG. Colours come from CFG.VIS_RAMA when cfg is
+    """Save a side-by-side comparison Ramachandran figure. Colours come from CFG.VIS_RAMA when cfg is
     supplied (SSOT), else the identical built-in fallback."""
 
     _P = _rama_palette(cfg)
@@ -709,7 +765,7 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
 
 def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str,
                            dpi: int = 300, cfg=None) -> None:
-    """Save a single-structure Ramachandran plot PNG. Colours from CFG.VIS_RAMA when cfg is supplied."""
+    """Save a single-structure Ramachandran figure. Colours from CFG.VIS_RAMA when cfg is supplied."""
     _P = _rama_palette(cfg)
     fig, ax = plt.subplots(figsize=(6, 6))
     _draw_rama_background(ax, cfg)
