@@ -2994,6 +2994,28 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
                     _qm_water_mols.append(_mol)
                 if len(_qm_water_mols) >= _QM_WATER_MAX:
                     break
+            # Dewetted-pocket fallback. If the strict radius found no coordinating water, the departing
+            # fluoride would ionise into an empty QM shell - its Mulliken charge stalls (~-0.40 e) short
+            # of the cleavage gate, a false "intact" for a genuine substrate (e.g. difluoroacetate). The
+            # pocket is usually not dry, just sparse: take the single nearest water to the reaction
+            # centre out to QSITE_QM_WATER_DEWET_RADIUS so the leaving group keeps a first-shell
+            # micro-solvation, matching wetted controls. Still fully self-contained on the coordinates.
+            if not _qm_water_mols:
+                _dewet_r = float(getattr(CFG, "QSITE_QM_WATER_DEWET_RADIUS", 6.0))
+                _best = None
+                for a in st.atom:
+                    if (a.element or "").strip() == "O" and a.pdbres.strip().upper() in _water_res:
+                        _wp = np.array(a.xyz)
+                        _d = float(np.min(np.linalg.norm(_cen_arr - _wp, axis=1)))
+                        if _d <= _dewet_r and a.molecule_number != lig_mol and (
+                                _best is None or _d < _best[0]):
+                            _best = (_d, a.molecule_number)
+                if _best is not None:
+                    _qm_water_mols.append(_best[1])
+                    console_info(
+                        f"    [i] Dewetted pocket: no water within {_QM_WATER_RADIUS:.1f} A of the "
+                        f"reaction centre; added the nearest leaving-F micro-solvating water at "
+                        f"{_best[0]:.2f} A (dewetted fallback, <= {_dewet_r:.1f} A).")
     except Exception as _wexc:
         # An empty QM water shell CHANGES the physics (the fluoride's first solvation shell goes
         # classical), so it is never a silent fallback.
@@ -3940,7 +3962,10 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 axE.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product",
                                fontweight="bold", fontsize=_fa)
                 axE.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
-                axE.legend(loc="upper right", fontsize=_ft)
+                # Legend top-left: the PES climbs to the product on the right, so a right-hand legend
+                # collides with the curve, the TS marker and the ΔE‡/ΔE_rxn annotations; the top-left
+                # (reactant well) is empty.
+                axE.legend(loc="upper left", fontsize=_ft)
                 clean_spines(axE)
                 # ── Panel B: departing-fluoride charge (C-F ionisation) ──────────
                 if len(_fq) >= 2:
@@ -3975,6 +4000,14 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                          f"ΔE_rxn      {_der:+.1f} kcal/mol",
                          f"F charge  R {_fq_r:+.2f} → P {_fq_p:+.2f} e",
                          f"scan points {int(profile.get('QSite_NScan', n))}"]
+                # Honest caveats. A monotonic uphill scan means the product IS the highest point (the
+                # Nu(O)···C scan endpoint, not a relaxed defluorinated product), so ΔE‡ is an endpoint
+                # energy, not a true barrier. A departing-F charge that stalls just short of the gate
+                # flags an under-solvated (dewetted) QM region rather than genuine inertness.
+                if int(np.argmax(y)) >= n - 1 and _der > 0:
+                    _rows.append("(!) monotonic: product = endpoint, not TS")
+                if (_fq_final == _fq_final) and (not _cleaved) and (_fq_final <= -0.40):
+                    _rows.append("(!) F near gate - check QM-water solvation")
                 for _r, _line in enumerate(_rows):
                     axV.text(0.03, 0.66 - _r * 0.145, _line, transform=axV.transAxes, ha="left", va="center",
                              fontsize=_ft, family="monospace",
@@ -4522,19 +4555,37 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
     than re-scanned, and the reaction-profile figure is always redrawn from the parsed data.
     """
     _barriers, _derxns = [], []
+    _fq_products = []   # departing-fluoride product charge for EVERY scored frame, not just the best
     for _k, _fold in enumerate(folds):
         _res = parse_qsite_barrier(_fold, job_name)
         _b = _res.get("QSite_Barrier_kcal")
         if _b == _b:   # not NaN → a barrier was parsed
             _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
+        # Every frame gets its own reaction-profile figure (not only the best-preorganised one). A
+        # variably wetted pocket can ionise the fluoride in some frames and not others; the per-frame
+        # panels are the evidence for that, and the best-preorg frame alone can be a dewetted outlier.
+        _prof = parse_qsite_profile(_fold, job_name)
+        plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.png", job_name, rank, _prof)
+        _fpp = _prof.get("F_Charge_Product", np.nan)
+        if _fpp == _fpp:
+            _fq_products.append(float(_fpp))
         if _k == 0:
-            # Primary frame: full reaction profile (PES + departing-fluoride
-            # charge) → the direct "did it defluorinate" figure + F-charge cols.
-            _prof = parse_qsite_profile(_fold, job_name)
+            # Primary frame: rank-level reaction profile + the reactant/Δ fluoride-charge columns.
             plot_qsite_reaction_profile(
                 job_out_dir / "07_QSite_Reaction_Profile.png", job_name, rank, _prof)
-            for _fk in ("F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta"):
+            for _fk in ("F_Charge_Reactant", "F_Charge_Delta"):
                 stats[_fk] = _prof.get(_fk, np.nan)
+    # Ensemble departing-fluoride charge = MEDIAN over the scored frames, not the single best-preorg
+    # frame. Frame selection favours TS-like geometry, which can land on a dewetted outlier (0 QM
+    # waters) whose fluoride under-ionises (Mulliken stalls ~-0.40 e) - a false "intact" for a
+    # substrate that cleaves in most frames (e.g. difluoroacetate: 2 of 3 frames reach <= -0.5 e).
+    if _fq_products:
+        stats["F_Charge_Product"]      = float(np.median(_fq_products))
+        stats["QSite_NFrames_Cleaved"] = int(sum(1 for _f in _fq_products
+                                                  if _f <= CFG.QSITE_F_CHARGE_CLEAVED))
+        stats["QSite_NFrames_FCharge"] = len(_fq_products)
+    else:
+        stats["F_Charge_Product"] = np.nan
     if _barriers:
         '''
         The reported barrier is the RATE-WEIGHTED ENSEMBLE barrier,

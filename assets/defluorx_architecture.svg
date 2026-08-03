@@ -17,7 +17,7 @@
 <text x="243" y="144" font-size="10.2" font-weight="800" fill="#1e293b">00_01_Project_Config_DeFluorX.py</text>
 <text x="243" y="161" font-size="9.2" fill="#334155">single source of truth - thresholds, weights, paths</text>
 <text x="243" y="174.2" font-size="9.2" fill="#334155">tiers · geometry cutoffs · restraint · gates</text>
-<text x="503" y="196" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,465</text>
+<text x="503" y="196" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,470</text>
 <g filter="url(#ds)"><rect x="524" y="124" width="214" height="80" rx="10" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5"/></g>
 <text x="541" y="144" font-size="10.2" font-weight="800" fill="#1e293b">00_02_Project_Utils_DeFluorX.py</text>
 <text x="541" y="161" font-size="9.2" fill="#334155">console &amp; logging · atomic CSV / JSON</text>
@@ -98,7 +98,7 @@
 <text x="753" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="753" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">departing-F Mulliken charge → cleavage check</text>
 <text x="753" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~6,486</text>
+<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~6,537</text>
 <path d="M210 166 L150 166 L150 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M930 166 L990 166 L990 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M210 166 L22 166 L22 505 L40 505" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>

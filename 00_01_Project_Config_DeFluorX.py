@@ -2066,6 +2066,11 @@ class CFG:
     QSITE_BUFFER_RADIUS: float = 8.0         # Å  ≤ this: restrained; beyond: frozen (the surface)
     QSITE_QM_WATER_RADIUS: float = 3.5       # Å  a water within this of the reactive centre goes QM
     QSITE_QM_WATER_MAX: int = 3              # cap on QM waters (each adds electrons to the SCF)
+    QSITE_QM_WATER_DEWET_RADIUS: float = 6.0 # Å  dewetted-pocket fallback: if 0 waters sit within
+                                             # QSITE_QM_WATER_RADIUS, the nearest single water to the
+                                             # leaving fluoride out to this radius is still taken QM, so
+                                             # the departing F keeps a first-shell micro-solvation (an
+                                             # empty shell strands the fluoride and under-calls cleavage)
     QSITE_WM_WATER_MATCH_A: float = 1.5      # Å  a candidate QM water is matched to a WaterMap site if
                                              # its O is within this distance of the site
     QSITE_WM_WATER_WEIGHT: float = 1.0       # Å-per-(kcal/mol) discount applied to a candidate water's
