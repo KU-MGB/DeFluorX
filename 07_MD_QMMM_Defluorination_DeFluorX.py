@@ -48,9 +48,10 @@ Date   : 05 August 2026 <──────────────────�
                     - 07_Machinery_Engagement.svg  (per-residue median distance + mean marker + IQR + contact occupancy vs the warhead C)
                     - Ideal_Final.maegz            (best frame for QSite)
                     - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index; each holds 01_Reaction_Profile.svg)
-                    - 08_QSite_BestFrame_Reaction_Profile.svg (3-panel PES + departing-F charge + verdict card for the BEST-preorg single frame; the RANK verdict rides its card so it agrees with 09. The 09 ensemble is the headline; this is the single-frame supplement)
-                    - 09_QSite_Ensemble_Profiles.svg (all sampled frames overlaid + cleavage-semantic colours + verdict card; the headline QM/MM figure)
-                    - 10_QSite_Scan_Data.csv       (long-format raw PES + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
+                    - 08_QSite_Reaction_Profile.svg (all sampled frames overlaid on one shared reaction axis - PES over departing-F charge - with a per-frame + ensemble table and cleavage-semantic colours; the headline QM/MM figure)
+                    - 09_Reaction_Mechanism.svg    (integrated SN2 defluorination scene: RDKit substrate + all 8 machinery residues by role with global->NAC distances + a QM/MM / geometry / WaterMap value dashboard)
+                    - 10_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
+                    - 11_QSite_Scan_Data.csv       (long-format raw PES + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn, departing-F
                      charge, NAC-conditioned MM-GBSA + component decomposition, and
@@ -169,8 +170,9 @@ Arguments:
      Both are also written merged across candidates (06/07 *_AllRanks figures).
  14. QM/MM reaction profile: the PES along the SN2 coordinate with ΔE‡ / ΔE_rxn
      and the departing-fluoride Mulliken charge (→ −1 = F⁻) - the direct proof of
-     C–F cleavage → 08_QSite_BestFrame_Reaction_Profile (single best frame) +
-     09_QSite_Ensemble_Profiles (all sampled frames, the headline) (cols F_Charge_Reactant/Product/Delta).
+     C–F cleavage → 08_QSite_Reaction_Profile (all sampled frames + per-frame/ensemble
+     table, the headline) (cols F_Charge_Reactant/Product/Delta); the integrated reaction
+     scene → 09_Reaction_Mechanism; the MD-time / QM/MM-sampling link → 10_MD_QSite_Timeline.
  15. Defluorination verdict: Is_Defluorinating gate + Defluor_Propensity
      ( P(strict-NAC)·exp(−ΔE‡/RT) ) - the concrete turnover claim, not affinity.
  16. Defluorination landscape figure (05_Defluorination_Landscape, master dir): persistence × QM/MM barrier × binding.
@@ -229,6 +231,7 @@ Scientific references
 
 import sys
 import json
+import math
 import os
 
 # =============================================================================
@@ -288,7 +291,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 import seaborn as sns
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch, FancyBboxPatch
+from matplotlib.patches import Patch, FancyBboxPatch, Rectangle, Circle, FancyArrowPatch, Arc
 from matplotlib.ticker import MultipleLocator
 from matplotlib.colors import BoundaryNorm
 
@@ -2588,11 +2591,11 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
     plot_mmgbsa_decomposition(out_dir, ranks, merged=True)
     plot_machinery_engagement(out_dir, ranks, merged=True)
 
-    # Cross-job QSite comparison - each rank's best-frame PES read back from its 10_QSite_Scan_Data.csv.
+    # Cross-job QSite comparison - each rank's best-frame PES read back from its 11_QSite_Scan_Data.csv.
     try:
         _jobs = []
         for _rd in sorted(out_dir.glob("Rank_*")):
-            _csv = _rd / "10_QSite_Scan_Data.csv"
+            _csv = _rd / "11_QSite_Scan_Data.csv"
             if not _csv.is_file():
                 continue
             try:
@@ -4025,9 +4028,8 @@ def _qsite_verdict_card(axV, headline: str, accent: str, rows: list) -> None:
                      color=accent, lw=0.4, alpha=0.16, zorder=2)
 
 
-def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict,
-                                rank_verdict: dict = None) -> None:
-    """The direct 'did it defluorinate' figure, told as three linked panels so each
+def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict) -> None:
+    """The direct 'did it defluorinate' figure for ONE scanned frame, told as three linked panels so each
     question is answered on its own axes rather than crowded onto one:
       A (energetics) - the QM/MM potential-energy surface along the SN2 coordinate
         (Nu_O···C compression) with the reactant well, transition state (ΔE‡) and
@@ -4127,21 +4129,12 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 axF.set_ylabel("departing-F Mulliken charge", fontsize=_fa)
                 axF.set_xlabel("Nu(O)···C distance (Å)", fontsize=_fa)
                 clean_spines(axF)
-                # ── Panel C: verdict card (bordered table). When a rank_verdict is passed (the rank-
-                # level 08 best-frame figure) the headline is the RANK verdict, so the best-frame (08)
-                # and ensemble (09) figures agree: a dewetted best frame does not read "INTACT" while
-                # the ensemble cleaves. ──
-                _box_col = CFG.QSITE_CLEAVED_BOX; _intact_col = CFG.QSITE_FRAME_INTACT_COLOUR
+                # ── Panel C: verdict card (bordered table) - this frame's own C-F call, from its
+                # departing-fluoride charge (honest per frame: a dewetted frame reads intact). The rank
+                # verdict over all frames is carried by the 08 ensemble figure, not here. ──
                 _monotone = (int(np.argmax(y)) >= n - 1 and _der > 0)
-                if rank_verdict:
-                    _rc = bool(rank_verdict.get("cleaved"))
-                    _accent = _box_col if _rc else _intact_col
-                    _head = (f"C-F CLEAVED  ({rank_verdict.get('n_cleaved', 0)}/{rank_verdict.get('n_total', 1)} frames)"
-                             if _rc else "C-F INTACT")
-                else:
-                    _rc = _cleaved
-                    _accent = _C["product"] if _cleaved else _C["ts"]
-                    _head = "C-F CLEAVED" if _cleaved else "C-F INTACT"
+                _accent = _C["product"] if _cleaved else _C["ts"]
+                _head = "C-F CLEAVED" if _cleaved else "C-F INTACT"
                 _rows = [
                     (str(_scf), "", _C["edge"], False),
                     ("ΔE‡", f"{_bar:.1f} kcal/mol" + ("  (endpt)" if _monotone else ""), _C["edge"], False),
@@ -4149,13 +4142,9 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                     ("F charge", f"R {_fq_r:+.2f} -> P {_fq_p:+.2f} e", _C["edge"], False),
                     ("scan points", f"{int(profile.get('QSite_NScan', n))}", _C["edge"], False),
                 ]
-                if rank_verdict and rank_verdict.get("best_dewetted"):
-                    _rows.append(("this frame: DEWETTED (0 QM water)", "", _intact_col, False))
-                    _rows.append(("F artifact-intact; rank cleaves", "", _intact_col, True))
-                elif _monotone:
+                if _monotone:
                     _rows.append(("(!) monotonic: product = endpoint", "", _C["ts"], False))
-                if (_fq_final == _fq_final) and (not _rc) and (_fq_final <= -0.40) \
-                        and not (rank_verdict and rank_verdict.get("best_dewetted")):
+                if (_fq_final == _fq_final) and (not _cleaved) and (_fq_final <= -0.40):
                     _rows.append(("(!) F near gate - check QM-water", "", _C["ts"], False))
                 _qsite_verdict_card(axV, _head, _accent, _rows)
                 with warnings.catch_warnings():
@@ -4292,98 +4281,465 @@ def _qsite_qm_water_count(fold: Path) -> "int | None":
 
 def plot_qsite_ensemble_profiles(out_path: Path, rank, profiles: list,
                                  job_name: str = "", ligand: str = "") -> None:
-    """Every SAMPLED frame's PES (top) + departing-F charge (bottom-left) overlaid, with a verdict
-    card (bottom-right). Frame colour encodes the C-F verdict: an INTACT / dewetted-artifact frame is
-    red, CLEAVED frames cycle the green/blue palette; the best-preorganised frame is drawn bold. A
-    dewetted frame (0 QM water) is called out on the card - the departing F under-ionises without a
-    first-shell water to accept charge, so its 'intact' is an artifact, not a chemical failure. No
-    title (card + legend carry the identity); the ensemble ΔE‡ line uses the guarded barriers only."""
+    """The rank's QM/MM reaction figure: two full-width panels share one reaction-coordinate axis -
+    every sampled frame's PES (top) and its departing-F Mulliken charge (bottom). A compact inset
+    table in the PES panel's top-left carries each frame's barrier, reaction energy, departing-F
+    reactant->product charge and C-F verdict, plus the ensemble column; a single-row frame legend
+    sits inside the charge panel. Frame colour encodes the verdict: an INTACT / dewetted frame is
+    red, cleaved frames cycle the green/blue palette, the best-preorganised frame is drawn bold. A
+    dewetted frame (0 QM water) under-ionises the departing F without a first-shell water to accept
+    the charge, so its 'intact' is a solvation artifact, flagged on the table. No figure title - the
+    table header carries the identity; the ensemble ΔE‡/ΔE_rxn use the guarded Boltzmann estimator."""
     try:
         _P = [p for p in profiles if len(p.get("energy_kcal") or []) >= 3]
         if not _P:
             return
-        _C = CFG.DEFLUOR_FIG_COLOUR
-        _intact_col = CFG.QSITE_FRAME_INTACT_COLOUR
-        _cleaved_pal = CFG.QSITE_FRAME_CLEAVED_PALETTE
-        _box_col = CFG.QSITE_CLEAVED_BOX
+        _intact = CFG.QSITE_FRAME_INTACT_COLOUR
+        _pal = CFG.QSITE_FRAME_CLEAVED_PALETTE
+        _box = CFG.QSITE_CLEAVED_BOX
         _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
-        _ctrl = str(job_name).startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in str(job_name).upper()
+        _ink, _mute = CFG.VIS_INK["near_black"], CFG.VIS_INK["muted"]
+        _fr, _ci = [], 0
+        for k, p in enumerate(_P):        # caller passes best-first, so k == 0 is the best frame
+            _cl = bool(p.get("cleaved"))
+            _col = _pal[_ci % len(_pal)] if _cl else _intact
+            if _cl:
+                _ci += 1
+            _fr.append({"p": p, "cl": _cl, "best": k == 0, "col": _col, "wat": p.get("water"),
+                        "bar": float(p.get("QSite_Barrier_kcal", np.nan)),
+                        "der": float(p.get("QSite_dErxn_kcal", np.nan)),
+                        "fr": float(p.get("F_Charge_Reactant", np.nan)),
+                        "fp": float(p.get("F_Charge_Product", np.nan)), "k": k + 1})
+        _n = len(_fr); _ncl = sum(1 for f in _fr if f["cl"])
+        _ebar = _qsite_ensemble_barrier([f["bar"] for f in _fr])
+        _eder = _qsite_ensemble_derxn([f["bar"] for f in _fr], [f["p"]["energy_kcal"][-1] for f in _fr])
+        _acc = _box if _ncl else _intact
 
-        def _frame_colour(idx_cleaved, cleaved):
-            return _cleaved_pal[idx_cleaved % len(_cleaved_pal)] if cleaved else _intact_col
-
-        def _frame_label(k, p):
-            _tags = (["best"] if k == 0 else [])
-            if (p.get("water") == 0) and not p.get("cleaved"):
-                _tags.append("dewetted")
-            else:
-                _tags.append("cleaved" if p.get("cleaved") else "intact")
-            return f"F{k + 1}" + (f" ({', '.join(_tags)})" if _tags else "")
+        def _lt(f):
+            return ("best·dewet" if (f["best"] and f["wat"] == 0 and not f["cl"]) else
+                    ("best·cleaved" if f["best"] else
+                     ("cleaved" if f["cl"] else ("dewetted" if f["wat"] == 0 else "intact"))))
 
         with PLOT_LOCK:
-            fig = plt.figure(figsize=(14.2, 7.2))
-            gs = fig.add_gridspec(2, 2, height_ratios=[1.5, 1.0], width_ratios=[2.7, 1.0],
-                                  hspace=0.44, wspace=0.07)
-            axE = fig.add_subplot(gs[0, :]); axF = fig.add_subplot(gs[1, 0])
-            axV = fig.add_subplot(gs[1, 1]); axV.axis("off")
+            fig = plt.figure(figsize=(12.6, 8.6))
+            gs = fig.add_gridspec(2, 1, height_ratios=[1.5, 1.0], hspace=0.055,
+                                  left=0.085, right=0.975, top=0.975, bottom=0.085)
+            axE = fig.add_subplot(gs[0]); axF = fig.add_subplot(gs[1], sharex=axE)
             try:
-                _cidx = 0
-                for k, p in enumerate(_P):
+                for f in _fr:
+                    p = f["p"]
                     x = np.asarray(p["coord"], float); y = np.asarray(p["energy_kcal"], float)
                     fq = np.asarray(p.get("f_charge") or [], float)
-                    _cl = bool(p.get("cleaved")); col = _frame_colour(_cidx, _cl)
-                    if _cl:
-                        _cidx += 1
-                    best = (k == 0)
-                    axE.plot(x, y, "-o", color=col, lw=(2.4 if best else 1.6), ms=(5 if best else 4),
-                             alpha=(1.0 if best else 0.85), zorder=(4 if best else 3), label=_frame_label(k, p))
+                    lw = 2.4 if f["best"] else 1.6; ms = 5 if f["best"] else 4
+                    a = 1.0 if f["best"] else 0.85
+                    axE.plot(x, y, "-o", color=f["col"], lw=lw, ms=ms, alpha=a, zorder=(4 if f["best"] else 3))
                     if len(fq) >= 3:
                         _xf = [x[min(int(j * (len(x) - 1) / (len(fq) - 1)), len(x) - 1)] for j in range(len(fq))]
-                        axF.plot(_xf, fq, "--s", color=col, lw=(1.9 if best else 1.4), ms=4, alpha=(1.0 if best else 0.85))
-                axE.axhline(0.0, ls=":", lw=1.0, color=_C["edge"], alpha=0.5)
-                axE.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
-                axE.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product", fontsize=_fa)
-                axE.legend(loc="upper left", fontsize=_ft, frameon=False)
-                axE.invert_xaxis(); clean_spines(axE)
-                axF.axhline(CFG.QSITE_F_CHARGE_CLEAVED, ls="--", lw=1.3, color=_box_col)
-                axF.axhspan(-1.05, CFG.QSITE_F_CHARGE_CLEAVED, color=_box_col, alpha=0.10, zorder=0)
-                axF.annotate(f"cleaved (F ≤ {CFG.QSITE_F_CHARGE_CLEAVED:+.1f} e)", xy=(0.015, 0.06),
-                             xycoords="axes fraction", fontsize=_ft, color=_box_col, fontweight="bold")
-                axF.set_ylabel("departing-F Mulliken charge", fontsize=_fa)
-                axF.set_xlabel("Nu(O)···C distance (Å)", fontsize=_fa)
-                axF.set_ylim(-0.72, -0.28); axF.invert_xaxis(); clean_spines(axF)
+                        axF.plot(_xf, fq, "--s", color=f["col"], lw=(1.9 if f["best"] else 1.4), ms=4, alpha=a)
+                axE.axhline(0.0, ls=":", lw=1.0, color=_mute, alpha=0.5)
+                axE.set_ylabel("Relative QM/MM energy\n(kcal/mol)", fontsize=_fa)
+                axF.axhline(CFG.QSITE_F_CHARGE_CLEAVED, ls="--", lw=1.3, color=_box)
+                axF.axhspan(-1.05, CFG.QSITE_F_CHARGE_CLEAVED, color=_box, alpha=0.10, zorder=0)
+                axF.annotate(f"cleaved (F ≤ {CFG.QSITE_F_CHARGE_CLEAVED:+.1f} e)", xy=(0.015, 0.08),
+                             xycoords="axes fraction", fontsize=_ft, color=_box, fontweight="bold")
+                axF.set_ylabel("departing-F\nMulliken charge", fontsize=_fa); axF.set_ylim(-0.72, -0.28)
+                axF.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å),  reactant → product", fontsize=_fa)
+                axE.invert_xaxis()                             # sharex propagates; invert ONCE (3.5 -> 1.5)
+                for _a in (axE, axF):
+                    clean_spines(_a)
+                    _a.set_axisbelow(True)
+                    _a.grid(True, axis="both", color=CFG.VIS_GRID_COLOUR, lw=CFG.VIS_GRID_LINEWIDTH,
+                            alpha=0.55, zorder=0)             # both horizontal and vertical gridlines
+                plt.setp(axE.get_xticklabels(), visible=False)   # one shared x-axis, labels on axF
+                _lh = [Line2D([0], [0], color=f["col"], lw=(2.4 if f["best"] else 1.6), marker="s", ms=4,
+                              label=f"F{f['k']} · {_lt(f)}") for f in _fr]
+                axF.legend(handles=_lh, loc="upper right", fontsize=_ft - 1.5, frameon=True, framealpha=0.9,
+                           edgecolor="#C8C8C8", handlelength=1.5, borderpad=0.45, ncol=len(_lh),
+                           columnspacing=1.0, handletextpad=0.4)
 
-                # ── Verdict card (bordered table; no title on the figure - the card carries identity) ──
-                _ncl = sum(1 for p in _P if p.get("cleaved"))
-                _mono = any(p.get("monotonic") for p in _P)
-                _ens_bar = _qsite_ensemble_barrier([p.get("QSite_Barrier_kcal", np.nan) for p in _P])
-                _derxn = float(np.mean([p["energy_kcal"][-1] for p in _P]))
-                _cleaved = _ncl > 0
-                _accent = _box_col if _cleaved else _intact_col
-                _head = f"C-F CLEAVED  ({_ncl}/{len(_P)} frames)" if _cleaved else "C-F INTACT"
-                _rows = [(f"{ligand or 'ligand'} C-F", ("control" if _ctrl else "lead"), _C["edge"], False)]
-                _dew = [f"F{k+1}" for k, p in enumerate(_P) if p.get("water") == 0 and not p.get("cleaved")]
-                if _dew:
-                    _rows.append((f"{','.join(_dew)} dewetted (0 water)", "", _intact_col, False))
-                    _rows.append(("F artifact-intact", "", _intact_col, False))
-                _clf = [f"{p.get('F_Charge_Product'):.2f}" for p in _P if p.get("cleaved")]
-                if _clf:
-                    _rows.append(("cleaved F", f"{' / '.join(_clf)} e", _box_col, True))
-                _rows.append(("ΔE‡ (ensemble)", f"{_ens_bar:.1f} kcal/mol", _C["edge"], False))
-                _rows.append((f"ΔE_rxn ({'endpt' if _mono else 'TS'})", f"{_derxn:+.1f} kcal/mol", _C["edge"], False))
-                _rows.append(("scan points",
-                              f"{_P[0].get('QSite_NScan', len(_P[0]['energy_kcal']))} "
-                              f"({getattr(CFG,'QSITE_FUNCTIONAL','b3lyp').upper()}/{getattr(CFG,'QSITE_SCAN_BASIS','6-31G**')})",
-                              _C["edge"], False))
-                _qsite_verdict_card(axV, _head, _accent, _rows)
+                # inset table (top-left of the PES panel): per-frame barrier / dErxn / F-charge / verdict + ensemble
+                _hdr = ([("QM/MM metric", _ink, "")]
+                        + [(f"F{f['k']}", f["col"], _lt(f)) for f in _fr]
+                        + [("ensemble", _acc, f"{_ncl}/{_n} cleave")])
+                _rows = [
+                    ("ΔE‡ barrier (kcal/mol)", [f"{f['bar']:.1f}" for f in _fr] + [f"{_ebar:.1f}"]),
+                    ("ΔE_rxn (kcal/mol)",      [f"{f['der']:+.1f}" for f in _fr] + [f"{_eder:+.1f}"]),
+                    ("departing-F  R→P (e)",   [f"{f['fr']:.2f}→{f['fp']:.2f}" for f in _fr] + ["-"]),
+                    ("C-F verdict",            [("cleaved" if f["cl"] else ("dewetted" if f["wat"] == 0 else "intact")) for f in _fr]
+                                               + [f"CLEAVED {_ncl}/{_n}"]),
+                ]
+                _nc = len(_hdr); _x0, _x1 = 0.012, 0.585; _lw0 = (_x1 - _x0) * 0.345
+                _xed = [_x0] + list(np.linspace(_x0 + _lw0, _x1, _nc))
+                _xc = [(_xed[i] + _xed[i + 1]) / 2 for i in range(_nc)]
+                _th, _hr, _dr = 0.060, 0.085, 0.060; _nR = len(_rows)
+                _Y1 = 0.985; _Y0 = _Y1 - (_th + _hr + _nR * _dr); _yT = _Y1 - _th; _yH = _yT - _hr
+                _T = axE.transAxes
+                _sub = str(ligand or "ligand")
+                axE.add_patch(Rectangle((_x0, _Y0), _x1 - _x0, _Y1 - _Y0, transform=_T, fc="white",
+                                        ec="#AEAEAE", lw=1.0, alpha=0.97, zorder=20))
+                axE.add_patch(Rectangle((_x0, _yT), _x1 - _x0, _th, transform=_T, fc=_acc, ec="none",
+                                        alpha=0.96, zorder=21))
+                axE.text((_x0 + _x1) / 2, _yT + _th / 2,
+                         f"C-F {'CLEAVED' if _ncl else 'INTACT'}  ({_ncl}/{_n} frames)   ·   {_sub}",
+                         transform=_T, ha="center", va="center", color="white", fontweight="bold",
+                         fontsize=_ft + 0.5, zorder=25)
+                axE.add_patch(Rectangle((_x0, _yH), _x1 - _x0, _hr, transform=_T, fc="#EEF1F0", ec="none", zorder=21))
+                for j, (lab, c, tag) in enumerate(_hdr):
+                    axE.text(_xc[j], _yH + _hr / 2 + (0.017 if tag else 0), lab, transform=_T, ha="center",
+                             va="center", color=c, fontweight="bold", fontsize=_ft - 0.5, zorder=25)
+                    if tag:
+                        axE.text(_xc[j], _yH + _hr / 2 - 0.023, tag, transform=_T, ha="center", va="center",
+                                 color=_mute, fontsize=_ft - 3.0, zorder=25)
+                for ri, (metric, vals) in enumerate(_rows):
+                    _yb = _yH - ri * _dr
+                    if ri % 2 == 1:
+                        axE.add_patch(Rectangle((_x0, _yb - _dr), _x1 - _x0, _dr, transform=_T, fc="#F6F6F6", ec="none", zorder=20))
+                    _yc = _yb - _dr / 2
+                    axE.text(_xed[0] + 0.007, _yc, metric, transform=_T, ha="left", va="center", color=_ink,
+                             fontsize=_ft - 1.5, fontweight="bold", zorder=25)
+                    for j, v in enumerate(vals):
+                        axE.text(_xc[j + 1], _yc, v, transform=_T, ha="center", va="center", color=_hdr[j + 1][1],
+                                 fontsize=_ft - 1.5, fontweight=("bold" if j == _n else "normal"), zorder=25)
+                for _xe in _xed[1:-1]:
+                    axE.plot([_xe, _xe], [_Y0, _yH + _hr], transform=_T, color="#DcDcDc", lw=0.6, zorder=22)
+                for _kk in range(_nR + 1):
+                    axE.plot([_x0, _x1], [_yH - _kk * _dr, _yH - _kk * _dr], transform=_T, color="#DcDcDc", lw=0.5, zorder=22)
+                if any(f["wat"] == 0 and not f["cl"] for f in _fr):
+                    axE.text(_x0, _Y0 - 0.028,
+                             "F1 dewetted (0 QM water): exothermic well is a solvation artifact; rank verdict = cleaved-frame fact",
+                             transform=_T, ha="left", va="top", color=_mute, fontsize=_ft - 3.2, style="italic", zorder=25)
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
                     fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
             finally:
                 plt.close(fig)
-        console_info(f"    QSite ensemble figure saved  : {Path(deflx_fig_name(out_path)).name}")
+        console_info(f"    QSite reaction figure saved  : {Path(deflx_fig_name(out_path)).name}")
     except Exception as _e:
-        console_info(f"    [!] QSite ensemble plot failed ({_e}).")
+        console_info(f"    [!] QSite reaction plot failed ({_e}).")
+
+
+def _mech_smiles_for(run_dir: Path, ligand: str) -> "str | None":
+    """The substrate SMILES from the Step-02 input library, matched on the ligand name that the job
+    name carries (the '<index>_<Name>' entries in D_INP_PFAS-27_Ligands.smi). None when unavailable."""
+    try:
+        smi = run_dir / "1_Boltz2_Production" / "1_Input_Data" / "D_INP_PFAS-27_Ligands.smi"
+        if not smi.is_file() or not ligand:
+            return None
+        want = str(ligand).strip().lower()
+        for ln in smi.read_text(errors="ignore").splitlines():
+            _p = ln.split()
+            if len(_p) >= 2 and _p[1].split("_", 1)[-1].strip().lower() == want:
+                return _p[0]
+    except Exception:
+        pass
+    return None
+
+
+def _mech_ligand_geom(smiles: str, target_deg: float = -16.0, blen: float = 1.3):
+    """A real 2D layout of the substrate (RDKit), transformed so the alpha carbon is at the origin
+    and the scissile C-F bond points toward target_deg - the departure direction of the drawn scene.
+    Returns atom positions, element symbols, bonds, and the alpha-C / scissile-F / carboxyl-C indices."""
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    mol = Chem.MolFromSmiles(smiles)
+    AllChem.Compute2DCoords(mol); conf = mol.GetConformer()
+    pos = {a.GetIdx(): np.array([conf.GetAtomPosition(a.GetIdx()).x, conf.GetAtomPosition(a.GetIdx()).y])
+           for a in mol.GetAtoms()}
+    elem = {a.GetIdx(): a.GetSymbol() for a in mol.GetAtoms()}
+    carbC = next(a.GetIdx() for a in mol.GetAtoms()
+                 if a.GetSymbol() == "C" and sum(nb.GetSymbol() == "O" for nb in a.GetNeighbors()) >= 2)
+    aC = sF = None
+    for a in mol.GetAtoms():
+        if a.GetSymbol() == "C" and a.GetIdx() != carbC:
+            fn = [nb.GetIdx() for nb in a.GetNeighbors() if nb.GetSymbol() == "F"]
+            if fn:
+                aC, sF = a.GetIdx(), fn[0]
+    if aC is None or sF is None:
+        return None
+    P0 = pos[aC]; v = pos[sF] - P0; s = blen / np.linalg.norm(v)
+    rot = math.radians(target_deg) - math.atan2(v[1], v[0])
+    R = np.array([[math.cos(rot), -math.sin(rot)], [math.sin(rot), math.cos(rot)]])
+    posT = {i: R @ ((p - P0) * s) for i, p in pos.items()}
+    if posT[carbC][1] < 0:
+        posT = {i: np.array([p[0], -p[1]]) for i, p in posT.items()}
+        v2 = posT[sF]; rot2 = math.radians(target_deg) - math.atan2(v2[1], v2[0])
+        R2 = np.array([[math.cos(rot2), -math.sin(rot2)], [math.sin(rot2), math.cos(rot2)]])
+        posT = {i: R2 @ p for i, p in posT.items()}
+    bonds = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx(), b.GetBondTypeAsDouble()) for b in mol.GetBonds()]
+    return posT, elem, bonds, aC, sF, carbC
+
+
+def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Path,
+                                  rank, job_name: str = "", ligand: str = "") -> None:
+    """One integrated SN2 defluorination reaction figure for a rank: the substrate drawn as a real
+    molecule with the nucleophilic backside attack, Walden inversion and C-F scission; all eight
+    machinery residues placed by role (nucleophile, base/acid dyad, fluoride cradle, carboxylate
+    clamps) each carrying its global->NAC distance from this run; and a dashboard of three value
+    tables (QM/MM outcome, catalytic geometry, WaterMap/MD) with a verdict header and a role legend.
+    Residue roles use the CFG active-site palette; colour layers (chemical action / role action /
+    distance / ligand elements) are disjoint. Residue IDs are the 3R3U reference. The mechanism prose
+    and per-frame verdicts are written to a companion description file, not drawn on the figure.
+    Degrades quietly (logs and returns) when RDKit, the SMILES, or a required input is unavailable."""
+    try:
+        import textwrap as _tw
+        _smiles = _mech_smiles_for(run_dir, ligand)
+        _geom = _mech_ligand_geom(_smiles) if _smiles else None
+        if _geom is None:
+            console_info("    [!] Reaction-mechanism figure skipped (no ligand SMILES / RDKit).")
+            return
+        posT, elem, bonds, aC, sF, cC = _geom
+
+        _rc = CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR
+        ROLE = {"nucleophile": _rc["Nucleophile"], "triad": _rc["Acid/base catalysis"],
+                "cradle": _rc["Fluoride pocket"], "clamp": _rc["Carboxylate clamp"]}
+        _M = CFG.MECHANISM_FIG_COLOUR
+        ACT_CHEM, ACT_ROLE, DIST = _M["chem"], _M["role"], _M["dist"]
+        EL = {"C": _M["elem_C"], "O": _M["elem_O"], "F": _M["elem_F"]}
+        INK, MUTE = CFG.VIS_INK["near_black"], CFG.VIS_INK["muted"]
+        V_CL, V_IN, WATc = CFG.QSITE_CLEAVED_BOX, CFG.QSITE_FRAME_INTACT_COLOUR, _M["water"]
+        ENG = float(getattr(CFG, "THRESHOLD_SALT_BRIDGE", 4.5))
+        # residue key -> (role text, id label, role group, NAC-table column)
+        _ref = CFG.REF_ACTIVE_SITE_MAP
+        def _rid(k):
+            return f"{_ref[k]['res'].title()}{_ref[k]['id']}"
+        RES = {"Nuc": ("nucleophile", _rid("Nuc"), "nucleophile"),
+               "Base": ("general base", _rid("Base"), "triad"),
+               "Acid": ("acid / orienter", _rid("Acid"), "triad"),
+               "StabH": ("F cradle", _rid("Stab_H"), "cradle"),
+               "StabW": ("F cradle", _rid("Stab_W"), "cradle"),
+               "StabY": ("F cradle", _rid("Stab_Y"), "cradle"),
+               "Clamp1": ("COO- clamp", _rid("Carb1"), "clamp"),
+               "Clamp2": ("COO- clamp", _rid("Carb2"), "clamp")}
+
+        st = json.loads((job_out_dir / "01_MD_Stats.json").read_text())
+        nac = pd.read_csv(job_out_dir / "02_NAC_Data.csv")
+        m = (nac["Catalytic_Pass"] if "Catalytic_Pass" in nac else nac["NAC_Geom_Pass"]).astype(bool)
+        d = {k: (float(nac[f"DT_{k}_LigC_A"].mean()), float(nac.loc[m, f"DT_{k}_LigC_A"].mean())) for k in RES}
+        tri = (float(nac["DT_Nuc_Base_A"].mean()), float(nac["DT_Base_Acid_A"].mean()))
+        qs = pd.read_csv(job_out_dir / "11_QSite_Scan_Data.csv"); fr = qs.drop_duplicates("Frame_Index").copy()
+        tot = int(st.get("Total_Frames", len(nac))); sims = float(st.get("Sim_Total_ns", 1000.0))
+        fr["ns"] = fr["Frame_Index"] / max(tot, 1) * sims
+        q = {"barrier": float(qs["QSite_Barrier_Ensemble_kcal"].iloc[0]),
+             "derxn": float(qs["QSite_dErxn_Ensemble_kcal"].iloc[0]),
+             "fq": float(fr["Frame_F_Charge_Product"].min()),
+             "ncl": int(fr["Frame_Cleaved"].sum()), "n": len(fr),
+             "isdef": bool(qs["Is_Defluorinating"].iloc[0]),
+             "frames": sorted([(row.ns, bool(row.Frame_Cleaved), float(row.Frame_Barrier_kcal)) for row in fr.itertuples()])}
+        ang = st.get("MD_Avg_NAC_Angle_Deg", np.nan)
+
+        def _split(rid):
+            mt = re.match(r"([A-Za-z]+)[-]?(\d+)", rid)
+            return (mt.group(1).upper(), mt.group(2)) if mt else (rid.upper(), "")
+
+        with PLOT_LOCK:
+            fig, ax = plt.subplots(figsize=(12.7, 9.35))
+            try:
+                ax.set_xlim(-6.8, 6.95); ax.set_ylim(-4.20, 6.0); ax.set_aspect("equal"); ax.axis("off")
+                DY = 2.9
+                pos = {i: p + np.array([0.2, DY]) for i, p in posT.items()}
+                Ca, Fp, COO = pos[aC], pos[sF], pos[cC]
+                Nud = -(Fp - Ca); Nud = Nud / np.linalg.norm(Nud)
+                Fdir = (Fp - Ca) / np.linalg.norm(Fp - Ca); Fd = Fp + Fdir * 1.45
+
+                for i, j, bt in bonds:
+                    pi, pj = pos[i], pos[j]
+                    ax.plot([pi[0], pj[0]], [pi[1], pj[1]], color=EL["C"], lw=2.6, zorder=3, solid_capstyle="round")
+                    if bt == 2.0:
+                        dv = pj - pi; nrm = np.array([-dv[1], dv[0]]); nrm = nrm / np.linalg.norm(nrm) * 0.09
+                        ax.plot([pi[0] + nrm[0], pj[0] + nrm[0]], [pi[1] + nrm[1], pj[1] + nrm[1]], color=EL["C"], lw=2.0, zorder=3)
+                for i, p in pos.items():
+                    sym = elem[i]
+                    if sym == "C":
+                        continue
+                    ax.add_patch(Circle(p, 0.20, fc="white", ec="none", zorder=4))
+                    ax.text(p[0], p[1], sym, color=EL.get(sym, INK), fontweight="bold", fontsize=11, ha="center", va="center", zorder=5)
+                ax.text(Ca[0] + 0.12, Ca[1] - 0.30, r"C$\alpha$", color=EL["C"], fontweight="bold", fontsize=10, ha="left", va="top", zorder=5)
+
+                nu0 = Ca + Nud * 2.95
+                ax.add_patch(FancyArrowPatch(nu0, Ca + Nud * .85, arrowstyle="-|>", mutation_scale=22, lw=2.8, color=ACT_CHEM, zorder=4))
+                ax.add_patch(FancyArrowPatch(Fp + Fdir * .42, Fd, arrowstyle="-|>", mutation_scale=19, lw=2.4, color=ACT_CHEM, ls="--", zorder=4))
+                ax.text(Ca[0] + Nud[0] * 1.55 - 0.1, Ca[1] + Nud[1] * 1.55 + 0.5, "nucleophilic\nbackside attack", fontsize=8, color=ACT_CHEM, ha="center", va="bottom", fontweight="bold")
+                ax.text(Fd[0] + 0.15, Fd[1] - 0.32, "C-F breaks,\nF$^-$ departs", fontsize=7.8, color=EL["F"], ha="center", va="top")
+                _geo = _M["geom"]
+                _t1 = math.degrees(math.atan2(*(Fp - Ca)[::-1])); _t2 = math.degrees(math.atan2(*(nu0 - Ca)[::-1]))
+                ax.add_patch(Arc(Ca, 1.9, 1.9, angle=0, theta1=_t1, theta2=_t2, color=_geo, lw=1.4))
+                _bis = math.radians((_t1 + _t2) / 2)     # arc bisector - seat the label inside the arc
+                ax.text(Ca[0] + math.cos(_bis) * 0.60, Ca[1] + math.sin(_bis) * 0.60,
+                        f"S$_N$2\n{ang:.0f}$^\\circ$ Walden\ninversion", fontsize=7.4, ha="center", va="center",
+                        color=_geo, style="italic", fontweight="bold", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.22", fc="white", ec="none", alpha=0.72))
+
+                def _node(xy, key, anchor, lbl="above", toff=(0, 0), show_dist=True):
+                    role, rid, grp = RES[key]; col = ROLE[grp]; x, y = xy; r = 0.50
+                    g, nn = d[key]; eng = nn <= ENG
+                    ax.plot([x, anchor[0]], [y, anchor[1]], ls=(0, (3, 2)), lw=1.0, color=DIST, alpha=.85, zorder=2)
+                    if show_dist:
+                        mx, my = (x + anchor[0]) / 2 + toff[0], (y + anchor[1]) / 2 + toff[1]
+                        tk = "↓" if nn < g - 0.02 else ("↑" if nn > g + 0.02 else "=")
+                        ax.text(mx, my, f"{g:.1f}→{nn:.1f} {tk}", fontsize=6.9, color=DIST, ha="center", va="center", zorder=11,
+                                bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=.9))
+                    ax.add_patch(Circle(xy, r, fc=col, ec="white", lw=1.6, zorder=5, alpha=.97 if eng else .5))
+                    code, num = _split(rid)
+                    ax.text(x, y + 0.13, code, ha="center", va="center", color="white", fontweight="bold", fontsize=8.0, zorder=12)
+                    ax.text(x, y - 0.15, num, ha="center", va="center", color="white", fontsize=7.6, zorder=12)
+                    yr = y + r + 0.13 if lbl == "above" else y - r - 0.13
+                    ax.text(x, yr, role, fontsize=6.9, ha="center", va="bottom" if lbl == "above" else "top", color=MUTE, zorder=12)
+
+                nucn = Ca + Nud * 3.0
+                _node(tuple(nucn), "Nuc", Ca, "above", toff=(0.35, -0.5))
+                _node((-4.6, 1.7), "Base", nucn, "below", toff=(-0.55, 0.05))
+                _node((-5.7, 0.55), "Acid", (-4.6, 1.7), "below", show_dist=False)
+                _node((4.4, 3.9), "StabH", Fd, "above")
+                _node((5.3, 2.1), "StabW", Fd, "above")
+                _node((4.2, 0.6), "StabY", Fd, "below")
+                _node((-2.3, 5.2), "Clamp1", COO, "above")
+                _node((1.7, 5.3), "Clamp2", COO, "above")
+
+                # Asp-His general-base dyad (His280 activates the hydrolytic WATER for the glycolyl-Asp110
+                # ester hydrolysis AFTER C-F cleavage; it does NOT activate the SN2 nucleophile).
+                ax.add_patch(FancyArrowPatch((-5.4, 0.85), (-4.75, 1.4), arrowstyle="-|>", mutation_scale=10, lw=1.4, color=ACT_ROLE, alpha=.85, zorder=3))
+                ax.text(-5.5, 1.35, "orients", fontsize=6.8, color=ACT_ROLE, ha="center", va="center", rotation=42)
+                for rp in ((4.4, 3.9), (5.3, 2.1), (4.2, 0.6)):
+                    ax.add_patch(FancyArrowPatch(rp, tuple(Fd + Fdir * 0.3), arrowstyle="-|>", mutation_scale=8, lw=1.1, color=ACT_ROLE, alpha=.7, zorder=2, connectionstyle="arc3,rad=0.12"))
+                ax.text(5.9, 1.25, "stabilise\ndeparting F$^-$", fontsize=6.8, color=ACT_ROLE, ha="center", va="center")
+                for cp in ((-2.3, 5.2), (1.7, 5.3)):
+                    ax.add_patch(FancyArrowPatch(cp, tuple(COO + np.array([0, 0.25])), arrowstyle="-|>", mutation_scale=8, lw=1.3, color=ACT_ROLE, alpha=.7, zorder=2, connectionstyle="arc3,rad=0.1"))
+                ax.text(-0.4, 5.9, "clamps hold the carboxylate", fontsize=7.0, color=ACT_ROLE, ha="center", va="center")
+
+                neng = sum(1 for k in RES if d[k][1] <= ENG)
+                OUTc, GEOc = EL["F"], _M["geom"]
+                nu = int(st.get("WM_N_Unstable", 0)); nsit = int(st.get("WM_N_Sites", 0))
+                bx, by, bw = -6.55, -0.35, 13.05; hh = 0.46; hcol = V_CL if q["ncl"] else V_IN
+                frames_short = "·".join(f"{ns:.0f}" for ns, cl, ba in q["frames"]) + " ns"
+                tables = [("QM/MM  QM-region", OUTc,
+                           [("ΔE‡ barrier", f"{q['barrier']:.2f} kcal/mol", OUTc), ("ΔE_rxn", f"{q['derxn']:+.2f} kcal/mol", OUTc),
+                            ("departing-F charge", f"{q['fq']:.2f} e", OUTc), ("Is_Defluorinating", "yes" if q["isdef"] else "no (gate)", OUTc)]),
+                          ("catalytic geometry", GEOc,
+                           [("SN2 attack pk/NAC", f"{st.get('SN2_Attack_Angle'):.0f}/{ang:.0f} deg", GEOc), ("triad Nu-B/B-Ac", f"{tri[0]:.2f}/{tri[1]:.2f} A", GEOc),
+                            ("residues engaged", f"{neng}/8 (<{ENG:.1f}A)", GEOc), ("MM-GBSA ΔG_bind", f"{st.get('MMGBSA_dG_NAC_Mean_kcal'):+.2f} kcal/mol", GEOc)]),
+                          ("WaterMap  ·  MD", WATc,
+                           [("displaceable H2O", f"{nu}/{nsit} sites", WATc), ("mean site ΔG", f"{st.get('WM_Mean_dG'):.2f} kcal/mol", WATc),
+                            ("sampled frames", frames_short, ACT_CHEM), ("reactive NAC dwell", f"{st.get('NAC_Total_ns'):.2f} ns", ACT_CHEM)])]
+                cwn = 0.083; hth = 0.34; rowh = 0.30; tgrid = "#C6C6C6"; tline = "#E4E4E4"; tgap = 0.28
+                geom = []
+                for title, hc, rws in tables:
+                    labw = max(len(r[0]) for r in rws) * cwn + 0.26
+                    valw = max(len(r[1]) for r in rws) * cwn + 0.24
+                    geom.append((labw, max(labw + valw, len(title) * 0.093 + 0.4)))
+                Ht = hth + 4 * rowh; H = hh + 0.12 + Ht + 0.14
+                ax.add_patch(FancyBboxPatch((bx, by - H), bw, H, boxstyle="round,pad=0.02,rounding_size=0.12", fc="none", ec=hcol, lw=1.8, zorder=5))
+                ax.add_patch(FancyBboxPatch((bx, by - hh), bw, hh, boxstyle="round,pad=0.02,rounding_size=0.12", fc=hcol, ec=hcol, lw=0, alpha=0.94, zorder=5))
+                ax.text(bx + bw / 2, by - hh / 2, f"C-F {'CLEAVED' if q['ncl'] else 'INTACT'}  ({q['ncl']}/{q['n']} frames)    ·    {ligand}",
+                        color="white", fontweight="bold", fontsize=10.3, ha="center", va="center", zorder=6)
+                ytab = by - hh - 0.12; x = bx + 0.22
+                for (title, hc, rws), (labw, wt) in zip(tables, geom):
+                    nn = len(rws)
+                    ax.add_patch(Rectangle((x, ytab - Ht), wt, Ht, fill=False, ec=tgrid, lw=1.0, zorder=6))
+                    ax.add_patch(Rectangle((x, ytab - hth), wt, hth, fc=hc, ec=hc, lw=0, alpha=0.93, zorder=5))
+                    ax.text(x + wt / 2, ytab - hth / 2, title, color="white", fontweight="bold", fontsize=7.2, ha="center", va="center", zorder=6)
+                    ax.plot([x + labw, x + labw], [ytab - hth, ytab - Ht], color=tline, lw=0.7, zorder=6)
+                    yy = ytab - hth
+                    for i, (lab, val, rc) in enumerate(rws):
+                        yc = yy - rowh / 2
+                        ax.text(x + 0.12, yc, lab, color=rc, fontsize=7.0, ha="left", va="center", zorder=6)
+                        ax.text(x + labw + 0.12, yc, val, color=rc, fontsize=7.0, ha="left", va="center", fontweight="bold", zorder=6)
+                        yy -= rowh
+                        if i < nn - 1:
+                            ax.plot([x, x + wt], [yy, yy], color=tline, lw=0.6, zorder=6)
+                    x += wt + tgap
+                tabw = sum(w for _, w in geom) + 2 * tgap
+                items = [("L", ACT_CHEM, "chemical action"), ("L", ACT_ROLE, "role action"), ("D", DIST, "distance (global->NAC)"),
+                         ("O", ROLE["nucleophile"], "nucleophile (Asp)"), ("O", ROLE["triad"], "triad (acid/base)"),
+                         ("O", ROLE["cradle"], "F cradle (His/Trp/Tyr)"), ("O", ROLE["clamp"], "COO- clamp (Arg)")]
+                lx = bx + tabw + 0.55; lrows = hth + 4 * rowh; lstep = lrows / len(items); ly = ytab - lstep / 2
+                for kind, col, lab in items:
+                    if kind in ("L", "D"):
+                        ax.plot([lx, lx + 0.30], [ly, ly], color=col, lw=1.9, ls="--" if kind == "D" else "-", zorder=6); xe = lx + 0.30
+                    else:
+                        ax.add_patch(Circle((lx + 0.09, ly), 0.09, fc=col, ec="white", lw=0.8, zorder=6)); xe = lx + 0.18
+                    ax.text(xe + 0.12, ly, lab, fontsize=7.6, va="center", ha="left", color=INK, zorder=6)
+                    ly -= lstep
+                ax.set_ylim(by - H - 0.14, 6.0)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+            finally:
+                plt.close(fig)
+
+        _verdict = "CLEAVED" if q["ncl"] else "INTACT"
+        _mech = (f"FAcD SN2 on {ligand}: Asp110 makes the backside attack on the alpha carbon (Walden inversion) "
+                 f"and breaks the C-F; {q['ncl']} of {q['n']} sampled QM/MM frames ionise the departing fluoride "
+                 f"(rank {_verdict}; ensemble barrier dE = {q['barrier']:.2f} kcal/mol, departing-F to {q['fq']:.2f} e). "
+                 f"His155/Trp156/Tyr219 cage the fluoride, Arg111/Arg114 clamp the substrate carboxylate, and the "
+                 f"Asp134-His280 dyad activates the hydrolytic water for the post-cleavage ester hydrolysis. "
+                 f"Residue IDs = 3R3U reference; every value is from this run.")
+        _fv = " · ".join(f"{ns:.0f} ns {'cleave' if cl else 'intact'}" for ns, cl, ba in q["frames"])
+        console_info(f"    Reaction-mechanism figure saved: {Path(deflx_fig_name(out_path)).name}")
+        console_info(f"      Rank {rank} · {ligand} · {st.get('degrader_tier')}  |  "
+                     f"C-F {'CLEAVED' if q['ncl'] else 'INTACT'} ({q['ncl']}/{q['n']} frames)  |  frames: {_fv}")
+        for _ml in _tw.wrap(_mech, width=110):
+            console_info(f"      {_ml}")
+    except Exception as _e:
+        console_info(f"    [!] Reaction-mechanism figure skipped ({_e}).")
+
+
+def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: str = "") -> None:
+    """The MD reactive-sampling timeline: the SN2 attack angle over the whole trajectory (competent
+    frames highlighted, mean NAC angle marked) with a vertical line at each frame QSite scored,
+    coloured by that frame's C-F verdict (cleaves / stays intact) and annotated with its ns and
+    barrier. This is the one view that links MD time to the QM/MM sampling - which pose fired and when
+    the C-F broke - and no other pipeline figure carries it. No figure title."""
+    try:
+        _box = CFG.QSITE_CLEAVED_BOX; _intact = CFG.QSITE_FRAME_INTACT_COLOUR
+        _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
+        _mute = CFG.VIS_INK["muted"]; _accent = CFG.VIS_ACCENT["magenta"]
+        _compet = "#9CC79C"
+        st = json.loads((job_out_dir / "01_MD_Stats.json").read_text())
+        nac = pd.read_csv(job_out_dir / "02_NAC_Data.csv")
+        qs = pd.read_csv(job_out_dir / "11_QSite_Scan_Data.csv").drop_duplicates("Frame_Index")
+        tot = int(st.get("Total_Frames", len(nac))); sims = float(st.get("Sim_Total_ns", 1000.0))
+        t = nac["Frame"].to_numpy() / max(tot, 1) * sims
+        ang = nac["NAC_Angle_Deg"].to_numpy()
+        with PLOT_LOCK:
+            fig, ax = plt.subplots(figsize=(12.6, 5.4))
+            try:
+                step = max(1, len(t) // 6000)
+                ax.plot(t[::step], ang[::step], color=_mute, lw=0.5, alpha=0.9, rasterized=True, zorder=1)
+                if "Catalytic_Pass" in nac.columns:
+                    mk = nac["Catalytic_Pass"].to_numpy().astype(bool)
+                    ax.scatter(t[mk], ang[mk], s=3, color=_compet, alpha=0.30, linewidths=0, rasterized=True, zorder=2)
+                ax.axhline(st.get("MD_Avg_NAC_Angle_Deg", np.nan), color=_accent, ls="--", lw=1.1, zorder=3)
+                f2ns = lambda f: f / max(tot, 1) * sims
+                qf = qs.sort_values("Frame_Index")
+                for i, (_, row) in enumerate(qf.iterrows()):
+                    xn = f2ns(row["Frame_Index"]); col = _box if bool(row["Frame_Cleaved"]) else _intact
+                    ax.axvline(xn, color=col, lw=1.6, alpha=0.9, zorder=4)
+                    yt = 183 if i % 2 == 0 else 187        # callouts in the 180->190 headroom, staggered
+                    ax.annotate(f"QSite {xn:.0f} ns · {'cleaves' if row['Frame_Cleaved'] else 'intact'}\n"
+                                f"ΔE 'barrier' {float(row['Frame_Barrier_kcal']):.1f} kcal",
+                                xy=(xn, 179), xytext=(xn - sims * 0.012, yt), ha="right", va="bottom",
+                                fontsize=_ft - 2.5, color=col, annotation_clip=False,
+                                arrowprops=dict(arrowstyle="->", color=col, lw=0.9))
+                ax.set_xlabel("simulation time  (ns)", fontsize=_fa)
+                ax.set_ylabel("SN2 attack angle  (deg)", fontsize=_fa)
+                ax.set_ylim(80, 190)                       # spine to 190; nothing catalytic below 80
+                ax.set_yticks(np.arange(80, 181, 10))      # ticks labelled to 180 (10° steps), 180->190 is headroom
+                ax.set_xlim(0, sims); ax.margins(x=0)      # start the trajectory axis at 0 ns, no gap
+                _lh = [Line2D([0], [0], marker="o", ls="", mfc=_compet, mec="none", ms=7, label="catalytically competent frame"),
+                       Line2D([0], [0], color=_accent, ls="--", lw=1.4, label=f"mean NAC angle {st.get('MD_Avg_NAC_Angle_Deg'):.1f}°"),
+                       Line2D([0], [0], color=_box, lw=2.2, label="QM/MM-scored frame - C-F cleaves"),
+                       Line2D([0], [0], color=_intact, lw=2.2, label="QM/MM-scored frame - stays intact")]
+                ax.legend(handles=_lh, loc="lower left", frameon=True, fontsize=_ft - 1.5, ncol=4,
+                          columnspacing=1.0, handletextpad=0.4, borderpad=0.5)
+                clean_spines(ax)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+            finally:
+                plt.close(fig)
+        console_info(f"    MD/QSite timeline figure saved : {Path(deflx_fig_name(out_path)).name}")
+    except Exception as _e:
+        console_info(f"    [!] MD/QSite timeline figure skipped ({_e}).")
 
 
 def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
@@ -4923,15 +5279,10 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             # Per-frame figure = that frame's own verdict (honest per frame: a dewetted frame is intact).
             plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.svg", job_name, rank, _pr)
         if _profs:
-            # Rank-level 08 (best frame) uses the RANK verdict (cleaved N/M) so it agrees with the 09
-            # ensemble overview even when the best-preorg frame it plots is a dewetted-intact outlier.
-            _ncl_all = sum(1 for p in _profs if p.get("cleaved"))
-            _best_dewet = (_profs[0].get("water") == 0) and not _profs[0].get("cleaved")
-            plot_qsite_reaction_profile(
-                job_out_dir / "08_QSite_BestFrame_Reaction_Profile.svg", job_name, rank, _profs[0],
-                rank_verdict={"cleaved": _ncl_all > 0, "n_cleaved": _ncl_all,
-                              "n_total": len(_profs), "best_dewetted": _best_dewet})
-            plot_qsite_ensemble_profiles(job_out_dir / "09_QSite_Ensemble_Profiles.svg", rank, _profs,
+            # 08 = the QM/MM reaction figure: every sampled frame overlaid (best first) with the
+            # per-frame + ensemble table. The verdict is the rank fact (cleaved N/M), carried on the
+            # table header, so a dewetted best-preorg frame never reads as the rank outcome.
+            plot_qsite_ensemble_profiles(job_out_dir / "08_QSite_Reaction_Profile.svg", rank, _profs,
                                          job_name=job_name, ligand=ligand)
             # The verdict is computed here from this job's own metrics (not read back from a stats key
             # the master only fills later), so the per-frame scan CSV carries the SAME
@@ -4946,8 +5297,15 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             _ens = {"n_attempted": n_attempted, "is_defluor": _v_flag,
                     "propensity": defluor_propensity(max(0.0, float(_sv_pct or 0.0)) / 100.0,
                                                      stats.get("QSite_Barrier_kcal", np.nan))}
-            write_qsite_scan_csv(job_out_dir / "10_QSite_Scan_Data.csv", rank, job_name,
+            write_qsite_scan_csv(job_out_dir / "11_QSite_Scan_Data.csv", rank, job_name,
                                  ligand, _profs, _ens, qmmeta)
+            # 09 = the integrated SN2 reaction scene; 10 = the MD-time / QSite-sampling link. Both read
+            # the scan CSV just written, so they draw only once the QM/MM sampling for this rank is in.
+            _run_dir = job_out_dir.parent.parent
+            plot_defluorination_mechanism(job_out_dir / "09_Reaction_Mechanism.svg",
+                                          job_out_dir, _run_dir, rank, job_name, ligand)
+            plot_md_qsite_timeline(job_out_dir / "10_MD_QSite_Timeline.svg",
+                                   job_out_dir, rank, job_name)
     except Exception as _exc:
         console_info(f"    [!] QSite ensemble/CSV/per-frame figures skipped ({_exc}).")
 

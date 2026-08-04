@@ -5,7 +5,7 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1122 nodes · 2456 edges · 12 communities (11 shown, 1 thin omitted)
+- 1127 nodes · 2483 edges · 12 communities (11 shown, 1 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 172 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 

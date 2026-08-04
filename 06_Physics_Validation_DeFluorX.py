@@ -77,8 +77,8 @@ Dependency Map
                   <out>/05_MD_Simulations/desmond_md_job_R_N/{-out.cms, _trj/, .ene, *_SID-out.eaf,
                        *_mmgbsa-prime-out.csv (per-frame ΔG_bind + Frame column)}
                   <out>/06_Analysis/{00_MMGBSA_Summary.csv, 01_Physics_Build_Solvation_QC.svg,
-                       02_MD_Trajectory_QC.svg, 03_MMGBSA_Combined_AllRanks.svg,
-                       04_Defluorination_Combined_AllRanks.svg,
+                       02_WaterMap_Landscapes_AllRanks.svg, 03_MD_Trajectory_QC.svg,
+                       04_MMGBSA_Combined_AllRanks.svg, 05_Defluorination_Combined_AllRanks.svg,
                        Prime-MMGBSA/MMGBSA_Profile_R{N}.svg,
                        Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.svg … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
@@ -2497,7 +2497,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         for _sp in ("left", "bottom"):
             _ax.spines[_sp].set_linewidth(1.0)
 
-    out_path = out_dir / "03_MMGBSA_Combined_AllRanks.svg"
+    out_path = out_dir / "04_MMGBSA_Combined_AllRanks.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _echo(f"  MM-GBSA combined figure saved: {_utils_mod.deflx_fig_name(out_path.resolve())}")
@@ -3344,10 +3344,10 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
         else:
             a.tick_params(labelbottom=False)
     fig.tight_layout()
-    fig.savefig(analysis / "04_Defluorination_Combined_AllRanks.svg",
+    fig.savefig(analysis / "05_Defluorination_Combined_AllRanks.svg",
                 dpi=int(CFG.VIS_FIGURE_DPI))
     plt.close(fig)
-    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/{_utils_mod.deflx_fig_name('04_Defluorination_Combined_AllRanks.svg')}")
+    _echo(f"  ✔ Defluorination combined figure → {analysis.name}/{_utils_mod.deflx_fig_name('05_Defluorination_Combined_AllRanks.svg')}")
 
 
 # =============================================================================
@@ -4162,6 +4162,88 @@ def export_watermap_csv(wm_maegz: Path, csv_path: Path) -> int:
 # =============================================================================
 # SECTION 15: MAIN
 # =============================================================================
+def plot_watermap_combined(wm_dir: Path, analysis_dir: Path) -> None:
+    """One compact multi-panel figure of every rank's active-site hydration landscape, drawn straight
+    from the WaterMaps already exported (watermap_R_<rank>.csv). Each panel sorts the sites by free
+    energy and colours displaceable (ΔG>0) vs stable (ΔG<0) waters, annotating the counts and the mean
+    ΔG - so the pocket a substrate must dewet to bind reads at a glance across the whole lead set.
+    Redrawn as each WaterMap lands (it reads only the CSVs present), and skipped without failing the
+    stage when none are ready. Saved to 06_Analysis/02_WaterMap_Landscapes_AllRanks.svg."""
+    try:
+        _csvs = sorted(wm_dir.glob("watermap_R_*.csv"),
+                       key=lambda p: int(re.search(r"watermap_R_(\d+)\.csv$", p.name).group(1)))
+        _csvs = [c for c in _csvs if re.search(r"watermap_R_(\d+)\.csv$", c.name)]
+        if not _csvs:
+            return
+        _stable = CFG.VIS_ACCENT["blue"]; _disp = CFG.VIS_ACCENT["amber"]
+        _ft = CFG.VIS_FONT_TICK
+        # rank -> ligand name (nice panel titles), from the ranked sheet when available
+        _lig = {}
+        try:
+            _prod = wm_dir.parent.parent / "1_Boltz2_Production"
+            _rk = (_utils_mod.latest_by_mtime(_prod.glob(CFG.GLOB_RANKED_CSV))
+                   or _utils_mod.latest_by_mtime(_prod.glob("*Ranked*.csv"))) if _prod.is_dir() else None
+            if _rk is not None:
+                _rdf = pd.read_csv(_rk, low_memory=False)
+                _nc = next((c for c in ("Ligand_Name", "ligand_name", "job_name") if c in _rdf.columns), None)
+                if "Scientific_Rank" in _rdf.columns and _nc:
+                    for _, _r in _rdf.iterrows():
+                        try:
+                            _lig[int(_r["Scientific_Rank"])] = str(_r[_nc]).split("_")[-1]
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        _panels = []
+        for _c in _csvs:
+            try:
+                _df = pd.read_csv(_c)
+                _col = next((k for k in _df.columns if k.strip().lower().startswith("dg")), None)
+                if _col is None:
+                    continue
+                _dg = np.sort(pd.to_numeric(_df[_col], errors="coerce").dropna().to_numpy())
+                if _dg.size:
+                    _panels.append((int(re.search(r"_R_(\d+)\.csv$", _c.name).group(1)), _dg))
+            except Exception:
+                continue
+        if not _panels:
+            return
+        _n = len(_panels); _ncol = 2 if _n > 1 else 1; _nrow = (_n + _ncol - 1) // _ncol
+        # share the y-axis within a row: one ΔG label + scale per row (left panel), x-axis stays per panel
+        fig, axes = plt.subplots(_nrow, _ncol, figsize=(6.0 * _ncol, 3.2 * _nrow), squeeze=False, sharey="row")
+        for _i, (_rank, _dg) in enumerate(_panels):
+            ax = axes[_i // _ncol][_i % _ncol]
+            _x = np.arange(_dg.size)
+            ax.bar(_x, _dg, color=[_stable if v < 0 else _disp for v in _dg], width=0.9, linewidth=0)
+            ax.axhline(0, color=CFG.VIS_INK["near_black"], lw=0.8)
+            _nu = int((_dg > 0).sum())
+            _head = f"R{_rank}" + (f" · {_lig[_rank]}" if _rank in _lig else "")
+            ax.text(0.03, 0.96, f"{_head}\n{_nu} displaceable / {_dg.size} sites\nmean ΔG {float(_dg.mean()):.2f} kcal/mol",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=_ft, linespacing=1.35,
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
+            ax.set_xlabel("hydration site (sorted by ΔG)", fontsize=_ft)     # x per panel
+            if _i % _ncol == 0:
+                ax.set_ylabel("water ΔG  (kcal/mol)", fontsize=_ft)          # one y label per row (leftmost)
+            else:
+                ax.tick_params(labelleft=False)
+            for _s in ("top", "right"):
+                ax.spines[_s].set_visible(False)
+        for _j in range(_n, _nrow * _ncol):
+            axes[_j // _ncol][_j % _ncol].axis("off")
+        _lh = [Patch(fc=_disp, ec="none", label="displaceable (ΔG > 0)"),
+               Patch(fc=_stable, ec="none", label="stable (ΔG < 0)")]
+        axes[0][0].legend(handles=_lh, loc="upper right", frameon=True, framealpha=0.85,
+                          edgecolor="#C8C8C8", fontsize=_ft - 1, ncol=1, borderpad=0.5)   # inside 1st panel
+        fig.tight_layout()
+        _out = analysis_dir / "02_WaterMap_Landscapes_AllRanks.svg"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(_out, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+        plt.close(fig)
+        _echo(f"  ✔ WaterMap combined figure → {analysis_dir.name}/{_utils_mod.deflx_fig_name('02_WaterMap_Landscapes_AllRanks.svg')} ({_n} ranks)")
+    except Exception as _e:
+        _warn(f"[watermap] combined landscape figure skipped ({_e}).")
+
+
 def _parse_args_merged():
     ap = argparse.ArgumentParser(
         description=f"{CFG.PROJECT_NAME} Step 06 - ESP Physics: WaterMap → System Builder → MD → SID → MM-GBSA → Defluorination",
@@ -4582,7 +4664,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
                  f"are restraint-enforced, not spontaneous. The unrestrained SN2 barrier is the Step-07 QM/MM ΔE‡.",
                  ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT - 1, color=CFG.VIS_INK["soft"], wrap=True)
     qc_dir = _analysis_dir(out_root)
-    out_path = qc_dir / "02_MD_Trajectory_QC.svg"
+    out_path = qc_dir / "03_MD_Trajectory_QC.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
     plt.close(fig)
     _ok(f"[qc] ✔ MD trajectory QC → {qc_dir.name}/{_utils_mod.deflx_fig_name(out_path.name)}  ({len(recs)} rank(s))")
@@ -4631,6 +4713,9 @@ def _phase_watermap(entry: dict, dirs: dict, a) -> None:
             _warn(f"[watermap] R_{rank} produced 0 hydration sites - no CSV written; will retry next run.")
         else:
             _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
+            # Redraw the combined landscape now this CSV has landed - it reads only the CSVs present,
+            # so the cross-rank figure fills in rank by rank as the WaterMaps complete.
+            plot_watermap_combined(dirs["wm"], _analysis_dir(dirs["wm"].parent))
     except Exception as exc:
         _fail(f"[watermap] R_{rank} ✘ FAILED after 3 tries - SKIPPED, continuing. "
               f"{(str(exc).splitlines() or ['<no message>'])[0]}")

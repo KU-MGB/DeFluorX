@@ -2184,6 +2184,15 @@ class CFG:
     QSITE_FRAME_CLEAVED_PALETTE: list = field(default_factory=lambda: [
         "#16A34A", "#2563EB", "#0E7490", "#7C3AED", "#BE185D"])
     QSITE_CLEAVED_BOX: str = "#2A9D8F"   # verdict-card frame + accent for "C-F cleaved (N/M frames)"
+    # Mechanism figure (07 fig 09): disjoint colour layers so no hue is shared. Residue-role colours
+    # come from ACTIVE_SITE_ROLE_GROUP_COLOUR; these are the reaction-scene layers + ligand elements.
+    MECHANISM_FIG_COLOUR: dict = field(default_factory=lambda: {
+        "chem": "#111111",   # chemical action arrows (attack / C-F break)
+        "role": "#0072B2",   # role action arrows (activate / orient / hold / stabilise)
+        "dist": "#8A8A8A",   # distance (global -> NAC) connectors
+        "geom": "#5B4B8A",   # SN2 attack-angle arc + Walden label (a geometry annotation, off the data layers)
+        "elem_C": "#333333", "elem_O": "#CC2222", "elem_F": "#17A2B8",  # ligand element colours
+        "water": "#2E86C1"})
     DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
         "#1D4ED8", "#B45309", "#0E7490", "#BE185D", "#7C3AED", "#15803D",
         "#B91C1C", "#0F766E", "#A16207", "#6D28D9"])

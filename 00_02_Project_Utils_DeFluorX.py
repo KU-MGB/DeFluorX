@@ -366,7 +366,7 @@ def deflx_fig_name(path) -> str:
     try:
         p = Path(path)
         if p.suffix.lower() in _DEFLX_IMG_SUFFIXES:
-            fmt = str(getattr(matplotlib, "_deflx_fig_fmt", "png")).lower().lstrip(".")
+            fmt = str(getattr(matplotlib, "_deflx_fig_fmt", "svg")).lower().lstrip(".")
             return str(p.with_suffix("." + fmt))
     except Exception:
         pass
@@ -421,7 +421,7 @@ def apply_figure_style(cfg) -> None:
     # call, so a later apply_figure_style with a different CFG re-targets without re-patching. It
     # composes with Step-03's savefig redirect: that wrapper rewrites the folder, then delegates to this
     # one which rewrites the extension.
-    matplotlib._deflx_fig_fmt = str(getattr(cfg, "VIS_FIGURE_FORMAT", "png")).lower().lstrip(".")
+    matplotlib._deflx_fig_fmt = str(getattr(cfg, "VIS_FIGURE_FORMAT", "svg")).lower().lstrip(".")
     if not getattr(matplotlib, "_deflx_savefig_patched", False):
         _SWAP = {"png", "jpg", "jpeg", "tif", "tiff", "pdf", "svg", "eps", "ps"}
         _orig_fig_savefig = plt.Figure.savefig
@@ -430,7 +430,7 @@ def apply_figure_style(cfg) -> None:
             try:
                 _p = Path(fname)
                 if _p.suffix.lower().lstrip(".") in _SWAP:
-                    return str(_p.with_suffix("." + getattr(matplotlib, "_deflx_fig_fmt", "png")))
+                    return str(_p.with_suffix("." + getattr(matplotlib, "_deflx_fig_fmt", "svg")))
             except Exception:
                 pass
             return fname
