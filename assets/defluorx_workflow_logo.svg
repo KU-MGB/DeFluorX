@@ -104,5 +104,5 @@
   <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,050 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
 
   <!-- ===== footer: the engineering weight behind it ===== -->
-  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   43,627 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
+  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   43,909 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
 </svg>

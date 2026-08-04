@@ -2192,7 +2192,8 @@ class CFG:
         "dist": "#8A8A8A",   # distance (global -> NAC) connectors
         "geom": "#5B4B8A",   # SN2 attack-angle arc + Walden label (a geometry annotation, off the data layers)
         "elem_C": "#333333", "elem_O": "#CC2222", "elem_F": "#17A2B8",  # ligand element colours
-        "water": "#2E86C1"})
+        "water": "#2E86C1",
+        "scissile": "#CC2222"})   # red ring marking the scissile fluorine (bonded on the ligand + departed)
     DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
         "#1D4ED8", "#B45309", "#0E7490", "#BE185D", "#7C3AED", "#15803D",
         "#B91C1C", "#0F766E", "#A16207", "#6D28D9"])

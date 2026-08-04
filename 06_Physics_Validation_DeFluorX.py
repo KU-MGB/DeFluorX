@@ -3340,7 +3340,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
             a.set_xticklabels(_labs)
             for _t, _c in zip(a.get_xticklabels(), cols):
                 _t.set_color(_c); _t.set_fontweight("bold")
-            a.set_xlabel("MD-selected complex")
+            # rank tick labels already identify the complexes; no redundant axis title
         else:
             a.tick_params(labelbottom=False)
     fig.tight_layout()
@@ -4987,6 +4987,14 @@ def main() -> int:
                     make_md_qc_figure(md_dir, out_root, _lookup_ligands(run_root), _lookup_controls(run_root))
                 except Exception as exc:
                     _warn(f"[qc] MD trajectory-QC figure skipped - {str(exc).splitlines()[0]}")
+
+    # Combined WaterMap landscape - drawn every run from the WaterMaps already on disk (never gated on a
+    # fresh export, so a resume where WaterMap is skipped still refreshes it), like the other cross-rank
+    # figures in 06_Analysis. Reads only the CSVs present and no-ops when none exist.
+    try:
+        plot_watermap_combined(dirs["wm"], _analysis_dir(out_root))
+    except Exception as exc:
+        _warn(f"[watermap] combined landscape figure skipped - {str(exc).splitlines()[0]}")
 
     _section(f"Summary - {len(ok)} ok, {len(failed)} failed  (stages {sorted(stages)})")
     for t in ok:

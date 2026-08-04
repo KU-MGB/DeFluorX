@@ -46,10 +46,10 @@ Date   : 05 August 2026 <──────────────────�
                     - 05_Free_Energy_Landscapes.svg (3D FEL: reaction coordinates + essential dynamics)
                     - 06_MMGBSA_Decomposition_and_Trace.svg (ONE figure: ΔG component decomposition bars - whole trajectory vs reactive pose, with the whole->reactive Δ shift + IQR whiskers - over the per-frame ΔG_bind trajectory trace with rolling mean and ±1 SD)
                     - 07_Machinery_Engagement.svg  (per-residue median distance + mean marker + IQR + contact occupancy vs the warhead C)
-                    - Ideal_Final.maegz            (best frame for QSite)
+                    - 00_Ideal_Final.maegz            (best frame for QSite)
                     - QSite_SN2/Frame_<rank>[_Best]_<frame>/  (one QM/MM scan per sampled frame, best pre-organised first; <frame> = trajectory frame index; each holds 01_Reaction_Profile.svg)
                     - 08_QSite_Reaction_Profile.svg (all sampled frames overlaid on one shared reaction axis - PES over departing-F charge - with a per-frame + ensemble table and cleavage-semantic colours; the headline QM/MM figure)
-                    - 09_Reaction_Mechanism.svg    (integrated SN2 defluorination scene: RDKit substrate + all 8 machinery residues by role with global->NAC distances + a QM/MM / geometry / WaterMap value dashboard)
+                    - 09_Reaction_Mechanism.svg    (integrated SN2 defluorination scene from the QM scan geometry: RDKit substrate with the scissile F shown bonded + departed, numbered electron-flow arrows, all 8 machinery residues by role with their real interacting atom and QM H-bond / MD global->NAC distances, the fluoride-stabilising water, a structural reaction-coordinate graph (C-F length + departing-F charge) and the QM/MM / geometry / WaterMap value tables)
                     - 10_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
                     - 11_QSite_Scan_Data.csv       (long-format raw PES + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
                   <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
@@ -79,7 +79,7 @@ Date   : 05 August 2026 <──────────────────�
   Run behaviour : Resume by default. A rank whose per-frame table (02_NAC_Data.csv), statistics
                   (01_MD_Stats.json) and QM/MM output are all present is NOT recomputed: the
                   figures are redrawn from the stored data (seconds) and the run moves on.
-                  QSite-only resume: a rank whose 02_NAC_Data.csv + 01_MD_Stats.json + Ideal_Final.maegz
+                  QSite-only resume: a rank whose 02_NAC_Data.csv + 01_MD_Stats.json + 00_Ideal_Final.maegz
                   are present but whose QSite_SN2/ folder was deleted re-runs ONLY QSite - the top
                   pre-organised frames are re-picked from the cached table and their droplets
                   re-extracted from just those frames, skipping the multi-hour frame stream. A rank
@@ -2333,7 +2333,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         # top-right shade key would spill into.
         ax.set_xlim(-0.55, len(terms) - 0.5)
         ax.set_xticks(np.arange(len(terms)))
-        ax.set_xticklabels([t.replace("_", " ") for t in terms], rotation=25, ha="right")
+        ax.set_xticklabels([t.replace("_", " ") for t in terms], rotation=0, ha="center")
         for lbl, i in zip(ax.get_xticklabels(), range(len(terms))):
             lbl.set_color(cmap(i % 10))
             lbl.set_fontweight("bold")
@@ -4092,7 +4092,10 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 # (extend inward, never off the frame) and split them vertically - ΔE‡ above, ΔE_rxn
                 # below - so they never overlap even sharing the datapoint. Otherwise ΔE‡ sits centred
                 # over the interior peak and ΔE_rxn to the left of the product point.
-                _coincide = (_imax >= len(y) - 1)
+                # Split the two labels vertically (ΔE‡ above, ΔE_rxn below) whenever the TS sits at OR
+                # near the product endpoint: their markers then overlap, so both labels above (the
+                # interior-TS layout) would collide. A few scan points of separation is enough to trip it.
+                _coincide = (_imax >= len(y) - 3)
                 axE.annotate(f"ΔE‡ = {_bar:.1f} kcal/mol", (x[_imax], y[_imax]),
                              xytext=((-6, 10) if _coincide else (0, 10)),
                              textcoords="offset points", fontsize=_ft, color=_C["ts"], fontweight="bold",
@@ -4348,8 +4351,12 @@ def plot_qsite_ensemble_profiles(out_path: Path, rank, profiles: list,
                 for _a in (axE, axF):
                     clean_spines(_a)
                     _a.set_axisbelow(True)
-                    _a.grid(True, axis="both", color=CFG.VIS_GRID_COLOUR, lw=CFG.VIS_GRID_LINEWIDTH,
-                            alpha=0.55, zorder=0)             # both horizontal and vertical gridlines
+                    # x-grid (the reaction-coordinate axis the reader tracks) darkened to the emphasis
+                    # colour; y-grid kept light so it never competes with the traces. CFG SSOT colours.
+                    _a.grid(True, axis="x", color=CFG.VIS_GRID_COLOUR_EMPHASIS, lw=CFG.VIS_GRID_LINEWIDTH,
+                            alpha=0.95, zorder=0)
+                    _a.grid(True, axis="y", color=CFG.VIS_GRID_COLOUR, lw=CFG.VIS_GRID_LINEWIDTH,
+                            alpha=CFG.VIS_GRID_ALPHA, zorder=0)
                 plt.setp(axE.get_xticklabels(), visible=False)   # one shared x-axis, labels on axF
                 _lh = [Line2D([0], [0], color=f["col"], lw=(2.4 if f["best"] else 1.6), marker="s", ms=4,
                               label=f"F{f['k']} · {_lt(f)}") for f in _fr]
@@ -4368,42 +4375,42 @@ def plot_qsite_ensemble_profiles(out_path: Path, rank, profiles: list,
                     ("C-F verdict",            [("cleaved" if f["cl"] else ("dewetted" if f["wat"] == 0 else "intact")) for f in _fr]
                                                + [f"CLEAVED {_ncl}/{_n}"]),
                 ]
-                _nc = len(_hdr); _x0, _x1 = 0.012, 0.585; _lw0 = (_x1 - _x0) * 0.345
+                _nc = len(_hdr); _x0, _x1 = 0.012, 0.548; _lw0 = (_x1 - _x0) * 0.40
                 _xed = [_x0] + list(np.linspace(_x0 + _lw0, _x1, _nc))
                 _xc = [(_xed[i] + _xed[i + 1]) / 2 for i in range(_nc)]
-                _th, _hr, _dr = 0.060, 0.085, 0.060; _nR = len(_rows)
+                _th, _hr, _dr = 0.056, 0.078, 0.058; _nR = len(_rows)
                 _Y1 = 0.985; _Y0 = _Y1 - (_th + _hr + _nR * _dr); _yT = _Y1 - _th; _yH = _yT - _hr
                 _T = axE.transAxes
                 _sub = str(ligand or "ligand")
                 axE.add_patch(Rectangle((_x0, _Y0), _x1 - _x0, _Y1 - _Y0, transform=_T, fc="white",
-                                        ec="#AEAEAE", lw=1.0, alpha=0.97, zorder=20))
+                                        ec="#BDBDBD", lw=1.2, alpha=0.98, zorder=20))
                 axE.add_patch(Rectangle((_x0, _yT), _x1 - _x0, _th, transform=_T, fc=_acc, ec="none",
                                         alpha=0.96, zorder=21))
                 axE.text((_x0 + _x1) / 2, _yT + _th / 2,
                          f"C-F {'CLEAVED' if _ncl else 'INTACT'}  ({_ncl}/{_n} frames)   ·   {_sub}",
                          transform=_T, ha="center", va="center", color="white", fontweight="bold",
-                         fontsize=_ft + 0.5, zorder=25)
+                         fontsize=_ft + 0.4, zorder=25)
                 axE.add_patch(Rectangle((_x0, _yH), _x1 - _x0, _hr, transform=_T, fc="#EEF1F0", ec="none", zorder=21))
                 for j, (lab, c, tag) in enumerate(_hdr):
-                    axE.text(_xc[j], _yH + _hr / 2 + (0.017 if tag else 0), lab, transform=_T, ha="center",
-                             va="center", color=c, fontweight="bold", fontsize=_ft - 0.5, zorder=25)
+                    axE.text(_xc[j], _yH + _hr / 2 + (0.016 if tag else 0), lab, transform=_T, ha="center",
+                             va="center", color=c, fontweight="bold", fontsize=_ft, zorder=25)
                     if tag:
-                        axE.text(_xc[j], _yH + _hr / 2 - 0.023, tag, transform=_T, ha="center", va="center",
-                                 color=_mute, fontsize=_ft - 3.0, zorder=25)
+                        axE.text(_xc[j], _yH + _hr / 2 - 0.021, tag, transform=_T, ha="center", va="center",
+                                 color=_mute, fontsize=_ft - 2.2, zorder=25)
                 for ri, (metric, vals) in enumerate(_rows):
                     _yb = _yH - ri * _dr
                     if ri % 2 == 1:
                         axE.add_patch(Rectangle((_x0, _yb - _dr), _x1 - _x0, _dr, transform=_T, fc="#F6F6F6", ec="none", zorder=20))
                     _yc = _yb - _dr / 2
                     axE.text(_xed[0] + 0.007, _yc, metric, transform=_T, ha="left", va="center", color=_ink,
-                             fontsize=_ft - 1.5, fontweight="bold", zorder=25)
+                             fontsize=_ft - 0.4, fontweight="bold", zorder=25)
                     for j, v in enumerate(vals):
                         axE.text(_xc[j + 1], _yc, v, transform=_T, ha="center", va="center", color=_hdr[j + 1][1],
-                                 fontsize=_ft - 1.5, fontweight=("bold" if j == _n else "normal"), zorder=25)
+                                 fontsize=_ft - 0.4, fontweight=("bold" if j == _n else "normal"), zorder=25)
                 for _xe in _xed[1:-1]:
-                    axE.plot([_xe, _xe], [_Y0, _yH + _hr], transform=_T, color="#DcDcDc", lw=0.6, zorder=22)
+                    axE.plot([_xe, _xe], [_Y0, _yH + _hr], transform=_T, color="#DDDDDD", lw=0.6, zorder=22)
                 for _kk in range(_nR + 1):
-                    axE.plot([_x0, _x1], [_yH - _kk * _dr, _yH - _kk * _dr], transform=_T, color="#DcDcDc", lw=0.5, zorder=22)
+                    axE.plot([_x0, _x1], [_yH - _kk * _dr, _yH - _kk * _dr], transform=_T, color="#DDDDDD", lw=0.5, zorder=22)
                 if any(f["wat"] == 0 and not f["cl"] for f in _fr):
                     axE.text(_x0, _Y0 - 0.028,
                              "F1 dewetted (0 QM water): exothermic well is a solvation artifact; rank verdict = cleaved-frame fact",
@@ -4435,7 +4442,7 @@ def _mech_smiles_for(run_dir: Path, ligand: str) -> "str | None":
     return None
 
 
-def _mech_ligand_geom(smiles: str, target_deg: float = -16.0, blen: float = 1.3):
+def _mech_ligand_geom(smiles: str, target_deg: float = -18.0, blen: float = 1.6):
     """A real 2D layout of the substrate (RDKit), transformed so the alpha carbon is at the origin
     and the scissile C-F bond points toward target_deg - the departure direction of the drawn scene.
     Returns atom positions, element symbols, bonds, and the alpha-C / scissile-F / carboxyl-C indices."""
@@ -4469,216 +4476,470 @@ def _mech_ligand_geom(smiles: str, target_deg: float = -16.0, blen: float = 1.3)
     return posT, elem, bonds, aC, sF, carbC
 
 
+# ---- QSite scan .mae reader (pure text; identifies the QM region by the per-atom Mulliken field) ----
+_MECH_WATRES = {"T3P", "HOH", "SPC", "TIP", "WAT"}
+_MECH_GREEK = {"A": "α", "B": "β", "G": "γ", "D": "δ", "E": "ε", "Z": "ζ", "H": "η"}
+
+
+def _mae_parse_cts(mae_path: Path) -> list:
+    """Parse every CT (scan point) of a Maestro .mae as a list of raw atom-property dicts, keyed by the
+    m_atom block schema. Pure text, so it never needs a Schrodinger import just to draw a figure."""
+    txt = Path(mae_path).read_text(errors="ignore").splitlines()
+    cts = []; i = 0; n = len(txt)
+    while i < n:
+        if txt[i].strip().startswith("m_atom["):
+            j = i + 1; schema = []
+            while j < n and ":::" not in txt[j]:
+                s = txt[j].strip()
+                if s and not s.startswith("#"):
+                    schema.append(s)
+                j += 1
+            j += 1; atoms = []
+            while j < n and ":::" not in txt[j]:
+                if txt[j].strip():
+                    tok = re.findall(r'"[^"]*"|\S+', txt[j].strip()); d = {"idx": tok[0]}
+                    for k, nm in enumerate(schema):
+                        d[nm] = tok[k + 1] if k + 1 < len(tok) else None
+                    atoms.append(d)
+                j += 1
+            cts.append(atoms); i = j
+        else:
+            i += 1
+    return cts
+
+
+def _mae_av(a: dict) -> dict:
+    """A minimal atom view from a raw m_atom row: index, coordinate, residue, element and the QSite
+    Mulliken charge (None outside the QM region - the field is populated only for QM atoms)."""
+    _q = (lambda v: v.strip().strip('"').strip() if v else v)
+    return dict(idx=int(a["idx"]),
+                xyz=np.array([float(a["r_m_x_coord"]), float(a["r_m_y_coord"]), float(a["r_m_z_coord"])]),
+                resnum=int(a["i_m_residue_number"]), resname=_q(a.get("s_m_pdb_residue_name")),
+                atomname=_q(a.get("s_m_pdb_atom_name")), Z=int(a["i_m_atomic_number"]),
+                mull=(None if a.get("r_qs_Mulliken_Charges") in (None, "<>") else float(a["r_qs_Mulliken_Charges"])))
+
+
+def _mech_pretty_atom(name: str) -> str:
+    """PDB atom name -> Greek-subscript form for the scene labels (OD2 -> Oδ2, NE2 -> Nε2, OH -> Oη)."""
+    name = (name or "").strip()
+    m = re.match(r"^([A-Z])([A-Z])(\d*)$", name)
+    if m and m.group(2) in _MECH_GREEK:
+        return f"{m.group(1)}{_MECH_GREEK[m.group(2)]}{m.group(3)}"
+    return name
+
+
+def _mech_rot2d(v, deg):
+    r = math.radians(deg); c, s = math.cos(r), math.sin(r)
+    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1]])
+
+
 def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Path,
                                   rank, job_name: str = "", ligand: str = "") -> None:
-    """One integrated SN2 defluorination reaction figure for a rank: the substrate drawn as a real
-    molecule with the nucleophilic backside attack, Walden inversion and C-F scission; all eight
-    machinery residues placed by role (nucleophile, base/acid dyad, fluoride cradle, carboxylate
-    clamps) each carrying its global->NAC distance from this run; and a dashboard of three value
-    tables (QM/MM outcome, catalytic geometry, WaterMap/MD) with a verdict header and a role legend.
-    Residue roles use the CFG active-site palette; colour layers (chemical action / role action /
-    distance / ligand elements) are disjoint. Residue IDs are the 3R3U reference. The mechanism prose
-    and per-frame verdicts are written to a companion description file, not drawn on the figure.
-    Degrades quietly (logs and returns) when RDKit, the SMILES, or a required input is unavailable."""
+    """The integrated SN2 defluorination scene for one rank, built entirely from this run's QSite QM
+    scan geometry and the MD read-outs. Left panel: the substrate as a real RDKit molecule with its
+    scissile fluorine shown twice - bonded on the ligand (red ring) and departed (linked by a release
+    arrow) - the nucleophilic backside attack and C-F heterolysis as numbered electron-flow arrows, the
+    eight machinery residues placed by role in the CFG active-site palette (each carrying its real
+    interacting atom and either the QM H-bond distance to the departing F or the MD global->NAC distance),
+    the SN2 attack arc, and the fluoride-stabilising water (a catalytic QM water at H-bond range, or the
+    nearest water flagged too far when the pocket is dewetted). Right panel: the structural reaction
+    coordinate (C-F length and departing-F Mulliken charge over the scan). Bottom: the three value tables
+    (QM/MM, catalytic geometry, WaterMap/MD) joined under one border with the scene legend as a left cell;
+    the cleavage verdict rides a coloured badge on the scene. All colours, thresholds, fonts and DPI come
+    from CFG. No figure title. Degrades quietly (logs and returns) when RDKit, the SMILES, or a required
+    input is unavailable."""
     try:
-        import textwrap as _tw
+        _M = CFG.MECHANISM_FIG_COLOUR; _ROLE = CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR
+        _INK = CFG.VIS_INK; _ACC = CFG.VIS_ACCENT
+        _CLEAVED = CFG.QSITE_CLEAVED_BOX; _INTACT = CFG.QSITE_FRAME_INTACT_COLOUR
+        _FCUT = float(CFG.QSITE_F_CHARGE_CLEAVED)
+        _SCIS = _M.get("scissile", _M["elem_O"])
+        D = (lambda a, b: float(np.linalg.norm(a - b)))
+        rot2d = _mech_rot2d; pretty_atom = _mech_pretty_atom
+        _FW, _FH = 14.4, 6.5
+
+        # ---- substrate (RDKit) + QSite scan geometry (.01.mae CTs carrying per-atom Mulliken) ----
         _smiles = _mech_smiles_for(run_dir, ligand)
-        _geom = _mech_ligand_geom(_smiles) if _smiles else None
+        _geom = _mech_ligand_geom(_smiles, blen=1.6) if _smiles else None
         if _geom is None:
             console_info("    [!] Reaction-mechanism figure skipped (no ligand SMILES / RDKit).")
             return
-        posT, elem, bonds, aC, sF, cC = _geom
+        _fdir = sorted((job_out_dir / "QSite_SN2").glob("Frame_1_Best*"))
+        _mae = sorted(_fdir[0].glob("*.01.mae")) if _fdir else []
+        if not _mae:
+            console_info("    [!] Reaction-mechanism figure skipped (no QSite scan .mae).")
+            return
+        cts = [[_mae_av(a) for a in c] for c in _mae_parse_cts(_mae[0])]
+        cts = [ct for ct in cts if any(a["resname"] == "LIG" and a["Z"] == 9 and a["mull"] is not None for a in ct)]
+        if len(cts) < 2:
+            console_info("    [!] Reaction-mechanism figure skipped (scan geometry incomplete).")
+            return
+        ct0 = cts[0]; scene = cts[-1]
 
-        _rc = CFG.ACTIVE_SITE_ROLE_GROUP_COLOUR
-        ROLE = {"nucleophile": _rc["Nucleophile"], "triad": _rc["Acid/base catalysis"],
-                "cradle": _rc["Fluoride pocket"], "clamp": _rc["Carboxylate clamp"]}
-        _M = CFG.MECHANISM_FIG_COLOUR
-        ACT_CHEM, ACT_ROLE, DIST = _M["chem"], _M["role"], _M["dist"]
-        EL = {"C": _M["elem_C"], "O": _M["elem_O"], "F": _M["elem_F"]}
-        INK, MUTE = CFG.VIS_INK["near_black"], CFG.VIS_INK["muted"]
-        V_CL, V_IN, WATc = CFG.QSITE_CLEAVED_BOX, CFG.QSITE_FRAME_INTACT_COLOUR, _M["water"]
-        ENG = float(getattr(CFG, "THRESHOLD_SALT_BRIDGE", 4.5))
-        # residue key -> (role text, id label, role group, NAC-table column)
-        _ref = CFG.REF_ACTIVE_SITE_MAP
-        def _rid(k):
-            return f"{_ref[k]['res'].title()}{_ref[k]['id']}"
-        RES = {"Nuc": ("nucleophile", _rid("Nuc"), "nucleophile"),
-               "Base": ("general base", _rid("Base"), "triad"),
-               "Acid": ("acid / orienter", _rid("Acid"), "triad"),
-               "StabH": ("F cradle", _rid("Stab_H"), "cradle"),
-               "StabW": ("F cradle", _rid("Stab_W"), "cradle"),
-               "StabY": ("F cradle", _rid("Stab_Y"), "cradle"),
-               "Clamp1": ("COO- clamp", _rid("Carb1"), "clamp"),
-               "Clamp2": ("COO- clamp", _rid("Carb2"), "clamp")}
+        _lig0 = [a for a in ct0 if a["resname"] == "LIG"]
+        _Cs = [a for a in _lig0 if a["Z"] == 6]; _Fs = [a for a in _lig0 if a["Z"] == 9]
+        Ca0, Fsc0, _ = min(((c, f, D(c["xyz"], f["xyz"])) for c in _Cs for f in _Fs), key=lambda t: t[2])
+        _aspO = [a for a in ct0 if a["resname"] == "ASP" and a["Z"] == 8]
+        nucO0 = min(_aspO, key=lambda o: D(o["xyz"], Ca0["xyz"]))
+        _fnd = (lambda ct, ref: next(a for a in ct if a["idx"] == ref["idx"]))
+        path = []
+        for ct in cts:
+            _ca = _fnd(ct, Ca0); _f = _fnd(ct, Fsc0); _no = _fnd(ct, nucO0)
+            path.append(dict(dNuCa=D(_no["xyz"], _ca["xyz"]), dCaF=D(_ca["xyz"], _f["xyz"]), fq=_f["mull"]))
 
+        # ---- MD / QSite read-outs ----
         st = json.loads((job_out_dir / "01_MD_Stats.json").read_text())
+        qs = pd.read_csv(job_out_dir / "11_QSite_Scan_Data.csv")
         nac = pd.read_csv(job_out_dir / "02_NAC_Data.csv")
-        m = (nac["Catalytic_Pass"] if "Catalytic_Pass" in nac else nac["NAC_Geom_Pass"]).astype(bool)
-        d = {k: (float(nac[f"DT_{k}_LigC_A"].mean()), float(nac.loc[m, f"DT_{k}_LigC_A"].mean())) for k in RES}
+        fr = qs.drop_duplicates("Frame_Index")
+        _RESK = ["Nuc", "Base", "Acid", "StabH", "StabW", "StabY", "Clamp1", "Clamp2"]
+        _mmask = (nac["Catalytic_Pass"] if "Catalytic_Pass" in nac else nac["NAC_Geom_Pass"]).astype(bool)
+        dres = {k: (float(nac[f"DT_{k}_LigC_A"].mean()), float(nac.loc[_mmask, f"DT_{k}_LigC_A"].mean())) for k in _RESK}
         tri = (float(nac["DT_Nuc_Base_A"].mean()), float(nac["DT_Base_Acid_A"].mean()))
-        qs = pd.read_csv(job_out_dir / "11_QSite_Scan_Data.csv"); fr = qs.drop_duplicates("Frame_Index").copy()
-        tot = int(st.get("Total_Frames", len(nac))); sims = float(st.get("Sim_Total_ns", 1000.0))
-        fr["ns"] = fr["Frame_Index"] / max(tot, 1) * sims
-        q = {"barrier": float(qs["QSite_Barrier_Ensemble_kcal"].iloc[0]),
-             "derxn": float(qs["QSite_dErxn_Ensemble_kcal"].iloc[0]),
-             "fq": float(fr["Frame_F_Charge_Product"].min()),
-             "ncl": int(fr["Frame_Cleaved"].sum()), "n": len(fr),
-             "isdef": bool(qs["Is_Defluorinating"].iloc[0]),
-             "frames": sorted([(row.ns, bool(row.Frame_Cleaved), float(row.Frame_Barrier_kcal)) for row in fr.itertuples()])}
-        ang = st.get("MD_Avg_NAC_Angle_Deg", np.nan)
+        _tot = int(st.get("Total_Frames", len(nac))); _sims = float(st.get("Sim_Total_ns", 1000.0))
+        frames = sorted([(row.Frame_Index / max(_tot, 1) * _sims, bool(row.Frame_Cleaved), float(row.Frame_Barrier_kcal))
+                         for row in fr.itertuples()])
+        ens = dict(barrier=float(qs["QSite_Barrier_Ensemble_kcal"].iloc[0]),
+                   derxn=float(qs["QSite_dErxn_Ensemble_kcal"].iloc[0]),
+                   ncl=int(fr["Frame_Cleaved"].sum()), n=len(fr), isdef=bool(qs["Is_Defluorinating"].iloc[0]),
+                   fq=float(fr["Frame_F_Charge_Product"].min()))
 
-        def _split(rid):
-            mt = re.match(r"([A-Za-z]+)[-]?(\d+)", rid)
-            return (mt.group(1).upper(), mt.group(2)) if mt else (rid.upper(), "")
+        # ---- eight machinery residues by role (QM residues by role + the two clamp Arg from structure) ----
+        qm = [a for a in ct0 if a["mull"] is not None]
+        def _rmin(rn, rname, tgt, pool):
+            at = [a for a in pool if a["resnum"] == rn and a["resname"] == rname]
+            return min(D(a["xyz"], tgt) for a in at) if at else 9e9
+        _asp = sorted({a["resnum"] for a in qm if a["resname"] == "ASP"}, key=lambda r: _rmin(r, "ASP", Ca0["xyz"], qm))
+        _nucid = _asp[0]; _acidid = _asp[1] if len(_asp) > 1 else None
+        _acidc = (np.mean([a["xyz"] for a in qm if a["resname"] == "ASP" and a["resnum"] == _acidid], axis=0)
+                  if _acidid is not None else Ca0["xyz"])
+        _hisq = list({a["resnum"] for a in qm if a["resname"] == "HIS"})
+        _baseid = min(_hisq, key=lambda r: _rmin(r, "HIS", _acidc, qm)) if _hisq else None
+        _cradhis = next((h for h in _hisq if h != _baseid), _baseid) if _hisq else None
+        _trpid = next(iter({a["resnum"] for a in qm if a["resname"] == "TRP"}), None)
+        _tyrid = next(iter({a["resnum"] for a in qm if a["resname"] == "TYR"}), None)
+        _carbC = max(_Cs, key=lambda c: sum(1 for o in _lig0 if o["Z"] == 8 and D(c["xyz"], o["xyz"]) < 1.6))
+        _args = sorted({a["resnum"] for a in ct0 if a["resname"] == "ARG"}, key=lambda r: _rmin(r, "ARG", _carbC["xyz"], ct0))[:2]
+        roles = {"Nuc": ("ASP", _nucid, "Nucleophile"), "Base": ("HIS", _baseid, "Acid/base catalysis"),
+                 "Acid": ("ASP", _acidid, "Acid/base catalysis"), "StabH": ("HIS", _cradhis, "Fluoride pocket"),
+                 "StabW": ("TRP", _trpid, "Fluoride pocket"), "StabY": ("TYR", _tyrid, "Fluoride pocket"),
+                 "Clamp1": ("ARG", _args[0] if _args else None, "Carboxylate clamp"),
+                 "Clamp2": ("ARG", _args[1] if len(_args) > 1 else None, "Carboxylate clamp")}
+
+        # ---- real interacting atoms + waters (from the product geometry) ----
+        F3 = _fnd(scene, Fsc0)
+        nuc = dict(res="ASP", num=nucO0["resnum"], heavy=nucO0["atomname"], d=min(p["dNuCa"] for p in path))
+        _raw = []
+        for a in scene:
+            if a["Z"] == 1 and a["resname"] != "LIG":
+                _dd = D(a["xyz"], F3["xyz"])
+                if _dd < 3.2 and (a["resname"] in ("HIS", "TRP", "TYR", "ARG") or a["resname"] in _MECH_WATRES):
+                    _heavy = [h for h in scene if h["resnum"] == a["resnum"] and h["resname"] == a["resname"]
+                              and h["Z"] > 1 and D(h["xyz"], a["xyz"]) < 1.3]
+                    _par = min(_heavy, key=lambda h: D(h["xyz"], a["xyz"])) if _heavy else a
+                    if _par["Z"] not in (7, 8):
+                        continue
+                    _raw.append(dict(res=a["resname"], num=a["resnum"], heavy=_par["atomname"], hd=_dd,
+                                     water=a["resname"] in _MECH_WATRES))
+        _raw.sort(key=lambda x: x["hd"]); _seen = set(); inter = []
+        for x in _raw:
+            if (x["res"], x["num"]) in _seen:
+                continue
+            _seen.add((x["res"], x["num"])); inter.append(x)
+        inter = [x for x in inter if x["hd"] < 3.0][:4]
+        prot = [x for x in inter if not x["water"]]
+        cat_water = next((x for x in inter if x["water"]), None)
+        nqmw = len({a["resnum"] for a in scene if a["resname"] in _MECH_WATRES and a["mull"] is not None})
+        _watO = [(a["resnum"], D(a["xyz"], F3["xyz"])) for a in scene if a["resname"] in _MECH_WATRES and a["Z"] == 8]
+        _watO.sort(key=lambda t: t[1]); nearwat = _watO[:4]
+        fq_prod = path[-1]["fq"]
+
+        posT, elem, bonds, aC, sF, cC = _geom
+        Ca = posT[aC]; Fp = posT[sF]; COO = posT[cC]
+        Fdir = (Fp - Ca) / np.linalg.norm(Fp - Ca); Nud = -Fdir
+        Fdep = Ca + Fdir * 5.6
 
         with PLOT_LOCK:
-            fig, ax = plt.subplots(figsize=(12.7, 9.35))
+            fig = plt.figure(figsize=(_FW, _FH))
             try:
-                ax.set_xlim(-6.8, 6.95); ax.set_ylim(-4.20, 6.0); ax.set_aspect("equal"); ax.axis("off")
-                DY = 2.9
-                pos = {i: p + np.array([0.2, DY]) for i, p in posT.items()}
-                Ca, Fp, COO = pos[aC], pos[sF], pos[cC]
-                Nud = -(Fp - Ca); Nud = Nud / np.linalg.norm(Nud)
-                Fdir = (Fp - Ca) / np.linalg.norm(Fp - Ca); Fd = Fp + Fdir * 1.45
+                ax = fig.add_axes([0.003, 0.470, 0.52, 0.515]); ax.set_aspect("equal"); ax.axis("off")
+                axc = fig.add_axes([0.545, 0.540, 0.44, 0.40])
+                axt = fig.add_axes([0.05, 0.045, 0.90, 0.365]); axt.axis("off")
 
+                ELc = {"C": _M["elem_C"], "O": _M["elem_O"], "F": _M["elem_F"]}
+                PUR = _ROLE["Nucleophile"]; PINK = _ROLE["Fluoride pocket"]
+                CHEM = _M["chem"]; GEO = _M["geom"]; WAT = _M["water"]
+
+                # ligand skeleton (RDKit); the intact substrate incl. its F(s) at the real bonded positions
                 for i, j, bt in bonds:
-                    pi, pj = pos[i], pos[j]
-                    ax.plot([pi[0], pj[0]], [pi[1], pj[1]], color=EL["C"], lw=2.6, zorder=3, solid_capstyle="round")
+                    pi, pj = posT[i], posT[j]
+                    _brk = ({i, j} == {aC, sF})
+                    ax.plot([pi[0], pj[0]], [pi[1], pj[1]], color=ELc["C"], lw=(2.0 if _brk else 3.0),
+                            solid_capstyle="round", zorder=3)
                     if bt == 2.0:
                         dv = pj - pi; nrm = np.array([-dv[1], dv[0]]); nrm = nrm / np.linalg.norm(nrm) * 0.09
-                        ax.plot([pi[0] + nrm[0], pj[0] + nrm[0]], [pi[1] + nrm[1], pj[1] + nrm[1]], color=EL["C"], lw=2.0, zorder=3)
-                for i, p in pos.items():
-                    sym = elem[i]
-                    if sym == "C":
+                        ax.plot([pi[0] + nrm[0], pj[0] + nrm[0]], [pi[1] + nrm[1], pj[1] + nrm[1]], color=ELc["C"], lw=2.0, zorder=3)
+                for i, p in posT.items():
+                    s = elem[i]
+                    if s == "C":
+                        if i == aC:
+                            ax.text(Ca[0] + 0.06, Ca[1] - 0.30, r"C$\alpha$", color=ELc["C"], fontweight="bold",
+                                    fontsize=10, ha="left", va="top", zorder=6)
                         continue
                     ax.add_patch(Circle(p, 0.20, fc="white", ec="none", zorder=4))
-                    ax.text(p[0], p[1], sym, color=EL.get(sym, INK), fontweight="bold", fontsize=11, ha="center", va="center", zorder=5)
-                ax.text(Ca[0] + 0.12, Ca[1] - 0.30, r"C$\alpha$", color=EL["C"], fontweight="bold", fontsize=10, ha="left", va="top", zorder=5)
+                    ax.text(p[0], p[1], s, color=ELc.get(s, _INK["near_black"]), fontweight="bold", fontsize=11.5,
+                            ha="center", va="center", zorder=5)
+                    if i == sF:
+                        ax.add_patch(Circle(p, 0.40, fc="none", ec=_SCIS, lw=1.4, zorder=6))
 
-                nu0 = Ca + Nud * 2.95
-                ax.add_patch(FancyArrowPatch(nu0, Ca + Nud * .85, arrowstyle="-|>", mutation_scale=22, lw=2.8, color=ACT_CHEM, zorder=4))
-                ax.add_patch(FancyArrowPatch(Fp + Fdir * .42, Fd, arrowstyle="-|>", mutation_scale=19, lw=2.4, color=ACT_CHEM, ls="--", zorder=4))
-                ax.text(Ca[0] + Nud[0] * 1.55 - 0.1, Ca[1] + Nud[1] * 1.55 + 0.5, "nucleophilic\nbackside attack", fontsize=8, color=ACT_CHEM, ha="center", va="bottom", fontweight="bold")
-                ax.text(Fd[0] + 0.15, Fd[1] - 0.32, "C-F breaks,\nF$^-$ departs", fontsize=7.8, color=EL["F"], ha="center", va="top")
-                _geo = _M["geom"]
-                _t1 = math.degrees(math.atan2(*(Fp - Ca)[::-1])); _t2 = math.degrees(math.atan2(*(nu0 - Ca)[::-1]))
-                ax.add_patch(Arc(Ca, 1.9, 1.9, angle=0, theta1=_t1, theta2=_t2, color=_geo, lw=1.4))
-                _bis = math.radians((_t1 + _t2) / 2)     # arc bisector - seat the label inside the arc
-                ax.text(Ca[0] + math.cos(_bis) * 0.60, Ca[1] + math.sin(_bis) * 0.60,
-                        f"S$_N$2\n{ang:.0f}$^\\circ$ Walden\ninversion", fontsize=7.4, ha="center", va="center",
-                        color=_geo, style="italic", fontweight="bold", zorder=6,
-                        bbox=dict(boxstyle="round,pad=0.22", fc="white", ec="none", alpha=0.72))
+                # the scissile F shown twice: bonded on the ligand and departed at Fdep, linked by a release arrow
+                ax.add_patch(FancyArrowPatch(Fp + Fdir * 0.42, Fdep - Fdir * 0.44, connectionstyle="arc3,rad=0.16",
+                             arrowstyle="-|>", mutation_scale=17, lw=2.2, color=ELc["F"], ls=(0, (4, 2)), zorder=5))
+                _amid = Fp * 0.46 + Fdep * 0.54; _aperp = rot2d(Fdep - Fp, 90); _aperp = _aperp / (np.linalg.norm(_aperp) + 1e-9)
+                ax.annotate(f"Cα-F released\n{path[-1]['dCaF']:.2f} Å", xy=tuple(_amid + _aperp * 0.18), xytext=tuple(_amid - _aperp * 1.8),
+                            color=ELc["F"], fontsize=7.4, ha="center", va="center", fontweight="bold", zorder=8,
+                            bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=.92),
+                            arrowprops=dict(arrowstyle="->", color=_M["dist"], lw=1.0, shrinkA=3, shrinkB=1))
+                ax.add_patch(Circle(Fdep, 0.36, fc="white", ec=_SCIS, lw=1.3, zorder=4))
+                ax.text(Fdep[0], Fdep[1], "F", color=ELc["F"], fontweight="bold", fontsize=13, ha="center", va="center", zorder=5)
+                ax.text(Fdep[0] + Fdir[0] * 1.9, Fdep[1] + Fdir[1] * 1.9, f"F$^-$ departs\n{fq_prod:+.2f} e", color=ELc["F"],
+                        fontsize=8.6, ha="center", va="center", fontweight="bold", zorder=9,
+                        bbox=dict(boxstyle="round,pad=0.16", fc="#EAF7F9", ec=ELc["F"], lw=0.8, alpha=.97))
 
-                def _node(xy, key, anchor, lbl="above", toff=(0, 0), show_dist=True):
-                    role, rid, grp = RES[key]; col = ROLE[grp]; x, y = xy; r = 0.50
-                    g, nn = d[key]; eng = nn <= ENG
-                    ax.plot([x, anchor[0]], [y, anchor[1]], ls=(0, (3, 2)), lw=1.0, color=DIST, alpha=.85, zorder=2)
-                    if show_dist:
-                        mx, my = (x + anchor[0]) / 2 + toff[0], (y + anchor[1]) / 2 + toff[1]
-                        tk = "↓" if nn < g - 0.02 else ("↑" if nn > g + 0.02 else "=")
-                        ax.text(mx, my, f"{g:.1f}→{nn:.1f} {tk}", fontsize=6.9, color=DIST, ha="center", va="center", zorder=11,
-                                bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=.9))
-                    ax.add_patch(Circle(xy, r, fc=col, ec="white", lw=1.6, zorder=5, alpha=.97 if eng else .5))
-                    code, num = _split(rid)
-                    ax.text(x, y + 0.13, code, ha="center", va="center", color="white", fontweight="bold", fontsize=8.0, zorder=12)
-                    ax.text(x, y - 0.15, num, ha="center", va="center", color="white", fontsize=7.6, zorder=12)
-                    yr = y + r + 0.13 if lbl == "above" else y - r - 0.13
-                    ax.text(x, yr, role, fontsize=6.9, ha="center", va="bottom" if lbl == "above" else "top", color=MUTE, zorder=12)
+                def _disc(center, col, code, num, r=0.58):
+                    ax.add_patch(Circle(center, r, fc=col, ec="white", lw=1.8, zorder=6, alpha=.97))
+                    ax.text(center[0], center[1] + 0.15, code, color="white", fontweight="bold", fontsize=9.0, ha="center", va="center", zorder=7)
+                    ax.text(center[0], center[1] - 0.17, str(num), color="white", fontsize=8.2, ha="center", va="center", zorder=7)
+                def _iatom(apos, col, name):
+                    ax.add_patch(Circle(apos, 0.28, fc="white", ec=col, lw=1.3, zorder=7))
+                    ax.text(apos[0], apos[1], name[0], color=col, fontweight="bold", fontsize=10.5, ha="center", va="center", zorder=8)
 
-                nucn = Ca + Nud * 3.0
-                _node(tuple(nucn), "Nuc", Ca, "above", toff=(0.35, -0.5))
-                _node((-4.6, 1.7), "Base", nucn, "below", toff=(-0.55, 0.05))
-                _node((-5.7, 0.55), "Acid", (-4.6, 1.7), "below", show_dist=False)
-                _node((4.4, 3.9), "StabH", Fd, "above")
-                _node((5.3, 2.1), "StabW", Fd, "above")
-                _node((4.2, 0.6), "StabY", Fd, "below")
-                _node((-2.3, 5.2), "Clamp1", COO, "above")
-                _node((1.7, 5.3), "Clamp2", COO, "above")
-
-                # Asp-His general-base dyad (His280 activates the hydrolytic WATER for the glycolyl-Asp110
-                # ester hydrolysis AFTER C-F cleavage; it does NOT activate the SN2 nucleophile).
-                ax.add_patch(FancyArrowPatch((-5.4, 0.85), (-4.75, 1.4), arrowstyle="-|>", mutation_scale=10, lw=1.4, color=ACT_ROLE, alpha=.85, zorder=3))
-                ax.text(-5.5, 1.35, "orients", fontsize=6.8, color=ACT_ROLE, ha="center", va="center", rotation=42)
-                for rp in ((4.4, 3.9), (5.3, 2.1), (4.2, 0.6)):
-                    ax.add_patch(FancyArrowPatch(rp, tuple(Fd + Fdir * 0.3), arrowstyle="-|>", mutation_scale=8, lw=1.1, color=ACT_ROLE, alpha=.7, zorder=2, connectionstyle="arc3,rad=0.12"))
-                ax.text(5.9, 1.25, "stabilise\ndeparting F$^-$", fontsize=6.8, color=ACT_ROLE, ha="center", va="center")
-                for cp in ((-2.3, 5.2), (1.7, 5.3)):
-                    ax.add_patch(FancyArrowPatch(cp, tuple(COO + np.array([0, 0.25])), arrowstyle="-|>", mutation_scale=8, lw=1.3, color=ACT_ROLE, alpha=.7, zorder=2, connectionstyle="arc3,rad=0.1"))
-                ax.text(-0.4, 5.9, "clamps hold the carboxylate", fontsize=7.0, color=ACT_ROLE, ha="center", va="center")
-
-                neng = sum(1 for k in RES if d[k][1] <= ENG)
-                OUTc, GEOc = EL["F"], _M["geom"]
-                nu = int(st.get("WM_N_Unstable", 0)); nsit = int(st.get("WM_N_Sites", 0))
-                bx, by, bw = -6.55, -0.35, 13.05; hh = 0.46; hcol = V_CL if q["ncl"] else V_IN
-                frames_short = "·".join(f"{ns:.0f}" for ns, cl, ba in q["frames"]) + " ns"
-                tables = [("QM/MM  QM-region", OUTc,
-                           [("ΔE‡ barrier", f"{q['barrier']:.2f} kcal/mol", OUTc), ("ΔE_rxn", f"{q['derxn']:+.2f} kcal/mol", OUTc),
-                            ("departing-F charge", f"{q['fq']:.2f} e", OUTc), ("Is_Defluorinating", "yes" if q["isdef"] else "no (gate)", OUTc)]),
-                          ("catalytic geometry", GEOc,
-                           [("SN2 attack pk/NAC", f"{st.get('SN2_Attack_Angle'):.0f}/{ang:.0f} deg", GEOc), ("triad Nu-B/B-Ac", f"{tri[0]:.2f}/{tri[1]:.2f} A", GEOc),
-                            ("residues engaged", f"{neng}/8 (<{ENG:.1f}A)", GEOc), ("MM-GBSA ΔG_bind", f"{st.get('MMGBSA_dG_NAC_Mean_kcal'):+.2f} kcal/mol", GEOc)]),
-                          ("WaterMap  ·  MD", WATc,
-                           [("displaceable H2O", f"{nu}/{nsit} sites", WATc), ("mean site ΔG", f"{st.get('WM_Mean_dG'):.2f} kcal/mol", WATc),
-                            ("sampled frames", frames_short, ACT_CHEM), ("reactive NAC dwell", f"{st.get('NAC_Total_ns'):.2f} ns", ACT_CHEM)])]
-                cwn = 0.083; hth = 0.34; rowh = 0.30; tgrid = "#C6C6C6"; tline = "#E4E4E4"; tgap = 0.28
-                geom = []
-                for title, hc, rws in tables:
-                    labw = max(len(r[0]) for r in rws) * cwn + 0.26
-                    valw = max(len(r[1]) for r in rws) * cwn + 0.24
-                    geom.append((labw, max(labw + valw, len(title) * 0.093 + 0.4)))
-                Ht = hth + 4 * rowh; H = hh + 0.12 + Ht + 0.14
-                ax.add_patch(FancyBboxPatch((bx, by - H), bw, H, boxstyle="round,pad=0.02,rounding_size=0.12", fc="none", ec=hcol, lw=1.8, zorder=5))
-                ax.add_patch(FancyBboxPatch((bx, by - hh), bw, hh, boxstyle="round,pad=0.02,rounding_size=0.12", fc=hcol, ec=hcol, lw=0, alpha=0.94, zorder=5))
-                ax.text(bx + bw / 2, by - hh / 2, f"C-F {'CLEAVED' if q['ncl'] else 'INTACT'}  ({q['ncl']}/{q['n']} frames)    ·    {ligand}",
-                        color="white", fontweight="bold", fontsize=10.3, ha="center", va="center", zorder=6)
-                ytab = by - hh - 0.12; x = bx + 0.22
-                for (title, hc, rws), (labw, wt) in zip(tables, geom):
-                    nn = len(rws)
-                    ax.add_patch(Rectangle((x, ytab - Ht), wt, Ht, fill=False, ec=tgrid, lw=1.0, zorder=6))
-                    ax.add_patch(Rectangle((x, ytab - hth), wt, hth, fc=hc, ec=hc, lw=0, alpha=0.93, zorder=5))
-                    ax.text(x + wt / 2, ytab - hth / 2, title, color="white", fontweight="bold", fontsize=7.2, ha="center", va="center", zorder=6)
-                    ax.plot([x + labw, x + labw], [ytab - hth, ytab - Ht], color=tline, lw=0.7, zorder=6)
-                    yy = ytab - hth
-                    for i, (lab, val, rc) in enumerate(rws):
-                        yc = yy - rowh / 2
-                        ax.text(x + 0.12, yc, lab, color=rc, fontsize=7.0, ha="left", va="center", zorder=6)
-                        ax.text(x + labw + 0.12, yc, val, color=rc, fontsize=7.0, ha="left", va="center", fontweight="bold", zorder=6)
-                        yy -= rowh
-                        if i < nn - 1:
-                            ax.plot([x, x + wt], [yy, yy], color=tline, lw=0.6, zorder=6)
-                    x += wt + tgap
-                tabw = sum(w for _, w in geom) + 2 * tgap
-                items = [("L", ACT_CHEM, "chemical action"), ("L", ACT_ROLE, "role action"), ("D", DIST, "distance (global->NAC)"),
-                         ("O", ROLE["nucleophile"], "nucleophile (Asp)"), ("O", ROLE["triad"], "triad (acid/base)"),
-                         ("O", ROLE["cradle"], "F cradle (His/Trp/Tyr)"), ("O", ROLE["clamp"], "COO- clamp (Arg)")]
-                lx = bx + tabw + 0.55; lrows = hth + 4 * rowh; lstep = lrows / len(items); ly = ytab - lstep / 2
-                for kind, col, lab in items:
-                    if kind in ("L", "D"):
-                        ax.plot([lx, lx + 0.30], [ly, ly], color=col, lw=1.9, ls="--" if kind == "D" else "-", zorder=6); xe = lx + 0.30
+                ROLECOL = {"Nucleophile": PUR, "Acid/base catalysis": _ROLE["Acid/base catalysis"],
+                           "Fluoride pocket": PINK, "Carboxylate clamp": _ROLE["Carboxylate clamp"]}
+                donmap = {(x["res"], x["num"]): x for x in prot}
+                perpN = rot2d(Nud, 90); COOdir = (COO - Ca) / np.linalg.norm(COO - Ca)
+                POS = {"Nuc": Ca + Nud * 4.3, "Base": Ca + Nud * 3.5 + perpN * 3.2, "Acid": Ca + Nud * 6.4 + perpN * 1.5,
+                       "StabH": Fdep + rot2d(Fdir, 42) * 3.5, "StabW": Fdep + rot2d(Fdir, 88) * 3.6, "StabY": Fdep + rot2d(Fdir, 133) * 3.3,
+                       "Clamp1": COO + rot2d(COOdir, 40) * 2.0, "Clamp2": COO + rot2d(COOdir, -30) * 2.0}
+                ANCH = {"Nuc": Ca, "Base": Ca + Nud * 2.2, "Acid": Ca + Nud * 3.9 + perpN * 2.6,
+                        "StabH": Fdep, "StabW": Fdep, "StabY": Fdep, "Clamp1": COO, "Clamp2": COO}
+                allpts = [np.array(p, float) for p in posT.values()] + [Fdep]
+                nuc_atom = Ca + Nud * 2.05
+                for key, (rn3, rid, cfg_role) in roles.items():
+                    if rid is None:
+                        continue
+                    dp = POS[key]; an = ANCH[key]; col = ROLECOL[cfg_role]; allpts.append(dp)
+                    code = rn3
+                    dv = (an - dp) / (np.linalg.norm(an - dp) + 1e-9)
+                    realatom = donmap.get((rn3, rid)) if cfg_role in ("Fluoride pocket", "Nucleophile") else None
+                    if key == "Nuc":
+                        apos = Ca + Nud * 2.05; nuc_atom = apos
+                        _disc(dp, col, code, rid)
+                        ax.plot([dp[0] + dv[0] * 0.58, apos[0] - dv[0] * 0.24], [dp[1] + dv[1] * 0.58, apos[1] - dv[1] * 0.24], color=col, lw=1.3, zorder=5)
+                        _iatom(apos, col, "O")
+                        ax.text(apos[0], apos[1] + 0.30, pretty_atom(nuc["heavy"]), color=col, fontsize=7.2, ha="center", va="bottom", fontweight="bold", zorder=8)
+                        ax.plot([apos[0] + dv[0] * 0.24, Ca[0] - dv[0] * 0.1], [apos[1] + dv[1] * 0.24, Ca[1] - dv[1] * 0.1], ls=(0, (2, 1.6)), lw=1.8, color=col, zorder=2)
+                        _fm = (apos + Ca) / 2
+                        ax.text(_fm[0] + perpN[0] * 0.40, _fm[1] + perpN[1] * 0.40, f"{nuc['d']:.2f} Å", color=col, fontsize=7.4, ha="center", va="center", zorder=7,
+                                bbox=dict(boxstyle="round,pad=0.08", fc="white", ec="none", alpha=.9))
+                    elif realatom is not None:
+                        apos = dp + dv * (np.linalg.norm(an - dp) - 2.4)
+                        _disc(dp, col, code, rid)
+                        ax.plot([dp[0] + dv[0] * 0.58, apos[0] - dv[0] * 0.24], [dp[1] + dv[1] * 0.58, apos[1] - dv[1] * 0.24], color=col, lw=1.2, zorder=5)
+                        _iatom(apos, col, pretty_atom(realatom["heavy"]))
+                        _ap = rot2d(dv, 90); _ap = _ap / (np.linalg.norm(_ap) + 1e-9) * 0.46
+                        ax.text(apos[0] + _ap[0], apos[1] + _ap[1], pretty_atom(realatom["heavy"]), color=col, fontsize=6.9, ha="center", va="center", fontweight="bold", zorder=8)
+                        ax.plot([apos[0] + dv[0] * 0.24, Fdep[0] - dv[0] * 0.22], [apos[1] + dv[1] * 0.24, Fdep[1] - dv[1] * 0.22], ls=(0, (1.2, 1.4)), lw=1.5, color=col, alpha=.95, zorder=3)
+                        _m = apos * 0.62 + Fdep * 0.38; _pp = rot2d(Fdep - apos, 90); _pp = _pp / (np.linalg.norm(_pp) + 1e-9) * 0.24
+                        ax.text(_m[0] + _pp[0], _m[1] + _pp[1], f"{realatom['hd']:.2f} Å", color=col, fontsize=6.7, ha="center", va="center", zorder=8,
+                                bbox=dict(boxstyle="round,pad=0.05", fc="white", ec="none", alpha=.9))
                     else:
-                        ax.add_patch(Circle((lx + 0.09, ly), 0.09, fc=col, ec="white", lw=0.8, zorder=6)); xe = lx + 0.18
-                    ax.text(xe + 0.12, ly, lab, fontsize=7.6, va="center", ha="left", color=INK, zorder=6)
-                    ly -= lstep
-                ax.set_ylim(by - H - 0.14, 6.0)
+                        _disc(dp, col, code, rid)
+                        ax.plot([dp[0] + dv[0] * 0.58, an[0] - dv[0] * 0.15], [dp[1] + dv[1] * 0.58, an[1] - dv[1] * 0.15], ls=(0, (3, 2)), lw=1.0, color=col, alpha=.7, zorder=2)
+                        g, nn = dres.get(key, (float("nan"), float("nan")))
+                        _m = (dp + an) / 2; _pp = rot2d(an - dp, 90); _pp = _pp / (np.linalg.norm(an - dp) + 1e-9) * 0.26
+                        ax.text(_m[0] + _pp[0], _m[1] + _pp[1], f"{g:.1f}->{nn:.1f} Å", color=col, fontsize=6.4, ha="center", va="center", zorder=7,
+                                bbox=dict(boxstyle="round,pad=0.05", fc="white", ec="none", alpha=.9))
+
+                # electron transfer (numbered, curved)
+                ax.add_patch(FancyArrowPatch(nuc_atom + Nud * (-0.22), Ca + Nud * 0.30, connectionstyle="arc3,rad=0.32",
+                             arrowstyle="-|>", mutation_scale=17, lw=1.9, color=CHEM, zorder=9))
+                ax.text(*(nuc_atom * 0.42 + Ca * 0.58 - perpN * 0.42), "①", color=CHEM, fontsize=11, ha="center", va="center", fontweight="bold", zorder=10)
+                emid = (Ca + Fdep) / 2
+                ax.add_patch(FancyArrowPatch(emid, Fdep - Fdir * 0.34, connectionstyle="arc3,rad=-0.32",
+                             arrowstyle="-|>", mutation_scale=17, lw=1.9, color=CHEM, zorder=9))
+                ax.text(emid[0] + perpN[0] * 0.4, emid[1] + 0.34, "②", color=CHEM, fontsize=11, ha="center", va="center", fontweight="bold", zorder=10)
+                ax.text(Ca[0] - 0.2, Ca[1] - 2.15, "① lone pair -> Cα    ② Cα-F σ pair -> F$^-$", color=CHEM, fontsize=7.4,
+                        ha="center", va="center", fontweight="bold", zorder=9,
+                        bbox=dict(boxstyle="round,pad=0.16", fc="white", ec=_INK["hairline"], lw=0.6, alpha=.92))
+
+                # SN2 attack arc labelled with the MD NAC attack angle
+                _t1 = math.degrees(math.atan2(*(Fdir)[::-1])); _t2 = math.degrees(math.atan2(*(Nud)[::-1]))
+                _lo, _hi = sorted([_t1, _t2]); (_lo, _hi) = (_hi, _lo + 360) if _hi - _lo > 180 else (_lo, _hi)
+                ax.add_patch(Arc(Ca, 2.0, 2.0, angle=0, theta1=_lo, theta2=_hi, color=GEO, lw=1.6, zorder=6))
+                _bis = math.radians((_lo + _hi) / 2)
+                _arot = math.degrees(_bis) - 90                          # align the label with the arc; keep it upright
+                _arot = _arot + 180 if _arot < -90 else (_arot - 180 if _arot > 90 else _arot)
+                ax.text(Ca[0] + math.cos(_bis) * 0.58, Ca[1] + math.sin(_bis) * 0.58, f"Nu-Cα-F\n{st.get('MD_Avg_NAC_Angle_Deg', float('nan')):.0f}°",
+                        color=GEO, fontsize=7.0, ha="center", va="center", fontweight="normal", style="italic", rotation=_arot, rotation_mode="anchor", zorder=7,
+                        bbox=dict(boxstyle="round,pad=0.06", fc="white", ec="none", alpha=.6))
+
+                # fluoride-stabilising water: catalytic (H-bonds F) highlighted, or nearest water flagged too far
+                _near = nearwat[0] if nearwat else None
+                if cat_water is not None:
+                    _wdir = rot2d(Fdir, -58); wO = Fdep + _wdir * 2.4
+                    _wHdir = (Fdep - wO) / np.linalg.norm(Fdep - wO); _wH1 = wO + _wHdir * 0.5; _wH2 = wO + rot2d(_wHdir, 108) * 0.5
+                    ax.add_patch(Circle(wO, 0.42, fc="none", ec=WAT, lw=1.5, ls=(0, (2, 1.5)), zorder=4, alpha=.85))
+                    ax.add_patch(Circle(wO, 0.25, fc=WAT, ec="white", lw=1.4, zorder=6))
+                    ax.text(wO[0], wO[1], "O", color="white", fontsize=8.4, ha="center", va="center", fontweight="bold", zorder=7)
+                    for _wH in (_wH1, _wH2):
+                        ax.plot([wO[0], _wH[0]], [wO[1], _wH[1]], color=WAT, lw=2.0, zorder=5); ax.add_patch(Circle(_wH, 0.10, fc=WAT, ec="none", zorder=6, alpha=.85))
+                    ax.plot([_wH1[0], Fdep[0] - _wHdir[0] * 0.25], [_wH1[1], Fdep[1] - _wHdir[1] * 0.25], ls=(0, (1.2, 1.4)), lw=1.6, color=WAT, zorder=3)
+                    _m = (_wH1 + Fdep) / 2; _pp = rot2d(Fdep - _wH1, 90); _pp = _pp / (np.linalg.norm(_pp) + 1e-9) * 0.18
+                    ax.text(_m[0] + _pp[0], _m[1] + _pp[1], f"{cat_water['hd']:.2f} Å", color=WAT, fontsize=6.8, ha="center", va="center", zorder=8,
+                            bbox=dict(boxstyle="round,pad=0.05", fc="white", ec="none", alpha=.9))
+                    ax.text(wO[0] + 0.5, wO[1] + 0.05, f"catalytic H$_2$O\nstabilises F$^-$\n{nqmw} QM H$_2$O", color=WAT, fontsize=7.0, ha="left", va="center", fontweight="bold", zorder=7)
+                    allpts.append(wO)
+                elif _near is not None:
+                    _wdir = rot2d(Fdir, -58); wO = Fdep + _wdir * 2.7
+                    ax.add_patch(Circle(wO, 0.22, fc=WAT, ec="white", lw=1.2, zorder=6, alpha=.55))
+                    ax.text(wO[0], wO[1], "O", color="white", fontsize=8, ha="center", va="center", fontweight="bold", zorder=7, alpha=.9)
+                    ax.plot([wO[0], Fdep[0]], [wO[1], Fdep[1]], ls=(0, (1, 2.2)), lw=1.2, color=WAT, alpha=.6, zorder=3)
+                    ax.text(wO[0] + 0.4, wO[1] - 0.2, f"nearest H$_2$O  {_near[1]:.1f} Å\ntoo far to stabilise F$^-$\n(dewetted)", color=WAT, fontsize=7.0, ha="left", va="top", fontweight="bold", zorder=7)
+                    allpts.append(wO)
+
+                _A = np.array(allpts); ax.set_xlim(_A[:, 0].min() - 1.0, _A[:, 0].max() + 1.25); ax.set_ylim(_A[:, 1].min() - 1.1, _A[:, 1].max() + 1.5)
+                """
+                Resize the scene axes to hug its content: aspect-equal would otherwise pad the box and open
+                a dead band above the table. The graph butts right up against the scene (its y-axis label fills
+                the small gap) and the table docks just below.
+                """
+                _xr = ax.get_xlim()[1] - ax.get_xlim()[0]; _yr = ax.get_ylim()[1] - ax.get_ylim()[0]
+                _hf = 0.545; _wf = min(0.55, _hf * _FH * _xr / (_FW * _yr)); _sb = 0.985 - _hf
+                ax.set_position([0.006, _sb, _wf, _hf])
+                axc.set_position([_wf + 0.045, _sb + 0.02, 0.86 - (_wf + 0.045), _hf - 0.055])   # narrower graph (compressed x-axis)
+
+                # verdict badge: pulled out of the table, sits in the scene's lower-left white space
+                _ABBR = {"Fluoroacetate": "FA", "Difluoroacetate": "DFA", "TFA": "TFA"}
+                _ab = _ABBR.get(ligand, str(ligand)[:3].upper())
+                _hcol = _CLEAVED if ens["ncl"] else _INTACT
+                ax.text(0.08, 0.02, f"{_ab} · C-F {'CLEAVED' if ens['ncl'] else 'INTACT'}  ({ens['ncl']}/{ens['n']} frames)",
+                        transform=ax.transAxes, ha="left", va="bottom", fontsize=11.5, fontweight="bold", color="white", zorder=20,
+                        bbox=dict(boxstyle="round,pad=0.4", fc=_hcol, ec=_hcol, alpha=0.95))
+
+                # reaction-coordinate graph (C-F length + departing-F charge over the scan); no title
+                _n = len(path); _xi = np.arange(1, _n + 1); _cf = [p["dCaF"] for p in path]; _fq = [p["fq"] for p in path]
+                axc.plot(_xi, _cf, "-o", color=_ACC["axis_left"], ms=3.2, lw=1.8, label="Cα-F length")
+                axc.set_ylabel("Cα-F  (Å)", color=_ACC["axis_left"], fontsize=8.5)
+                axc.tick_params(axis="y", labelcolor=_ACC["axis_left"], labelsize=7.5); axc.tick_params(axis="x", labelsize=7.5)
+                axc.set_xlabel("QM scan point  (reactant -> product)", fontsize=8.0)
+                axc.set_xlim(0.4, _n + 0.6); axc.margins(x=0)             # tight x so the points are not spread wide
+                axc.grid(True, axis="x", color=_INK["palest"], lw=0.5, alpha=.6); axc.set_axisbelow(True); axc.spines["top"].set_visible(False)
+                axc2 = axc.twinx()
+                axc2.plot(_xi, _fq, "-s", color=_ACC["axis_right"], ms=3.0, lw=1.6, label="departing-F charge")
+                axc2.axhline(_FCUT, ls="--", lw=1.1, color=_INTACT)
+                axc2.set_ylabel("F Mulliken (e)", color=_ACC["axis_right"], fontsize=8.5); axc2.tick_params(axis="y", labelcolor=_ACC["axis_right"], labelsize=7.5)
+                axc2.text(0.98, _FCUT, f" cleaved <={_FCUT:+.1f}", color=_INTACT, fontsize=6.6, ha="right", va="bottom", transform=axc2.get_yaxis_transform())
+                axc2.spines["top"].set_visible(False)
+                _h1, _l1 = axc.get_legend_handles_labels(); _h2, _l2 = axc2.get_legend_handles_labels()
+                axc.legend(_h1 + _h2, _l1 + _l2, fontsize=6.8, loc="center left", frameon=True, framealpha=.9, edgecolor=_INK["hairline"])
+
+                # bottom: one joined value table (three sections abut under a single sharp border, each with its
+                # own coloured header) + the scene legend as a borderless right cell. The verdict is the badge above.
+                _ENG = 4.5; _neng = sum(1 for k in dres if dres[k][1] <= _ENG); _ang = st.get("MD_Avg_NAC_Angle_Deg", float("nan"))
+                OUTc = _M["elem_F"]; GEOc = _M["geom"]; WATc = _M["water"]
+                _nu = int(st.get("WM_N_Unstable", 0)); _nsit = int(st.get("WM_N_Sites", 0))
+                _water_val = (f"{nqmw} QM · catalytic {cat_water['hd']:.1f} Å" if cat_water
+                              else (f"0 QM · nearest {nearwat[0][1]:.1f} Å" if nearwat else "0 QM"))
+                tables = [("QM/MM  QM-region", OUTc,
+                           [("ΔE‡ barrier", f"{ens['barrier']:.2f} kcal/mol", OUTc), ("ΔE_rxn", f"{ens['derxn']:+.2f} kcal/mol", OUTc),
+                            ("departing-F charge", f"{ens['fq']:.2f} e", OUTc), ("Is_Defluorinating", "yes" if ens["isdef"] else "no (gate)", OUTc)]),
+                          ("catalytic geometry", GEOc,
+                           [("SN2 attack pk/NAC", f"{st.get('SN2_Attack_Angle'):.0f}/{_ang:.0f} deg", GEOc), ("triad Nu-B/B-Ac", f"{tri[0]:.2f}/{tri[1]:.2f} Å", GEOc),
+                            ("residues engaged", f"{_neng}/8 (<{_ENG:.1f}Å)", GEOc), ("MM-GBSA ΔG_bind", f"{st.get('MMGBSA_dG_NAC_Mean_kcal'):+.2f} kcal/mol", GEOc)]),
+                          ("WaterMap  ·  MD", WATc,
+                           [("displaceable H2O", f"{_nu}/{_nsit} sites", WATc), ("mean site ΔG", f"{st.get('WM_Mean_dG'):.2f} kcal/mol", WATc),
+                            ("water at F$^-$", _water_val, WATc), ("reactive NAC dwell", f"{st.get('NAC_Total_ns'):.2f} ns", WATc)])]
+                _cwn = 0.090; _hth = 0.40; _rowh = 0.34; _tgrid = _INK["palest"]; _tline = _INK["hairline"]; _tedge = _INK["silver"]
+                _fs_head = 9.4; _fs_lab = 8.8; _fs_val = 8.8; _legw = 2.02
+                _geomT = []
+                for _title, _hc, _rws in tables:
+                    _labw = max(len(r[0]) for r in _rws) * _cwn + 0.14; _valw = max(len(r[1]) for r in _rws) * _cwn + 0.15
+                    _geomT.append((_labw, max(_labw + _valw, len(_title) * 0.108 + 0.28)))
+                _tabw = sum(w for _, w in _geomT)
+                _Ht = _hth + 4 * _rowh
+                _total = _legw + _tabw                                    # legend (left) + joined table (right)
+                _x0 = -_total / 2; _by = -0.30; _ytab = _by; _bx = _x0; _BW = _total   # centre the [legend + table] block
+                # outer border: one clean rectangle (sharp) around legend + table. The table carries the grid;
+                # the legend sits on the left as a borderless cell, divided from the table by a single vertical.
+                axt.add_patch(Rectangle((_x0, _ytab - _Ht), _total, _Ht, fill=False, ec=_tedge, lw=1.5, zorder=6))
+                # ---- scene legend, borderless cell on the LEFT ----
+                _lx = _x0 + 0.12
+                _lg = [("disc", PUR, "nucleophile (Asp)"), ("disc", _ROLE["Acid/base catalysis"], "acid / base (Asp·His)"),
+                       ("disc", PINK, "F$^-$ cradle (His/Trp/Tyr)"), ("disc", _ROLE["Carboxylate clamp"], "COO$^-$ clamp (Arg)"),
+                       ("iatom", _INK["muted"], "real interacting atom"), ("ring", _SCIS, "scissile F (released)"),
+                       ("arrow", CHEM, "electron flow ①②"), ("dashF", _M["elem_F"], "breaking Cα-F"),
+                       ("dot", PINK, "F$^-$ H-bond (Å)")]
+                _lstep = _Ht / len(_lg); _ly = _ytab - _lstep / 2; _ml = 0.22
+                for _kind, _col, _lab in _lg:
+                    _xe = _lx + _ml
+                    if _kind == "arrow":
+                        axt.add_patch(FancyArrowPatch((_lx, _ly), (_lx + _ml, _ly), arrowstyle="-|>", mutation_scale=7, lw=1.3, color=_col, zorder=6))
+                    elif _kind == "dashF":
+                        axt.plot([_lx, _lx + _ml], [_ly, _ly], color=_col, lw=1.5, ls=(0, (1.4, 2.0)), zorder=6)
+                    elif _kind == "dot":
+                        axt.plot([_lx, _lx + _ml], [_ly, _ly], color=_col, lw=1.4, ls=(0, (1.2, 1.4)), zorder=6)
+                    elif _kind == "disc":
+                        axt.add_patch(Circle((_lx + 0.08, _ly), 0.075, fc=_col, ec="white", lw=0.6, zorder=6)); _xe = _lx + 0.16
+                    elif _kind == "iatom":
+                        axt.add_patch(Circle((_lx + 0.08, _ly), 0.06, fc="white", ec=_INK["muted"], lw=1.1, zorder=6)); _xe = _lx + 0.16
+                    elif _kind == "ring":
+                        axt.add_patch(Circle((_lx + 0.08, _ly), 0.075, fc="none", ec=_col, lw=1.5, zorder=6)); _xe = _lx + 0.16
+                    axt.text(_xe + 0.10, _ly, _lab, fontsize=7.8, va="center", ha="left", color=_INK["near_black"], zorder=6)
+                    _ly -= _lstep
+                # divider between the legend cell and the joined table
+                _xtab = _x0 + _legw
+                axt.plot([_xtab, _xtab], [_ytab - _Ht, _ytab], color=_tedge, lw=1.2, zorder=6)
+                # ---- joined table (three sections) on the RIGHT ----
+                _x = _xtab
+                for _idx, ((_title, _hc, _rws), (_labw, _wt)) in enumerate(zip(tables, _geomT)):
+                    _nn = len(_rws)
+                    axt.add_patch(Rectangle((_x, _ytab - _hth), _wt, _hth, fc=_hc, ec=_hc, lw=0, alpha=0.94, zorder=5))
+                    axt.text(_x + _wt / 2, _ytab - _hth / 2, _title, color="white", fontweight="bold", fontsize=_fs_head, ha="center", va="center", zorder=6)
+                    axt.plot([_x + _labw, _x + _labw], [_ytab - _hth, _ytab - _Ht], color=_tline, lw=0.7, zorder=6)
+                    _yy = _ytab - _hth
+                    for _i, (_lab, _val, _rc) in enumerate(_rws):
+                        _yc = _yy - _rowh / 2
+                        axt.text(_x + 0.14, _yc, _lab, color=_rc, fontsize=_fs_lab, ha="left", va="center", zorder=6)
+                        axt.text(_x + _labw + 0.16, _yc, _val, color=_rc, fontsize=_fs_val, ha="left", va="center", fontweight="bold", zorder=6)
+                        _yy -= _rowh
+                        if _i < _nn - 1:
+                            axt.plot([_x, _x + _wt], [_yy, _yy], color=_tline, lw=0.6, zorder=6)
+                    if _idx < len(tables) - 1:                    # section separator between joined blocks
+                        axt.plot([_x + _wt, _x + _wt], [_ytab - _Ht, _ytab], color=_tgrid, lw=1.2, zorder=6)
+                    _x += _wt
+                # (table right edge = the outer rectangle's right edge; no extra line)
+                # a compact table box (its own natural aspect, no stretch), centred under the panels (mid-way
+                # between the scene's left edge and the graph's right edge, the figure centre after the tight crop)
+                axt.set_xlim(_bx - 0.12, _bx + _BW + 0.12); axt.set_ylim(_ytab - _Ht - 0.10, _ytab + 0.06); axt.set_aspect("auto")
+                _tasp = (_BW + 0.24) / (_Ht + 0.16); _thf = 0.255; _twf = _thf * _tasp * _FH / _FW
+                _pcx = (0.006 + 0.86) / 2
+                axt.set_position([_pcx - _twf / 2, max(0.015, _sb - 0.05 - _thf), _twf, _thf])
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
-                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight", pad_inches=0.06)
             finally:
                 plt.close(fig)
 
-        _verdict = "CLEAVED" if q["ncl"] else "INTACT"
-        _mech = (f"FAcD SN2 on {ligand}: Asp110 makes the backside attack on the alpha carbon (Walden inversion) "
-                 f"and breaks the C-F; {q['ncl']} of {q['n']} sampled QM/MM frames ionise the departing fluoride "
-                 f"(rank {_verdict}; ensemble barrier dE = {q['barrier']:.2f} kcal/mol, departing-F to {q['fq']:.2f} e). "
-                 f"His155/Trp156/Tyr219 cage the fluoride, Arg111/Arg114 clamp the substrate carboxylate, and the "
-                 f"Asp134-His280 dyad activates the hydrolytic water for the post-cleavage ester hydrolysis. "
-                 f"Residue IDs = 3R3U reference; every value is from this run.")
-        _fv = " · ".join(f"{ns:.0f} ns {'cleave' if cl else 'intact'}" for ns, cl, ba in q["frames"])
+        _verdict = "CLEAVED" if ens["ncl"] else "INTACT"
+        _fv = " · ".join(f"{ns:.0f} ns {'cleave' if cl else 'intact'}" for ns, cl, ba in frames)
         console_info(f"    Reaction-mechanism figure saved: {Path(deflx_fig_name(out_path)).name}")
         console_info(f"      Rank {rank} · {ligand} · {st.get('degrader_tier')}  |  "
-                     f"C-F {'CLEAVED' if q['ncl'] else 'INTACT'} ({q['ncl']}/{q['n']} frames)  |  frames: {_fv}")
-        for _ml in _tw.wrap(_mech, width=110):
-            console_info(f"      {_ml}")
+                     f"C-F {_verdict} ({ens['ncl']}/{ens['n']} frames)  |  frames: {_fv}")
+        console_info(f"      QM region: {len(qm)} atoms · nuc Asp{_nucid} {_mech_pretty_atom(nuc['heavy'])} at {nuc['d']:.2f} A · "
+                     f"{'catalytic H2O ' + format(cat_water['hd'], '.2f') + ' A' if cat_water else ('dewetted, nearest H2O ' + format(nearwat[0][1], '.1f') + ' A' if nearwat else 'no QM water')}; "
+                     f"every value from this run.")
     except Exception as _e:
         console_info(f"    [!] Reaction-mechanism figure skipped ({_e}).")
 
@@ -4725,6 +4986,13 @@ def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: st
                 ax.set_ylim(80, 190)                       # spine to 190; nothing catalytic below 80
                 ax.set_yticks(np.arange(80, 181, 10))      # ticks labelled to 180 (10° steps), 180->190 is headroom
                 ax.set_xlim(0, sims); ax.margins(x=0)      # start the trajectory axis at 0 ns, no gap
+                ax.set_axisbelow(True)                      # grids under the traces
+                # x-grid (the simulation-time axis the reader tracks) darkened to the emphasis colour;
+                # y-grid kept light so it never competes with the angle trace. CFG SSOT colours.
+                ax.grid(True, axis="x", color=CFG.VIS_GRID_COLOUR_EMPHASIS, lw=CFG.VIS_GRID_LINEWIDTH,
+                        alpha=0.95, zorder=0)
+                ax.grid(True, axis="y", color=CFG.VIS_GRID_COLOUR, lw=CFG.VIS_GRID_LINEWIDTH,
+                        alpha=CFG.VIS_GRID_ALPHA, zorder=0)
                 _lh = [Line2D([0], [0], marker="o", ls="", mfc=_compet, mec="none", ms=7, label="catalytically competent frame"),
                        Line2D([0], [0], color=_accent, ls="--", lw=1.4, label=f"mean NAC angle {st.get('MD_Avg_NAC_Angle_Deg'):.1f}°"),
                        Line2D([0], [0], color=_box, lw=2.2, label="QM/MM-scored frame - C-F cleaves"),
@@ -5017,12 +5285,15 @@ def _qsite_status_line(prog: dict) -> str:
     """One line summarising every in-flight QSite scan, grouped by rank, e.g.
     'QSite 12 scans | R1 ✔ F1 23/23 F2 9/23 F3 8/23 | R2 ... | ⏱ 61m' (max elapsed across the scans).
     The header, rank labels and stopwatch clock are green and the field separators red; a completed
-    scan is prefixed with a green tick and a failed one (rc != 0) with a red cross, so finished and
-    broken scans read at a glance without parsing the k/N numbers."""
+    scan (the job exited rc=0 and its results are copied back) is prefixed with a green tick and a failed
+    one (rc != 0) with a red cross, so finished and broken scans read at a glance without parsing the k/N
+    numbers. A scan whose point counter has reached N but whose job has not yet exited shows an amber
+    N/N with an ellipsis: the last point's optimisation and the copy-back from the job-server /tmp
+    write-dir are still running, so it is NOT yet a green tick (the .mae/.out are not on disk yet)."""
     if not prog:
         return ""
-    _G, _R, _B, _E = (ConsoleColours.OKGREEN, ConsoleColours.FAIL,
-                      ConsoleColours.BOLD, ConsoleColours.ENDC)
+    _G, _R, _B, _W, _E = (ConsoleColours.OKGREEN, ConsoleColours.FAIL,
+                          ConsoleColours.BOLD, ConsoleColours.WARNING, ConsoleColours.ENDC)
     _by, _max = {}, 0.0
     for _jn, (_rk, _dn, _tot, _el, _st) in prog.items():
         _m = re.search(r"Frame_(\d+)", str(_jn))
@@ -5030,8 +5301,10 @@ def _qsite_status_line(prog: dict) -> str:
         _d = _dn if _dn is not None else 0
         if _st == "fail":
             _tok = f"{_R}✘ {_fs} {_d}/{_tot}{_E}"
-        elif _st == "done" or _d >= _tot:
+        elif _st == "done":                       # green tick only once the job has actually finished
             _tok = f"{_G}✔ {_fs} {_tot}/{_tot}{_E}"
+        elif _d >= _tot:                          # all points reached, final point + copy-back still running
+            _tok = f"{_W}{_fs} {_tot}/{_tot}…{_E}"
         else:
             _tok = f"{_fs} {_d}/{_tot}"
         _by.setdefault(_rk, []).append((_fs, _tok))
@@ -5605,7 +5878,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                      f"using Smart-Lock oxygens for the per-frame NAC.")
 
     # ── QSite-only resume ───────────────────────────────────────────────────────
-    # A rank whose frame pass already finished (02_NAC_Data.csv + 01_MD_Stats.json + Ideal_Final.maegz
+    # A rank whose frame pass already finished (02_NAC_Data.csv + 01_MD_Stats.json + 00_Ideal_Final.maegz
     # present) but whose QM/MM folder was removed re-runs ONLY QSite: the top pre-organised frames
     # are re-picked from the cached per-frame table (Consensus is that frame's selection score) and
     # their droplets re-extracted from just those frames, skipping the multi-hour frame stream. The
@@ -5614,7 +5887,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _qonly = (not _FORCE_RECOMPUTE and _QSITE_RUN
               and (job_out_dir / "02_NAC_Data.csv").is_file()
               and (job_out_dir / "01_MD_Stats.json").is_file()
-              and (job_out_dir / "Ideal_Final.maegz").is_file()
+              and (job_out_dir / "00_Ideal_Final.maegz").is_file()
               and not (job_out_dir / "QSite_SN2").is_dir())
     if _qonly:
         try:
@@ -5645,8 +5918,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                     topo.make_whole_cms(msys_model, cms_model)
                     _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
                     topo.center_cms(msys_model, _gids, cms_model)
-                    if _k == 0:
-                        cms_model.fsys_ct.write(str(job_out_dir / "Ideal_Final.maegz"))
+                    if _k == 0 and not (job_out_dir / "00_Ideal_Final.maegz").is_file():
+                        cms_model.fsys_ct.write(str(job_out_dir / "00_Ideal_Final.maegz"))   # never overwrite an existing best-frame archive
                     _folder.mkdir(parents=True, exist_ok=True)
                     _mae = _folder / "Ideal_Final.mae"
                     write_qsite_droplet(cms_model, _mae, lig_resname)
@@ -6531,8 +6804,8 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             topo.make_whole_cms(msys_model, cms_model)
             _gids = topo.asl2gids(cms_model, f"res.ptype {lig_resname}")
             topo.center_cms(msys_model, _gids, cms_model)
-            if _primary:
-                cms_model.fsys_ct.write(str(job_out_dir / "Ideal_Final.maegz"))
+            if _primary and not (job_out_dir / "00_Ideal_Final.maegz").is_file():
+                cms_model.fsys_ct.write(str(job_out_dir / "00_Ideal_Final.maegz"))   # never overwrite an existing best-frame archive
             if _folder.exists():
                 console_info(f"    [Rank {rank}] QSite folder exists - will parse: {_folder.name}")
                 return None
