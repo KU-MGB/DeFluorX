@@ -68,7 +68,8 @@ Date   : 05 August 2026 <──────────────────�
                   <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.svg
                     (the same two reactive-pose figures, merged across candidates)
                   <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.svg
-                    (every job's best-frame QM/MM PES overlaid + defluorination ranking by ensemble ΔE‡)
+                    (one panel: every job's best-frame QM/MM PES overlaid, each cleavage point dotted to
+                    the reaction coordinate and to its SN2 attack angle, with a top ensemble-ΔE‡ ranking inset)
   Upstream      : 06_Physics_Validation_DeFluorX.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
                                                     produces the MD trajectories, WaterMap CSVs,
                                                     *_SID-out.eaf + Prime MM-GBSA summary consumed here
@@ -291,7 +292,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 import seaborn as sns
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch, FancyBboxPatch, Rectangle, Circle, FancyArrowPatch, Arc
+from matplotlib.patches import Patch, Rectangle, Circle, FancyArrowPatch, Arc
 from matplotlib.ticker import MultipleLocator
 from matplotlib.colors import BoundaryNorm
 
@@ -2272,7 +2273,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                 ax.bar(np.arange(len(terms)) + off,
                        [vals.get(t, np.nan) for t in terms], width=width * 0.92,
                        color=bar_cols, alpha=alpha, edgecolor=_ink["outline"], linewidth=0.6,
-                       zorder=3, yerr=_yerr,
+                       zorder=3, hatch=("////" if (merged and si == 0) else None), yerr=_yerr,
                        error_kw=dict(ecolor=_ink["outline"], elinewidth=1.0, capsize=3, alpha=0.65, zorder=5))
             """
             One legend row per candidate, not two. The faint/solid pair means the same thing for
@@ -2288,7 +2289,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         # not a legend row. The reactive-pose frame count rides on its own entry rather than a header line.
         _rp_label = "reactive pose" if merged else f"reactive (n={n_scored:,})"
         hdl += [Patch(facecolor=_ink["muted"], alpha=0.40, edgecolor=_ink["outline"],
-                      label="whole traj."),
+                      hatch=("////" if merged else None), label="whole traj. (hatched)" if merged else "whole traj."),
                 Patch(facecolor=_ink["muted"], alpha=1.0, edgecolor=_ink["outline"],
                       label=_rp_label)]
 
@@ -2327,6 +2328,25 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                     ax.annotate(f"Δ {_d:+.1f}", xy=(i, _lo + 0.03 * _span), ha="center", va="bottom",
                                 fontsize=_f_ann, fontweight="bold", color=_dc, zorder=6,
                                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=_dc, lw=0.8, alpha=0.9))
+        else:
+            # Merged panel: every candidate × ensemble bar carries its value, written at 90° up the bar
+            # tip so the eight bars per term stay readable. Coloured to the candidate; the faint (whole)
+            # bar's number is lighter than the solid (reactive-pose) one, matching the bars themselves.
+            _span = _hi - _lo
+            for gi, r in enumerate(rr):
+                _col = _CTRL_COLOUR if r.get("is_control") else _pal[gi % len(_pal)]
+                _fr, _ = _reactive_frames(r["nac"])
+                for si, _vals in enumerate((_mmgbsa_components(r["mmgbsa"], None),
+                                            _mmgbsa_components(r["mmgbsa"], _fr))):
+                    off = (gi * 2 + si) * width - 0.39 + width / 2
+                    for i, t in enumerate(terms):
+                        _v = _vals.get(t, np.nan)
+                        if _v != _v:
+                            continue
+                        ax.text(i + off, _v + (0.006 * _span if _v >= 0 else -0.006 * _span),
+                                f"{_v:.1f}", rotation=90, ha="center", va=("bottom" if _v >= 0 else "top"),
+                                fontsize=_f_ann - 0.5, fontweight="bold",
+                                color=_darken(_col, 0.5 if si else 0.15), zorder=7)
 
         ax.axhline(0.0, color=_ink["outline"], linewidth=0.9, zorder=2.5)
         # Trim the default right/left margin so the near-zero terms don't leave a wide empty band the
@@ -2339,24 +2359,13 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
             lbl.set_fontweight("bold")
         # The descriptive notes live on the axis labels, not the legend, so the legend stays two rows.
         ax.set_ylabel("ΔG component (kcal/mol)  ·  negative favours binding")
-        # The omitted terms are still NAMED (a silently deleted term is a lie). Standalone that rides the
-        # x-axis label; in the combined overview there is no bottom x-label (it would sit between the two
-        # stacked panels) - the coloured component names on the ticks are self-evident, and the omitted
-        # terms ride a small inset note in the corner instead.
-        if _external_ax:
-            if dropped:
-                # Top-LEFT: the Coulomb column is a downward bar, so the space above 0 there is empty -
-                # keeps the note off the bottom Δ badges and clear of the rightmost bars.
-                ax.text(0.015, 0.985, "omitted (|ΔG| < %.1f kcal/mol): %s"
-                        % (_min_kcal, ", ".join(t.replace("_", " ") for t, _ in dropped)),
-                        transform=ax.transAxes, ha="left", va="top",
-                        fontsize=_f_ann, color=_ink["outline"], alpha=0.85)
-        else:
-            _xlab = "MM-GBSA energy component"
-            if dropped:
-                _xlab += ("  ·  omitted (|ΔG| < %.1f kcal/mol): %s"
-                          % (_min_kcal, ", ".join(t.replace("_", " ") for t, _ in dropped)))
-            ax.set_xlabel(_xlab)
+        # The omitted terms are still NAMED (a silently deleted term is a lie). In the stand-alone
+        # per-rank panel the note rides the shade-key legend's TITLE, so note + key share one box; in
+        # the combined overview (no bottom x-label between the two stacked panels) it rides the x-label.
+        _omit_note = ("omitted (|ΔG| < %.1f kcal/mol): %s"
+                      % (_min_kcal, ", ".join(t.replace("_", " ") for t, _ in dropped))) if dropped else ""
+        if not _external_ax:
+            ax.set_xlabel("MM-GBSA energy component" + ("  ·  " + _omit_note if _omit_note else ""))
         # Tick every DEFLUOR_COMPONENT_TICK_KCAL: matplotlib's default step is coarser than most of
         # the components themselves - an H-bond term of −2.7 cannot be read off a 20 kcal/mol grid.
         _tick = float(CFG.DEFLUOR_COMPONENT_TICK_KCAL)
@@ -2366,11 +2375,13 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         ax.grid(alpha=CFG.VIS_GRID_ALPHA * 0.5, linewidth=CFG.VIS_GRID_LINEWIDTH * 0.7,
                 axis="y", which="minor")
         ax.set_axisbelow(True)
-        # Single-case shade key: one row, top-right, inside the empty upper-right band (only Solv GB
-        # reaches that height, so the right side is clear) with a small inset from the corner.
-        ax.legend(handles=hdl, loc="upper right", bbox_to_anchor=(0.86, 0.99), ncol=2,
-                  fontsize=_f_leg, frameon=True, framealpha=0.92,
-                  columnspacing=1.0, handletextpad=0.4)
+        # Single-case shade key merged with the omitted-terms note into ONE centred box on ONE row,
+        # pulled a little below the spine: the note rides an invisible handle so it sits inline with the
+        # two shade swatches rather than as a separate title line above them.
+        _hdl_row = ([Patch(facecolor="none", edgecolor="none", label=_omit_note)] + hdl
+                    if (_external_ax and _omit_note) else hdl)
+        ax.legend(handles=_hdl_row, loc="upper center", bbox_to_anchor=(0.5, 0.985), ncol=len(_hdl_row),
+                  fontsize=_f_leg, frameon=True, framealpha=0.92, columnspacing=1.0, handletextpad=0.4)
 
         if _external_ax:
             return   # bars drawn onto the caller's axes; the combined overview owns the save
@@ -2514,14 +2525,13 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                 """
                 _y = max(m, q3s[i] if q3s[i] == q3s[i] else m)
                 _c = _ink["dark"] if not merged else _darken(col, 0.55)
-                ax.text(i + off, min(_y + 0.10, _ytop - 0.25), f"{m:.1f} Å", ha="center",
-                        va="bottom", fontsize=_f_ann, fontweight="bold", color=_c, zorder=10,
+                ax.text(i + off, min(_y + 0.12, _ytop - 1.4), f"{m:.1f} Å", rotation=90, ha="center",
+                        va="bottom", fontsize=_f_ann + 0.3, fontweight="bold", color=_c, zorder=10,
                         path_effects=[pe.withStroke(linewidth=2.4, foreground=_ink["light"])])
                 _bar_c = bar_cols[i] if isinstance(bar_cols, list) else bar_cols
                 _on_bar = auto_label_colour(CFG, _bar_c)
                 ax.text(i + off, m - 0.13, f"{occs[i]:.0f}%", rotation=90, ha="center", va="top",
-                        fontsize=_f_ann - 0.5 if merged else _f_ann, fontweight="bold",
-                        color=_on_bar, zorder=10)
+                        fontsize=_f_ann + 0.3, fontweight="bold", color=_on_bar, zorder=10)
 
             # Every bar names the residue it measures, written up the inside of the bar: the residue
             # behind a role is per-homolog (ASP110 here, ASP109 there), so it belongs on the bar and
@@ -2532,7 +2542,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                 if resn and meds[i] == meds[i]:
                     _bar_c = bar_cols[i] if isinstance(bar_cols, list) else bar_cols
                     ax.text(i + off, 0.12, resn, rotation=90, ha="center", va="bottom",
-                            fontsize=_f_ann - 0.7 if merged else _f_ann - 0.3, fontweight="bold",
+                            fontsize=_f_ann if merged else _f_ann + 0.3, fontweight="bold",
                             color=auto_label_colour(CFG, _bar_c), zorder=8)
 
         # Master containers group the residues by CATALYTIC ROLE (colours from CFG). The outline is
@@ -2564,11 +2574,12 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         # Legend = the four criterion bands (A-D) plus the mean marker; the statistics and annotation
         # keys moved to the axis labels. The merged panel still leads with per-rank names.
         _mean_hdl = Line2D([], [], marker="D", linestyle="none", markerfacecolor=_ink["light"],
-                           markeredgecolor=_ink["dark"], markersize=6, label="mean (bar = median)")
+                           markeredgecolor=_ink["dark"], markersize=6, label="mean")
         _hdl = ((ax.get_legend_handles_labels()[0] + [_mean_hdl] + band_hdl) if merged
                 else [_mean_hdl] + list(band_hdl))
-        ax.legend(handles=_hdl, loc="upper right", fontsize=_f_leg, frameon=True,
-                  ncol=len(_hdl) if not merged else 4)
+        ax.legend(handles=_hdl, loc="upper center", bbox_to_anchor=(0.5, 0.99), fontsize=_f_leg - 1.0,
+                  frameon=True, ncol=len(_hdl) if not merged else 4,
+                  columnspacing=0.9, handletextpad=0.4, borderpad=0.4)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.svg" if merged
                     else rr[0]["dir"] / "07_Machinery_Engagement.svg")
@@ -2615,9 +2626,22 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
             # re-deriving a looser fluoride+barrier proxy that would disagree with the master ranking.
             # The fluoride+barrier proxy is kept only as a fallback for a CSV predating the column.
             _isdef = _one("Is_Defluorinating")
+            # Flag + label the 3R3U positive control from its job name, so the cross-job figure names it
+            # 3R3U-FA and orders it LAST, exactly like the merged 06/07 and every other comparison.
+            _jn = str(_one("Job_Name")) if ("Job_Name" in _cd.columns and pd.notna(_one("Job_Name"))) else ""
+            _isc = _jn.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in _jn.upper()
+            _ligd = _CTRL_LABEL if _isc else (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else "")
+            # SN2 attack angle from this rank's MD stats, for the right-hand angle read-off in the figure
+            _ang = np.nan
+            try:
+                _st = json.loads((_rd / "01_MD_Stats.json").read_text())
+                _ang = float(_st.get("SN2_Attack_Angle", _st.get("MD_Avg_NAC_Angle_Deg", np.nan)))
+            except Exception:
+                pass
             _jobs.append({
                 "label": (f"R_{int(_one('Rank'))}" if "Rank" in _cd.columns and pd.notna(_one("Rank")) else _rd.name),
-                "ligand": (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else ""),
+                "rank": (int(_one("Rank")) if "Rank" in _cd.columns and pd.notna(_one("Rank")) else 0),
+                "angle": _ang, "ligand": _ligd, "is_control": _isc,
                 "coord": _cd["Coord_Nu_O_C_A"].tolist(),
                 "energy_kcal": _cd["Energy_Rel_kcal"].tolist(),
                 "barrier_ens": (float(_bar) if pd.notna(_bar) else np.nan),
@@ -3996,48 +4020,26 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, ax) -> None:
     clean_spines(ax)
 
 
-def _qsite_verdict_card(axV, headline: str, accent: str, rows: list) -> None:
-    """Render a bordered 'table' verdict card in an axis-off panel, shared by the per-frame reaction
-    profile (08 / Frame_*) and the all-frames ensemble (09) so both tell one visual story. `rows` is a
-    list of (left, right, colour, bold); a row whose `right` is empty spans the full width as a note."""
-    axV.axis("off")
-    _ft = CFG.VIS_FONT_TICK
-    axV.add_patch(FancyBboxPatch((0.02, 0.03), 0.96, 0.95, transform=axV.transAxes,
-                                 boxstyle="round,pad=0.008,rounding_size=0.035", fill=True,
-                                 facecolor="white", edgecolor=accent, linewidth=1.6, clip_on=False, zorder=1))
-    axV.add_patch(plt.Rectangle((0.02, 0.83), 0.96, 0.15, transform=axV.transAxes,
-                                facecolor=accent, alpha=0.14, edgecolor="none", zorder=2))
-    axV.plot([0.02, 0.98], [0.83, 0.83], transform=axV.transAxes, color=accent, lw=1.0, alpha=0.55, zorder=3)
-    axV.text(0.5, 0.905, headline, transform=axV.transAxes, ha="center", va="center",
-             fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold", color=accent, zorder=4)
-    _n = max(len(rows), 1); _top, _bot = 0.75, 0.09
-    _step = (_top - _bot) / _n
-    _kf = _ft * 0.92; _vf = _ft * 0.86     # key / value fonts sized to stay inside the border
-    for _i, (_l, _r, _c, _b) in enumerate(rows):
-        _y = _top - _i * _step
-        _w = "bold" if _b else "normal"
-        # A row with no right value is a full-width note (left-aligned); a key/value pair keys left and
-        # RIGHT-aligns the value at the inner border so long values (charges, basis) never overrun it.
-        axV.text(0.07, _y, _l, transform=axV.transAxes, ha="left", va="center",
-                 fontsize=(_kf if _r else _vf), family="monospace", color=_c, fontweight=_w, zorder=4)
-        if _r:
-            axV.text(0.93, _y, _r, transform=axV.transAxes, ha="right", va="center", fontsize=_vf,
-                     family="monospace", color=_c, fontweight=_w, zorder=4)
-        if _i < len(rows) - 1:
-            axV.plot([0.07, 0.93], [_y - _step / 2, _y - _step / 2], transform=axV.transAxes,
-                     color=accent, lw=0.4, alpha=0.16, zorder=2)
+def _qsite_verdict_label(ligand, cleaved: bool, ncl=None, n=None) -> str:
+    """Uniform C-F verdict caption for the QM/MM figures: '<short> · C-F Cleaved' per frame, and
+    '<short> · C-F Cleaved (<ncl>/<n> Frames)' per rank (08 / 09). The short ligand name is the CFG
+    SSOT (VIS_LIGAND_SHORT, the same table the Step-03 figures use), never a local abbreviation map."""
+    _s = CFG.VIS_LIGAND_SHORT.get(str(ligand).strip().lower(), str(ligand)[:3].upper())
+    _t = f"{_s} · C-F {'Cleaved' if cleaved else 'Intact'}"
+    if ncl is not None and n is not None:
+        _t += f" ({ncl}/{n} Frames)"
+    return _t
 
 
-def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict) -> None:
-    """The direct 'did it defluorinate' figure for ONE scanned frame, told as three linked panels so each
-    question is answered on its own axes rather than crowded onto one:
-      A (energetics) - the QM/MM potential-energy surface along the SN2 coordinate
-        (Nu_O···C compression) with the reactant well, transition state (ΔE‡) and
-        product (ΔE_rxn) marked and the activation climb shaded.
-      B (bond-breaking) - the departing-fluoride Mulliken charge dropping toward −1
-        as the C-F bond ionises, against the cleaved-charge threshold band.
-      C (verdict) - a plain-language card: barrier, reaction energy, the reactant →
-        product fluoride charge shift and the cleaved / intact call.
+def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: dict, ligand: str = "") -> None:
+    """The direct 'did it defluorinate' figure for ONE scanned frame on a single dual-axis plot:
+    the QM/MM potential-energy surface along the SN2 coordinate (Nu_O···C compression, LEFT axis) with
+    the reactant well, transition state (ΔE‡) and product (ΔE_rxn) marked and the activation climb
+    shaded, over the departing-fluoride Mulliken charge (RIGHT axis) falling toward −1 as the C-F bond
+    ionises, against the cleaved-charge threshold. The header is a single-row legend and one text row
+    carrying the ligand+verdict badge (e.g. 'FA · C-F Cleaved') and the numbers (ΔE‡, ΔE_rxn, the
+    reactant → product fluoride-charge shift and the CFG scan length); the per-frame call is honest -
+    a dewetted frame reads intact - while the rank verdict over all frames lives in the 08 ensemble.
 
     Called from process_single_job, which runs inside the ThreadPoolExecutor, so the
     figure is built under PLOT_LOCK. Pyplot's figure registry is global state: two ranks
@@ -4062,97 +4064,75 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
         _fq_r = profile.get("F_Charge_Reactant", (_fq[0] if len(_fq) else np.nan))
         _fq_p = profile.get("F_Charge_Product", (_fq[-1] if len(_fq) else np.nan))
         _fq_final = (float(_fq[-1]) if len(_fq) else np.nan)
-        # The verdict card names the scissile bond; where the profile carries no explicit label the
-        # candidate's ligand (the job-name tail) identifies it, so the card never reads a bare generic.
-        _scf = profile.get("scissile_f_label") or f"{str(job_name).split('_')[-1]} C-F"
         _cleaved = (_fq_final == _fq_final) and (_fq_final <= CFG.QSITE_F_CHARGE_CLEAVED)
+        _nscan = int(CFG.QSITE_SCAN_NSTEPS)                     # the configured scan length (CFG SSOT)
         with PLOT_LOCK:
-            fig = plt.figure(figsize=(14.2, 7.4))
-            gs = gridspec.GridSpec(2, 2, height_ratios=[1.5, 1.0], width_ratios=[2.7, 1.0],
-                                   hspace=0.34, wspace=0.07)
-            axE = fig.add_subplot(gs[0, :])
-            axF = fig.add_subplot(gs[1, 0])
-            axV = fig.add_subplot(gs[1, 1])
+            fig, axE = plt.subplots(figsize=(9.8, 5.6))
+            axF = axE.twinx()
             try:
-                # ── Panel A: activation energetics ──────────────────────────────
                 _imax = int(np.argmax(y))
-                axE.axhline(0.0, ls=":", lw=1.0, color=_C["edge"], alpha=0.6, zorder=1)
-                axE.fill_between(x[:_imax + 1], 0.0, y[:_imax + 1], color=_C["ts"], alpha=0.08, zorder=1)
-                axE.plot(x, y, "-o", color=_C["pes"], lw=2, ms=4, zorder=3, label="QM/MM PES")
-                axE.scatter([x[_imax]], [y[_imax]], s=120, color=_C["ts"], zorder=5, label="transition state")
-                axE.scatter([x[-1]], [y[-1]], s=90, color=_C["product"], zorder=5, label="product")
-                # Headroom so the peak label sits ABOVE the TS but still INSIDE the axes; both labels
-                # are kept inside (ΔE‡ centred over the peak, ΔE_rxn to the LEFT of the right-edge
-                # product point) so nothing overruns the frame and pads the figure's right margin.
-                _y0, _y1 = axE.get_ylim(); axE.set_ylim(_y0, _y1 + 0.16 * (_y1 - _y0))
-                # When the scan is monotonic the TS point IS the product point, so the two labels would
-                # anchor at the same spot: split them automatically (ΔE‡ above, ΔE_rxn below) so they
-                # never overlap even though they mark the same datapoint.
-                # Monotonic scan: the peak IS the right-edge endpoint, so anchor BOTH labels to the left
-                # (extend inward, never off the frame) and split them vertically - ΔE‡ above, ΔE_rxn
-                # below - so they never overlap even sharing the datapoint. Otherwise ΔE‡ sits centred
-                # over the interior peak and ΔE_rxn to the left of the product point.
-                # Split the two labels vertically (ΔE‡ above, ΔE_rxn below) whenever the TS sits at OR
-                # near the product endpoint: their markers then overlap, so both labels above (the
-                # interior-TS layout) would collide. A few scan points of separation is enough to trip it.
+                # ── left axis: QM/MM activation energetics ──────────────────────
+                axE.axhline(0.0, ls=":", lw=1.0, color=_C["edge"], alpha=0.55, zorder=1)
+                axE.fill_between(x[:_imax + 1], 0.0, y[:_imax + 1], color=_C["ts"], alpha=0.07, zorder=1)
+                axE.plot(x, y, "-o", color=_C["pes"], lw=2.0, ms=4, zorder=4, label="QM/MM PES")
+                if not np.isnan(_bar):
+                    axE.scatter([x[_imax]], [y[_imax]], s=115, color=_C["ts"], zorder=6, label="transition state")
+                axE.scatter([x[-1]], [y[-1]], s=85, color=_C["product"], zorder=6, label="product")
+                _y0, _y1 = axE.get_ylim(); axE.set_ylim(_y0, _y1 + 0.26 * (_y1 - _y0))   # headroom for the header block
+                # ΔE‡ over the peak and ΔE_rxn by the product point; when the TS sits at/near the product
+                # endpoint their markers coincide, so pull both to the left and split them vertically.
                 _coincide = (_imax >= len(y) - 3)
-                axE.annotate(f"ΔE‡ = {_bar:.1f} kcal/mol", (x[_imax], y[_imax]),
-                             xytext=((-6, 10) if _coincide else (0, 10)),
+                _btxt = f"ΔE‡ = {_bar:.1f}" if not np.isnan(_bar) else "ΔE‡ = n/a"
+                axE.annotate(_btxt, (x[_imax], y[_imax]), xytext=((-6, 10) if _coincide else (0, 10)),
                              textcoords="offset points", fontsize=_ft, color=_C["ts"], fontweight="bold",
                              ha=("right" if _coincide else "center"), va="bottom", clip_on=True)
-                axE.annotate(f"ΔE_rxn = {_der:+.1f} kcal/mol", (x[-1], y[-1]),
-                             xytext=((-6, -13) if _coincide else (-9, 10)),
+                axE.annotate(f"ΔE_rxn = {_der:+.1f}", (x[-1], y[-1]), xytext=((-6, -13) if _coincide else (-9, 10)),
                              textcoords="offset points", fontsize=_ft, color=_C["product"], fontweight="bold",
                              ha="right", va=("top" if _coincide else "bottom"), clip_on=True)
-                axE.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
-                axE.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product",
-                               fontsize=_fa)
+                axE.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa, color=_C["pes"])
+                axE.tick_params(axis="y", labelcolor=_C["pes"], labelsize=_ft)
+                axE.tick_params(axis="x", labelsize=_ft)
+                axE.set_xlabel("Reaction coordinate  ·  Nu(O)···C distance (Å)  ·  reactant → product", fontsize=_fa)
                 axE.invert_xaxis()   # NAC (large r) on the left → product (small r) on the right
-                # Legend top-left: the PES climbs to the product on the right, so a right-hand legend
-                # collides with the curve, the TS marker and the ΔE‡/ΔE_rxn annotations; the top-left
-                # (reactant well) is empty.
-                axE.legend(loc="upper left", fontsize=_ft)
-                clean_spines(axE)
-                # ── Panel B: departing-fluoride charge (C-F ionisation) ──────────
+                # apply_figure_style despines top/right globally; a dual-axis plot needs the box closed
+                # and the RIGHT spine kept for the F-charge axis, so set the four borders explicitly.
+                for _spn in ("left", "bottom", "top"):
+                    axE.spines[_spn].set_visible(True)
+                axE.spines["right"].set_visible(False)   # axF owns the right spine
+                # ── right axis: departing-fluoride Mulliken charge (C-F ionisation) ──
                 if len(_fq) >= 2:
                     _xf = [x[min(int(i * (n - 1) / (len(_fq) - 1)), n - 1)] for i in range(len(_fq))]
-                    axF.axhspan(-1.05, CFG.QSITE_F_CHARGE_CLEAVED, color=_C["cleaved_bg"], alpha=0.7, zorder=0)
-                    axF.axhline(CFG.QSITE_F_CHARGE_CLEAVED, ls="--", lw=1.2, color=_C["cleave_line"], zorder=1)
-                    axF.plot(_xf, _fq, "--s", color=_C["f_charge"], lw=1.6, ms=3.5, zorder=3)
-                    axF.scatter([_xf[0]], [_fq[0]], s=55, color=_C["pes"], edgecolor="white", lw=0.6, zorder=5)
-                    axF.scatter([_xf[-1]], [_fq[-1]], s=70,
-                                color=(_C["product"] if _cleaved else _C["ts"]), edgecolor="white", lw=0.6, zorder=5)
-                    axF.annotate(f"cleaved (F ≤ {CFG.QSITE_F_CHARGE_CLEAVED:+.1f} e)", xy=(0.02, 0.08),
-                                 xycoords="axes fraction", fontsize=_ft, color=_C["product"], fontweight="bold")
-                    axF.set_ylim(-1.05, max(-0.1, float(np.nanmax(_fq)) + 0.05))
-                    axF.invert_xaxis()
-                else:
-                    axF.text(0.5, 0.5, "departing-F charge\nnot parseable", transform=axF.transAxes,
-                             ha="center", va="center", fontsize=_ft, color=_C["edge"])
-                axF.set_ylabel("departing-F Mulliken charge", fontsize=_fa)
-                axF.set_xlabel("Nu(O)···C distance (Å)", fontsize=_fa)
-                clean_spines(axF)
-                # ── Panel C: verdict card (bordered table) - this frame's own C-F call, from its
-                # departing-fluoride charge (honest per frame: a dewetted frame reads intact). The rank
-                # verdict over all frames is carried by the 08 ensemble figure, not here. ──
-                _monotone = (int(np.argmax(y)) >= n - 1 and _der > 0)
-                _accent = _C["product"] if _cleaved else _C["ts"]
-                _head = "C-F CLEAVED" if _cleaved else "C-F INTACT"
-                _rows = [
-                    (str(_scf), "", _C["edge"], False),
-                    ("ΔE‡", f"{_bar:.1f} kcal/mol" + ("  (endpt)" if _monotone else ""), _C["edge"], False),
-                    ("ΔE_rxn", f"{_der:+.1f} kcal/mol", _C["edge"], False),
-                    ("F charge", f"R {_fq_r:+.2f} -> P {_fq_p:+.2f} e", _C["edge"], False),
-                    ("scan points", f"{int(profile.get('QSite_NScan', n))}", _C["edge"], False),
-                ]
-                if _monotone:
-                    _rows.append(("(!) monotonic: product = endpoint", "", _C["ts"], False))
-                if (_fq_final == _fq_final) and (not _cleaved) and (_fq_final <= -0.40):
-                    _rows.append(("(!) F near gate - check QM-water", "", _C["ts"], False))
-                _qsite_verdict_card(axV, _head, _accent, _rows)
+                    axF.axhline(CFG.QSITE_F_CHARGE_CLEAVED, ls="--", lw=1.1, color=_C["cleave_line"], zorder=1)
+                    axF.plot(_xf, _fq, "--s", color=_C["f_charge"], lw=1.6, ms=3.6, zorder=3, label="departing-F charge")
+                    axF.scatter([_xf[-1]], [_fq[-1]], s=66, color=(_C["product"] if _cleaved else _C["ts"]),
+                                edgecolor="white", lw=0.6, zorder=5)
+                    axF.text(0.985, CFG.QSITE_F_CHARGE_CLEAVED, f" cleaved ≤ {CFG.QSITE_F_CHARGE_CLEAVED:+.1f}",
+                             transform=axF.get_yaxis_transform(), ha="right", va="bottom",
+                             fontsize=_ft - 1.5, color=_C["cleave_line"])
+                    axF.set_ylim(-1.05, max(-0.05, float(np.nanmax(_fq)) + 0.05))
+                axF.set_ylabel("departing-F Mulliken (e)", fontsize=_fa, color=_C["f_charge"])
+                axF.tick_params(axis="y", labelcolor=_C["f_charge"], labelsize=_ft)
+                axF.spines["right"].set_visible(True); axF.spines["top"].set_visible(True)
+                # ── header: a single-row legend, then a single row carrying the ligand+verdict badge and
+                # the numbers - the two stacked lines read like one compact block at the top-left ──
+                # ONE framed box on a single row holding the verdict, the numbers and the curve legend:
+                # the verdict (coloured by the C-F call) and the numbers ride blank handles so they sit as
+                # leading text entries inside the legend frame. ΔE‡ / ΔE_rxn are omitted here - already
+                # labelled on the TS and product points - so the top-right stays clear for those labels.
+                _acc = _C["product"] if _cleaved else _C["ts"]
+                _head = _qsite_verdict_label(ligand or str(job_name).split("_")[-1], _cleaved)
+                _detail = f"F {_fq_r:+.2f} → {_fq_p:+.2f} e   ·   {_nscan} scan points"
+                _h1, _l1 = axE.get_legend_handles_labels(); _h2, _l2 = axF.get_legend_handles_labels()
+                _blank = Line2D([], [], ls="none", marker="none")
+                _leg = axE.legend([_blank, _blank] + _h1 + _h2, [_head, _detail] + _l1 + _l2,
+                                  loc="upper center", bbox_to_anchor=(0.5, 0.995), ncol=2 + len(_h1) + len(_h2),
+                                  fontsize=_ft - 1.5, framealpha=0.95, edgecolor=_C.get("legend_edge", _C["edge"]),
+                                  columnspacing=0.9, handletextpad=0.4, handlelength=1.2, borderpad=0.5)
+                _lt = _leg.get_texts()
+                _lt[0].set_color(_acc); _lt[0].set_fontweight("bold"); _lt[1].set_color(_C["edge"])
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
-                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight", pad_inches=0.12)
             finally:
                 plt.close(fig)
         console_info(f"    QSite reaction profile saved : {Path(deflx_fig_name(out_path)).name}")
@@ -4381,13 +4361,12 @@ def plot_qsite_ensemble_profiles(out_path: Path, rank, profiles: list,
                 _th, _hr, _dr = 0.056, 0.078, 0.058; _nR = len(_rows)
                 _Y1 = 0.985; _Y0 = _Y1 - (_th + _hr + _nR * _dr); _yT = _Y1 - _th; _yH = _yT - _hr
                 _T = axE.transAxes
-                _sub = str(ligand or "ligand")
                 axE.add_patch(Rectangle((_x0, _Y0), _x1 - _x0, _Y1 - _Y0, transform=_T, fc="white",
                                         ec="#BDBDBD", lw=1.2, alpha=0.98, zorder=20))
                 axE.add_patch(Rectangle((_x0, _yT), _x1 - _x0, _th, transform=_T, fc=_acc, ec="none",
                                         alpha=0.96, zorder=21))
                 axE.text((_x0 + _x1) / 2, _yT + _th / 2,
-                         f"C-F {'CLEAVED' if _ncl else 'INTACT'}  ({_ncl}/{_n} frames)   ·   {_sub}",
+                         _qsite_verdict_label(ligand, bool(_ncl), _ncl, _n),
                          transform=_T, ha="center", va="center", color="white", fontweight="bold",
                          fontsize=_ft + 0.4, zorder=25)
                 axE.add_patch(Rectangle((_x0, _yH), _x1 - _x0, _hr, transform=_T, fc="#EEF1F0", ec="none", zorder=21))
@@ -4820,10 +4799,8 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                 axc.set_position([_wf + 0.045, _sb + 0.02, 0.86 - (_wf + 0.045), _hf - 0.055])   # narrower graph (compressed x-axis)
 
                 # verdict badge: pulled out of the table, sits in the scene's lower-left white space
-                _ABBR = {"Fluoroacetate": "FA", "Difluoroacetate": "DFA", "TFA": "TFA"}
-                _ab = _ABBR.get(ligand, str(ligand)[:3].upper())
                 _hcol = _CLEAVED if ens["ncl"] else _INTACT
-                ax.text(0.08, 0.02, f"{_ab} · C-F {'CLEAVED' if ens['ncl'] else 'INTACT'}  ({ens['ncl']}/{ens['n']} frames)",
+                ax.text(0.08, 0.02, _qsite_verdict_label(ligand, bool(ens["ncl"]), ens["ncl"], ens["n"]),
                         transform=ax.transAxes, ha="left", va="bottom", fontsize=11.5, fontweight="bold", color="white", zorder=20,
                         bbox=dict(boxstyle="round,pad=0.4", fc=_hcol, ec=_hcol, alpha=0.95))
 
@@ -4972,13 +4949,28 @@ def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: st
                 ax.axhline(st.get("MD_Avg_NAC_Angle_Deg", np.nan), color=_accent, ls="--", lw=1.1, zorder=3)
                 f2ns = lambda f: f / max(tot, 1) * sims
                 qf = qs.sort_values("Frame_Index")
-                for i, (_, row) in enumerate(qf.iterrows()):
-                    xn = f2ns(row["Frame_Index"]); col = _box if bool(row["Frame_Cleaved"]) else _intact
+                _rws = list(qf.iterrows())
+                _xns = [f2ns(r["Frame_Index"]) for _, r in _rws]
+                # De-clutter the callouts: each sits a touch to the LEFT of its own line (a small baseline
+                # offset so the arrow is always a visible slant, never a zero-length stub hidden under the
+                # text), and when two would sit closer than the label is wide the later one is pushed right
+                # to hold a minimum gap. So a clustered set (R1's 15/39/117 ns) fans across the headroom
+                # without overlap, while a spread set (R2/R69) keeps its callouts just above the lines with
+                # a short slanted arrow each. If the row runs off the right edge it shifts left to stay in.
+                _base = sims * 0.025; _gap = sims * 0.13
+                _lx = []
+                for _v in _xns:
+                    _lx.append(max(_v - _base, (_lx[-1] + _gap) if _lx else sims * 0.06))
+                _over = _lx[-1] - sims * 0.96
+                if _over > 0:
+                    _lx = [max(sims * 0.04, _p - _over) for _p in _lx]
+                for i, (_, row) in enumerate(_rws):
+                    xn = _xns[i]; col = _box if bool(row["Frame_Cleaved"]) else _intact
                     ax.axvline(xn, color=col, lw=1.6, alpha=0.9, zorder=4)
-                    yt = 183 if i % 2 == 0 else 187        # callouts in the 180->190 headroom, staggered
+                    _yl = 182 if i % 2 == 0 else 186       # small 2-level stagger so adjacent arrows do not run together
                     ax.annotate(f"QSite {xn:.0f} ns · {'cleaves' if row['Frame_Cleaved'] else 'intact'}\n"
                                 f"ΔE 'barrier' {float(row['Frame_Barrier_kcal']):.1f} kcal",
-                                xy=(xn, 179), xytext=(xn - sims * 0.012, yt), ha="right", va="bottom",
+                                xy=(xn, 179), xytext=(_lx[i], _yl), ha="center", va="bottom",
                                 fontsize=_ft - 2.5, color=col, annotation_clip=False,
                                 arrowprops=dict(arrowstyle="->", color=col, lw=0.9))
                 ax.set_xlabel("simulation time  (ns)", fontsize=_fa)
@@ -5087,45 +5079,100 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
 
 
 def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
-    """Cross-job QSite comparison (run root). Top: every job's best-frame PES overlaid (distinct
-    colour; solid = defluorinating, dashed = not). Bottom: ensemble ΔE‡ ranked low→high, tagged with
-    ΔE_rxn and the final departing-F charge - so which complex defluorinates reads at a glance."""
+    """Cross-job QSite comparison (run root) on ONE panel. Every job's best-frame QM/MM PES is overlaid
+    (control distinct + last); each cleavage point (transition state) is a big dot with a coloured
+    dashed drop line to the reaction-coordinate axis and a coloured dotted read-off line to its SN2
+    attack angle on the right. A top-border, axis-less ΔE‡ bar inset (transparent, control last, values
+    inside, x-axis rotated on the top border with a grey dotted frame) ranks the barriers, and a
+    top-centre legend names each rank. So shape, barrier, cleavage geometry and attack angle read at a
+    glance. Solid curve = defluorinating (Is_Defluorinating), dashed = not. No figure title."""
     try:
         _J = [j for j in jobs if len(j.get("energy_kcal") or []) >= 3]
         if not _J:
             return
         _C = CFG.DEFLUOR_FIG_COLOUR; _pal = CFG.DEFLUOR_JOB_PALETTE
+        _CTRL = CFG.VIS_ACCENT["control"]; _xtcol = CFG.VIS_ACCENT.get("axis_left", "#2C6FAC")
         _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
-        js = sorted(_J, key=lambda z: (z.get("barrier_ens") if z.get("barrier_ens") == z.get("barrier_ens") else 1e9))
+        _shrt = lambda lg: CFG.VIS_LIGAND_SHORT.get(str(lg).strip().lower(), str(lg))   # CFG short-name SSOT
+        _rankof = lambda z: int(z.get("rank") if z.get("rank") is not None else 0)
+        # curve colours: the non-controls by ascending barrier take the job palette, the control the control colour
+        _ncs = sorted([j for j in _J if not j.get("is_control")],
+                      key=lambda z: (z.get("barrier_ens") if z.get("barrier_ens") == z.get("barrier_ens") else 1e9))
+        _col = {}
+        for _k, _j in enumerate(_ncs):
+            _col[id(_j)] = _pal[_k % len(_pal)]
+        for _j in _J:
+            if _j.get("is_control"):
+                _col[id(_j)] = _CTRL
         with PLOT_LOCK:
-            fig, (axP, axB) = plt.subplots(2, 1, figsize=(9.0, 8.5), gridspec_kw={"height_ratios": [2.0, 1.0]})
+            fig, ax = plt.subplots(figsize=(12.0, 6.8))
             try:
-                for k, j in enumerate(js):
-                    col = _pal[k % len(_pal)]
-                    x = np.asarray(j["coord"], float); y = np.asarray(j["energy_kcal"], float)
-                    axP.plot(x, y, ("-" if j.get("is_defluor") else "--"), marker="o", ms=3, lw=2.0, color=col,
-                             alpha=0.9, label=f"{j.get('label')} ({j.get('ligand')}) · ΔE‡ {j.get('barrier_ens', float('nan')):.1f}")
-                    _i = int(np.argmax(y)); axP.scatter([x[_i]], [y[_i]], s=55, color=col, edgecolor="white", lw=0.6, zorder=5)
-                axP.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
-                axP.set_xlabel("Reaction coordinate - Nu(O)···C distance (Å), reactant → product", fontweight="bold", fontsize=_fa)
-                axP.invert_xaxis(); clean_spines(axP)
-                axP.legend(loc="upper right", fontsize=_ft, title="solid = defluorinating", title_fontsize=_ft)
-                _lab = [f"{j.get('label')} ({j.get('ligand')})" for j in js]
-                _b = [j.get("barrier_ens", np.nan) for j in js]
-                _cols = [_C["product"] if j.get("is_defluor") else _C["inactive_bar"] for j in js]
-                _yp = np.arange(len(js))[::-1]
-                axB.barh(_yp, _b, color=_cols, edgecolor=_C["edge"], height=0.6)
-                for _y, j in zip(_yp, js):
-                    axB.annotate(f"ΔE_rxn {j.get('derxn_ens', float('nan')):+.1f} · F {j.get('fq_final', float('nan')):+.2f} e",
-                                 xy=(j.get("barrier_ens", 0) or 0, _y), xytext=(6, 0), textcoords="offset points",
-                                 va="center", fontsize=_ft, color=_C["edge"])
-                axB.set_yticks(_yp); axB.set_yticklabels(_lab, fontsize=_ft)
-                axB.set_xlabel("Ensemble ΔE‡ (kcal/mol) - lower = more accessible defluorination", fontweight="bold", fontsize=_fa)
-                axB.margins(x=0.18); clean_spines(axB)
-                fig.tight_layout()
+                fig.subplots_adjust(left=0.075, right=0.93, top=0.90, bottom=0.11)
+                for j in _J:
+                    c = _col[id(j)]; x = np.asarray(j["coord"], float); y = np.asarray(j["energy_kcal"], float)
+                    ax.plot(x, y, ("-" if j.get("is_defluor") else "--"), marker="o", ms=3, lw=2.2,
+                            color=c, alpha=0.9, zorder=3)
+                ax.axhline(0.0, ls=":", lw=1.0, color=_C["edge"], alpha=0.5, zorder=1)
+                ax.set_xlabel("Reaction coordinate  ·  Nu(O)···C distance (Å)  ·  reactant → product", fontsize=_fa)
+                ax.set_ylabel("Relative QM/MM energy (kcal/mol)", fontsize=_fa)
+                ax.invert_xaxis()
+                for _s in ("top", "right", "bottom", "left"):
+                    ax.spines[_s].set_visible(True)                    # apply_figure_style despines top/right
+                ax.grid(True, axis="both", color=_C.get("legend_edge", "#E2E8F0"), lw=0.6, alpha=0.6); ax.set_axisbelow(True)
+                ax.xaxis.set_major_locator(MultipleLocator(0.25)); ax.xaxis.set_minor_locator(MultipleLocator(0.125))
+                ax.yaxis.set_major_locator(MultipleLocator(2.5)); ax.yaxis.set_minor_locator(MultipleLocator(1.25))
+                ax.tick_params(axis="both", labelsize=_ft - 1.0)
+                # big cleavage-point dot + a dashed vertical drop line to the reaction-coordinate axis
+                _y0, _y1 = ax.get_ylim()
+                for j in _J:
+                    c = _col[id(j)]; x = np.asarray(j["coord"], float); y = np.asarray(j["energy_kcal"], float); _i = int(np.argmax(y))
+                    ax.plot([x[_i], x[_i]], [_y0, y[_i]], ls="--", lw=1.3, color=c, alpha=0.55, zorder=2)
+                    ax.scatter([x[_i]], [y[_i]], s=200, color=c, edgecolor="white", lw=1.8, zorder=6)
+                ax.set_ylim(_y0, _y1)
+                # angle read-off: a horizontal dotted line from each cleavage dot to the right axis, labelled
+                # with the job's SN2 attack angle - the right-hand analogue of the reaction-coordinate drops.
+                _xr = ax.get_xlim()[1]
+                for j in _J:
+                    c = _col[id(j)]; x = np.asarray(j["coord"], float); y = np.asarray(j["energy_kcal"], float)
+                    _i = int(np.argmax(y)); _ty = float(y[_i]); _ang = j.get("angle", float("nan"))
+                    if _ang == _ang:
+                        ax.plot([x[_i], _xr], [_ty, _ty], ls=":", lw=1.3, color=c, alpha=0.5, zorder=2)
+                        ax.annotate(f"{_ang:.0f}°", xy=(_xr, _ty), xytext=(9, 0), textcoords="offset points",
+                                    ha="left", va="center", color=c, fontweight="bold", fontsize=_ft - 0.5, annotation_clip=False)
+                # legend by rank (R1, R2, R8, R69), full ligand names, top-centre; big colour dots
+                _lh = [Line2D([0], [0], color=_col[id(j)], lw=3.0, marker="o", ms=11, mec="white", mew=0.9,
+                              ls=("-" if j.get("is_defluor") else "--"),
+                              label=f"{str(j.get('label', '')).replace('_', '')} · {_shrt(j.get('ligand'))}")
+                       for j in sorted(_J, key=_rankof)]
+                ax.legend(handles=_lh, loc="upper center", bbox_to_anchor=(0.55, 0.995), ncol=len(_lh),
+                          fontsize=_ft - 0.5, framealpha=0.95, borderpad=0.6, handlelength=2.2,
+                          columnspacing=1.5, handletextpad=0.5)
+                # top-left ΔE‡ bar inset (transparent, axis-less, x-axis rotated on the top border, control last)
+                _order = sorted([j for j in _J if not j.get("is_control")], key=_rankof) + [j for j in _J if j.get("is_control")]
+                _ins = ax.inset_axes([0.0, 0.67, 0.27, 0.33]); _ins.patch.set_alpha(0.0)
+                _yp = np.arange(len(_order))[::-1]
+                for _yy, j in zip(_yp, _order):
+                    _b = j.get("barrier_ens", float("nan"))
+                    if _b != _b:
+                        continue
+                    _ins.barh(_yy, _b, color=_col[id(j)], edgecolor=_C["edge"], height=0.72, alpha=0.92, zorder=3)
+                    _ins.text(0.25, _yy, f"{_b:.1f} kcal/mol", ha="left", va="center", fontsize=_ft - 1.0,
+                              fontweight="bold", color="white", zorder=5)
+                _ins.set_yticks([])
+                _bmax = max([j.get("barrier_ens") for j in _order if j.get("barrier_ens") == j.get("barrier_ens")] or [1.0])
+                _ins.set_xticks(list(range(0, int(np.ceil(_bmax)) + 1, 2)))
+                _ins.set_xlabel("ensemble ΔE‡ (kcal/mol)  ·  lower = more accessible", fontsize=_ft - 1.5, color=_xtcol)
+                _ins.xaxis.set_label_position("top")
+                _ins.tick_params(axis="x", colors=_xtcol, labelsize=_ft - 2.0, length=3, labelrotation=90,
+                                 top=True, bottom=False, labeltop=True, labelbottom=False)
+                for _s in ("bottom", "right", "left"):
+                    _ins.spines[_s].set_visible(False)
+                _ins.spines["top"].set_color(_xtcol); _ins.spines["top"].set_visible(True); _ins.margins(x=0.02, y=0.06)
+                _ins.add_patch(Rectangle((0, 0), 1, 1, transform=_ins.transAxes, fill=False,
+                                         edgecolor="#9AA5B1", ls=(0, (1.6, 1.6)), lw=1.1, clip_on=False, zorder=6))
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
-                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight")
+                    fig.savefig(out_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches="tight", pad_inches=0.12)
             finally:
                 plt.close(fig)
         console_info(f"    QSite all-jobs figure saved  : {Path(deflx_fig_name(out_path)).name}")
@@ -5550,7 +5597,7 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             _pr["water"] = _qsite_qm_water_count(_fold)
             _profs.append(_pr)
             # Per-frame figure = that frame's own verdict (honest per frame: a dewetted frame is intact).
-            plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.svg", job_name, rank, _pr)
+            plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.svg", job_name, rank, _pr, ligand)
         if _profs:
             # 08 = the QM/MM reaction figure: every sampled frame overlaid (best first) with the
             # per-frame + ensemble table. The verdict is the rank fact (cleaved N/M), carried on the
