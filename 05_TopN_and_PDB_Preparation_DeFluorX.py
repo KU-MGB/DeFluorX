@@ -627,6 +627,15 @@ def _is_reference_control(job) -> bool:
     return CFG.REFERENCE_PDB_ID in j and any(str(lig) in j for lig in CFG.CONTROL_MD_LIGANDS)
 
 
+def _lig_short_token(s: str) -> str:
+    """Collapse the long PFAS acid name inside a compound job token to its CFG short form.
+    The map is CFG.VIS_LIGAND_SHORT (single source of truth); the longest acid name is matched
+    first so 'trifluoroacetate' is not shadowed by the 'fluoroacetate' substring."""
+    for _full in ("trifluoroacetate", "difluoroacetate", "fluoroacetate"):
+        s = s.replace(_full.title(), CFG.VIS_LIGAND_SHORT[_full])
+    return s
+
+
 def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     """What preparation does to the two numbers the tier is decided on.
 
@@ -669,8 +678,8 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     df["_is_md"] = ~df["job"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
 
     def _short(j):
-        return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
-                .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
+        return (_lig_short_token("_".join(str(j).split("_")[2:]).replace("_Control", ""))
+                .replace("_26", "").replace("_27", "").replace("_25", ""))
 
     # Keep the MD-selected candidates + only the CFG-designated control (3R3U × fluoroacetate); the
     # other reference systems (3R3U-DFA/TFA, DeHa4-*) are dropped so one canonical control is shown.
@@ -1066,8 +1075,8 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
 
 
 def _short_job(j):
-    return ("_".join(str(j).split("_")[2:]).replace("_Control", "").replace("Fluoroacetate", "FA")
-            .replace("Difluoroacetate", "DFA").replace("_26", "").replace("_27", "").replace("_25", ""))
+    return (_lig_short_token("_".join(str(j).split("_")[2:]).replace("_Control", ""))
+            .replace("_26", "").replace("_27", "").replace("_25", ""))
 
 
 def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> dict:
@@ -1622,8 +1631,7 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
                                f"skipping - the most-positive-after-carboxylate rule assumes n_C=2.")
             continue
         _alpha = _c.iloc[1]                        # 0 = carboxylate C, 1 = the α-carbon
-        _lig = ("TFA" if "TFA" in _st else "DFA" if "Difluoro" in _st
-                else "FA" if "Fluoro" in _st else _st.split("_")[-1])
+        _lig = CFG.VIS_LIGAND_SHORT.get(_st.split("_")[-1].lower(), _st.split("_")[-1])   # ligand short via CFG SSOT
         _rows.append({"ligand": _lig, "structure": str(_st), "q_alpha": float(_alpha["esp_charge"]),
                       "n_F": int(_g["atom_label"].str.match(r"^F\d+$").sum())})
     if not _rows:

@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-08-03)
+# Graph Report - .  (2026-08-05)
 
 ## Corpus Check
-- 12 files · ~0 words
+- 12 files · ~6,237 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1127 nodes · 2483 edges · 12 communities (11 shown, 1 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 172 edges (avg confidence: 0.72)
+- 1140 nodes · 2512 edges · 12 communities (11 shown, 1 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 174 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -24,28 +24,24 @@
 - [[_COMMUNITY_git_push|git_push]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CFG` - 85 edges
-2. `main()` - 34 edges
-3. `main()` - 34 edges
-4. `process_single_job()` - 33 edges
-5. `_generate_comprehensive_figures_impl()` - 32 edges
-6. `_echo()` - 30 edges
-7. `console_info()` - 28 edges
-8. `prep_and_convert_phase()` - 25 edges
-9. `run_mmgbsa_phase()` - 22 edges
-10. `process_single_job()` - 21 edges
+1. `03_Validation_Figures_DeFluorX.py` - 135 edges
+2. `06_Physics_Validation_DeFluorX.py` - 114 edges
+3. `07_MD_QMMM_Defluorination_DeFluorX.py` - 104 edges
+4. `CFG` - 84 edges
+5. `02_Production_DeFluorX.py` - 66 edges
+6. `05_TopN_and_PDB_Preparation_DeFluorX.py` - 64 edges
+7. `Path` - 59 edges
+8. `Path` - 46 edges
+9. `00_02_Project_Utils_DeFluorX.py` - 43 edges
+10. `DataFrame` - 41 edges
+11. `main()` - 36 edges
+12. `main()` - 34 edges
+13. `Path` - 34 edges
+14. `process_single_job()` - 34 edges
+15. `Path` - 32 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `generate_plots()` --indirect_call--> `CFG`  [INFERRED]
-  01_Merge_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
-- `calculate_sn2_metrics()` --indirect_call--> `CFG`  [INFERRED]
-  02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
-- `check_catalytic_geometry()` --indirect_call--> `CFG`  [INFERRED]
-  02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
-- `generate_scientific_ranking_csv()` --indirect_call--> `CFG`  [INFERRED]
-  02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
-- `main()` --indirect_call--> `CFG`  [INFERRED]
-  02_Production_DeFluorX.py → 00_01_Project_Config_DeFluorX.py
+- None detected - all connections are within the same source files.
 
 ## Import Cycles
 - None detected.
@@ -62,7 +58,7 @@ Nodes (7): CFG, ================================================================
 
 ### Community 2 - "00_02_Project_Utils"
 Cohesion: 0.03
-Nodes (90): ConsoleColours, _ConsoleRuleFilter, install_console_rule_filter(), safe_name(), setup_logging(), Path, Logger, _strip_ansi() (+82 more)
+Nodes (90): ConsoleColours, _ConsoleRuleFilter, install_console_rule_filter(), safe_name(), setup_logging(), _strip_ansi(), console_title(), console_info() (+82 more)
 
 ### Community 3 - "00_03_Environment"
 Cohesion: 0.33
@@ -70,51 +66,33 @@ Nodes (8): ConsoleColours, export_environment(), install_environment(), verify_e
 
 ### Community 4 - "01_Merge"
 Cohesion: 0.18
-Nodes (18): _load_module(), Path, setup_logger(), Logger, clean_sequence_str(), is_valid_protein(), clean_header(), process_and_write() (+10 more)
+Nodes (18): _load_module(), setup_logger(), clean_sequence_str(), is_valid_protein(), clean_header(), process_and_write(), apply_clean_spines(), generate_plots() (+10 more)
 
 ### Community 5 - "02_Production"
 Cohesion: 0.03
-Nodes (129): _load_module(), _canonical_resname(), setup_logging(), Path, console_info(), console_separator(), atomic_to_csv(), _tty_write() (+121 more)
+Nodes (129): _load_module(), _canonical_resname(), setup_logging(), console_info(), console_separator(), atomic_to_csv(), _tty_write(), extract_short_fasta_id() (+121 more)
 
 ### Community 6 - "03_Validation_Figures"
 Cohesion: 0.02
-Nodes (240): _load_module(), Path, _tier_seps(), _stat_box(), _register_p(), _statistical_battery(), DataFrame, _write_statistical_tests() (+232 more)
+Nodes (235): _load_module(), _tier_seps(), _stat_box(), _register_p(), _statistical_battery(), _write_statistical_tests(), _kruskal_by_tier(), _wilcoxon_ptm_iptm() (+227 more)
 
 ### Community 7 - "04_Dendrogram"
 Cohesion: 0.18
-Nodes (18): _load_module(), Path, console_info(), console_separator(), _make_reporter(), clean_id(), get_kmer_counts(), generate_upgma_newick() (+10 more)
+Nodes (18): _load_module(), console_info(), console_separator(), _make_reporter(), clean_id(), get_kmer_counts(), generate_upgma_newick(), package_deployment() (+10 more)
 
 ### Community 8 - "05_TopN_and_PDB_Preparation"
 Cohesion: 0.03
-Nodes (119): _load_module(), Path, setup_logging(), console_info(), console_separator(), index_existing_files(), collect_best_cifs(), load_rank_map() (+111 more)
+Nodes (121): _load_module(), setup_logging(), console_info(), console_separator(), index_existing_files(), collect_best_cifs(), load_rank_map(), load_md_selected_jobs() (+113 more)
 
 ### Community 9 - "06_Physics_Validation"
 Cohesion: 0.02
-Nodes (223): _load_module(), Path, _open_step_log(), _progress_line(), _close_bar(), _worker_progress(), _echo(), _log() (+215 more)
+Nodes (225): _load_module(), _open_step_log(), _progress_line(), _close_bar(), _worker_progress(), _echo(), _log(), _ok() (+217 more)
 
 ### Community 10 - "07_MD_QMMM_Defluorination"
 Cohesion: 0.02
-Nodes (179): LazyTrajectory, _load_module(), Path, console_title(), console_info(), _mask_oomd_at_start(), console_separator(), _print_labeled() (+171 more)
+Nodes (198): LazyTrajectory, _load_module(), console_title(), console_info(), _mask_oomd_at_start(), console_separator(), _print_labeled(), console_qmm_ready() (+190 more)
 
 ## Knowledge Gaps
 - **5 isolated node(s):** `WARN_EXIT_CODE`, `_TT_W_NAME`, `_TT_W_TIME`, `_TT_W_STAT`, `git_push_DeFluorX.sh script`
   These have ≤1 connection - possible missing edges or undocumented components.
 - **1 thin communities (<3 nodes) omitted from report** - run `graphify query` to explore isolated nodes.
-
-## Suggested Questions
-_Questions this graph is uniquely positioned to answer:_
-
-- **Why does `CFG` connect `00_01_Project_Config` to `01_Merge`, `02_Production`, `03_Validation_Figures`, `04_Dendrogram`, `05_TopN_and_PDB_Preparation`, `06_Physics_Validation`, `07_MD_QMMM_Defluorination`?**
-  _High betweenness centrality (0.630) - this node is a cross-community bridge._
-- **Why does `main()` connect `02_Production` to `00_01_Project_Config`, `00_02_Project_Utils`?**
-  _High betweenness centrality (0.126) - this node is a cross-community bridge._
-- **Why does `_generate_comprehensive_figures_impl()` connect `03_Validation_Figures` to `00_01_Project_Config`, `00_02_Project_Utils`?**
-  _High betweenness centrality (0.086) - this node is a cross-community bridge._
-- **Are the 70 inferred relationships involving `CFG` (e.g. with `generate_plots()` and `calculate_sn2_metrics()`) actually correct?**
-  _`CFG` has 70 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 4 inferred relationships involving `main()` (e.g. with `CFG` and `safe_name()`) actually correct?**
-  _`main()` has 4 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `WARN_EXIT_CODE`, `_TT_W_NAME`, `_TT_W_TIME` to the rest of the system?**
-  _481 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `00_01_Project_Config` be split into smaller, more focused modules?**
-  _Cohesion score 0.1 - nodes in this community are weakly interconnected._

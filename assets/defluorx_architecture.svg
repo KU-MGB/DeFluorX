@@ -17,7 +17,7 @@
 <text x="243" y="144" font-size="10.2" font-weight="800" fill="#1e293b">00_01_Project_Config_DeFluorX.py</text>
 <text x="243" y="161" font-size="9.2" fill="#334155">single source of truth - thresholds, weights, paths</text>
 <text x="243" y="174.2" font-size="9.2" fill="#334155">tiers · geometry cutoffs · restraint · gates</text>
-<text x="503" y="196" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,500</text>
+<text x="503" y="196" font-size="9" font-weight="700" fill="#94a3b8" text-anchor="end">~3,519</text>
 <g filter="url(#ds)"><rect x="524" y="124" width="214" height="80" rx="10" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5"/></g>
 <text x="541" y="144" font-size="10.2" font-weight="800" fill="#1e293b">00_02_Project_Utils_DeFluorX.py</text>
 <text x="541" y="161" font-size="9.2" fill="#334155">console &amp; logging · atomic CSV / JSON</text>
@@ -60,14 +60,14 @@
 <text x="633" y="341.4" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">BH stats · Ramachandran · control★</text>
 <text x="633" y="354.59999999999997" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">multi-model variance · separators</text>
 <text x="633" y="367.79999999999995" font-size="9.2" fill="#9d174d" textLength="202" lengthAdjust="spacing">→ Figure_Enriched_Dataset.csv</text>
-<text x="841" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,671</text>
+<text x="841" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,670</text>
 <g filter="url(#ds)"><rect x="860" y="278" width="224" height="134" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="877" y="298" font-size="10.4" font-weight="800" fill="#9d174d">04_Dendrogram_DeFluorX.py</text>
 <text x="877" y="315" font-size="9.2" fill="#9d174d" textLength="190" lengthAdjust="spacing">alignment-free k-mer (k=3)</text>
 <text x="877" y="328.2" font-size="9.2" fill="#9d174d" textLength="190" lengthAdjust="spacing">UPGMA phylogeny</text>
 <text x="877" y="341.4" font-size="9.2" fill="#9d174d" textLength="190" lengthAdjust="spacing">interactive D3 tree</text>
 <text x="877" y="354.59999999999997" font-size="9.2" fill="#9d174d" textLength="190" lengthAdjust="spacing">per-tier · zoom / search</text>
-<text x="1073" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~1,670</text>
+<text x="1073" y="404" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~1,676</text>
 <rect x="40" y="446" width="304" height="178" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="192.0" y="465" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 3 - Selection &amp; Prep</text>
 <g filter="url(#ds)"><rect x="56" y="476" width="272" height="134" rx="10" fill="#fed7aa" stroke="#fb923c" stroke-width="1.5"/></g>
@@ -78,7 +78,7 @@
 <text x="73" y="552.6000000000001" font-size="9.2" fill="#9a3412" textLength="238" lengthAdjust="spacing">PyMOL / PLIP contact figures</text>
 <text x="73" y="565.8000000000002" font-size="9.2" fill="#9a3412" textLength="238" lengthAdjust="spacing">pose-drift + 8-residue machinery figures</text>
 <text x="73" y="579.0000000000002" font-size="9.2" fill="#9a3412" textLength="238" lengthAdjust="spacing">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="317" y="602" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,155</text>
+<text x="317" y="602" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,163</text>
 <rect x="356" y="446" width="744" height="178" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="728.0" y="465" font-size="11.5" font-weight="800" fill="#1d4ed8" text-anchor="middle" letter-spacing="0.3">Phase 4 - Dynamics &amp; Quantum Mechanics</text>
 <g filter="url(#ds)"><rect x="372" y="476" width="356" height="134" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
@@ -89,7 +89,7 @@
 <text x="389" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="389" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="389" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,011</text>
+<text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,002</text>
 <g filter="url(#ds)"><rect x="736" y="476" width="348" height="134" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="753" y="496" font-size="10.4" font-weight="800" fill="#1e40af">07_MD_QMMM_Defluorination_DeFluorX.py</text>
 <text x="753" y="513" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">turns MD trajectories into a defluorination verdict</text>
@@ -98,7 +98,7 @@
 <text x="753" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="753" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">departing-F Mulliken charge → cleavage check</text>
 <text x="753" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,484</text>
+<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,678</text>
 <path d="M210 166 L150 166 L150 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M930 166 L990 166 L990 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M210 166 L22 166 L22 505 L40 505" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>

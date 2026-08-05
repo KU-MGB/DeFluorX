@@ -2066,11 +2066,6 @@ class CFG:
     QSITE_BUFFER_RADIUS: float = 8.0         # Å  ≤ this: restrained; beyond: frozen (the surface)
     QSITE_QM_WATER_RADIUS: float = 3.5       # Å  a water within this of the reactive centre goes QM
     QSITE_QM_WATER_MAX: int = 3              # cap on QM waters (each adds electrons to the SCF)
-    QSITE_QM_WATER_DEWET_RADIUS: float = 6.0 # Å  dewetted-pocket fallback: if 0 waters sit within
-                                             # QSITE_QM_WATER_RADIUS, the nearest single water to the
-                                             # leaving fluoride out to this radius is still taken QM, so
-                                             # the departing F keeps a first-shell micro-solvation (an
-                                             # empty shell strands the fluoride and under-calls cleavage)
     QSITE_WM_WATER_MATCH_A: float = 1.5      # Å  a candidate QM water is matched to a WaterMap site if
                                              # its O is within this distance of the site
     QSITE_WM_WATER_WEIGHT: float = 1.0       # Å-per-(kcal/mol) discount applied to a candidate water's
@@ -2293,14 +2288,23 @@ class CFG:
     SCORE_PCA_NEUTRAL: float       = 50.0   # the neutral PCA score assigned when PCA cannot run
                                             # (mid-scale of 0-100 - never a silent zero)
     VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
-    VIS_FONT_LARGE: float       = 14.0   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
-    VIS_FONT_AXIS_LABEL: float  = 11.0   # x/y axis labels - plain weight
-    VIS_FONT_TICK: float        = 9.0    # tick labels
-    VIS_FONT_TICK_COMPACT: float = 8.0   # tick labels on a crowded axis (many categories/rotated labels)
-    VIS_FONT_TICK_DENSE: float  = 7.0    # tick labels on a very dense axis (per-complex rows, colourbars)
-    VIS_FONT_LEGEND: float      = 8.0    # legend entries (one size for every figure, every step)
-    VIS_FONT_LEGEND_TITLE: float = 8.5   # legend title (one size everywhere; slightly above the entries)
-    VIS_FONT_ANNOT: float       = 7.5    # in-figure annotations (values on/inside bars)
+    VIS_FONT_LARGE: float       = 15.5   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
+    VIS_FONT_AXIS_LABEL: float  = 12.5   # x/y axis labels - plain weight
+    VIS_FONT_TICK: float        = 10.5   # tick labels
+    VIS_FONT_TICK_COMPACT: float = 9.5   # tick labels on a crowded axis (many categories/rotated labels)
+    VIS_FONT_TICK_DENSE: float  = 8.5    # tick labels on a very dense axis (per-complex rows, colourbars)
+    VIS_FONT_LEGEND: float      = 9.5    # legend entries (one size for every figure, every step)
+    VIS_FONT_LEGEND_TITLE: float = 10.0  # legend title (one size everywhere; slightly above the entries)
+    VIS_FONT_ANNOT: float       = 9.0    # in-figure annotations (values on/inside bars)
+    # Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
+    # than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,
+    # nothing hardcoded). Ordered largest -> smallest; scale the ladder to grow/shrink the whole scene.
+    MECH_FONT_ATOM_XL: float    = 13.0   # the departing fluoride glyph (emphasised)
+    MECH_FONT_ATOM: float       = 11.5   # substrate element glyphs (C/O/F) + verdict badge
+    MECH_FONT_LABEL: float      = 10.5   # emphasised atom label
+    MECH_FONT_DISC: float       = 8.7    # residue-disc code/number, electron ①② markers, reaction-coord graph labels
+    MECH_FONT_SMALL: float      = 7.7    # interacting-atom names, graph ticks / x-label, scene legend rows
+    MECH_FONT_TINY: float       = 6.7    # distance / angle read-off labels, cleavage-threshold marker
     VIS_TEXT_MAX_LUM: float     = 0.42   # a bar/line colour reused as TEXT is darkened to at most this relative luminance so a light hue (yellow, sky, amber) stays legible on white
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
@@ -3312,10 +3316,24 @@ class CFG:
     in the chemistry. A ligand not listed here keeps its full name rather than being mangled.
     """
     VIS_LIGAND_SHORT: dict = field(default_factory=lambda: {
-        "fluoroacetate":    "FA",
-        "difluoroacetate":  "DFA",
-        "trifluoroacetate": "TFA",
-        "tfa":              "TFA",
+        # short PFAS acids: the long acid name collapses to FA / DFA / TFA
+        "fluoroacetate":      "FA",
+        "monofluoroacetate":  "FA",
+        "mono-fluoroacetate": "FA",
+        "mfa":                "FA",
+        "difluoroacetate":    "DFA",
+        "dfa":                "DFA",
+        "trifluoroacetate":   "TFA",
+        "tfa":                "TFA",
+        # the 27-PFAS input panel (D_INP_PFAS-27_Ligands.smi): lowercased token -> canonical
+        # display short. Identity for the already-short perfluoro names, but held here so the
+        # lookup normalises case and any future ligand resolves from this one CFG map.
+        "pfoa":    "PFOA",   "pfos":    "PFOS",   "pfhxs":   "PFHxS",  "pfna":  "PFNA",
+        "pfbs":    "PFBS",   "pfhxa":   "PFHxA",  "pfba":    "PFBA",   "pfpea": "PFPeA",
+        "pfpes":   "PFPeS",  "pfda":    "PFDA",   "pfdoda":  "PFDoDA", "pfunda":"PFUnDA",
+        "pfhpa":   "PFHpA",  "pftrda":  "PFTrDA", "pfhps":   "PFHpS",  "pfds":  "PFDS",
+        "pfteda":  "PFTeDA", "pfhxda":  "PFHxDA", "pfoda":   "PFODA",  "genx":  "GenX",
+        "adona":   "ADONA",  "6-2-ftoh":"6-2-FTOH", "8-2-ftoh":"8-2-FTOH", "c6o4": "C6O4",
     })
     """
     Prime subjob parallelism. The target is GLOBAL_MAX_WORKERS (cpu_count − PREP_CPU_RESERVE),

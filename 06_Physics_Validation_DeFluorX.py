@@ -159,6 +159,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+plt.rcParams["axes.labelpad"] = 8.0   # gap between axis labels and tick values (per-call labelpad still overrides)
 import matplotlib.colors as _mcolors  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
@@ -4615,18 +4616,16 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
         a.plot(r["t"], r["ca"], color=cols[i], lw=1.3, label=labs[i])
     a.set_xlabel("time (ns)")
     a.set_ylabel("Protein Cα-RMSD (Å)\nvs the minimised start - lower = more stable")
-    a.legend(loc="lower right", fontsize=fl, title="MD-selected", ncol=max(1, len(labs)))
 
     # B - ligand RMSD after fitting on the protein (did the PFAS stay in the pocket).
     b = ax[0, 1]
     for i, r in enumerate(recs):
         b.plot(r["t"], r["lg"], color=cols[i], lw=1.3, label=labs[i])
     b.set_xlabel("time (ns)")
-    _lg_ylab = ("Ligand RMSD (Å), fit on protein\nhigher = drift within the pocket restraint (see note)"
+    _lg_ylab = ("Ligand RMSD (Å), fit on protein\nhigher = drift within the pocket restraint"
                 if getattr(CFG, "MD_RESTRAIN_LIGAND", False)
                 else "Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
     b.set_ylabel(_lg_ylab)
-    b.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
 
     # C - system temperature vs the target (thermostat stability), zoomed to a tight band.
     c = ax[1, 0]
@@ -4641,7 +4640,6 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
            fontsize=CFG.VIS_FONT_ANNOT - 1, color=_INK["soft"])
     if has_T:
         c.set_ylim(tgt - 12, tgt + 10)
-        c.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
     c.set_xlabel("time (ns)")
     c.set_ylabel("System temperature (K)\nthermostat stability around the target")
 
@@ -4651,18 +4649,11 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
         dd.plot(r["res"], r["rf"], color=cols[i], lw=1.0, label=labs[i])
     dd.set_xlabel("residue number")
     dd.set_ylabel("Protein Cα-RMSF (Å)\nper-residue flexibility over the run")
-    dd.legend(loc="lower right", fontsize=fl, ncol=max(1, len(labs)))
 
+    # one legend for all four panels (identical FA/DFA/TFA/control series), placed inside panel A
+    ax[0, 0].legend(loc="lower right", ncol=max(1, len(labs)), fontsize=fl,
+                    frameon=True, framealpha=0.9)
     fig.tight_layout()
-    # Honest disclosure: when the production is positionally restrained, retention/equilibration in
-    # panels A/B are enforced by the restraint, not observed as spontaneous - say so on the figure.
-    if getattr(CFG, "MD_RESTRAIN_LIGAND", False):
-        fig.subplots_adjust(bottom=0.11)
-        fig.text(0.5, 0.01,
-                 f"Production run under a positional restraint (ligand heavy atoms k={CFG.MD_RESTRAIN_LIG_FORCE_K}, "
-                 f"backbone k={CFG.MD_RESTRAIN_BB_FORCE_K} kcal/mol/Å²): ligand retention (B) and Cα equilibration (A) "
-                 f"are restraint-enforced, not spontaneous. The unrestrained SN2 barrier is the Step-07 QM/MM ΔE‡.",
-                 ha="center", va="bottom", fontsize=CFG.VIS_FONT_ANNOT - 1, color=CFG.VIS_INK["soft"], wrap=True)
     qc_dir = _analysis_dir(out_root)
     out_path = qc_dir / "03_MD_Trajectory_QC.svg"
     plt.savefig(out_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")

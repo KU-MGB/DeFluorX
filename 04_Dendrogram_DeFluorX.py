@@ -293,6 +293,8 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     ).replace(
         "{{ JSON_LIGAND_COLORS }}", json.dumps(list(CFG.VIS_LIGAND_SERIES))
     ).replace(
+        "{{ JSON_LIGAND_SHORT }}",  json.dumps(CFG.VIS_LIGAND_SHORT)
+    ).replace(
         "{{ JSON_CLADE_COLORS }}",  json.dumps(list(CFG.VIS_CLADE_SERIES))
     ).replace(
         '<div id="upload-section">',
@@ -713,6 +715,10 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
         const BASE_TIER_COLORS = {{ JSON_BASE_COLORS }};
         const LIGAND_COLORS = {{ JSON_LIGAND_COLORS }};
+        // CFG.VIS_LIGAND_SHORT (single source of truth) - the ONE ligand shortener; display-only,
+        // the raw Ligand_Name stays the key for filtering / colouring / matching.
+        const LIGAND_SHORT = {{ JSON_LIGAND_SHORT }};
+        function ligShort(n){ if(n==null) return n; const s=String(n).replace(/^\d+_/,''); return LIGAND_SHORT[s.toLowerCase()] || s; }
         const CLADE_COLORS = [...LIGAND_COLORS, ...{{ JSON_CLADE_COLORS }}];
         const TIER_RANKING = {{ JSON_TIER_ORDER }};
         const CELL_PADDING = 2;
@@ -1056,7 +1062,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             ligContainer.innerHTML = ligands.map(lig => `
                 <label class="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 px-2 rounded transition">
                     <input type="checkbox" class="ligand-checkbox w-3.5 h-3.5 rounded border-slate-300 text-indigo-600" value="${lig}" checked>
-                    <span class="text-slate-600 font-medium select-none truncate" title="${lig}">${lig}</span>
+                    <span class="text-slate-600 font-medium select-none truncate" title="${lig}">${ligShort(lig)}</span>
                 </label>
             `).join('');
             document.querySelectorAll('.ligand-checkbox').forEach(cb => cb.addEventListener('change', (e) => { if (e.target.checked) state.activeLigands.add(e.target.value); else state.activeLigands.delete(e.target.value); updateColorsAndStats(); }));
@@ -1237,7 +1243,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     tooltip.html(
                         `<strong class="text-indigo-300 border-b border-slate-700 pb-1 block mb-2">${d.protName}</strong>` +
                         `<div class="grid grid-cols-2 gap-x-4 gap-y-1">` +
-                        `<span class="text-slate-400">Ligand:</span><span>${d.lig}</span>` +
+                        `<span class="text-slate-400">Ligand:</span><span>${ligShort(d.lig)}</span>` +
                         `<span class="text-slate-400">Tier:</span>` +
                         `<span style="color:${getColorForTier(d.tier)};font-weight:bold">${d.tier.replace('_',' ')}</span>` +
                         `<span class="text-slate-400">Score:</span><span>${parseFloat(d.score||0).toFixed(2)}</span>` +
@@ -1301,7 +1307,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                 .style("-webkit-text-stroke", "2px white")
                 .select("textPath")
                 .attr("href", d => `#ring-arc-guide-${d.i}`)
-                .text(d => d.lig);
+                .text(d => ligShort(d.lig));
             ringLabels.exit().remove();
 
             // ── Nodes ─────────────────────────────────────────────────────────
@@ -1317,7 +1323,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     if (!d.data.name) return;
                     const match = getBestActiveMatch(d.data.name);
                     let tipHtml = `<strong class="text-indigo-300 border-b border-slate-700 pb-1 block mb-2">${d.data.name}</strong>`;
-                    if (match.ligand) tipHtml += `<div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Best ligand:</span><span>${match.ligand}</span><span class="text-slate-400">Tier:</span><span style="color:${getColorForTier(match.tier)};font-weight:bold">${match.tier}</span></div>`;
+                    if (match.ligand) tipHtml += `<div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Best ligand:</span><span>${ligShort(match.ligand)}</span><span class="text-slate-400">Tier:</span><span style="color:${getColorForTier(match.tier)};font-weight:bold">${match.tier}</span></div>`;
                     else tipHtml += `<span class="text-slate-400 italic">Internal node</span>`;
                     tooltip.html(tipHtml).style("opacity", 1);
                 })
@@ -1516,7 +1522,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     document.querySelectorAll('.ligand-checkbox').forEach(cb => { if(cb.value === d) cb.checked = state.activeLigands.has(d); });
                     updateColorsAndStats();
                 })
-                .merge(headers).transition().duration(transDuration).text(d => d)
+                .merge(headers).transition().duration(transDuration).text(d => ligShort(d))
                 .attr("transform", (d, i) => isV ? `translate(${maxLeafX + NODE_SPACING + 10}, ${maxDepthY + MATRIX_GAP + (i * DIM_LIG) + DIM_LIG/2 + 3}) rotate(0)` : `translate(${maxDepthY + MATRIX_GAP + (i * DIM_LIG) + DIM_LIG/2 + 3}, ${minLeafX - NODE_SPACING - 10}) rotate(-90)`)
                 .style("fill", (d, i) => LIGAND_COLORS[i % LIGAND_COLORS.length]).style("text-anchor", "start").style("dominant-baseline", "middle").style("opacity", d => state.activeLigands.has(d) ? 1 : 0.3);
             headers.exit().remove();
@@ -1530,7 +1536,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                     if (!d.data.name) return;
                     const match = getBestActiveMatch(d.data.name);
                     let tipHtml = `<strong class="text-indigo-300 border-b border-slate-700 pb-1 block mb-2">${d.data.name}</strong>`;
-                    if (match.ligand) tipHtml += `<div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Ligand:</span> <span>${match.ligand}</span><span class="text-slate-400">Tier:</span> <span style="color:${getColorForTier(match.tier)}; font-weight:bold">${match.tier}</span></div>`;
+                    if (match.ligand) tipHtml += `<div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Ligand:</span> <span>${ligShort(match.ligand)}</span><span class="text-slate-400">Tier:</span> <span style="color:${getColorForTier(match.tier)}; font-weight:bold">${match.tier}</span></div>`;
                     else tipHtml += `<span class="text-slate-400 italic">Internal Node / No Filtered Match</span>`;
                     tooltip.html(tipHtml).style("opacity", 1);
                 }).on("mousemove", (event) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px")).on("mouseout", () => tooltip.style("opacity", 0));
@@ -1593,7 +1599,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
 
             const cellEnter = cellGroups.enter().append("g").attr("class", "heatmap-cell-group")
                 .on("mouseover", function(event, d) {
-                    tooltip.html(`<strong class="text-indigo-300 border-b border-slate-700 pb-1 block mb-2">${d.protName}</strong><div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Target Ligand:</span> <span>${d.lig}</span><span class="text-slate-400">Tier:</span> <span style="color:${getColorForTier(d.tier)}; font-weight:bold">${d.tier.replace('_', ' ')}</span></div>`).style("opacity", 1);
+                    tooltip.html(`<strong class="text-indigo-300 border-b border-slate-700 pb-1 block mb-2">${d.protName}</strong><div class="grid grid-cols-2 gap-x-4 gap-y-1"><span class="text-slate-400">Target Ligand:</span> <span>${ligShort(d.lig)}</span><span class="text-slate-400">Tier:</span> <span style="color:${getColorForTier(d.tier)}; font-weight:bold">${d.tier.replace('_', ' ')}</span></div>`).style("opacity", 1);
                     d3.select(this).select("rect").style("stroke", "#1e293b").style("stroke-width", "2px");
                 }).on("mousemove", (event) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px")).on("mouseout", function() { tooltip.style("opacity", 0); d3.select(this).select("rect").style("stroke", "none"); });
 
