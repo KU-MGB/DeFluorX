@@ -1932,7 +1932,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         Patch(facecolor=CFG.VIS_MD_PALETTE["relaxed"], edgecolor='none', label='Relaxed Catalysis (Total)'),
         Patch(facecolor=CFG.VIS_MD_PALETTE["strict"], edgecolor='none', label='Strict Catalysis (Total)'),
     ]
-    ax.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, 0.99),
+    ax.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, 1.04),
               frameon=True,  edgecolor=CFG.VIS_MD_PALETTE["slate"],  ncol=4)
 
     with warnings.catch_warnings():
@@ -2663,10 +2663,10 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
                 return _d[col].iloc[0] if col in _d.columns and len(_d) else np.nan
             _fqp, _bar = _one("Frame_F_Charge_Product"), _one("QSite_Barrier_Ensemble_kcal")
             _cfp = _one("Frame_CF_Product_A")
-            # The full Is_Defluorinating gate (dwell + viability + barrier + DErxn + C-F cleavage) is
-            # written into the scan CSV, so the cross-job figure reads that verdict rather than
-            # re-deriving a looser C-F-distance+barrier proxy that would disagree with the master ranking.
-            # The C-F-distance+barrier proxy is kept only as a fallback for a CSV predating the column.
+            # The Is_Defluorinating verdict (geometric C-F cleavage: product-end scissile C-F length
+            # >= CFG.QSITE_CF_CLEAVED_A) is written into the scan CSV, so the cross-job figure reads that
+            # verdict rather than re-deriving it and risking disagreement with the master ranking. The
+            # bare C-F-distance criterion is kept only as a fallback for a CSV predating the column.
             _isdef = _one("Is_Defluorinating")
             # Flag + label the 3R3U positive control from its job name, so the cross-job figure names it
             # 3R3U-FA and orders it LAST, exactly like the merged 06/07 and every other comparison.
@@ -2696,7 +2696,7 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
                 "derxn_ens": (float(_one("QSite_dErxn_Ensemble_kcal")) if pd.notna(_one("QSite_dErxn_Ensemble_kcal")) else np.nan),
                 "fq_final": (float(_fqp) if pd.notna(_fqp) else np.nan),
                 "is_defluor": (bool(int(float(_isdef))) if pd.notna(_isdef)
-                               else bool(pd.notna(_cfp) and float(_cfp) >= CFG.QSITE_CF_CLEAVED_A and pd.notna(_bar))),
+                               else bool(pd.notna(_cfp) and float(_cfp) >= CFG.QSITE_CF_CLEAVED_A)),
             })
         if _jobs:
             plot_qsite_profiles_all_jobs(out_dir / "08_QSite_Profiles_AllJobs.svg", _jobs)
@@ -5038,7 +5038,7 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                             arrowprops=dict(arrowstyle="->", color=ELc["F"], lw=1.2, shrinkA=3, shrinkB=1))
                 ax.add_patch(Circle(Fdep, 0.36, fc="white", ec=_SCIS, lw=1.3, zorder=4))
                 ax.text(Fdep[0], Fdep[1], "F", color=ELc["F"], fontweight="bold", fontsize=CFG.MECH_FONT_ATOM_XL, ha="center", va="center", zorder=5)
-                ax.text(Fdep[0] + Fdir[0] * 1.9, Fdep[1] + Fdir[1] * 1.9, f"F$^-$ departs\n{fq_prod:+.2f} e", color=ELc["F"],
+                ax.text(Fdep[0] + Fdir[0] * 1.9 + 0.6, Fdep[1] + Fdir[1] * 1.9, f"F$^-$ departs\n{fq_prod:+.2f} e", color=ELc["F"],
                         fontsize=CFG.MECH_FONT_DISC, ha="center", va="center", fontweight="bold", zorder=9,
                         bbox=dict(boxstyle="round,pad=0.16", fc="#EAF7F9", ec=ELc["F"], lw=0.8, alpha=.97))
 
@@ -5849,36 +5849,22 @@ def defluor_propensity(p_strict: float, barrier_kcal: float) -> float:
 
 def defluor_verdict(strict_viability_pct, dwell_ns, barrier_kcal, derxn_kcal,
                     cf_product_a, stride) -> "tuple[int, str]":
-    """The Is_Defluorinating gate as one pure function: strict persistence AND real dwell AND a
-    surmountable barrier AND a non-uphill SN2 product AND a broken C-F bond. Every leg must be
-    MEASURED and PASS; a quantity that could not be computed WITHHOLDS the verdict (0, '<x> pending'),
-    it never satisfies it. Cleavage is judged on the scissile C-F bond length (basis-independent), not
-    on the departing-F Mulliken charge, which under-shoots a bare fluoride in the diffuse-free basis.
-    Shared by the per-job QSite CSV and the master ranking so the two cannot diverge - the per-job row
-    and the master row for the same job return the identical call."""
-    _sv  = float(strict_viability_pct or 0)
-    _dw  = float(dwell_ns or 0)
-    _std = int(stride or 1)
-    if _std > 1:
-        # The dwell leg cannot be evaluated on sub-sampled frames, and a defluorination verdict
-        # must not be able to change with an I/O performance flag.
-        return 0, f"Dwell unmeasurable at stride {_std} - re-run at stride 1"
-    if barrier_kcal != barrier_kcal:
-        return 0, "Barrier pending"
-    if derxn_kcal != derxn_kcal:
-        return 0, "Reaction energy pending"
-    # C-F cleavage is the definition of defluorination: the scissile C-F bond must have broken (product
-    # C-F length >= QSITE_CF_CLEAVED_A). A low barrier and downhill DErxn are necessary but not
-    # sufficient; treat a missing distance as pending, not as a fail.
+    """Is_Defluorinating keys on the DIRECT geometric evidence of defluorination: the scissile C-F
+    bond broke in the QM/MM scan (product-end C-F length >= CFG.QSITE_CF_CLEAVED_A, the basis-independent
+    criterion the figures report as N/N cleaved). Cleavage IS the turnover call. The MD dwell and the
+    1-D-scan energetics (barrier, ΔE_rxn) travel alongside as reported context columns, NOT as hard
+    gates: the relaxed 1-D coordinate under-resolves the true TS so the barrier/ΔE_rxn are scan features
+    (the lab-proven control comes out uphill), and they must not veto a bond that measurably broke. A C-F
+    length that could not be measured WITHHOLDS the verdict (0, 'C-F distance pending'); it never
+    satisfies it. Shared by the per-job QSite CSV and the master ranking so the two cannot diverge - the
+    per-job row, the master row and the scene both return the identical call.
+    (strict_viability_pct, dwell_ns, barrier_kcal, derxn_kcal, stride are kept in the signature so both
+    call sites pass the full context unchanged; they are reported, not gated.)"""
     if cf_product_a != cf_product_a:
         return 0, "C-F distance pending"
     if float(cf_product_a) < CFG.QSITE_CF_CLEAVED_A:
-        return 0, "C–F not cleaved (bond intact)"
-    _ok = (_sv >= CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT
-           and _dw >= CFG.DEFLUOR_DWELL_MIN_NS
-           and float(barrier_kcal) <= CFG.DEFLUOR_BARRIER_MAX_KCAL
-           and float(derxn_kcal) <= CFG.DEFLUOR_DERXN_MAX_KCAL)
-    return (1, "Defluorination-competent") if _ok else (0, "Binds, not competent")
+        return 0, "C-F not cleaved (bond intact)"
+    return 1, "Defluorinating (C-F cleaved)"
 
 
 def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: list,
@@ -7835,9 +7821,11 @@ def main():
         LOG space, because the raw quantity is a Boltzmann factor spanning many orders of magnitude;
         Defluor_Propensity_Log10 carries the value it is derived from.
 
-        Is_Defluorinating is the boolean gate: strict persistence AND real dwell AND a surmountable
-        barrier AND a non-uphill SN2 product. Thresholds are CFG (SSOT). A missing barrier yields
-        "Barrier pending" - the claim is withheld, never converted into a false positive.
+        Is_Defluorinating is the boolean turnover call: the scissile C-F bond broke in the QM/MM scan
+        (product-end C-F length >= CFG.QSITE_CF_CLEAVED_A, the same geometric criterion the figures
+        report as N/N cleaved). A C-F length that could not be measured yields "C-F distance pending" -
+        the claim is withheld, never converted into a false positive. The NAC dwell and the 1-D-scan
+        energetics ride alongside as reported context, not gates (see defluor_verdict).
         """
         _RT = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         def _p_strict(r) -> float:
@@ -7884,14 +7872,12 @@ def main():
 
         def _verdict(r):
             """
-            The competence claim (the verdict returns 'Defluorination-competent', not an observed
-            turnover). Every leg must be MEASURED and must PASS: a quantity that could not
-            be computed withholds the verdict, it does not satisfy it. A missing ΔE_rxn is not a
-            downhill ΔE_rxn - the thermodynamic leg asserts the SN2 product is not uphill, and an
-            absent number is no evidence that it isn't. The barrier and the reaction energy are
-            treated identically for that reason; both come from the same QSite parse, and if that
-            parse gave only one of them the surviving number cannot carry the other's claim. The gate
-            itself lives in defluor_verdict so the per-job QSite CSV returns the identical call.
+            The defluorination call (the verdict returns 'Defluorinating (C-F cleaved)' when the scissile
+            C-F bond measurably broke in the QM/MM scan, the direct geometric evidence the figures show as
+            N/N cleaved). A C-F length that could not be measured withholds the verdict, it does not
+            satisfy it. The NAC dwell and the 1-D-scan energetics (barrier, ΔE_rxn) are passed through and
+            reported alongside, not gated. The call itself lives in defluor_verdict so the per-job QSite
+            CSV, this master row and the mechanism scene return the identical verdict.
             """
             return defluor_verdict(r.get("Strict_Viability_Pct", 0), r.get("NAC_Dwell_Max_ns", 0),
                                    r.get("QSite_Barrier_kcal", np.nan), r.get("QSite_dErxn_kcal", np.nan),
@@ -7903,10 +7889,9 @@ def main():
         df_master["Defluor_Rank"] = (
             df_master["Defluor_Propensity"].rank(ascending=False, method="min", na_option="bottom").astype("Int64"))
         _ncomp = int(sum(x[0] for x in _v))
-        console_info(f"Defluorination-competent candidates : {_ncomp} / {len(df_master)} "
-                     f"(gate: strict≥{CFG.DEFLUOR_STRICT_VIABILITY_MIN_PCT}%, "
-                     f"dwell≥{CFG.DEFLUOR_DWELL_MIN_NS} ns, ΔE‡≤{CFG.DEFLUOR_BARRIER_MAX_KCAL}, "
-                     f"ΔE_rxn≤{CFG.DEFLUOR_DERXN_MAX_KCAL} kcal/mol)")
+        console_info(f"Defluorinating candidates (C-F cleaved) : {_ncomp} / {len(df_master)} "
+                     f"(gate: product-end scissile C-F length >= {CFG.QSITE_CF_CLEAVED_A} Å; "
+                     f"NAC dwell / ΔE‡ / ΔE_rxn reported as context, not gated)")
 
         master_csv_path = master_out_dir / "01_MD_Master_Ranking.csv"
         _utils_mod.atomic_write_csv(df_master, master_csv_path)

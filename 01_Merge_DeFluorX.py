@@ -416,7 +416,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     fig = plt.figure(figsize=(16, 9), facecolor=PALETTE["Bg"])
 
     # Layout: Top row (Bar + Violin), Bottom row (KDE)
-    gs = fig.add_gridspec(2, 2, height_ratios=[0.65, 1.35], width_ratios=[1.3, 0.7], hspace=0.12, wspace=0.1)
+    gs = fig.add_gridspec(2, 2, height_ratios=[0.65, 1.35], width_ratios=[1.3, 0.7], hspace=0.22, wspace=0.1)
 
     ax1 = fig.add_subplot(gs[0, 0]) # Top Left: Throughput
     ax2 = fig.add_subplot(gs[0, 1]) # Top Right: Violins
@@ -476,6 +476,11 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     apply_clean_spines(ax1)
     ax1.spines["left"].set_visible(False)
     ax1.tick_params(axis="y", length=0)
+    # Horizontal-bar chart: vertical guides only (to read the sequence counts); the y-grid would just
+    # draw horizontal lines through the middle of the bars.
+    ax1.set_axisbelow(True)
+    ax1.grid(axis="y", visible=False)
+    ax1.grid(axis="x", linestyle="--", alpha=0.3)
 
     ax1.legend(loc="upper right", frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
 

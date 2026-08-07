@@ -41,7 +41,7 @@
 <text x="73" y="369" font-size="9.2" fill="#047857" textLength="238" lengthAdjust="spacing">merge multi-source FASTA → non-redundant set</text>
 <text x="73" y="382.2" font-size="9.2" fill="#047857" textLength="238" lengthAdjust="spacing">dedup + QC</text>
 <text x="73" y="395.4" font-size="9.2" fill="#047857" textLength="238" lengthAdjust="spacing">→ merged FASTA</text>
-<text x="317" y="408" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~702</text>
+<text x="317" y="408" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~707</text>
 <rect x="356" y="248" width="744" height="178" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="728.0" y="267" font-size="11.5" font-weight="800" fill="#be185d" text-anchor="middle" letter-spacing="0.3">Phase 2 - High-Throughput Screening</text>
 <g filter="url(#ds)"><rect x="372" y="278" width="236" height="134" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
@@ -98,7 +98,7 @@
 <text x="753" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="753" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">departing-F Mulliken charge → cleavage check</text>
 <text x="753" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,960</text>
+<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,945</text>
 <path d="M210 166 L150 166 L150 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M930 166 L990 166 L990 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M210 166 L22 166 L22 505 L40 505" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
