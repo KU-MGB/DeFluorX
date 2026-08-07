@@ -6448,614 +6448,615 @@ def main():
     analysis_pool.submit(analysis_worker_loop, gpu_queue_for_analysis, PROD,
                          args.diffusion_samples, D_ALN, control_cif, control_map,
                          DEHA4_CONTROL_SEQ, CSV_PATH, r3u_boltz_cif, r3u_control_map)
+    try:
 
-    if pending_jobs > 0:
-        workspace_dir = PROD / "_Temp_Workspace"
-        workspace_dir.mkdir(exist_ok=True)
+        if pending_jobs > 0:
+            workspace_dir = PROD / "_Temp_Workspace"
+            workspace_dir.mkdir(exist_ok=True)
 
-        batch_out_dir = workspace_dir / "Boltz_Batch_Output"
-        batch_out_dir.mkdir(exist_ok=True)
+            batch_out_dir = workspace_dir / "Boltz_Batch_Output"
+            batch_out_dir.mkdir(exist_ok=True)
 
-        env = os.environ.copy()
-        env["CC"] = shutil.which("gcc") or "gcc"
-        env["CXX"] = shutil.which("g++") or "g++"
-        # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
-        # in a shared /tmp/triton_cache.
-        env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
-        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
-        # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
-        # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
-        env["OMP_NUM_THREADS"] = "1"
-        env["MKL_NUM_THREADS"] = "1"
-        env["OPENBLAS_NUM_THREADS"] = "1"
-        env["PYTHONWARNINGS"] = "ignore"
-        env["PYTORCH_LIGHTNING_SUPPRESS_WARNINGS"] = "1"
-        env["TF_CPP_MIN_LOG_LEVEL"] = "3"
-        env["CUDA_LAUNCH_BLOCKING"] = "0"
-        env["WANDB_DISABLED"] = "true"
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
+            env = os.environ.copy()
+            env["CC"] = shutil.which("gcc") or "gcc"
+            env["CXX"] = shutil.which("g++") or "g++"
+            # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
+            # in a shared /tmp/triton_cache.
+            env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
+            # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
+            # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
+            # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+            env["OMP_NUM_THREADS"] = "1"
+            env["MKL_NUM_THREADS"] = "1"
+            env["OPENBLAS_NUM_THREADS"] = "1"
+            env["PYTHONWARNINGS"] = "ignore"
+            env["PYTORCH_LIGHTNING_SUPPRESS_WARNINGS"] = "1"
+            env["TF_CPP_MIN_LOG_LEVEL"] = "3"
+            env["CUDA_LAUNCH_BLOCKING"] = "0"
+            env["WANDB_DISABLED"] = "true"
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
 
-        pending_by_protein = defaultdict(list)
-        pre_predicted_count = 0
+            pending_by_protein = defaultdict(list)
+            pre_predicted_count = 0
 
-        console_info(f"Scanning {len(tasks):,} jobs for pre-existing GPU predictions...")
-        _scan_lock = threading.Lock()
-        _pre_pred_jobs = []
-        _gpu_only_jobs = []
-        _scan_done = [0]
-        _n_scan = len(tasks)
+            console_info(f"Scanning {len(tasks):,} jobs for pre-existing GPU predictions...")
+            _scan_lock = threading.Lock()
+            _pre_pred_jobs = []
+            _gpu_only_jobs = []
+            _scan_done = [0]
+            _n_scan = len(tasks)
 
-        def _scan_job(job):
-            job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
-            job_dir = D_RUNS / job_name
-            if check_job_status(job_dir):
-                return  # already complete
-            prediction = next(iter(sorted(job_dir.glob("**/predictions/**/*.cif"))), None)
-            with _scan_lock:
-                _scan_done[0] += 1
-                n = _scan_done[0]
-                if n % 2000 == 0 or n == _n_scan:
-                    _tty_write(f"\r   [{n:,}/{_n_scan:,}] pre-predicted: {len(_pre_pred_jobs):,}  gpu-needed: {len(_gpu_only_jobs):,}   \033[K")
-                    sys.stdout.flush()
-                if prediction:
-                    _pre_pred_jobs.append(job)
-                else:
-                    _gpu_only_jobs.append(job)
-
-        with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _n_scan or 1)) as _sex:
-            list(_sex.map(_scan_job, tasks))
-        _tty_write("\r\033[K")
-        sys.stdout.flush()
-
-        pre_predicted_count = len(_pre_pred_jobs)
-        for _gj in _gpu_only_jobs:
-            pending_by_protein[_gj["protein"]].append(_gj)
-
-        if pre_predicted_count > 0:
-            if pending_by_protein:
-                """
-                Mixed mode: GPU-only jobs also present - route pre-predicted jobs
-                through the background single-worker queue so analysis runs
-                concurrently with ongoing GPU prediction.
-                """
-                for _pj in _pre_pred_jobs:
-                    gpu_queue_for_analysis.put(_pj)
-                console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions - re-routing to Analysis Queue...")
-            else:
-                """
-                All jobs are pre-existing - skip the single-worker queue entirely.
-                Step 10.8's full parallel pool will handle analysis at maximum
-                concurrency (TARGET_CORES workers). No blocking wait.
-                """
-                console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions.")
-                console_info(f" -> Routing to parallel analysis pool ({TARGET_CORES} workers) - skipping single-worker queue.")
-        if _gpu_only_jobs:
-            console_info(f" -> {len(_gpu_only_jobs):,} jobs require GPU prediction.")
-
-        if pending_by_protein:
-            # MSA cache is only relevant to proteins that actually need a GPU prediction.
-            msa_ready = sum(1 for pid in pending_by_protein if validate_a3m_file(D_COLABFOLD / f"{pid}.a3m"))
-            _n_gpu_jobs = sum(len(v) for v in pending_by_protein.values())
-            print(f"\n{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}{'=' * 80}{ConsoleColours.ENDC}")
-            print(f"{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}  GPU PREDICTION PHASE STARTING  -  {_n_gpu_jobs} jobs  |  {len(pending_by_protein)} proteins  |  {msa_ready}/{len(pending_by_protein)} MSA cached{ConsoleColours.ENDC}")
-            print(f"{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}{'=' * 80}{ConsoleColours.ENDC}\n", flush=True)
-            console_info("Launching Boltz-2 Batch Prediction Sequence Operations (GPU)...")
-            console_info("Execution Strategy: Greedy batching protocol - multiple individual proteins bundled per Boltz call to systematically minimise model reloads and mitigate GPU idle instances.")
-        else:
-            console_info(f"\n -> All {pending_jobs} pending job(s) have pre-existing GPU predictions - no new predictions required.")
-            console_info(" -> Proceeding directly to parallel analysis...")
-
-        msa_dir = D_COLABFOLD
-        msa_dir.mkdir(parents=True, exist_ok=True)
-        tmp_msa_dir = workspace_dir / "5b_MSA_Temp"
-        tmp_msa_dir.mkdir(exist_ok=True)
-
-        if pending_by_protein:
-            console_info("\nStarting Concurrent MSA Retrieval Sequence and GPU Prediction Execution Pipeline...")
-            console_info("MSA retrieval (via ColabFold APIs) executes consistently in a background parallel thread whilst Boltz-2 predicts completed sequential batches via the GPU architecture.")
-
-        def background_downloader(proteins_to_fetch):
-            """Fetch MSAs for the given proteins sequentially in a daemon thread.
-
-            For each protein writes <pid>.a3m into msa_dir (skipping ones already
-            present), using the ColabFold MSA server with a Boltz fallback. Runs
-            concurrently with the GPU prediction phase; failures are tolerated and
-            retried per-protein downstream.
-            """
-            for pid in proteins_to_fetch:
-                a3m_path = msa_dir / f"{pid}.a3m"
-                if a3m_path.exists():
-                    if validate_a3m_file(a3m_path):
-                        continue
-                    else:
-                        logger.debug(f"A3M sequence file for {pid} failed extensive structural validation. Re-fetching structural data...")
-                        a3m_path.unlink(missing_ok=True)
-
-                seq       = pending_by_protein[pid][0]["sequence"]
-                meta_path = colabfold_meta_path(PROD, pid)
-
-                logger.debug(f"[MSA] Commencing MSA structural retrieval for {pid} securely via ColabFold API framework...")
-                t_msa = time.time()
-                ok = fetch_msa_direct(pid, seq, a3m_path, meta_path)
-                if ok:
-                    logger.debug(f"[MSA] ColabFold API sequence operations succeeded for {pid} in {time.time()-t_msa:.1f}s")
-
-                if not ok:
-                    console_info(f"  [MSA] Direct API methodologies functionally failed for {pid} - actively falling back to Boltz subprocess execution strategies (computationally slow)")
-                    yaml_path = tmp_msa_dir / f"{pid}_fetch.yaml"
-                    with open(yaml_path, "w") as f:
-                        yaml.safe_dump({"sequences": [{"protein": {"id": "A", "sequence": seq}}]}, f, sort_keys=False)
-
-                    cmd = [
-                        BOLTZ_BIN, "predict", str(yaml_path), "--out_dir", str(tmp_msa_dir),
-                        "--use_msa_server", "--accelerator", "cpu", "--devices", "1"
-                    ]
-
-                    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(tmp_msa_dir))
-                    start     = time.time()
-                    found     = False
-                    job_msa_dir = tmp_msa_dir / f"boltz_results_{pid}_fetch"
-
-                    while time.time() - start < 900:
-                        if proc.poll() is not None: break
-                        if job_msa_dir.exists():
-                            a3ms = sorted(job_msa_dir.rglob("*.a3m"))
-                            if a3ms and a3ms[0].stat().st_size > 500:
-                                if validate_a3m_file(a3ms[0]):
-                                    # Atomic publish: copy to a temp file in the same
-                                    # directory, then rename. The main thread polls
-                                    # a3m_path concurrently; a mid-copy read could
-                                    # otherwise pass the size/header check on a
-                                    # truncated file and predict on a partial MSA.
-                                    _tmp_a3m = a3m_path.with_suffix(a3m_path.suffix + ".tmp")
-                                    shutil.copy2(a3ms[0], _tmp_a3m)
-                                    _tmp_a3m.replace(a3m_path)
-                                    with open(meta_path, "w") as mf:
-                                        json.dump({
-                                            "sequence_sha256": sequence_hash(seq),
-                                            "protein_id":      pid,
-                                            "generated_at":    datetime.utcnow().isoformat() + "Z",
-                                            "source":          "boltz_fallback",
-                                        }, mf)
-                                    found = True
-                                    proc.terminate()
-                                    break
-                                else:
-                                    logger.debug(f"A3M sequence for {pid} is inherently corrupted (aberrant null bytes detected). Retrying...")
-                                    shutil.rmtree(job_msa_dir, ignore_errors=True)
-                                    time.sleep(5)
-                                    break
-                        time.sleep(5)
-
-                    # Ensure the fallback Boltz subprocess is not left running once the
-                    # polling loop exits via any path (corrupted A3M, 900 s timeout, or
-                    # completion without an early terminate).
-                    if proc.poll() is None:
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=10)
-                        except Exception:
-                            proc.kill()
-
-                    if not found and job_msa_dir.exists():
-                        a3ms = sorted(job_msa_dir.rglob("*.a3m"))
-                        if a3ms: shutil.copy2(a3ms[0], a3m_path)
-
-                    shutil.rmtree(job_msa_dir, ignore_errors=True)
-                    yaml_path.unlink(missing_ok=True)
-
-                time.sleep(3)
-
-        downloader_finished = threading.Event()
-
-        def _downloader_wrapper(proteins_to_fetch):
-            try:
-                background_downloader(proteins_to_fetch)
-            finally:
-                downloader_finished.set()
-
-        downloader_thread = threading.Thread(target=_downloader_wrapper, args=(list(pending_by_protein.keys()),), daemon=True)
-        downloader_thread.start()
-
-        protein_list = list(pending_by_protein.keys())
-        completed_prots = len(proteins) - len(protein_list)
-        processed_pids = set()
-
-        for c_idx, pid in enumerate(protein_list):
-            if pid in processed_pids:
-                continue
-
-            a3m_path = msa_dir / f"{pid}.a3m"
-            current_prot_num = completed_prots + c_idx + 1
-            protein_name_display = pid[:60] if pid else "Unknown"
-
-            dl_wait_start = time.time()
-            while not validate_a3m_file(a3m_path):
-                elapsed_wait = time.time() - dl_wait_start
-                mins, secs = divmod(int(elapsed_wait), 60)
-                elapsed_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
-                _tty_write(f"\r -> [WAIT] Current MSA retrieval: {protein_name_display:<45}  {elapsed_str:>8} currently suspended..." + "\033[K")
-                sys.stdout.flush()
-                if downloader_finished.is_set():
-                    console_info(f"\nWARNING: MSA retrieval framework terminated independently but no structurally valid A3M output emerged for {pid} (elapsed time {elapsed_str}). Systematically skipping.")
-                    break
-                if elapsed_wait > 900:
-                    console_info(f"\nWARNING: Extensive MSA download timeout occurred for designated {pid} (>15 min). Systematically skipping specified protein sequence.")
-                    break
-                time.sleep(1)
-            if not validate_a3m_file(a3m_path):
-                console_info(f"\n  Skipping configuration {pid} (invalid/corrupted MSA structural data). Will be systematically retried within the individual processing grid.")
-                continue
-
-            proteins_for_batch = [pid]
-            for look_pid in protein_list[c_idx + 1:]:
-                if len(proteins_for_batch) >= MAX_PROTEINS_PER_BATCH:
-                    break
-                if look_pid in processed_pids:
-                    continue
-                if validate_a3m_file(msa_dir / f"{look_pid}.a3m"):
-                    proteins_for_batch.append(look_pid)
-
-            all_jobs_in_batch = []
-            for batch_pid in proteins_for_batch:
-                all_jobs_in_batch.extend(pending_by_protein[batch_pid])
-
-            n_prot      = len(proteins_for_batch)
-            n_jobs      = len(all_jobs_in_batch)
-
-            if n_prot > 1:
-                _tty_write(
-                    f"\n -> [GREEDY BATCH] Bundling {n_prot} proteins with {n_jobs} total pending jobs into one Boltz call"
-                    f" - saving {n_prot - 1} model reload(s).\n"
-                )
-                sys.stdout.flush()
-
-            batch_label = pid if n_prot == 1 else f"{proteins_for_batch[0]} +{n_prot - 1} more sequence blocks"
-
-            unique_id         = str(uuid.uuid4())[:8]
-            chunk_dir         = (workspace_dir / f"2_Boltz2_YAML_Configs_batch_{unique_id}").resolve()
-            chunk_dir.mkdir(parents=True, exist_ok=True)
-            protein_batch_out = (batch_out_dir / f"batch_out_{unique_id}").resolve()
-            protein_batch_out.mkdir(parents=True, exist_ok=True)
-
-            job_map = {}
-            for batch_pid in proteins_for_batch:
-                batch_a3m = msa_dir / f"{batch_pid}.a3m"
-                for job in pending_by_protein[batch_pid]:
-                    job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
-                    with open(job["yaml"], "r") as yf: data = yaml.safe_load(yf)
-                    data["sequences"][0]["protein"]["msa"] = str(batch_a3m.resolve())
-                    chunk_yaml = chunk_dir / job["yaml"].name
-                    with open(chunk_yaml, "w") as yf: yaml.safe_dump(data, yf, sort_keys=False)
-                    job_map[chunk_yaml.stem] = job
-                    job_run_dir = D_RUNS / job_name
-                    if job_run_dir.exists():
-                        for old_res in sorted(job_run_dir.glob("boltz_results_*")):
-                            if old_res.is_dir(): shutil.rmtree(old_res, ignore_errors=True)
-
-            cmd = [
-                BOLTZ_BIN, "predict", str(chunk_dir), "--out_dir", str(protein_batch_out),
-                "--cache", str(BOLTZ_CACHE), "--model", BOLTZ_MODEL,
-                "--recycling_steps", str(RECYCLING_STEPS),
-                "--diffusion_samples", str(args.diffusion_samples),
-                "--accelerator", "gpu", "--devices", "1",
-                "--preprocessing-threads", "2",
-                "--output_format", OUTPUT_FORMAT,
-                "--no_kernels"
-            ]
-
-            max_retries = 8
-            attempt = 0
-            _surgical_repair_done = False  # Only attempt surgical repair once per batch
-
-            while attempt < max_retries:
-                # --- Salvage any partial predictions before wiping the temp folder ---
-                if protein_batch_out.exists() and attempt > 0:
-                    _salvage_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
-                    if _salvage_res_dir and (_salvage_res_dir / "predictions").exists():
-                        _salvaged = set()
-                        for _pred_dir in sorted((_salvage_res_dir / "predictions").iterdir()):
-                            _stem = _pred_dir.name
-                            if _stem not in job_map or not _pred_dir.is_dir():
-                                continue
-                            _job = job_map[_stem]
-                            _jname = f"{_job['job_index']}_{_job.get('job_protein', _job['protein'])}_{_job['ligand']}"
-                            _dst_root = D_RUNS / _jname / f"boltz_results_{_stem}"
-                            _dst_pred = _dst_root / "predictions" / _stem
-                            try:
-                                _dst_pred.mkdir(parents=True, exist_ok=True)
-                                for _f in sorted(_pred_dir.iterdir()):
-                                    shutil.move(str(_f), str(_dst_pred / _f.name))
-                                for _cat in ["constraints", "mols", "msa", "records", "structures"]:
-                                    _src_cat = _salvage_res_dir / "processed" / _cat
-                                    if _src_cat.exists():
-                                        for _ext in [".json", ".npz", ".pkl", ".csv"]:
-                                            for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
-                                                _d = _dst_root / "processed" / _cat
-                                                _d.mkdir(parents=True, exist_ok=True)
-                                                shutil.move(str(_m), str(_d / _m.name))
-                                gpu_queue_for_analysis.put(_job)
-                                (chunk_dir / f"{_stem}.yaml").unlink(missing_ok=True)
-                                _salvaged.add(_stem)
-                            except Exception:
-                                pass
-                        if _salvaged:
-                            for _s in _salvaged:
-                                job_map.pop(_s, None)
-                            all_jobs_in_batch = [j for j in all_jobs_in_batch if j["yaml"].stem in job_map]
-                            n_jobs = len(all_jobs_in_batch)
-                            console_info(f"\n  [SALVAGE] Recovered {len(_salvaged)} partial predictions - {n_jobs} jobs remain for retry.")
-                if n_jobs == 0:
-                    shutil.rmtree(protein_batch_out, ignore_errors=True)
-                    shutil.rmtree(chunk_dir, ignore_errors=True)
-                    for _batch_pid in proteins_for_batch:
-                        processed_pids.add(_batch_pid)
-                    break
-                if protein_batch_out.exists():
-                    shutil.rmtree(protein_batch_out, ignore_errors=True)
-                protein_batch_out.mkdir(parents=True, exist_ok=True)
-                if not chunk_dir.exists(): chunk_dir.mkdir(parents=True, exist_ok=True)
-
-                # --- Incremental-move tracking (reset each attempt) ---
-                _moved_stems: set = set()
-                _protein_job_counts: dict = {}
-                for _s, _j in job_map.items():
-                    _pid = _j["protein"]
-                    if _pid not in _protein_job_counts:
-                        _protein_job_counts[_pid] = {"moved": 0, "total": 0}
-                    _protein_job_counts[_pid]["total"] += 1
-
-                try:
-                    err_log_path = workspace_dir / f"gpu_error_{unique_id}.log"
-                    with open(err_log_path, "w") as err_file:
-                        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=err_file)
-
-                        gpu_start_time = time.time()
-                        timeout_limit  = n_jobs * CFG.GPU_WATCHDOG_TIMEOUT_PER_JOB
-
-                        while proc.poll() is None:
-                            if time.time() - gpu_start_time > timeout_limit:
-                                proc.kill()
-                                raise subprocess.CalledProcessError(-9, cmd, stderr="WATCHDOG TIMEOUT ERROR: GPU Batch Deadlocked Iteration.")
-
-                            # --- Incremental move: pick up finished predictions every 5 s ---
-                            _res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None) if protein_batch_out.exists() else None
-                            if _res_dir and (_res_dir / "predictions").exists():
-                                for _pred_dir in sorted((_res_dir / "predictions").iterdir()):
-                                    _stem = _pred_dir.name
-                                    if not _pred_dir.is_dir() or _stem in _moved_stems or _stem not in job_map:
-                                        continue
-                                    # Require the confidence JSON too: Boltz writes it after the
-                                    # structure, so its presence marks a complete prediction and
-                                    # prevents moving a still-being-written .cif (truncation race).
-                                    if not any(_pred_dir.glob("*.cif")) or not any(_pred_dir.glob("confidence_*.json")):
-                                        continue  # not finished yet
-                                    _job = job_map[_stem]
-                                    _jname = f"{_job['job_index']}_{_job.get('job_protein', _job['protein'])}_{_job['ligand']}"
-                                    _dst_root = D_RUNS / _jname / f"boltz_results_{_stem}"
-                                    _dst_pred = _dst_root / "predictions" / _stem
-                                    try:
-                                        _dst_pred.mkdir(parents=True, exist_ok=True)
-                                        for _f in list(sorted(_pred_dir.iterdir())):
-                                            shutil.move(str(_f), str(_dst_pred / _f.name))
-                                        for _cat in ["constraints", "mols", "msa", "records", "structures"]:
-                                            _src_cat = _res_dir / "processed" / _cat
-                                            if _src_cat.exists():
-                                                for _ext in [".json", ".npz", ".pkl", ".csv"]:
-                                                    for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
-                                                        _d = _dst_root / "processed" / _cat
-                                                        _d.mkdir(parents=True, exist_ok=True)
-                                                        shutil.move(str(_m), str(_d / _m.name))
-                                        gpu_queue_for_analysis.put(_job)
-                                        _moved_stems.add(_stem)
-                                        _pid2 = _job["protein"]
-                                        if _pid2 in _protein_job_counts:
-                                            _protein_job_counts[_pid2]["moved"] += 1
-                                            _pc = _protein_job_counts[_pid2]
-                                            if _pc["moved"] == _pc["total"]:
-                                                _elapsed_p = int(time.time() - gpu_start_time)
-                                                _tty_write(
-                                                    f"\r\033[K -> [DONE] {_pid2}"
-                                                    f" - {_pc['total']}/{_pc['total']} jobs moved"
-                                                    f" | {_elapsed_p}s elapsed\n"
-                                                )
-                                                sys.stdout.flush()
-                                    except Exception:
-                                        pass
-                            # --- End incremental move ---
-
-                            elapsed_gpu     = time.time() - gpu_start_time
-                            elapsed_display = int(elapsed_gpu / 5) * 5
-                            n_moved_total   = len(_moved_stems)
-                            _tty_write(
-                                f"\r -> [GPU] Overall: {current_prot_num}/{len(proteins)} proteins"
-                                f" | This call: {n_prot} proteins, {n_jobs} jobs"
-                                f" | Moved: {n_moved_total}/{n_jobs}"
-                                f" | {elapsed_display}s elapsed" + "\033[K"
-                            )
-                            sys.stdout.flush()
-                            time.sleep(5.0)
-
-                    if proc.returncode == 0:
-                        total_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
-                        moved_count   = 0
-                        failed_jobs   = []
-
-                        if total_res_dir and (total_res_dir / "predictions").exists():
-                            all_pred_folders = [d.name for d in sorted((total_res_dir / "predictions").iterdir()) if d.is_dir()]
-                        else:
-                            all_pred_folders = []
-
-                        if len(all_pred_folders) == 0 and len(job_map) > 0:
-                            console_info(f"\n    [BATCH CRITICAL WARNING] returncode=0 evaluated but 0 predictions yielded for [{batch_label}]!")
-                            console_info(f"    [BATCH CRITICAL WARNING] Mathematically expected {len(job_map)} predictions but successfully obtained 0")
-                            try:
-                                with open(err_log_path, "r") as ef:
-                                    stderr_content = ef.read()
-                                    if stderr_content:
-                                        critical_lines = [
-                                            line for line in stderr_content.split("\n")
-                                            if any(kw in line for kw in ["Traceback", "Error", "KeyError", "Exception", "CUDA out", "cuda", "memory"])
-                                            and "|" not in line and "%" not in line
-                                        ]
-                                        if critical_lines:
-                                            console_info("    [BATCH STDERR EVALUATION] Critical Errors Identified Documented Below:")
-                                            for line in critical_lines[-20:]:
-                                                if line.strip(): console_info(f"      {line[:120]}")
-                                        else:
-                                            non_prog = [l for l in stderr_content.split("\n")
-                                                        if l.strip() and "|" not in l and "%" not in l and "it/s" not in l]
-                                            if non_prog:
-                                                console_info("    [BATCH STDERR EVALUATION] Terminal system output recorded preceding final operational return:")
-                                                for line in non_prog[-5:]:
-                                                    if line.strip(): console_info(f"      {line[:120]}")
-                                    else:
-                                        console_info("    [BATCH STDERR EVALUATION] Target error log is empty - Boltz execution yielded a strictly silent systemic failure")
-                            except Exception as read_err:
-                                console_info(f"    [BATCH CRITICAL WARNING] Unable to successfully parse stderr output log sequence: {read_err}")
-                            err_log_path.unlink(missing_ok=True)
-                        else:
-                            if all_pred_folders:
-                                logger.debug(f"[BATCH] {len(all_pred_folders)} isolated prediction folders structurally parsed for {len(job_map)} jobs")
-                            err_log_path.unlink(missing_ok=True)
-
-                        if total_res_dir and all_pred_folders:
-                            for stem, job in job_map.items():
-                                if stem in _moved_stems:
-                                    moved_count += 1
-                                    continue  # already moved incrementally during polling
-                                job_name    = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
-                                job_run_dir = D_RUNS / job_name
-                                job_run_dir.mkdir(parents=True, exist_ok=True)
-                                dst_boltz_root = job_run_dir / f"boltz_results_{stem}"
-                                dst_pred_dir   = dst_boltz_root / "predictions" / stem
-                                src_pred       = total_res_dir / "predictions" / stem
-
-                                if not src_pred.exists():
-                                    pred_base = total_res_dir / "predictions"
-                                    if pred_base.exists():
-                                        matches = [d for d in sorted(pred_base.iterdir())
-                                                   if d.is_dir() and (job["ligand"] in d.name or stem in d.name)]
-                                        if matches:
-                                            src_pred = matches[0]
-                                            logger.debug(f"[BATCH FLEXIBLE MATCH] Correctly identified correlation {stem} -> {src_pred.name}")
-                                        else:
-                                            logger.debug(f"[BATCH WARNING] Failed to locate compatible structural prediction folder corresponding to {stem}")
-                                            failed_jobs.append(stem)
-                                            continue
-
-                                if src_pred.exists():
-                                    try:
-                                        dst_pred_dir.mkdir(parents=True, exist_ok=True)
-                                        for f in sorted(src_pred.iterdir()):
-                                            shutil.move(str(f), str(dst_pred_dir / f.name))
-                                        for cat in ["constraints", "mols", "msa", "records", "structures"]:
-                                            src_cat = total_res_dir / "processed" / cat
-                                            if src_cat.exists():
-                                                for ext in [".json", ".npz", ".pkl", ".csv"]:
-                                                    for m in sorted(src_cat.glob(f"{stem}*{ext}")):
-                                                        dst_cat_dir = dst_boltz_root / "processed" / cat
-                                                        dst_cat_dir.mkdir(parents=True, exist_ok=True)
-                                                        shutil.move(str(m), str(dst_cat_dir / m.name))
-                                        moved_count += 1
-                                        logger.debug(f"[BATCH SUCCESS] Effectively translocated results referencing: {stem}")
-                                    except Exception as move_err:
-                                        logger.debug(f"[BATCH MOVEMENT ERROR] Migration operation structurally failed for {stem}: {move_err}")
-                                        failed_jobs.append(stem)
-                                else:
-                                    logger.debug(f"[BATCH SKIP ENFORCED] Core prediction source structurally absent: {src_pred}")
-                                    failed_jobs.append(stem)
-
-                        shutil.rmtree(chunk_dir, ignore_errors=True)
-                        shutil.rmtree(protein_batch_out, ignore_errors=True)
-
-                        for stem, job in job_map.items():
-                            if stem not in _moved_stems:
-                                gpu_queue_for_analysis.put(job)
-
-                        if failed_jobs:
-                            console_info(f"    [BATCH RESULTS] {moved_count}/{n_jobs} securely moved, {len(failed_jobs)} instances encountered systemic failure")
-                        _tty_write(
-                            f"\r -> [DONE] [{batch_label}] | {moved_count}/{n_jobs} structural evaluation results effectively moved\033[K\n"
-                        )
+            def _scan_job(job):
+                job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
+                job_dir = D_RUNS / job_name
+                if check_job_status(job_dir):
+                    return  # already complete
+                prediction = next(iter(sorted(job_dir.glob("**/predictions/**/*.cif"))), None)
+                with _scan_lock:
+                    _scan_done[0] += 1
+                    n = _scan_done[0]
+                    if n % 2000 == 0 or n == _n_scan:
+                        _tty_write(f"\r   [{n:,}/{_n_scan:,}] pre-predicted: {len(_pre_pred_jobs):,}  gpu-needed: {len(_gpu_only_jobs):,}   \033[K")
                         sys.stdout.flush()
-                        for batch_pid in proteins_for_batch:
-                            processed_pids.add(batch_pid)
-                        break
-
+                    if prediction:
+                        _pre_pred_jobs.append(job)
                     else:
-                        with open(err_log_path, "r") as err_file: stderr_out = err_file.read()
-                        raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=stderr_out)
+                        _gpu_only_jobs.append(job)
 
-                except subprocess.CalledProcessError as e:
-                    stderr_text = e.stderr or ""
+            with _TPE(max_workers=min(max(1, (os.cpu_count() or 4) - 2), _n_scan or 1)) as _sex:
+                list(_sex.map(_scan_job, tasks))
+            _tty_write("\r\033[K")
+            sys.stdout.flush()
 
+            pre_predicted_count = len(_pre_pred_jobs)
+            for _gj in _gpu_only_jobs:
+                pending_by_protein[_gj["protein"]].append(_gj)
+
+            if pre_predicted_count > 0:
+                if pending_by_protein:
                     """
-                    Surgical repair: if a single job caused a FileNotFoundError,
-                    wait 5 s for the filesystem to settle, then isolate just that job
-                    to the individual queue and retry the rest of the batch without
-                    counting this as a failed attempt.
+                    Mixed mode: GPU-only jobs also present - route pre-predicted jobs
+                    through the background single-worker queue so analysis runs
+                    concurrently with ongoing GPU prediction.
                     """
-                    if not _surgical_repair_done and "FileNotFoundError" in stderr_text:
-                        _m = re.search(r"/predictions/([^/\s]+)/pre_affinity_", stderr_text)
-                        if _m:
-                            bad_stem = _m.group(1)
-                            bad_yaml = chunk_dir / f"{bad_stem}.yaml"
-                            if bad_yaml.exists() and bad_stem in job_map:
+                    for _pj in _pre_pred_jobs:
+                        gpu_queue_for_analysis.put(_pj)
+                    console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions - re-routing to Analysis Queue...")
+                else:
+                    """
+                    All jobs are pre-existing - skip the single-worker queue entirely.
+                    Step 10.8's full parallel pool will handle analysis at maximum
+                    concurrency (TARGET_CORES workers). No blocking wait.
+                    """
+                    console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions.")
+                    console_info(f" -> Routing to parallel analysis pool ({TARGET_CORES} workers) - skipping single-worker queue.")
+            if _gpu_only_jobs:
+                console_info(f" -> {len(_gpu_only_jobs):,} jobs require GPU prediction.")
+
+            if pending_by_protein:
+                # MSA cache is only relevant to proteins that actually need a GPU prediction.
+                msa_ready = sum(1 for pid in pending_by_protein if validate_a3m_file(D_COLABFOLD / f"{pid}.a3m"))
+                _n_gpu_jobs = sum(len(v) for v in pending_by_protein.values())
+                print(f"\n{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}{'=' * 80}{ConsoleColours.ENDC}")
+                print(f"{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}  GPU PREDICTION PHASE STARTING  -  {_n_gpu_jobs} jobs  |  {len(pending_by_protein)} proteins  |  {msa_ready}/{len(pending_by_protein)} MSA cached{ConsoleColours.ENDC}")
+                print(f"{ConsoleColours.OKGREEN}{ConsoleColours.BOLD}{'=' * 80}{ConsoleColours.ENDC}\n", flush=True)
+                console_info("Launching Boltz-2 Batch Prediction Sequence Operations (GPU)...")
+                console_info("Execution Strategy: Greedy batching protocol - multiple individual proteins bundled per Boltz call to systematically minimise model reloads and mitigate GPU idle instances.")
+            else:
+                console_info(f"\n -> All {pending_jobs} pending job(s) have pre-existing GPU predictions - no new predictions required.")
+                console_info(" -> Proceeding directly to parallel analysis...")
+
+            msa_dir = D_COLABFOLD
+            msa_dir.mkdir(parents=True, exist_ok=True)
+            tmp_msa_dir = workspace_dir / "5b_MSA_Temp"
+            tmp_msa_dir.mkdir(exist_ok=True)
+
+            if pending_by_protein:
+                console_info("\nStarting Concurrent MSA Retrieval Sequence and GPU Prediction Execution Pipeline...")
+                console_info("MSA retrieval (via ColabFold APIs) executes consistently in a background parallel thread whilst Boltz-2 predicts completed sequential batches via the GPU architecture.")
+
+            def background_downloader(proteins_to_fetch):
+                """Fetch MSAs for the given proteins sequentially in a daemon thread.
+
+                For each protein writes <pid>.a3m into msa_dir (skipping ones already
+                present), using the ColabFold MSA server with a Boltz fallback. Runs
+                concurrently with the GPU prediction phase; failures are tolerated and
+                retried per-protein downstream.
+                """
+                for pid in proteins_to_fetch:
+                    a3m_path = msa_dir / f"{pid}.a3m"
+                    if a3m_path.exists():
+                        if validate_a3m_file(a3m_path):
+                            continue
+                        else:
+                            logger.debug(f"A3M sequence file for {pid} failed extensive structural validation. Re-fetching structural data...")
+                            a3m_path.unlink(missing_ok=True)
+
+                    seq       = pending_by_protein[pid][0]["sequence"]
+                    meta_path = colabfold_meta_path(PROD, pid)
+
+                    logger.debug(f"[MSA] Commencing MSA structural retrieval for {pid} securely via ColabFold API framework...")
+                    t_msa = time.time()
+                    ok = fetch_msa_direct(pid, seq, a3m_path, meta_path)
+                    if ok:
+                        logger.debug(f"[MSA] ColabFold API sequence operations succeeded for {pid} in {time.time()-t_msa:.1f}s")
+
+                    if not ok:
+                        console_info(f"  [MSA] Direct API methodologies functionally failed for {pid} - actively falling back to Boltz subprocess execution strategies (computationally slow)")
+                        yaml_path = tmp_msa_dir / f"{pid}_fetch.yaml"
+                        with open(yaml_path, "w") as f:
+                            yaml.safe_dump({"sequences": [{"protein": {"id": "A", "sequence": seq}}]}, f, sort_keys=False)
+
+                        cmd = [
+                            BOLTZ_BIN, "predict", str(yaml_path), "--out_dir", str(tmp_msa_dir),
+                            "--use_msa_server", "--accelerator", "cpu", "--devices", "1"
+                        ]
+
+                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(tmp_msa_dir))
+                        start     = time.time()
+                        found     = False
+                        job_msa_dir = tmp_msa_dir / f"boltz_results_{pid}_fetch"
+
+                        while time.time() - start < 900:
+                            if proc.poll() is not None: break
+                            if job_msa_dir.exists():
+                                a3ms = sorted(job_msa_dir.rglob("*.a3m"))
+                                if a3ms and a3ms[0].stat().st_size > 500:
+                                    if validate_a3m_file(a3ms[0]):
+                                        # Atomic publish: copy to a temp file in the same
+                                        # directory, then rename. The main thread polls
+                                        # a3m_path concurrently; a mid-copy read could
+                                        # otherwise pass the size/header check on a
+                                        # truncated file and predict on a partial MSA.
+                                        _tmp_a3m = a3m_path.with_suffix(a3m_path.suffix + ".tmp")
+                                        shutil.copy2(a3ms[0], _tmp_a3m)
+                                        _tmp_a3m.replace(a3m_path)
+                                        with open(meta_path, "w") as mf:
+                                            json.dump({
+                                                "sequence_sha256": sequence_hash(seq),
+                                                "protein_id":      pid,
+                                                "generated_at":    datetime.utcnow().isoformat() + "Z",
+                                                "source":          "boltz_fallback",
+                                            }, mf)
+                                        found = True
+                                        proc.terminate()
+                                        break
+                                    else:
+                                        logger.debug(f"A3M sequence for {pid} is inherently corrupted (aberrant null bytes detected). Retrying...")
+                                        shutil.rmtree(job_msa_dir, ignore_errors=True)
+                                        time.sleep(5)
+                                        break
+                            time.sleep(5)
+
+                        # Ensure the fallback Boltz subprocess is not left running once the
+                        # polling loop exits via any path (corrupted A3M, 900 s timeout, or
+                        # completion without an early terminate).
+                        if proc.poll() is None:
+                            proc.terminate()
+                            try:
+                                proc.wait(timeout=10)
+                            except Exception:
+                                proc.kill()
+
+                        if not found and job_msa_dir.exists():
+                            a3ms = sorted(job_msa_dir.rglob("*.a3m"))
+                            if a3ms: shutil.copy2(a3ms[0], a3m_path)
+
+                        shutil.rmtree(job_msa_dir, ignore_errors=True)
+                        yaml_path.unlink(missing_ok=True)
+
+                    time.sleep(3)
+
+            downloader_finished = threading.Event()
+
+            def _downloader_wrapper(proteins_to_fetch):
+                try:
+                    background_downloader(proteins_to_fetch)
+                finally:
+                    downloader_finished.set()
+
+            downloader_thread = threading.Thread(target=_downloader_wrapper, args=(list(pending_by_protein.keys()),), daemon=True)
+            downloader_thread.start()
+
+            protein_list = list(pending_by_protein.keys())
+            completed_prots = len(proteins) - len(protein_list)
+            processed_pids = set()
+
+            for c_idx, pid in enumerate(protein_list):
+                if pid in processed_pids:
+                    continue
+
+                a3m_path = msa_dir / f"{pid}.a3m"
+                current_prot_num = completed_prots + c_idx + 1
+                protein_name_display = pid[:60] if pid else "Unknown"
+
+                dl_wait_start = time.time()
+                while not validate_a3m_file(a3m_path):
+                    elapsed_wait = time.time() - dl_wait_start
+                    mins, secs = divmod(int(elapsed_wait), 60)
+                    elapsed_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+                    _tty_write(f"\r -> [WAIT] Current MSA retrieval: {protein_name_display:<45}  {elapsed_str:>8} currently suspended..." + "\033[K")
+                    sys.stdout.flush()
+                    if downloader_finished.is_set():
+                        console_info(f"\nWARNING: MSA retrieval framework terminated independently but no structurally valid A3M output emerged for {pid} (elapsed time {elapsed_str}). Systematically skipping.")
+                        break
+                    if elapsed_wait > 900:
+                        console_info(f"\nWARNING: Extensive MSA download timeout occurred for designated {pid} (>15 min). Systematically skipping specified protein sequence.")
+                        break
+                    time.sleep(1)
+                if not validate_a3m_file(a3m_path):
+                    console_info(f"\n  Skipping configuration {pid} (invalid/corrupted MSA structural data). Will be systematically retried within the individual processing grid.")
+                    continue
+
+                proteins_for_batch = [pid]
+                for look_pid in protein_list[c_idx + 1:]:
+                    if len(proteins_for_batch) >= MAX_PROTEINS_PER_BATCH:
+                        break
+                    if look_pid in processed_pids:
+                        continue
+                    if validate_a3m_file(msa_dir / f"{look_pid}.a3m"):
+                        proteins_for_batch.append(look_pid)
+
+                all_jobs_in_batch = []
+                for batch_pid in proteins_for_batch:
+                    all_jobs_in_batch.extend(pending_by_protein[batch_pid])
+
+                n_prot      = len(proteins_for_batch)
+                n_jobs      = len(all_jobs_in_batch)
+
+                if n_prot > 1:
+                    _tty_write(
+                        f"\n -> [GREEDY BATCH] Bundling {n_prot} proteins with {n_jobs} total pending jobs into one Boltz call"
+                        f" - saving {n_prot - 1} model reload(s).\n"
+                    )
+                    sys.stdout.flush()
+
+                batch_label = pid if n_prot == 1 else f"{proteins_for_batch[0]} +{n_prot - 1} more sequence blocks"
+
+                unique_id         = str(uuid.uuid4())[:8]
+                chunk_dir         = (workspace_dir / f"2_Boltz2_YAML_Configs_batch_{unique_id}").resolve()
+                chunk_dir.mkdir(parents=True, exist_ok=True)
+                protein_batch_out = (batch_out_dir / f"batch_out_{unique_id}").resolve()
+                protein_batch_out.mkdir(parents=True, exist_ok=True)
+
+                job_map = {}
+                for batch_pid in proteins_for_batch:
+                    batch_a3m = msa_dir / f"{batch_pid}.a3m"
+                    for job in pending_by_protein[batch_pid]:
+                        job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
+                        with open(job["yaml"], "r") as yf: data = yaml.safe_load(yf)
+                        data["sequences"][0]["protein"]["msa"] = str(batch_a3m.resolve())
+                        chunk_yaml = chunk_dir / job["yaml"].name
+                        with open(chunk_yaml, "w") as yf: yaml.safe_dump(data, yf, sort_keys=False)
+                        job_map[chunk_yaml.stem] = job
+                        job_run_dir = D_RUNS / job_name
+                        if job_run_dir.exists():
+                            for old_res in sorted(job_run_dir.glob("boltz_results_*")):
+                                if old_res.is_dir(): shutil.rmtree(old_res, ignore_errors=True)
+
+                cmd = [
+                    BOLTZ_BIN, "predict", str(chunk_dir), "--out_dir", str(protein_batch_out),
+                    "--cache", str(BOLTZ_CACHE), "--model", BOLTZ_MODEL,
+                    "--recycling_steps", str(RECYCLING_STEPS),
+                    "--diffusion_samples", str(args.diffusion_samples),
+                    "--accelerator", "gpu", "--devices", "1",
+                    "--preprocessing-threads", "2",
+                    "--output_format", OUTPUT_FORMAT,
+                    "--no_kernels"
+                ]
+
+                max_retries = 8
+                attempt = 0
+                _surgical_repair_done = False  # Only attempt surgical repair once per batch
+
+                while attempt < max_retries:
+                    # --- Salvage any partial predictions before wiping the temp folder ---
+                    if protein_batch_out.exists() and attempt > 0:
+                        _salvage_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
+                        if _salvage_res_dir and (_salvage_res_dir / "predictions").exists():
+                            _salvaged = set()
+                            for _pred_dir in sorted((_salvage_res_dir / "predictions").iterdir()):
+                                _stem = _pred_dir.name
+                                if _stem not in job_map or not _pred_dir.is_dir():
+                                    continue
+                                _job = job_map[_stem]
+                                _jname = f"{_job['job_index']}_{_job.get('job_protein', _job['protein'])}_{_job['ligand']}"
+                                _dst_root = D_RUNS / _jname / f"boltz_results_{_stem}"
+                                _dst_pred = _dst_root / "predictions" / _stem
+                                try:
+                                    _dst_pred.mkdir(parents=True, exist_ok=True)
+                                    for _f in sorted(_pred_dir.iterdir()):
+                                        shutil.move(str(_f), str(_dst_pred / _f.name))
+                                    for _cat in ["constraints", "mols", "msa", "records", "structures"]:
+                                        _src_cat = _salvage_res_dir / "processed" / _cat
+                                        if _src_cat.exists():
+                                            for _ext in [".json", ".npz", ".pkl", ".csv"]:
+                                                for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
+                                                    _d = _dst_root / "processed" / _cat
+                                                    _d.mkdir(parents=True, exist_ok=True)
+                                                    shutil.move(str(_m), str(_d / _m.name))
+                                    gpu_queue_for_analysis.put(_job)
+                                    (chunk_dir / f"{_stem}.yaml").unlink(missing_ok=True)
+                                    _salvaged.add(_stem)
+                                except Exception:
+                                    pass
+                            if _salvaged:
+                                for _s in _salvaged:
+                                    job_map.pop(_s, None)
+                                all_jobs_in_batch = [j for j in all_jobs_in_batch if j["yaml"].stem in job_map]
+                                n_jobs = len(all_jobs_in_batch)
+                                console_info(f"\n  [SALVAGE] Recovered {len(_salvaged)} partial predictions - {n_jobs} jobs remain for retry.")
+                    if n_jobs == 0:
+                        shutil.rmtree(protein_batch_out, ignore_errors=True)
+                        shutil.rmtree(chunk_dir, ignore_errors=True)
+                        for _batch_pid in proteins_for_batch:
+                            processed_pids.add(_batch_pid)
+                        break
+                    if protein_batch_out.exists():
+                        shutil.rmtree(protein_batch_out, ignore_errors=True)
+                    protein_batch_out.mkdir(parents=True, exist_ok=True)
+                    if not chunk_dir.exists(): chunk_dir.mkdir(parents=True, exist_ok=True)
+
+                    # --- Incremental-move tracking (reset each attempt) ---
+                    _moved_stems: set = set()
+                    _protein_job_counts: dict = {}
+                    for _s, _j in job_map.items():
+                        _pid = _j["protein"]
+                        if _pid not in _protein_job_counts:
+                            _protein_job_counts[_pid] = {"moved": 0, "total": 0}
+                        _protein_job_counts[_pid]["total"] += 1
+
+                    try:
+                        err_log_path = workspace_dir / f"gpu_error_{unique_id}.log"
+                        with open(err_log_path, "w") as err_file:
+                            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=err_file)
+
+                            gpu_start_time = time.time()
+                            timeout_limit  = n_jobs * CFG.GPU_WATCHDOG_TIMEOUT_PER_JOB
+
+                            while proc.poll() is None:
+                                if time.time() - gpu_start_time > timeout_limit:
+                                    proc.kill()
+                                    raise subprocess.CalledProcessError(-9, cmd, stderr="WATCHDOG TIMEOUT ERROR: GPU Batch Deadlocked Iteration.")
+
+                                # --- Incremental move: pick up finished predictions every 5 s ---
+                                _res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None) if protein_batch_out.exists() else None
+                                if _res_dir and (_res_dir / "predictions").exists():
+                                    for _pred_dir in sorted((_res_dir / "predictions").iterdir()):
+                                        _stem = _pred_dir.name
+                                        if not _pred_dir.is_dir() or _stem in _moved_stems or _stem not in job_map:
+                                            continue
+                                        # Require the confidence JSON too: Boltz writes it after the
+                                        # structure, so its presence marks a complete prediction and
+                                        # prevents moving a still-being-written .cif (truncation race).
+                                        if not any(_pred_dir.glob("*.cif")) or not any(_pred_dir.glob("confidence_*.json")):
+                                            continue  # not finished yet
+                                        _job = job_map[_stem]
+                                        _jname = f"{_job['job_index']}_{_job.get('job_protein', _job['protein'])}_{_job['ligand']}"
+                                        _dst_root = D_RUNS / _jname / f"boltz_results_{_stem}"
+                                        _dst_pred = _dst_root / "predictions" / _stem
+                                        try:
+                                            _dst_pred.mkdir(parents=True, exist_ok=True)
+                                            for _f in list(sorted(_pred_dir.iterdir())):
+                                                shutil.move(str(_f), str(_dst_pred / _f.name))
+                                            for _cat in ["constraints", "mols", "msa", "records", "structures"]:
+                                                _src_cat = _res_dir / "processed" / _cat
+                                                if _src_cat.exists():
+                                                    for _ext in [".json", ".npz", ".pkl", ".csv"]:
+                                                        for _m in sorted(_src_cat.glob(f"{_stem}*{_ext}")):
+                                                            _d = _dst_root / "processed" / _cat
+                                                            _d.mkdir(parents=True, exist_ok=True)
+                                                            shutil.move(str(_m), str(_d / _m.name))
+                                            gpu_queue_for_analysis.put(_job)
+                                            _moved_stems.add(_stem)
+                                            _pid2 = _job["protein"]
+                                            if _pid2 in _protein_job_counts:
+                                                _protein_job_counts[_pid2]["moved"] += 1
+                                                _pc = _protein_job_counts[_pid2]
+                                                if _pc["moved"] == _pc["total"]:
+                                                    _elapsed_p = int(time.time() - gpu_start_time)
+                                                    _tty_write(
+                                                        f"\r\033[K -> [DONE] {_pid2}"
+                                                        f" - {_pc['total']}/{_pc['total']} jobs moved"
+                                                        f" | {_elapsed_p}s elapsed\n"
+                                                    )
+                                                    sys.stdout.flush()
+                                        except Exception:
+                                            pass
+                                # --- End incremental move ---
+
+                                elapsed_gpu     = time.time() - gpu_start_time
+                                elapsed_display = int(elapsed_gpu / 5) * 5
+                                n_moved_total   = len(_moved_stems)
                                 _tty_write(
-                                    f"\n[Warning] Job {bad_stem} is missing its preprocessed data file in batch [{batch_label}]."
-                                    f" Waiting 5s for filesystem to settle, then isolating it to the individual queue...\n"
+                                    f"\r -> [GPU] Overall: {current_prot_num}/{len(proteins)} proteins"
+                                    f" | This call: {n_prot} proteins, {n_jobs} jobs"
+                                    f" | Moved: {n_moved_total}/{n_jobs}"
+                                    f" | {elapsed_display}s elapsed" + "\033[K"
                                 )
                                 sys.stdout.flush()
-                                time.sleep(5)
-                                bad_yaml.unlink(missing_ok=True)
-                                bad_job = job_map.pop(bad_stem)
-                                bad_job["fallback_individual"] = True
-                                gpu_queue_for_analysis.put(bad_job)
-                                all_jobs_in_batch = [
-                                    j for j in all_jobs_in_batch
-                                    if f"{j['job_index']}_{j.get('job_protein', j['protein'])}_{j['ligand']}" != bad_stem
-                                ]
-                                n_jobs = len(all_jobs_in_batch)
-                                _surgical_repair_done = True
-                                console_info(
-                                    f"[SURGICAL REPAIR] Isolated {bad_stem} → individual queue."
-                                    f" Retrying batch with {n_jobs} remaining jobs (attempt counter not incremented)."
-                                )
-                                continue  # retry without incrementing attempt
-                    # --- End surgical repair ---
+                                time.sleep(5.0)
 
-                    _tty_write(f"\n[Warning] Designated GPU batch failed on [{batch_label}] (Attempt {attempt+1}/{max_retries}). Systematically retrying in 15s...")
-                    sys.stdout.flush()
-                    attempt += 1
-                    if attempt < max_retries:
-                        time.sleep(15)
-                    else:
-                        console_info(f"\nCRITICAL EVENT: GPU execution batch failed permanently on designated [{batch_label}]: {e}")
-                        console_info(f"Reported Error Diagnostics:\n{e.stderr}")
-                        console_info(f"\nFALLBACK PROTOCOL INITIATED: Queueing {n_jobs} active computational jobs for sequential individual processing...")
-                        for job in all_jobs_in_batch:
-                            job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
-                            if not check_job_status(D_RUNS / job_name):
-                                job["fallback_individual"] = True
-                                gpu_queue_for_analysis.put(job)
+                        if proc.returncode == 0:
+                            total_res_dir = next(iter(sorted(protein_batch_out.glob("boltz_results_*"))), None)
+                            moved_count   = 0
+                            failed_jobs   = []
+
+                            if total_res_dir and (total_res_dir / "predictions").exists():
+                                all_pred_folders = [d.name for d in sorted((total_res_dir / "predictions").iterdir()) if d.is_dir()]
+                            else:
+                                all_pred_folders = []
+
+                            if len(all_pred_folders) == 0 and len(job_map) > 0:
+                                console_info(f"\n    [BATCH CRITICAL WARNING] returncode=0 evaluated but 0 predictions yielded for [{batch_label}]!")
+                                console_info(f"    [BATCH CRITICAL WARNING] Mathematically expected {len(job_map)} predictions but successfully obtained 0")
+                                try:
+                                    with open(err_log_path, "r") as ef:
+                                        stderr_content = ef.read()
+                                        if stderr_content:
+                                            critical_lines = [
+                                                line for line in stderr_content.split("\n")
+                                                if any(kw in line for kw in ["Traceback", "Error", "KeyError", "Exception", "CUDA out", "cuda", "memory"])
+                                                and "|" not in line and "%" not in line
+                                            ]
+                                            if critical_lines:
+                                                console_info("    [BATCH STDERR EVALUATION] Critical Errors Identified Documented Below:")
+                                                for line in critical_lines[-20:]:
+                                                    if line.strip(): console_info(f"      {line[:120]}")
+                                            else:
+                                                non_prog = [l for l in stderr_content.split("\n")
+                                                            if l.strip() and "|" not in l and "%" not in l and "it/s" not in l]
+                                                if non_prog:
+                                                    console_info("    [BATCH STDERR EVALUATION] Terminal system output recorded preceding final operational return:")
+                                                    for line in non_prog[-5:]:
+                                                        if line.strip(): console_info(f"      {line[:120]}")
+                                        else:
+                                            console_info("    [BATCH STDERR EVALUATION] Target error log is empty - Boltz execution yielded a strictly silent systemic failure")
+                                except Exception as read_err:
+                                    console_info(f"    [BATCH CRITICAL WARNING] Unable to successfully parse stderr output log sequence: {read_err}")
+                                err_log_path.unlink(missing_ok=True)
+                            else:
+                                if all_pred_folders:
+                                    logger.debug(f"[BATCH] {len(all_pred_folders)} isolated prediction folders structurally parsed for {len(job_map)} jobs")
+                                err_log_path.unlink(missing_ok=True)
+
+                            if total_res_dir and all_pred_folders:
+                                for stem, job in job_map.items():
+                                    if stem in _moved_stems:
+                                        moved_count += 1
+                                        continue  # already moved incrementally during polling
+                                    job_name    = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
+                                    job_run_dir = D_RUNS / job_name
+                                    job_run_dir.mkdir(parents=True, exist_ok=True)
+                                    dst_boltz_root = job_run_dir / f"boltz_results_{stem}"
+                                    dst_pred_dir   = dst_boltz_root / "predictions" / stem
+                                    src_pred       = total_res_dir / "predictions" / stem
+
+                                    if not src_pred.exists():
+                                        pred_base = total_res_dir / "predictions"
+                                        if pred_base.exists():
+                                            matches = [d for d in sorted(pred_base.iterdir())
+                                                       if d.is_dir() and (job["ligand"] in d.name or stem in d.name)]
+                                            if matches:
+                                                src_pred = matches[0]
+                                                logger.debug(f"[BATCH FLEXIBLE MATCH] Correctly identified correlation {stem} -> {src_pred.name}")
+                                            else:
+                                                logger.debug(f"[BATCH WARNING] Failed to locate compatible structural prediction folder corresponding to {stem}")
+                                                failed_jobs.append(stem)
+                                                continue
+
+                                    if src_pred.exists():
+                                        try:
+                                            dst_pred_dir.mkdir(parents=True, exist_ok=True)
+                                            for f in sorted(src_pred.iterdir()):
+                                                shutil.move(str(f), str(dst_pred_dir / f.name))
+                                            for cat in ["constraints", "mols", "msa", "records", "structures"]:
+                                                src_cat = total_res_dir / "processed" / cat
+                                                if src_cat.exists():
+                                                    for ext in [".json", ".npz", ".pkl", ".csv"]:
+                                                        for m in sorted(src_cat.glob(f"{stem}*{ext}")):
+                                                            dst_cat_dir = dst_boltz_root / "processed" / cat
+                                                            dst_cat_dir.mkdir(parents=True, exist_ok=True)
+                                                            shutil.move(str(m), str(dst_cat_dir / m.name))
+                                            moved_count += 1
+                                            logger.debug(f"[BATCH SUCCESS] Effectively translocated results referencing: {stem}")
+                                        except Exception as move_err:
+                                            logger.debug(f"[BATCH MOVEMENT ERROR] Migration operation structurally failed for {stem}: {move_err}")
+                                            failed_jobs.append(stem)
+                                    else:
+                                        logger.debug(f"[BATCH SKIP ENFORCED] Core prediction source structurally absent: {src_pred}")
+                                        failed_jobs.append(stem)
+
+                            shutil.rmtree(chunk_dir, ignore_errors=True)
+                            shutil.rmtree(protein_batch_out, ignore_errors=True)
+
+                            for stem, job in job_map.items():
+                                if stem not in _moved_stems:
+                                    gpu_queue_for_analysis.put(job)
+
+                            if failed_jobs:
+                                console_info(f"    [BATCH RESULTS] {moved_count}/{n_jobs} securely moved, {len(failed_jobs)} instances encountered systemic failure")
+                            _tty_write(
+                                f"\r -> [DONE] [{batch_label}] | {moved_count}/{n_jobs} structural evaluation results effectively moved\033[K\n"
+                            )
+                            sys.stdout.flush()
+                            for batch_pid in proteins_for_batch:
+                                processed_pids.add(batch_pid)
+                            break
+
+                        else:
+                            with open(err_log_path, "r") as err_file: stderr_out = err_file.read()
+                            raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=stderr_out)
+
+                    except subprocess.CalledProcessError as e:
+                        stderr_text = e.stderr or ""
+
+                        """
+                        Surgical repair: if a single job caused a FileNotFoundError,
+                        wait 5 s for the filesystem to settle, then isolate just that job
+                        to the individual queue and retry the rest of the batch without
+                        counting this as a failed attempt.
+                        """
+                        if not _surgical_repair_done and "FileNotFoundError" in stderr_text:
+                            _m = re.search(r"/predictions/([^/\s]+)/pre_affinity_", stderr_text)
+                            if _m:
+                                bad_stem = _m.group(1)
+                                bad_yaml = chunk_dir / f"{bad_stem}.yaml"
+                                if bad_yaml.exists() and bad_stem in job_map:
+                                    _tty_write(
+                                        f"\n[Warning] Job {bad_stem} is missing its preprocessed data file in batch [{batch_label}]."
+                                        f" Waiting 5s for filesystem to settle, then isolating it to the individual queue...\n"
+                                    )
+                                    sys.stdout.flush()
+                                    time.sleep(5)
+                                    bad_yaml.unlink(missing_ok=True)
+                                    bad_job = job_map.pop(bad_stem)
+                                    bad_job["fallback_individual"] = True
+                                    gpu_queue_for_analysis.put(bad_job)
+                                    all_jobs_in_batch = [
+                                        j for j in all_jobs_in_batch
+                                        if f"{j['job_index']}_{j.get('job_protein', j['protein'])}_{j['ligand']}" != bad_stem
+                                    ]
+                                    n_jobs = len(all_jobs_in_batch)
+                                    _surgical_repair_done = True
+                                    console_info(
+                                        f"[SURGICAL REPAIR] Isolated {bad_stem} → individual queue."
+                                        f" Retrying batch with {n_jobs} remaining jobs (attempt counter not incremented)."
+                                    )
+                                    continue  # retry without incrementing attempt
+                        # --- End surgical repair ---
+
+                        _tty_write(f"\n[Warning] Designated GPU batch failed on [{batch_label}] (Attempt {attempt+1}/{max_retries}). Systematically retrying in 15s...")
+                        sys.stdout.flush()
+                        attempt += 1
+                        if attempt < max_retries:
+                            time.sleep(15)
+                        else:
+                            console_info(f"\nCRITICAL EVENT: GPU execution batch failed permanently on designated [{batch_label}]: {e}")
+                            console_info(f"Reported Error Diagnostics:\n{e.stderr}")
+                            console_info(f"\nFALLBACK PROTOCOL INITIATED: Queueing {n_jobs} active computational jobs for sequential individual processing...")
+                            for job in all_jobs_in_batch:
+                                job_name = f"{job['job_index']}_{job.get('job_protein', job['protein'])}_{job['ligand']}"
+                                if not check_job_status(D_RUNS / job_name):
+                                    job["fallback_individual"] = True
+                                    gpu_queue_for_analysis.put(job)
+                            break  # continue to next batch - do not exit the pipeline
+                    except Exception as e:
+                        console_info(f"\nCRITICAL EVENT: Unexpected systemic error encountered precisely in GPU Modeller Execution Loop covering [{batch_label}]: {e}")
                         break  # continue to next batch - do not exit the pipeline
-                except Exception as e:
-                    console_info(f"\nCRITICAL EVENT: Unexpected systemic error encountered precisely in GPU Modeller Execution Loop covering [{batch_label}]: {e}")
-                    break  # continue to next batch - do not exit the pipeline
 
-        if pending_by_protein:
-            print()
-            console_info("\nGPU Hardware Batch Prediction Phase Exhaustively Completed.")
-            console_separator()
-            print()
+            if pending_by_protein:
+                print()
+                console_info("\nGPU Hardware Batch Prediction Phase Exhaustively Completed.")
+                console_separator()
+                print()
 
-    """
-    Signal the background analysis worker to stop and wait for it to flush
-    (runs regardless of whether there were pending GPU jobs)
-    """
-    gpu_queue_for_analysis.put("STOP")
-    analysis_pool.shutdown(wait=True)
+    finally:
+        # Always signal the analysis worker to stop and wait for it to flush - on the normal path AND
+        # on any exception raised in the GPU phase above - so the worker process is never orphaned and
+        # the run cannot deadlock on a pool that never received STOP.
+        gpu_queue_for_analysis.put("STOP")
+        analysis_pool.shutdown(wait=True)
 
     # -------------------------------------------------------------------------------
     # Step 10.8: CPU Worker Master Execution Loop

@@ -6067,6 +6067,127 @@ def _select_qsite_frames(df_res, cms_model, tr, centre_atoms, n_frames):
         return _base, {}
 
 
+def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
+    """Read this rank's Step-06 Prime MM-GBSA CSV and write the ΔG_bind aggregates into `stats`:
+    the global + strict-NAC means, the whole-trajectory distribution (Boltzmann/arith mean, median,
+    min, max, sd) and the per-component decomposition. Reads only; never launches anything."""
+    _nac_fr = nac_fr
+    _decomp = {}   # component → (nac_mean, global_mean) for the decomposition plot
+    try:
+        _mmg = (sorted(job_folder.glob("*prime*mmgbsa*.csv"))
+                or sorted(job_folder.glob("*mmgbsa*.csv")))
+        if _mmg:
+            _mdf = pd.read_csv(_mmg[0])
+            """
+            Map trajectory frame → MM-GBSA row by the frame index Step 06 stamps on the CSV
+            ('Frame'). Never by row POSITION: Prime scores every CFG.MMGBSA_STEP_SIZE-th frame,
+            so row i is frame i·step, and positional lookup would silently attribute one frame's
+            energy to another. Only a CSV with no Frame column (an old every-frame run) falls
+            back to position, where row i genuinely is frame i.
+            """
+            _row_of_frame = None
+            if "Frame" in _mdf.columns:
+                _fr_idx = pd.to_numeric(_mdf["Frame"], errors="coerce")
+                _row_of_frame = {int(f): i for i, f in enumerate(_fr_idx) if f == f}
+            elif len(_mdf) < len(results):
+                """
+                No Frame column AND fewer rows than trajectory frames ⇒ the CSV was strided but
+                never stamped. Row i is NOT frame i, so positional lookup would attribute the
+                wrong frame's energy. Refuse it: a missing number beats a confidently wrong one.
+                Re-run Step 06 (it stamps the frame index) to recover this metric.
+                """
+                console_info(f"    [!] MM-GBSA CSV has {len(_mdf)} rows for {len(results)} frames "
+                             f"and no 'Frame' column - it was strided but not frame-stamped. "
+                             f"Skipping NAC-conditioned MM-GBSA rather than mis-aligning frames; "
+                             f"re-run Step 06 to stamp it.")
+                raise ValueError("MM-GBSA CSV lacks frame indices")
+            _nac_scored = ([f for f in _nac_fr if f in _row_of_frame] if _row_of_frame is not None
+                           else [f for f in _nac_fr if 0 <= f < len(_mdf)])
+            if _nac_fr and not _nac_scored:
+                console_info(f"    [!] None of the {len(_nac_fr)} strict-NAC frames were scored by "
+                             f"MM-GBSA - NAC-conditioned ΔG unavailable (lower CFG.MMGBSA_STEP_SIZE).")
+            elif _row_of_frame is not None and len(_nac_scored) < len(_nac_fr):
+                console_info(f"    [i] NAC-conditioned MM-GBSA uses {len(_nac_scored)} of "
+                             f"{len(_nac_fr)} strict-NAC frames (the rest fall between the "
+                             f"MM-GBSA stride's sampled frames).")
+
+            def _nac_vs_global(col):
+                """Mean over the scored strict-NAC frames, the global mean, and the NAC sample's
+                size and dispersion. n and SD are returned rather than discarded: they are what
+                decides whether the difference between the two means can be claimed at all."""
+                _s = pd.to_numeric(_mdf[col], errors="coerce")
+                _g = float(_s.mean())
+                _v = [float(_s.iloc[_row_of_frame[f] if _row_of_frame is not None else f])
+                      for f in _nac_scored]
+                _v = [x for x in _v if x == x]
+                _sd = float(np.std(_v, ddof=1)) if len(_v) >= 2 else np.nan
+                return ((float(np.mean(_v)) if _v else np.nan),
+                        (_g if _g == _g else np.nan), len(_v), _sd)
+
+            _dgc = getattr(CFG, "MMGBSA_DG_COLUMN", "r_psp_MMGBSA_dG_Bind")
+            if _dgc not in _mdf.columns:
+                _c = [c for c in _mdf.columns if re.search(r"dg.?bind", c, re.I)]
+                _dgc = _c[0] if _c else None
+            if _dgc is not None:
+                _nac, _glob, _n_nac, _sd_nac = _nac_vs_global(_dgc)
+                stats["MMGBSA_dG_Global_Mean_kcal"] = round(_glob, 2) if _glob == _glob else np.nan
+                stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
+                stats["MMGBSA_dG_NAC_SD_kcal"]      = round(_sd_nac, 2) if _sd_nac == _sd_nac else np.nan
+                stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
+                # Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
+                # MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
+                # reading any central Step-06 summary file.
+                _dg_all = pd.to_numeric(_mdf[_dgc], errors="coerce").dropna()
+                if len(_dg_all):
+                    _rt_mg = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
+                    # Log-sum-exp ("Boltzmann") ensemble mean, IDENTICAL to 06 `_boltzmann_mean_dg`, so the
+                    # MMGBSA_dG_Boltzmann_kcal column carries the same quantity in the Step-06 summary CSV and
+                    # this master ranking:  <dG> = -RT ln( (1/N) Σ exp(-dGi/RT) ), max-shifted for stability.
+                    _xs = -_dg_all.to_numpy() / _rt_mg
+                    _m  = float(_xs.max())
+                    _lse = _m + float(np.log(np.sum(np.exp(_xs - _m))))
+                    stats["MMGBSA_dG_Boltzmann_kcal"] = round(-_rt_mg * (_lse - float(np.log(len(_dg_all)))), 2)
+                    stats["MMGBSA_dG_ArithMean_kcal"] = round(float(_dg_all.mean()), 2)
+                    stats["MMGBSA_dG_Median_kcal"]    = round(float(_dg_all.median()), 2)
+                    stats["MMGBSA_dG_Min_kcal"]       = round(float(_dg_all.min()), 2)
+                    stats["MMGBSA_dG_Max_kcal"]       = round(float(_dg_all.max()), 2)
+                    stats["MMGBSA_dG_Std_kcal"]       = round(float(_dg_all.std()), 2)
+                '''
+                The penalty is the difference of two means, and it is only reportable if the NAC mean
+                is. Prime's per-frame ΔG_bind scatter runs to several kcal/mol, so below
+                CFG.MMGBSA_NAC_MIN_FRAMES the difference is dominated by the sampling noise of the
+                smaller sample. The mean and SD above are kept - they are the evidence - but the
+                penalty itself is withheld rather than printed to two decimals from one frame.
+                '''
+                if _n_nac >= int(CFG.MMGBSA_NAC_MIN_FRAMES) and _nac == _nac and _glob == _glob:
+                    stats["MMGBSA_NAC_Penalty_kcal"] = round(_nac - _glob, 2)
+                else:
+                    stats["MMGBSA_NAC_Penalty_kcal"] = np.nan
+                    if 0 < _n_nac < int(CFG.MMGBSA_NAC_MIN_FRAMES):
+                        console_info(f"    [!] NAC-conditioned MM-GBSA has only {_n_nac} scored "
+                                     f"strict-NAC frame(s) (< CFG.MMGBSA_NAC_MIN_FRAMES = "
+                                     f"{int(CFG.MMGBSA_NAC_MIN_FRAMES)}) - mean reported, "
+                                     f"penalty withheld.")
+            # Energy-component decomposition (the "which forces" breakdown).
+            _components = {"Coulomb": r"coulomb", "vdW": r"vdw|van.?der.?waals",
+                           "Covalent": r"covalent", "H-bond": r"h.?bond",
+                           "Lipo": r"lipo", "Packing": r"packing",
+                           "SolvGB": r"solv.?gb|gb\b|solvation", "SelfCont": r"self.?cont"}
+            for _name, _pat in _components.items():
+                # Require a dG_Bind DELTA column (not the absolute Complex/Receptor/
+                # Ligand energies, which are thousands of kcal/mol and would swamp the
+                # decomposition). e.g. r_psp_MMGBSA_dG_Bind_Coulomb, not *_Complex_Coulomb.
+                _hit = [c for c in _mdf.columns
+                        if re.search(r"dg.?bind", c, re.I) and re.search(_pat, c, re.I)
+                        and not re.search(r"complex|receptor|ligand", c, re.I)]
+                if _hit:
+                    _nac, _glob = _nac_vs_global(_hit[0])[:2]   # helper returns (mean, global, n, sd)
+                    _decomp[_name] = (_nac, _glob)
+                    stats[f"MMGBSA_{_name}_NAC_Mean_kcal"] = round(_nac, 2) if _nac == _nac else np.nan
+    except Exception as _e:
+        console_info(f"    [!] NAC-conditioned MM-GBSA decomposition skipped ({_e}).")
+
+
 def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                        master_out_dir: Path, lig_resname: str, stride: int,
                        triad_override: dict = None,
@@ -7094,116 +7215,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # engaged. Best-effort: the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned
     # to trajectory frames; component columns are matched by name.
     _nac_fr = [r["Frame"] for r in results if r.get("NAC_Strict_Pass", 0)]
-    _decomp = {}   # component → (nac_mean, global_mean) for the decomposition plot
-    try:
-        _mmg = (sorted(job_folder.glob("*prime*mmgbsa*.csv"))
-                or sorted(job_folder.glob("*mmgbsa*.csv")))
-        if _mmg:
-            _mdf = pd.read_csv(_mmg[0])
-            """
-            Map trajectory frame → MM-GBSA row by the frame index Step 06 stamps on the CSV
-            ('Frame'). Never by row POSITION: Prime scores every CFG.MMGBSA_STEP_SIZE-th frame,
-            so row i is frame i·step, and positional lookup would silently attribute one frame's
-            energy to another. Only a CSV with no Frame column (an old every-frame run) falls
-            back to position, where row i genuinely is frame i.
-            """
-            _row_of_frame = None
-            if "Frame" in _mdf.columns:
-                _fr_idx = pd.to_numeric(_mdf["Frame"], errors="coerce")
-                _row_of_frame = {int(f): i for i, f in enumerate(_fr_idx) if f == f}
-            elif len(_mdf) < len(results):
-                """
-                No Frame column AND fewer rows than trajectory frames ⇒ the CSV was strided but
-                never stamped. Row i is NOT frame i, so positional lookup would attribute the
-                wrong frame's energy. Refuse it: a missing number beats a confidently wrong one.
-                Re-run Step 06 (it stamps the frame index) to recover this metric.
-                """
-                console_info(f"    [!] MM-GBSA CSV has {len(_mdf)} rows for {len(results)} frames "
-                             f"and no 'Frame' column - it was strided but not frame-stamped. "
-                             f"Skipping NAC-conditioned MM-GBSA rather than mis-aligning frames; "
-                             f"re-run Step 06 to stamp it.")
-                raise ValueError("MM-GBSA CSV lacks frame indices")
-            _nac_scored = ([f for f in _nac_fr if f in _row_of_frame] if _row_of_frame is not None
-                           else [f for f in _nac_fr if 0 <= f < len(_mdf)])
-            if _nac_fr and not _nac_scored:
-                console_info(f"    [!] None of the {len(_nac_fr)} strict-NAC frames were scored by "
-                             f"MM-GBSA - NAC-conditioned ΔG unavailable (lower CFG.MMGBSA_STEP_SIZE).")
-            elif _row_of_frame is not None and len(_nac_scored) < len(_nac_fr):
-                console_info(f"    [i] NAC-conditioned MM-GBSA uses {len(_nac_scored)} of "
-                             f"{len(_nac_fr)} strict-NAC frames (the rest fall between the "
-                             f"MM-GBSA stride's sampled frames).")
-
-            def _nac_vs_global(col):
-                """Mean over the scored strict-NAC frames, the global mean, and the NAC sample's
-                size and dispersion. n and SD are returned rather than discarded: they are what
-                decides whether the difference between the two means can be claimed at all."""
-                _s = pd.to_numeric(_mdf[col], errors="coerce")
-                _g = float(_s.mean())
-                _v = [float(_s.iloc[_row_of_frame[f] if _row_of_frame is not None else f])
-                      for f in _nac_scored]
-                _v = [x for x in _v if x == x]
-                _sd = float(np.std(_v, ddof=1)) if len(_v) >= 2 else np.nan
-                return ((float(np.mean(_v)) if _v else np.nan),
-                        (_g if _g == _g else np.nan), len(_v), _sd)
-
-            _dgc = getattr(CFG, "MMGBSA_DG_COLUMN", "r_psp_MMGBSA_dG_Bind")
-            if _dgc not in _mdf.columns:
-                _c = [c for c in _mdf.columns if re.search(r"dg.?bind", c, re.I)]
-                _dgc = _c[0] if _c else None
-            if _dgc is not None:
-                _nac, _glob, _n_nac, _sd_nac = _nac_vs_global(_dgc)
-                stats["MMGBSA_dG_Global_Mean_kcal"] = round(_glob, 2) if _glob == _glob else np.nan
-                stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
-                stats["MMGBSA_dG_NAC_SD_kcal"]      = round(_sd_nac, 2) if _sd_nac == _sd_nac else np.nan
-                stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
-                # Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
-                # MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
-                # reading any central Step-06 summary file.
-                _dg_all = pd.to_numeric(_mdf[_dgc], errors="coerce").dropna()
-                if len(_dg_all):
-                    _rt_mg = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
-                    _w_mg = np.exp(-(_dg_all - _dg_all.min()) / _rt_mg)
-                    stats["MMGBSA_dG_Boltzmann_kcal"] = (round(float((_dg_all * _w_mg).sum() / _w_mg.sum()), 2)
-                                                         if float(_w_mg.sum()) > 0 else np.nan)
-                    stats["MMGBSA_dG_ArithMean_kcal"] = round(float(_dg_all.mean()), 2)
-                    stats["MMGBSA_dG_Median_kcal"]    = round(float(_dg_all.median()), 2)
-                    stats["MMGBSA_dG_Min_kcal"]       = round(float(_dg_all.min()), 2)
-                    stats["MMGBSA_dG_Max_kcal"]       = round(float(_dg_all.max()), 2)
-                    stats["MMGBSA_dG_Std_kcal"]       = round(float(_dg_all.std()), 2)
-                '''
-                The penalty is the difference of two means, and it is only reportable if the NAC mean
-                is. Prime's per-frame ΔG_bind scatter runs to several kcal/mol, so below
-                CFG.MMGBSA_NAC_MIN_FRAMES the difference is dominated by the sampling noise of the
-                smaller sample. The mean and SD above are kept - they are the evidence - but the
-                penalty itself is withheld rather than printed to two decimals from one frame.
-                '''
-                if _n_nac >= int(CFG.MMGBSA_NAC_MIN_FRAMES) and _nac == _nac and _glob == _glob:
-                    stats["MMGBSA_NAC_Penalty_kcal"] = round(_nac - _glob, 2)
-                else:
-                    stats["MMGBSA_NAC_Penalty_kcal"] = np.nan
-                    if 0 < _n_nac < int(CFG.MMGBSA_NAC_MIN_FRAMES):
-                        console_info(f"    [!] NAC-conditioned MM-GBSA has only {_n_nac} scored "
-                                     f"strict-NAC frame(s) (< CFG.MMGBSA_NAC_MIN_FRAMES = "
-                                     f"{int(CFG.MMGBSA_NAC_MIN_FRAMES)}) - mean reported, "
-                                     f"penalty withheld.")
-            # Energy-component decomposition (the "which forces" breakdown).
-            _components = {"Coulomb": r"coulomb", "vdW": r"vdw|van.?der.?waals",
-                           "Covalent": r"covalent", "H-bond": r"h.?bond",
-                           "Lipo": r"lipo", "Packing": r"packing",
-                           "SolvGB": r"solv.?gb|gb\b|solvation", "SelfCont": r"self.?cont"}
-            for _name, _pat in _components.items():
-                # Require a dG_Bind DELTA column (not the absolute Complex/Receptor/
-                # Ligand energies, which are thousands of kcal/mol and would swamp the
-                # decomposition). e.g. r_psp_MMGBSA_dG_Bind_Coulomb, not *_Complex_Coulomb.
-                _hit = [c for c in _mdf.columns
-                        if re.search(r"dg.?bind", c, re.I) and re.search(_pat, c, re.I)
-                        and not re.search(r"complex|receptor|ligand", c, re.I)]
-                if _hit:
-                    _nac, _glob = _nac_vs_global(_hit[0])[:2]   # helper returns (mean, global, n, sd)
-                    _decomp[_name] = (_nac, _glob)
-                    stats[f"MMGBSA_{_name}_NAC_Mean_kcal"] = round(_nac, 2) if _nac == _nac else np.nan
-    except Exception as _e:
-        console_info(f"    [!] NAC-conditioned MM-GBSA decomposition skipped ({_e}).")
+    _aggregate_mmgbsa_stats(job_folder, results, _nac_fr, stats)
 
     # Catalytic-machinery engagement: mean distance of the nucleophile + fluoride
     # cradle + clamps to the warhead carbon over the strict-NAC frames (did the

@@ -1092,7 +1092,7 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     """
     Flippin–Lodge torsional pre-alignment angle in degrees.
     Ref: Lodge, E. P. & Heathcock, C. H. (1987) J. Am. Chem. Soc. 109(11):3353–3361.
-    DOI: https://doi.org/10.1021/ja00245a028
+    DOI: https://doi.org/10.1021/ja00245a027
 
     Measures the angle between the Nu–C vector projected onto the R1–C–R2 plane
     and the bisector of R1–C–R2.  Ideal value = 0° (the nucleophile approaches ALONG the
