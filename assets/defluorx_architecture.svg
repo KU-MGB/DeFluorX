@@ -98,7 +98,7 @@
 <text x="753" y="552.6000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="753" y="565.8000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">departing-F Mulliken charge → cleavage check</text>
 <text x="753" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,957</text>
+<text x="1073" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,999</text>
 <path d="M210 166 L150 166 L150 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M930 166 L990 166 L990 248" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M210 166 L22 166 L22 505 L40 505" fill="none" stroke="#94a3b8" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>

@@ -2904,6 +2904,43 @@ def _read_qsite_molchg(fold: Path) -> "int | None":
         return None
 
 
+def _read_qsite_qmregion(fold: Path) -> dict:
+    """Re-derive the full QM-region provenance from a job's QSite .in for the scan CSV's provenance
+    columns, on a resume that carries no live qmmeta. The .in (fold/<fold.name>.in) records everything:
+    `molchg=` (net charge), the `&qmregion` residue rows in canonical role order (nuc, base, acid, stabH,
+    then the fluoride-cradle residues), the `&coord` atom pair driving the scan (attacking Oδ, ligand Cα)
+    and the `&zvar` range. Provenance is identical across a job's frames (same QM region), so the best
+    frame's file is representative. Returns {} if the file is unreadable/absent."""
+    try:
+        _t = (fold / f"{fold.name}.in").read_text(errors="ignore")
+    except Exception:
+        return {}
+    _qm: dict = {}
+    _mc = re.search(r"molchg\s*=\s*(-?\d+)", _t)
+    if _mc:
+        _qm["qm_charge"] = int(_mc.group(1))
+    _rg = re.search(r"&qmregion(.*?)^\s*&", _t, re.S | re.M)
+    if _rg:
+        # Only the 5-column residue rows ("molid chain resnum qmatom mmatom"); the trailing
+        # "molid theory" sub-table (ligand/water molids) has 2 columns and is skipped.
+        _resnums = [int(m.group(1)) for m in
+                    re.finditer(r"^\s*\d+\s+\S+\s+(\d+)\s+\S+\s+\S+\s*$", _rg.group(1), re.M)]
+        for _i, _role in enumerate(("nuc", "base", "acid", "stabh")):
+            if _i < len(_resnums):
+                _qm[_role] = _resnums[_i]
+        if len(_resnums) > 4:
+            _qm["cradle"] = ";".join(str(_r) for _r in _resnums[4:])
+    _cd = re.search(r"&coord\s*\n\s*(\d+)\s+(\d+)", _t)
+    if _cd:
+        _qm["nuc_o_idx"] = int(_cd.group(1))
+        _qm["lig_c_idx"] = int(_cd.group(2))
+    _zv = re.search(r"r\s*=\s*([\d.]+)\s+to\s+([\d.]+)\s+in\s+(\d+)", _t)
+    if _zv:
+        _qm["scan_start"] = float(_zv.group(1))
+        _qm["scan_nsteps"] = int(_zv.group(3))
+    return _qm
+
+
 def generate_qsite_inputs(mae_path: Path, job_name: str,
                           nuc_num, stab_f_num, lig_c_idx, nuc_o_idx,
                           base_num=None, acid_num=None,
@@ -5209,7 +5246,7 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                               else (f"{nqmw} QM · nearest F {nearwat[0][1]:.1f} Å" if nearwat else f"{nqmw} QM"))
                 tables = [("QM/MM  QM-region", OUTc,
                            [("ΔE‡ barrier", f"{ens['barrier']:.2f} kcal/mol", OUTc), ("ΔE_rxn", f"{ens['derxn']:+.2f} kcal/mol", OUTc),
-                            ("departing-F charge", f"{ens['fq']:.2f} e", OUTc), ("Is_Defluorinating", "yes" if ens["isdef"] else "no (gate)", OUTc)]),
+                            ("departing-F charge", f"{ens['fq']:.2f} e", OUTc), ("Is_Defluorinating", "yes" if ens["isdef"] else "no (intact)", OUTc)]),
                           ("catalytic geometry", GEOc,
                            [("SN2 attack QM/NAC", f"{_attack['angle']:.0f}/{_ang:.0f} deg", GEOc), ("triad Nu-B/B-Ac", f"{tri[0]:.2f}/{tri[1]:.2f} Å", GEOc),
                             ("residues engaged", f"{_neng}/8 (<{_ENG:.1f}Å)", GEOc), ("MM-GBSA ΔG_bind", f"{st.get('MMGBSA_dG_NAC_Mean_kcal'):+.2f} kcal/mol", GEOc)]),
@@ -6010,6 +6047,11 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             _ens = {"n_attempted": n_attempted, "is_defluor": _v_flag,
                     "propensity": defluor_propensity(max(0.0, float(_sv_pct or 0.0)) / 100.0,
                                                      stats.get("QSite_Barrier_kcal", np.nan))}
+            # A resume / figures-only pass arrives with no live qmmeta; re-derive the QM-region record
+            # (triad + cradle resnums, the two scan atom indices, net charge, scan range) from the best
+            # frame's existing QSite .in so the scan CSV's provenance columns are never left blank.
+            if not qmmeta and folds:
+                qmmeta = _read_qsite_qmregion(folds[0])
             write_qsite_scan_csv(job_out_dir / "11_QSite_Scan_Data.csv", rank, job_name,
                                  ligand, _profs, _ens, qmmeta)
             # 09 = the integrated SN2 reaction scene; 10 = the MD-time / QSite-sampling link. Both read
