@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 05 August 2026 <────────────────────────────────────────────────────────
+Date   : 07 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_DeFluorX.py
@@ -1987,6 +1987,7 @@ class CFG:
                                              # slow to converge and the main source of divergent scan tails.
                                              # The 0.13 Å spacing lands a grid point on the ~2.2 Å SN2 saddle,
                                              # so the barrier maximum is sampled directly.
+    QSITE_PROFILE_DIST_TICK_A: float = 0.20  # Å  per-frame reaction-profile bottom x-axis tick spacing
     """
     Execution of the generated QSite jobs from Step 07. When True, Step 07
     launches `$SCHRODINGER/qsite` on each freshly extracted frame, writing all
@@ -2139,6 +2140,16 @@ class CFG:
     QSITE_F_CHARGE_CLEAVED: float = -0.5   # e  ≤ this on the departing F → free fluoride
 
     '''
+    Scissile C-F bond length (Å) at or above which the bond is declared cleaved. A covalent C-F
+    sits near 1.35-1.44 Å; a departed fluoride separates past 2 Å. The geometric criterion is
+    basis-independent - unlike the departing-F Mulliken charge, which under-shoots a bare fluoride
+    in the diffuse-free 6-31G** basis and so never reaches its own -0.5 e threshold even when the
+    bond has plainly broken. The C-F distance is therefore the single source of truth for cleavage;
+    the Mulliken charge is retained only as a corroborating read-out.
+    '''
+    QSITE_CF_CLEAVED_A: float = 1.8   # Å  ≥ this scissile C-F length → C-F cleaved
+
+    '''
     Minimum number of strict-NAC frames that must be scored by Prime before the NAC-conditioned
     MM-GBSA penalty is reported. Prime's per-frame ΔG_bind scatter is several kcal/mol, so a mean
     over one or two frames carries an uncertainty larger than the penalty it is claiming.
@@ -2166,15 +2177,14 @@ class CFG:
         "tail":         "#0072B2", # NAC dashboard: cradle → ligand-F trace and its criterion line
         "kde":          "#111111", # NAC dashboard: density contours over the scatter
         "legend_edge":  "#E2E8F0", # legend frame
-        "cleave_line":  "#64748B", # departing-F cleaved-charge threshold line
+        "cleave_line":  "#64748B", # C-F cleavage threshold line (distance / charge)
+        "cf_dist":      "#B45309", # scissile C-F bond-length curve (the cleavage observable)
         "inactive_bar": "#94A3B8", # cross-job ranking bar - non-defluorinating job
+        "scan_axis":    "#6A4C93", # per-frame profile: top QM-scan-point axis + its distinct grid
+        "dist_axis":    "#0F766E", # per-frame profile: bottom Nu(O)···C distance axis (label + ticks + grid) - teal, distinct from every trace/axis colour
     })
-    # Categorical palettes for the QSite ensemble (per-frame, best first) and the cross-job
-    # comparison (per-rank) reaction-profile overlays. Distinct hues, colour-blind aware.
-    DEFLUOR_FRAME_PALETTE: list = field(default_factory=lambda: [
-        "#1D4ED8", "#0E7490", "#B45309", "#7C3AED", "#BE185D"])
-    # QSite all-frames overview: the departing-F verdict drives frame colour - an INTACT (or
-    # dewetted-artifact) frame reads red, CLEAVED frames cycle a green/blue palette. Best frame bold.
+    # QSite all-frames overview: the C-F cleavage verdict drives frame colour - an INTACT frame reads
+    # red, CLEAVED frames cycle a green/blue palette. Best frame bold.
     QSITE_FRAME_INTACT_COLOUR: str = "#C1121F"
     QSITE_FRAME_CLEAVED_PALETTE: list = field(default_factory=lambda: [
         "#16A34A", "#2563EB", "#0E7490", "#7C3AED", "#BE185D"])
@@ -2185,13 +2195,17 @@ class CFG:
         "chem": "#111111",   # chemical action arrows (attack / C-F break)
         "role": "#0072B2",   # role action arrows (activate / orient / hold / stabilise)
         "dist": "#8A8A8A",   # distance (global -> NAC) connectors
-        "geom": "#5B4B8A",   # SN2 attack-angle arc + Walden label (a geometry annotation, off the data layers)
+        "geom": "#5B4B8A",   # Walden / other geometry annotations (off the data layers)
+        "angle": "#00695C",  # the Nu-Cα-F SN2 attack-angle arc + its read-off label (distinct dark teal)
         "elem_C": "#333333", "elem_O": "#CC2222", "elem_F": "#17A2B8",  # ligand element colours
         "water": "#2E86C1",
         "scissile": "#CC2222"})   # red ring marking the scissile fluorine (bonded on the ligand + departed)
+    # Rank colours shared with the Step-06 combined figures (candidates green/amber/vermillion/blue/
+    # magenta/sky by rank; the control takes its own distinct colour), so a rank reads the same colour
+    # across every 06 and 07 figure.
     DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
-        "#1D4ED8", "#B45309", "#0E7490", "#BE185D", "#7C3AED", "#15803D",
-        "#B91C1C", "#0F766E", "#A16207", "#6D28D9"])
+        "#009E73", "#E69F00", "#D55E00", "#0072B2", "#CC79A7", "#56B4E9",
+        "#8C564B", "#0F766E", "#A16207", "#6D28D9"])
     # Comparative residue-engagement heatmap (11_): colour ramp and the colour a missing residue
     # takes - a homolog that has no such residue must read as absent, never as a distance.
     ENGAGE_HEATMAP_CMAP: str = "RdYlGn_r"
@@ -2302,6 +2316,8 @@ class CFG:
     MECH_FONT_ATOM_XL: float    = 13.0   # the departing fluoride glyph (emphasised)
     MECH_FONT_ATOM: float       = 11.5   # substrate element glyphs (C/O/F) + verdict badge
     MECH_FONT_LABEL: float      = 10.5   # emphasised atom label
+    MECH_FONT_TBL_HEAD: float   = 9.4    # QM/MM summary-table column headers (bottom scene table)
+    MECH_FONT_TBL_CELL: float   = 8.8    # QM/MM summary-table label + value cells
     MECH_FONT_DISC: float       = 8.7    # residue-disc code/number, electron ①② markers, reaction-coord graph labels
     MECH_FONT_SMALL: float      = 7.7    # interacting-atom names, graph ticks / x-label, scene legend rows
     MECH_FONT_TINY: float       = 6.7    # distance / angle read-off labels, cleavage-threshold marker
@@ -3254,8 +3270,10 @@ class CFG:
     MMGBSA_TIME_WINDOW_NS: float = 100.0    # width of the time windows the ΔG distribution is resolved into
                                             # (panel B): shows drift, stability and any change of binding mode
                                             # across the trajectory, which a single pooled violin hides
-    MMGBSA_RANK_PALETTE: tuple = ("#0072B2", "#D55E00", "#009E73", "#CC79A7",
-                                  "#E69F00", "#56B4E9")   # colour-blind-safe, one per compared rank
+    MMGBSA_RANK_PALETTE: tuple = ("#009E73", "#E69F00", "#D55E00", "#0072B2",
+                                  "#CC79A7", "#56B4E9")   # colour-blind-safe, one per compared rank
+                                                          # (green/amber/vermillion/blue/magenta/sky, the
+                                                          # shared rank scheme; control takes its own colour)
     # Grid colours for the twin-axis panel: the two axes carry different quantities, so their
     # gridlines are coloured to match the axis they belong to and cannot be misread as one another.
     MMGBSA_GRID_LEFT: str  = "#4C72B0"   # bottom/left axis  (time course)

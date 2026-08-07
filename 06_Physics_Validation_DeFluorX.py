@@ -45,7 +45,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) - in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 05 August 2026 <─────────────────────────────────────────────────────────
+Date   : 07 August 2026 <─────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_DeFluorX.py [Boltz-2_Run_Directory] [options]
@@ -1450,8 +1450,9 @@ def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, 
     return ranges, conc, njobs
 
 
-# Every mark colour in this step's figures comes from CFG (candidate colours from
-# MMGBSA_RANK_PALETTE, everything else from MMGBSA_INK) - none is written here.
+# Every mark colour in this step's figures comes from CFG (per-rank candidate colours from
+# CFG.VIS_ACCENT via _ctrl_palette - the control distinct - everything else from MMGBSA_INK);
+# none is written here.
 _INK = CFG.MMGBSA_INK
 
 MMGBSA_FRAME_COL = "Frame"   # trajectory frame index each scored structure came from
@@ -2310,7 +2311,8 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     Statistics note: MD frames are autocorrelated, so a t-test or Mann-Whitney over ~10⁴ frames
     would report p ≈ 0 for any difference at all and mean nothing. The bootstrap resamples
     contiguous blocks (CFG.MMGBSA_BOOTSTRAP_BLOCK) so each block counts as one independent draw.
-    Colours come from CFG.MMGBSA_RANK_PALETTE.
+    Per-rank colours come from CFG.VIS_ACCENT via _ctrl_palette (the control takes its own distinct
+    colour), the same shared rank scheme as 01_Physics_Build_Solvation_QC.
     """
     per_job = [(r, dg) for r, dg in per_job if not dg.empty]
     if not per_job:
@@ -2321,8 +2323,9 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     per_job.sort(key=lambda x: (int(x[0]) in controls, int(x[0])))
     ligands, nspf, controls = ligands or {}, nspf or {}, controls or set()
 
-    _pal    = list(CFG.MMGBSA_RANK_PALETTE)
-    _cols   = [_pal[i % len(_pal)] for i in range(len(per_job))]
+    # Rank colours: the SAME scheme as 01_Physics_Build_Solvation_QC (candidates green/amber/vermillion,
+    # the control its one distinct colour), so a rank reads the same colour across every combined figure.
+    _cols   = _ctrl_palette([int(x[0]) for x in per_job], controls, list(CFG.MMGBSA_RANK_PALETTE))
     _cores  = [dg.drop(_dg_failures(dg).index) for _, dg in per_job]
     _nbad   = [len(_dg_failures(dg)) for _, dg in per_job]
     _meds   = [float(dg.median()) for _, dg in per_job]
@@ -2334,7 +2337,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
 
     def _label(r):
         lig = _ctrl_label(int(r), ligands, controls)
-        return f"#{r}\n{lig}" if lig else f"#{r}"
+        return f"{lig}\nR{r}" if lig else f"R{r}"
     _labels = [_label(r) for r, _ in per_job]
 
     _clip = float(getattr(CFG, "MMGBSA_PLOT_CLIP_PCT", 0.5))
@@ -2431,7 +2434,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     for i in range(len(per_job)):
         for j in range(i + 1, len(per_job)):
             d = _cliffs_delta(per_job[i][1], per_job[j][1])
-            _pairs.append(f"#{per_job[i][0]} vs #{per_job[j][0]}: δ = {d:+.2f} ({_delta_word(d)})")
+            _pairs.append(f"R{per_job[i][0]} vs R{per_job[j][0]}: δ = {d:+.2f} ({_delta_word(d)})")
     # The pairwise deltas are the legend's entries (one pair per line) under the "Cliff's δ" title -
     # inside the panel, never a caption below it, and narrow enough to sit clear of the tallest bar.
     ax3.axhline(0.0, color=_INK["outline"], linewidth=0.8)
@@ -2557,7 +2560,8 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
     cis   = [_block_bootstrap_median_ci(dg) for _, dg in per_job]
 
     def _label(r):
-        return f"#{r} {_ctrl_label(int(r), ligands, controls)}".strip()
+        _l = _ctrl_label(int(r), ligands, controls)
+        return f"{_l} R{r}" if _l else f"R{r}"
     flat = [_label(r) for r, _ in per_job]
 
     _clip = float(getattr(CFG, "MMGBSA_PLOT_CLIP_PCT", 0.5))
@@ -2629,11 +2633,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
     # Column count derived from the entry count, so the legend stays balanced as candidates change.
     _rows = max(1, int(getattr(CFG, "MMGBSA_LEGEND_MAX_ROWS", 3)))
     axT.legend(handles=hdl, loc="lower right", frameon=True,
-               ncol=max(1, math.ceil(len(hdl) / _rows)),
-
-               title="Relative ranking only - GB overstabilises anionic PFAS: compare candidates, "
-                     "never absolute values",
-               )
+               ncol=max(1, math.ceil(len(hdl) / _rows)))
 
 
 # ── 8.5  Phase driver ────────────────────────────────────────────────────────
@@ -3108,7 +3108,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     _top = float(np.ceil(max(float(np.nanmax(attack)), _DEFL_NAC_DIST)))
     axA.set_ylim(0, _top); axA.set_yticks(np.arange(0, _top + 0.001, 1))
     axA.tick_params(axis="y", labelcolor=_DEFL_OKABE[0]); _dgrid(axA)
-    _edge_labels(axA, [(f"ASP{R['nuc']}·Nu", _DEFL_OKABE[0], _start_level(attack))])
+    _edge_labels(axA, [(f"ASP{R['nuc']}", _DEFL_OKABE[0], _start_level(attack))])
     _aA = axA.twinx()
     _aA.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
     _cut_a = _aA.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.6)
@@ -3126,7 +3126,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     _cmax = float(np.nanmax([np.nanmax(d) for d in cradle_d.values()])) * 1.05
     _lab_top = []
     for (k, d), c in zip(cradle_d.items(), _DEFL_OKABE):
-        axB.plot(t, d, lw=0.8, color=c); _lab_top.append((f"F···{k}", c, _start_level(d)))
+        axB.plot(t, d, lw=0.8, color=c); _lab_top.append((k, c, _start_level(d)))
     _dlB = axB.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
     axB.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT)
     axB.set_ylim(0, _cmax); axB.set_yticks(np.arange(0, _cmax + 0.001, 1))
@@ -3163,7 +3163,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     # 02 reactive summary - each bar's y-tick label AND its value (written just right of the bar, never
     # inside) take that bar's colour, so residue/criterion, bar and number all read as one coloured unit.
     fig, (axa, axb2) = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw={"width_ratios": [1.7, 1]})
-    names = list(occ.keys()); vals = [occ[k] for k in names]
+    _okeys = list(occ.keys()); names = [k.split("·")[0] for k in _okeys]; vals = [occ[k] for k in _okeys]
     _cols_a = list(_DEFL_OKABE[:len(names)])
     _txt_a = [_readable(c) for c in _cols_a]   # bars keep the bright hue; label/value text is legible
     axa.barh(names, vals, color=_cols_a); axa.invert_yaxis()
@@ -3292,7 +3292,7 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     def _rank_lig_label(rk):
         _d = re.sub(r"\D", "", str(rk))
         _lig = _ctrl_label(int(_d) if _d else rk, ligands, controls)
-        return f"{_lig}\n{rk}"
+        return f"{_lig}\nR{_d}" if _d else f"{_lig}\n{rk}"
     _labs = [_rank_lig_label(rk) for rk in rks]
 
     def _labels(a, vals, fmt):
@@ -3308,10 +3308,8 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     nac_vals = [r[1] for r in rows]
     # Per-rank colours (one colour per rank, consistent across all four panels; the control distinct) -
     # mirrors 01_Physics_Build_Solvation_QC so a rank reads the same colour everywhere.
-    _palette = [CFG.VIS_ACCENT["green"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"],
-                CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["magenta"], CFG.VIS_ACCENT["sky"]]
     _rank_ints = [int(re.sub(r"\D", "", str(rk)) or 0) for rk in rks]
-    cols = _ctrl_palette(_rank_ints, controls, _palette)
+    cols = _ctrl_palette(_rank_ints, controls, list(CFG.MMGBSA_RANK_PALETTE))
     ax[0].bar(rks, nac_vals, color=cols)
     ax[0].set_ylabel("NAC-competent (%)"); ax[0].set_ylim(0, max(max(nac_vals), 1.0) * 1.2)
     _labels(ax[0], nac_vals, "{:.2f}%")
@@ -4218,9 +4216,13 @@ def plot_watermap_combined(wm_dir: Path, analysis_dir: Path) -> None:
             ax.bar(_x, _dg, color=[_stable if v < 0 else _disp for v in _dg], width=0.9, linewidth=0)
             ax.axhline(0, color=CFG.VIS_INK["near_black"], lw=0.8)
             _nu = int((_dg > 0).sum())
-            _head = f"R{_rank}" + (f" · {_lig[_rank]}" if _rank in _lig else "")
-            ax.text(0.03, 0.96, f"{_head}\n{_nu} displaceable / {_dg.size} sites\nmean ΔG {float(_dg.mean()):.2f} kcal/mol",
-                    transform=ax.transAxes, ha="left", va="top", fontsize=_ft, linespacing=1.35,
+            _short = _short_ligand(_lig.get(_rank, "")) or f"R{_rank}"
+            _mean = float(_dg.mean()); _mc = CFG.VIS_ACCENT["magenta"]
+            ax.axhline(_mean, color=_mc, ls="--", lw=1.3, zorder=3)          # mean water ΔG, drawn on the panel
+            ax.text(0.015, _mean, f" mean {_mean:.2f}", transform=ax.get_yaxis_transform(), ha="left",
+                    va="bottom", color=_mc, fontsize=_ft - 0.5, fontweight="bold", zorder=4)
+            ax.text(0.03, 0.96, f"{_short} (R{_rank})  {_nu}/{_dg.size} Displaceable waters",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=_ft,
                     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
             ax.set_xlabel("hydration site (sorted by ΔG)", fontsize=_ft)     # x per panel
             if _i % _ncol == 0:
@@ -4232,9 +4234,10 @@ def plot_watermap_combined(wm_dir: Path, analysis_dir: Path) -> None:
         for _j in range(_n, _nrow * _ncol):
             axes[_j // _ncol][_j % _ncol].axis("off")
         _lh = [Patch(fc=_disp, ec="none", label="displaceable (ΔG > 0)"),
-               Patch(fc=_stable, ec="none", label="stable (ΔG < 0)")]
-        axes[0][0].legend(handles=_lh, loc="upper right", frameon=True, framealpha=0.85,
-                          edgecolor="#C8C8C8", fontsize=_ft - 1, ncol=1, borderpad=0.5)   # inside 1st panel
+               Patch(fc=_stable, ec="none", label="stable (ΔG < 0)"),
+               Line2D([0], [0], color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.3, label="mean ΔG")]
+        axes[0][0].legend(handles=_lh, loc="lower right", frameon=True, framealpha=0.85,
+                          edgecolor="#C8C8C8", fontsize=_ft - 1, ncol=len(_lh), borderpad=0.5)   # single row, bottom-right of 1st panel
         fig.tight_layout()
         _out = analysis_dir / "02_WaterMap_Landscapes_AllRanks.svg"
         analysis_dir.mkdir(parents=True, exist_ok=True)
@@ -4405,9 +4408,9 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
     recs.sort(key=lambda r: r["rank"])
     ranks = [r["rank"] for r in recs]
     controls = controls or set()
-    labs = [_ctrl_label(rk, ligands, controls) for rk in ranks]
+    labs = [f"{_ctrl_label(rk, ligands, controls)}\nR{rk}" for rk in ranks]
     _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
-    palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
+    palette = list(CFG.MMGBSA_RANK_PALETTE)
     cols = _ctrl_palette(ranks, controls, palette)
     xp = np.arange(len(recs))
     fa = CFG.VIS_FONT_ANNOT
@@ -4469,8 +4472,8 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
                 fontsize=fa - 1, color=_INK["soft"])
         cx.text(len(recs) - 0.52, -0.15, "stable ↓ · displaceable ↑", ha="right", va="top",
                 fontsize=fa - 1.5, color=_INK["soft"])
-        cx.text(0.015, 0.985, "★ crucial H₂O (nearest reactive α-C)", transform=cx.transAxes,
-                ha="left", va="top", fontsize=fa - 1.5, color=_INK["soft"])
+        cx.text(0.985, 0.015, "★ crucial H₂O (nearest reactive α-C)", transform=cx.transAxes,
+                ha="right", va="bottom", fontsize=fa - 1.5, color=_INK["soft"])
     cx.set_xticks(xp); cx.set_xticklabels(labs); _colour_xticks(cx)
     _qc_group_seps(cx, len(recs))
     cx.set_ylabel("WaterMap hydration-site ΔG (kcal/mol)")
@@ -4603,9 +4606,9 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
 
     controls = controls or set()
     _rk_list = [r["rank"] for r in recs]
-    labs = [_ctrl_label(rk, ligands, controls) for rk in _rk_list]
-    _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
-    palette = [_A["green"], _A["amber"], _A["vermillion"], _A["blue"], _A["magenta"], _A["sky"]]
+    labs = [f"{_ctrl_label(rk, ligands, controls)} (R{rk})" for rk in _rk_list]
+    _INK = CFG.VIS_INK
+    palette = list(CFG.MMGBSA_RANK_PALETTE)
     cols = _ctrl_palette(_rk_list, controls, palette)
     fl = CFG.VIS_FONT_LEGEND
     fig, ax = plt.subplots(2, 2, figsize=(12, 8.6))
@@ -4636,8 +4639,6 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
             has_T = True
     tgt = CFG.MD_EQUIL_TARGET_T
     c.axhline(tgt, color=_INK["dark"], lw=1.0, ls="--")
-    c.text(0.99, 0.53, f"{tgt:g} K target", transform=c.transAxes, ha="right", va="bottom",
-           fontsize=CFG.VIS_FONT_ANNOT - 1, color=_INK["soft"])
     if has_T:
         c.set_ylim(tgt - 12, tgt + 10)
     c.set_xlabel("time (ns)")

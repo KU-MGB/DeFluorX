@@ -13,7 +13,7 @@ interactions & chemical space, PFAS scope & synthesis, and pocket-fit / multi-mo
 diagnostics).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 05 August 2026 <────────────────────────────────────────────────────────
+Date   : 07 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 03_Validation_Figures_DeFluorX.py
@@ -289,7 +289,6 @@ from sklearn.decomposition import PCA
 # Bioinformatics Imports
 from matplotlib.patches import ConnectionPatch
 from matplotlib.lines import Line2D
-import matplotlib.patheffects as pe
 plt.rcParams["axes.labelpad"] = 8.0   # a little gap between every axis LABEL and its tick VALUES (per-call labelpad still overrides where intentionally tuned)
 from PIL import Image, ImageDraw, ImageFont
 
