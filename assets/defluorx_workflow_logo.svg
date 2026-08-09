@@ -29,7 +29,7 @@
     <text x="650" y="171" fill="#2b6f9e"><tspan font-weight="800">27</tspan> PFAS</text>
     <text x="720" y="172" fill="#6b7c78" font-size="19">=</text>
     <rect x="738" y="149" width="244" height="34" rx="17" fill="#fdeeea" stroke="#f4cabc" stroke-width="1.5"/>
-    <text x="860" y="171" fill="#c21d15"><tspan font-weight="800">58,056</tspan> predicted complexes</text>
+    <text x="860" y="171" fill="#c21d15"><tspan font-weight="800">58,050</tspan> predicted complexes</text>
   </g>
 
   <!-- ===== connectors (behind medallions) ===== -->
@@ -101,7 +101,7 @@
   <!-- ===== payoff ribbon: what the pipeline delivers ===== -->
   <rect x="40" y="486" width="1200" height="46" rx="13" fill="#f2f9f6" stroke="#d6ece3" stroke-width="1.5"/>
   <rect x="40" y="486" width="6" height="46" rx="3" fill="url(#gRibbon)"/>
-  <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,056 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
+  <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,050 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
 
   <!-- ===== footer: the engineering weight behind it ===== -->
   <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   44,517 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
