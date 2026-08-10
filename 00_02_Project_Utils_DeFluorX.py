@@ -434,9 +434,34 @@ def apply_figure_style(cfg) -> None:
             except Exception:
                 pass
             return fname
+        def _deflx_rasterize_dense(fig):
+            # Dense per-point vector layers (large scatters, meshes, line/patch collections) inflate an
+            # SVG to hundreds of MB, past what renderers and submission systems accept; rasterize only
+            # those layers so the points embed as a compact image while axes, ticks and text stay vector.
+            try:
+                for ax in fig.axes:
+                    for art in list(ax.collections):
+                        n = 0
+                        try:
+                            offs = art.get_offsets(); n = len(offs) if offs is not None else 0
+                        except Exception:
+                            pass
+                        try:
+                            n = max(n, len(art.get_paths()))
+                        except Exception:
+                            pass
+                        if n >= 2000:
+                            art.set_rasterized(True)
+            except Exception:
+                pass
+        def _deflx_prep_svg(fig, k):
+            if getattr(matplotlib, "_deflx_fig_fmt", "svg") == "svg":
+                _deflx_rasterize_dense(fig)
+                k.setdefault("dpi", 300)   # embedded-raster resolution for the rasterized dense layers
         def _deflx_fig_savefig(self, fname, *a, **k):
             if "format" not in k:
                 fname = _deflx_route(fname)
+            _deflx_prep_svg(self, k)
             return _orig_fig_savefig(self, fname, *a, **k)
         def _deflx_plt_savefig(*a, **k):
             if "format" not in k:
@@ -444,6 +469,7 @@ def apply_figure_style(cfg) -> None:
                     a = (_deflx_route(a[0]),) + a[1:]
                 elif "fname" in k:
                     k["fname"] = _deflx_route(k["fname"])
+            _deflx_prep_svg(plt.gcf(), k)
             return _orig_plt_savefig(*a, **k)
         plt.Figure.savefig = _deflx_fig_savefig
         plt.savefig = _deflx_plt_savefig
