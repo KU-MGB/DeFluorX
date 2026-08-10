@@ -8,7 +8,7 @@ protein sequence sources using a strict, master-guided deduplication strategy.
 Produces a merged FASTA, a detailed log, and a high-resolution QC dashboard.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 07 August 2026 <─────────────────────────────────────────────────────────
+Date   : 12 August 2026 <─────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 01_Merge_DeFluorX.py
