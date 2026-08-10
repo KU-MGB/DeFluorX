@@ -5476,7 +5476,7 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
                     "QSite_Barrier_Ensemble_kcal": round(float(_qsite_ensemble_barrier(_bar)), 2),
                     "QSite_Barrier_Min_kcal": round(float(np.nanmin(_bar)), 2) if any(v == v for v in _bar) else np.nan,
                     "QSite_Barrier_Mean_kcal": round(float(np.nanmean(_bar)), 2) if any(v == v for v in _bar) else np.nan,
-                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar)), 2) if any(v == v for v in _bar) else np.nan,
+                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar, ddof=1)), 2) if sum(v == v for v in _bar) > 1 else np.nan,  # sample SD (ddof=1), matching the master-ranking estimator so the scan CSV and 01_MD_Master_Ranking.csv agree
                     "QSite_dErxn_Ensemble_kcal": round(float(_qsite_ensemble_derxn(_bar, _der)), 2),
                     "QSite_NFrames_Scored": len(_P),
                     "QSite_NFrames_Attempted": _ens.get("n_attempted", len(_P)),
