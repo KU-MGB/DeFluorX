@@ -91,7 +91,7 @@
 <text x="389" y="579.0000000000002" font-size="9.2" fill="#1e40af" textLength="322" lengthAdjust="spacing">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
 <text x="717" y="602" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,003</text>
 <g filter="url(#ds)"><rect x="736" y="476" width="348" height="134" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
-<text x="753" y="496" font-size="10.4" font-weight="800" fill="#1e40af">07_MD_QMMM_Defluorination_DeFluorX.py</text>
+<text x="753" y="496" font-size="10.4" font-weight="800" fill="#1e40af">07_QMMM_Defluorination_DeFluorX.py</text>
 <text x="753" y="513" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">turns MD trajectories into a defluorination verdict</text>
 <text x="753" y="526.2" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">parallel frame / SN2 analysis @ cores-2 · counter</text>
 <text x="753" y="539.4000000000001" font-size="9.2" fill="#1e40af" textLength="314" lengthAdjust="spacing">QSite QM/MM barrier ΔE‡ (concurrent, 1-thread)</text>

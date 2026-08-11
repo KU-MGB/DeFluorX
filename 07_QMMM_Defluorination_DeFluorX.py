@@ -29,7 +29,7 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 12 August 2026 <────────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 07_MD_QMMM_Defluorination_DeFluorX.py
+  Script        : 07_QMMM_Defluorination_DeFluorX.py
   Role          : Trajectory analysis engine; terminal computational step before
                   QM/MM (outputs ideal frame + QSite .inp files).
   Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - all thresholds + tier metadata)
@@ -41,7 +41,7 @@ Date   : 12 August 2026 <──────────────────�
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
                   <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv
                   <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv
-  Writes        : <Run>/7_MD_Thermodynamics_Results/Rank_N/
+  Writes        : <Run>/7_QMMM_Defluorination/Rank_N/
                     - 02_NAC_Data.csv                 (per-frame geometry + DT)
                     - 01_MD_Stats.json                (per-rank statistics cache; drives the resume path)
                     - 03_NAC_Dashboard.svg         (2-panel figure)
@@ -55,23 +55,23 @@ Date   : 12 August 2026 <──────────────────�
                     - 09_Reaction_Mechanism.svg    (integrated SN2 defluorination scene from the QM scan geometry: RDKit substrate with the scissile F shown bonded + departed, numbered electron-flow arrows, all 8 machinery residues by role with their real interacting atom and QM H-bond / MD global->NAC distances, the fluoride-stabilising water, a structural reaction-coordinate graph (C-F length + departing-F charge) and the QM/MM / geometry / WaterMap value tables)
                     - 10_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
                     - 11_QSite_Scan_Data.csv       (long-format raw PES + scissile C-F length + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
-                  <Run>/7_MD_Thermodynamics_Results/01_MD_Master_Ranking.csv
+                  <Run>/7_QMMM_Defluorination/01_Master_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn scan features,
                      scissile C-F cleavage length + departing-F charge,
                      NAC-conditioned MM-GBSA + component decomposition, and
                      the Defluor_Propensity / Is_Defluorinating verdict)
-                  <Run>/7_MD_Thermodynamics_Results/02_MD_Comparative_Analysis.svg
+                  <Run>/7_QMMM_Defluorination/02_Comparative_Analysis.svg
                     (cross-rank comparative dashboard)
-                  <Run>/7_MD_Thermodynamics_Results/03_MD_Viability_Summary.svg
+                  <Run>/7_QMMM_Defluorination/03_Viability_Summary.svg
                     (per-candidate MD viability bar chart)
-                  <Run>/7_MD_Thermodynamics_Results/04_Comparative_Residue_Engagement.svg
+                  <Run>/7_QMMM_Defluorination/04_Comparative_Residue_Engagement.svg
                     (cross-rank catalytic-residue engagement heatmap)
-                  <Run>/7_MD_Thermodynamics_Results/05_Defluorination_Landscape.svg
+                  <Run>/7_QMMM_Defluorination/05_Defluorination_Landscape.svg
                     (whole-story figure: persistence × QM/MM barrier × binding)
-                  <Run>/7_MD_Thermodynamics_Results/06_MMGBSA_Decomposition_AllRanks.svg
-                  <Run>/7_MD_Thermodynamics_Results/07_Machinery_Engagement_AllRanks.svg
+                  <Run>/7_QMMM_Defluorination/06_MMGBSA_Decomposition_AllRanks.svg
+                  <Run>/7_QMMM_Defluorination/07_Machinery_Engagement_AllRanks.svg
                     (the same two reactive-pose figures, merged across candidates)
-                  <Run>/7_MD_Thermodynamics_Results/08_QSite_Profiles_AllJobs.svg
+                  <Run>/7_QMMM_Defluorination/08_QSite_Profiles_AllJobs.svg
                     (one panel: every job's best-frame QM/MM PES overlaid, each cleavage point dotted to
                     the reaction coordinate and to its SN2 attack angle, with a top ensemble-ΔE‡ ranking inset)
   Upstream      : 06_Physics_Validation_DeFluorX.py → runs WaterMap · System Builder · MD · SID · MM-GBSA;
@@ -120,9 +120,9 @@ Date   : 12 August 2026 <──────────────────�
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
-    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
-    python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --stride 5 --ranks 3 --lig PFAS
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --nuc 85 --base 250 --acid 112
 
 Arguments:
     run_dir           Positional. Boltz-2 run folder name or prefix (e.g.
@@ -163,7 +163,7 @@ Arguments:
      into ΔE‡ (min/mean/σ) and ΔE_rxn.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
- 11. Master aggregation: 01_MD_Master_Ranking.csv.
+ 11. Master aggregation: 01_Master_Ranking.csv.
  12. NAC persistence: longest/mean continuous strict-NAC dwell converted to ns
      (real "time in position", not a frame-count fraction).
  13. NAC-conditioned MM-GBSA: ΔG_bind over the strict-NAC frames vs the global
@@ -247,8 +247,8 @@ import os
 # When invoked with plain `python`, re-invokes transparently via
 # $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 # Both forms are equivalent:
-#   python 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 07_MD_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+#   python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+#   $SCHRODINGER/run 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -1692,7 +1692,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "02_MD_Comparative_Analysis.svg"
+    out_path = out_dir / "02_Comparative_Analysis.svg"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Comparative Dashboard Saved : {deflx_fig_name(out_path.resolve())}")
@@ -1938,7 +1938,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         plt.tight_layout()
-    out_path = out_dir / "03_MD_Viability_Summary.svg"
+    out_path = out_dir / "03_Viability_Summary.svg"
     plt.savefig(out_path, dpi=int(getattr(CFG, "VIS_FIGURE_DPI", 300)), bbox_inches='tight')
     plt.close(fig)
     console_info(f"    Viability Bar Chart Saved   : {deflx_fig_name(out_path.resolve())}")
@@ -5476,7 +5476,7 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
                     "QSite_Barrier_Ensemble_kcal": round(float(_qsite_ensemble_barrier(_bar)), 2),
                     "QSite_Barrier_Min_kcal": round(float(np.nanmin(_bar)), 2) if any(v == v for v in _bar) else np.nan,
                     "QSite_Barrier_Mean_kcal": round(float(np.nanmean(_bar)), 2) if any(v == v for v in _bar) else np.nan,
-                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar, ddof=1)), 2) if sum(v == v for v in _bar) > 1 else np.nan,  # sample SD (ddof=1), matching the master-ranking estimator so the scan CSV and 01_MD_Master_Ranking.csv agree
+                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar, ddof=1)), 2) if sum(v == v for v in _bar) > 1 else np.nan,  # sample SD (ddof=1), matching the master-ranking estimator so the scan CSV and 01_Master_Ranking.csv agree
                     "QSite_dErxn_Ensemble_kcal": round(float(_qsite_ensemble_derxn(_bar, _der)), 2),
                     "QSite_NFrames_Scored": len(_P),
                     "QSite_NFrames_Attempted": _ens.get("n_attempted", len(_P)),
@@ -7476,7 +7476,7 @@ def main():
     # and the log grows triple bars with nothing between them.
     _utils_mod.install_console_rule_filter()
     parser = argparse.ArgumentParser(
-        description="PFAS-27 MD Thermodynamics & QM/MM Engine")
+        description="PFAS-27 QM/MM Defluorination Engine")
     parser.add_argument("run_dir",  nargs="?", default=None,
                         help="Boltz-2 run folder name or prefix (e.g. Boltz-2_Run_20260309T085406Z)")
     parser.add_argument("--dir",    default=None,
@@ -7500,9 +7500,9 @@ def main():
                         help="Only write QSite .in/.mae inputs; do not launch the QSite executable.")
     parser.add_argument("--qsite-procs", type=int, default=None,
                         help="CPUs per QSite job, qsite -PARALLEL (default 1 - the QM engine is single-threaded; scans run concurrently instead).")
-    parser.add_argument("--results-dirname", default="7_MD_Thermodynamics_Results",
+    parser.add_argument("--results-dirname", default="7_QMMM_Defluorination",
                         help="Name of the Step-07 output directory under the run root. Set to a distinct name "
-                             "(e.g. 7_MD_Thermodynamics_Results_NEW) to run a second, isolated Step-07 alongside "
+                             "(e.g. 7_QMMM_Defluorination_NEW) to run a second, isolated Step-07 alongside "
                              "an existing one without overwriting it.")
     parser.add_argument("--run-tag", default="",
                         help="Suffix appended to QSite job names so a parallel Step-07 run does not collide with "
@@ -7553,7 +7553,7 @@ def main():
 
 
     # Auto-detect all available MD rank indices - scan MD, WaterMaps, and
-    # 7_MD_Thermodynamics_Results so that every rank already processed is included.
+    # 7_QMMM_Defluorination so that every rank already processed is included.
     # Always scan the ranks that actually exist on disk - the MD cohort is SPARSE (whole-library
     # Scientific_Rank, e.g. {1, 2, 8}), so `--ranks N` must not mean the literal 1..N (that silently
     # skips R_8 when N=3). It means the N lowest-numbered ranks that were actually run.
@@ -7599,14 +7599,14 @@ def main():
     master_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = (_setup_logging(master_out_dir / "00_MD_Thermodynamics.log",
+    logger = (_setup_logging(master_out_dir / "00_QMMM_Defluorination.log",
                              "md_thermo_engine")
               if _setup_logging else None)
 
 
     _utils_mod.print_script_banner(
-        "07_MD_QMMM_Defluorination_DeFluorX.py",
-        "MD Thermodynamics  ·  QM/MM Frame Extraction  ·  NAC Validation",
+        "07_QMMM_Defluorination_DeFluorX.py",
+        "QM/MM Defluorination  ·  Frame Extraction  ·  NAC Validation",
     )
     console_info(f"Run Directory    : {work_dir.parent}")
     console_info(f"Physics Validation : {work_dir}")
@@ -7947,14 +7947,14 @@ def main():
                      f"(gate: product-end scissile C-F length >= {CFG.QSITE_CF_CLEAVED_A} Å; "
                      f"NAC dwell / ΔE‡ / ΔE_rxn reported as context, not gated)")
 
-        master_csv_path = master_out_dir / "01_MD_Master_Ranking.csv"
+        master_csv_path = master_out_dir / "01_Master_Ranking.csv"
         _utils_mod.atomic_write_csv(df_master, master_csv_path)
         console_info(f"Total Simulations Validated : {len(df_master)}")
         console_info(f"Master Ranking Sheet Saved  : {master_csv_path.resolve()}")
         console_separator()
 
         if _rcon:
-            tbl = _RichTable(title="MD Thermodynamics Ranking Summary",
+            tbl = _RichTable(title="QM/MM Defluorination Ranking Summary",
                              show_header=True, header_style="bold bright_blue",
                              box=None, show_lines=True)
             for col in ("Rank", "Job", "Pocket%", "Viability%", "Strict%",
@@ -7996,4 +7996,4 @@ def main():
 if __name__ == "__main__":
     _t0 = _time.perf_counter()
     main()
-    _utils_mod.print_elapsed(_t0, "07_MD_QMMM_Defluorination_DeFluorX.py")
+    _utils_mod.print_elapsed(_t0, "07_QMMM_Defluorination_DeFluorX.py")

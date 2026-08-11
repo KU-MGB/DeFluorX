@@ -15,12 +15,12 @@ Date   : 12 August 2026 <──────────────────�
   Imported by   : 01_Merge_DeFluorX.py, 02_Production_DeFluorX.py, 03_Validation_Figures_DeFluorX.py,
                   04_Dendrogram_DeFluorX.py, 05_TopN_and_PDB_Preparation_DeFluorX.py,
                   06_Physics_Validation_DeFluorX.py,
-                  07_MD_QMMM_Defluorination_DeFluorX.py
+                  07_QMMM_Defluorination_DeFluorX.py
                   (also referenced by 00_03 for a ConsoleColours drift check)
   Reads         : (none - pure utility module)
   Writes        : (none - pure utility module)
   Upstream      : 00_01_Project_Config_DeFluorX.py (CFG is passed in by callers).
-  Downstream    : 01_Merge through 07_MD_QMMM (every pipeline step imports these helpers).
+  Downstream    : 01_Merge through 07_QMMM (every pipeline step imports these helpers).
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────

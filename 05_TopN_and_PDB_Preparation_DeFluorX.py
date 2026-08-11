@@ -34,7 +34,7 @@ Date   : 12 August 2026 <──────────────────�
   Upstream      : 02_Production_DeFluorX.py  → writes Best_Complexes_CIFs and ranked CSV
   Downstream    : 06_Physics_Validation_DeFluorX.py       → reads the MD-selected handover (R{N}_*.pdb
                                                           + *_ESP.mae) → WaterMap · System Builder · MD · SID · MM-GBSA
-                  07_MD_QMMM_Defluorination_DeFluorX.py   → reads the MD/WaterMap outputs for QM/MM defluorination
+                  07_QMMM_Defluorination_DeFluorX.py   → reads the MD/WaterMap outputs for QM/MM defluorination
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────

@@ -32,7 +32,7 @@ Date   : 12 August 2026 <──────────────────�
                   04_Dendrogram_DeFluorX.py → reads 1_Input_Data roster
                   05_TopN_and_PDB_Preparation_DeFluorX.py → reads ranked CSV + Best_Complexes_CIFs
                   06_Physics_Validation_DeFluorX.py → reads ranked CSV
-                  07_MD_QMMM_Defluorination_DeFluorX.py → reads ranked + master CSV
+                  07_QMMM_Defluorination_DeFluorX.py → reads ranked + master CSV
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────

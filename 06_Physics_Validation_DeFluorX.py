@@ -83,7 +83,7 @@ Dependency Map
                        Defluorination/Defluorination_R{N}/01_Reactive_Pose_Trajectory.svg … 06_Figure_Descriptions.txt}
                   <out>/00_Physics_Validation.log  (single merged, colour-preserving log; `tail -f` it)
   Upstream      : 05_TopN_and_PDB_Preparation_DeFluorX.py (prepared PDBs + ESP charges).
-  Downstream    : 07_MD_QMMM_Defluorination_DeFluorX.py (reads 05_MD_Simulations + 03_WaterMaps).
+  Downstream    : 07_QMMM_Defluorination_DeFluorX.py (reads 05_MD_Simulations + 03_WaterMaps).
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
   1. Pipelined GPU→CPU per rank: MD runs on the GPU; the instant it lands (and its files settle)

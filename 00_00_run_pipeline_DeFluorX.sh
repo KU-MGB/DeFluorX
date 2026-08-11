@@ -297,7 +297,7 @@ fi
 #
 # Scripts/operations that use sudo (only when enabled):
 #   06_Physics_Validation_DeFluorX.py      → systemctl stop / mask systemd-oomd
-#   07_MD_QMMM_Defluorination_DeFluorX.py  → systemctl mask / unmask / start systemd-oomd
+#   07_QMMM_Defluorination_DeFluorX.py  → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
 _SUDO_PROMPT="  ${_C_RED}${_C_BOLD}Sudo is used only by: 06 and 07 scripts, enter the password to continue (hit Enter for default without OOMD mask):${_C_RESET} "
@@ -731,7 +731,7 @@ run_step "06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)" \
     python 06_Physics_Validation_DeFluorX.py "$RUN_ID" --pipeline-mode
 
 run_step "07  MD thermodynamics + QM/MM engine" \
-    python 07_MD_QMMM_Defluorination_DeFluorX.py "$RUN_ID"
+    python 07_QMMM_Defluorination_DeFluorX.py "$RUN_ID"
 
 # Restore systemd-oomd after both Steps 06 and 07 have completed (only if masked).
 if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then

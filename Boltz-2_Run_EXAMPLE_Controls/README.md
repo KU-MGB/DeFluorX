@@ -61,11 +61,11 @@ is visible without exceeding size limits:
 - `5_TopN_and_Preparation/` - converted and prepared PDBs, comparative analysis, ligand ESP charges.
 - `6_Physics_Validation/` - prepared proteins, ESP-charged complexes, WaterMaps, system builder,
   MD simulations, and the analysis folder (Prime MM-GBSA and defluorination).
-- `7_MD_Thermodynamics_Results/`
+- `7_QMMM_Defluorination/`
 
 Empty folders are held in version control by `.gitkeep` placeholders.
 
 ## Reproducing a full run
 
 The complete pipeline resides in the repository root and runs in sequence from
-`00_00_run_pipeline_DeFluorX.sh` through `07_MD_QMMM_Defluorination_DeFluorX.py`.
+`00_00_run_pipeline_DeFluorX.sh` through `07_QMMM_Defluorination_DeFluorX.py`.
