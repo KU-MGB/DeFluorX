@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 600" width="1280" height="600" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1191 393" width="1191" height="393" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
   <defs>
     <linearGradient id="gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17bd8c"/><stop offset="1" stop-color="#0c7d5d"/></linearGradient>
     <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa3d4"/><stop offset="1" stop-color="#2b6f9e"/></linearGradient>
     <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b431"/><stop offset="1" stop-color="#d68a00"/></linearGradient>
     <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a3d"/><stop offset="1" stop-color="#d81f16"/></linearGradient>
-    <linearGradient id="gRibbon" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0c7d5d"/><stop offset="0.5" stop-color="#b9760a"/><stop offset="1" stop-color="#c21d15"/></linearGradient>
     <filter id="ds" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#123" flood-opacity="0.18"/></filter>
     <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#9fb0ad"/>
@@ -12,16 +11,17 @@
   </defs>
 
   <!-- solid white plate so the mark stays legible on any README theme (light/dark) -->
-  <rect x="0" y="0" width="1280" height="600" rx="22" fill="#ffffff"/>
-  <rect x="3" y="3" width="1274" height="594" rx="20" fill="none" stroke="#e3ede9" stroke-width="2"/>
+  <rect x="0" y="0" width="1191" height="393" rx="22" fill="#ffffff"/>
+  <rect x="3" y="3" width="1185" height="387" rx="20" fill="none" stroke="#e3ede9" stroke-width="2"/>
+  <g transform="translate(-57,-16)">
 
   <!-- ===== header ===== -->
   <text x="640" y="68" font-size="35" font-weight="800" fill="#1f2937" text-anchor="middle" letter-spacing="0.2"><tspan fill="#0c7d5d">DeFluorX:</tspan> Discovering <tspan fill="#0c7d5d">FAcDs</tspan> for PFAS Defluorination</text>
   <text x="640" y="104" font-size="18" font-weight="600" fill="#15b587" text-anchor="middle" letter-spacing="2.6">FULLY  AUTOMATED  END-TO-END  ENZYME-DISCOVERY  PIPELINE</text>
-  <line x1="220" y1="126" x2="1060" y2="126" stroke="#dfe9e5" stroke-width="2"/>
+  <line x1="220" y1="179" x2="1060" y2="179" stroke="#dfe9e5" stroke-width="2"/>
 
   <!-- ===== scale equation: the search space that is actually enumerated ===== -->
-  <g font-size="15.5" font-weight="700" text-anchor="middle">
+  <g transform="translate(0,-24)" font-size="15.5" font-weight="700" text-anchor="middle">
     <rect x="298" y="149" width="264" height="34" rx="17" fill="#e9f7f1" stroke="#bfe6d7" stroke-width="1.5"/>
     <text x="430" y="171" fill="#0c7d5d"><tspan font-weight="800">2,150</tspan> bacterial FAcD variants</text>
     <text x="580" y="172" fill="#6b7c78" font-size="19">×</text>
@@ -32,6 +32,7 @@
     <text x="860" y="171" fill="#c21d15"><tspan font-weight="800">58,050</tspan> predicted complexes</text>
   </g>
 
+  <g transform="translate(0,-68)">
   <!-- ===== connectors (behind medallions) ===== -->
   <g stroke="#c3d3cf" stroke-width="5" fill="none">
     <line x1="256" y1="322" x2="356" y2="322" marker-end="url(#arrow)"/>
@@ -97,12 +98,6 @@
   </g>
   <path d="M1148 228 q 11 -11 4 -24" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
   <path d="M1200 230 q 11 -6 20 -13" fill="none" stroke="#ff6a3d" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-
-  <!-- ===== payoff ribbon: what the pipeline delivers ===== -->
-  <rect x="40" y="486" width="1200" height="46" rx="13" fill="#f2f9f6" stroke="#d6ece3" stroke-width="1.5"/>
-  <rect x="40" y="486" width="6" height="46" rx="3" fill="url(#gRibbon)"/>
-  <text x="640" y="515" font-size="15.5" font-weight="600" fill="#3c4a47" text-anchor="middle" letter-spacing="0.3">58,050 complexes  →  competence-tiered leads  →  µs MD + MM-GBSA + WaterMap  →  <tspan font-weight="800" fill="#c21d15">quantum-mechanical proof of C-F bond cleavage &amp; F⁻ release</tspan></text>
-
-  <!-- ===== footer: the engineering weight behind it ===== -->
-  <text x="640" y="562" font-size="12.5" font-weight="600" fill="#8a9793" text-anchor="middle" letter-spacing="0.6">7-STEP AUTOMATED PIPELINE   ·   44,543 LINES   ·   BOLTZ-2 → DESMOND MD → B3LYP QM/MM   ·   CFG SINGLE SOURCE OF TRUTH   ·   FULLY REPRODUCIBLE</text>
+  </g>
+  </g>
 </svg>
