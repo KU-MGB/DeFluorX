@@ -476,7 +476,7 @@ The 3R3U × Fluoroacetate complex is expected to classify as **Tier_2A** or high
 Step 02 supports full crash recovery. Pass the existing run directory name to resume from the last completed job:
 
 ```bash
-python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 Completed jobs are detected from the master CSV and skipped automatically - zero repeated work.
@@ -486,11 +486,11 @@ Completed jobs are detected from the master CSV and skipped automatically - zero
 Each script after step 02 takes the run directory as its first argument; the bracketed flags are the common overrides (all optional):
 
 ```bash
-python 03_Validation_Figures_DeFluorX.py  Boltz-2_Run_20260309T085406Z_DeFluorX [--no-variance]
-python 04_Dendrogram_DeFluorX.py           Boltz-2_Run_20260309T085406Z_DeFluorX
-python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
-python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX [--stages merge,watermap,build,md] [--test]
-python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX [--workers N] [--no-run-qsite] [--force] [--results-dirname NAME] [--run-tag TAG] [--qsite-threads N]
+python 03_Validation_Figures_DeFluorX.py  Boltz-2_Run_20260309T085406Z [--no-variance]
+python 04_Dendrogram_DeFluorX.py           Boltz-2_Run_20260309T085406Z
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z [--stages merge,watermap,build,md] [--test]
+python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z [--workers N] [--no-run-qsite] [--force] [--results-dirname NAME] [--run-tag TAG] [--qsite-threads N]
 ```
 
 `06 --stages` runs a subset of the physics phases (SID + MM-GBSA run inside `md`); `07 --no-run-qsite` writes the QSite inputs without launching the scans, and `--force` recomputes a rank from the trajectory instead of resuming from its cached frame table.
@@ -568,7 +568,7 @@ Pre-generate A3M MSA files locally using `colabfold_search` and place them in th
 # Back up before recovery
 cp Boltz-2_Run_*/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv backup.csv
 # Resume - the pipeline re-scores only the missing jobs
-python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 </details>
 
@@ -810,7 +810,7 @@ python 01_Merge_DeFluorX.py \
 python 02_Production_DeFluorX.py --fasta C_INP_Merged_for_Boltz-2.fasta --smi D_INP_PFAS-27_Ligands.smi
 
 # Resume from checkpoint after interruption
-python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
+python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 **Arguments:**
@@ -892,8 +892,8 @@ python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
 
 **Usage:**
 ```bash
-python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
-python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX --no-variance   # skip the CIF re-parse
+python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 03_Validation_Figures_DeFluorX.py Boltz-2_Run_20260309T085406Z --no-variance   # skip the CIF re-parse
 ```
 
 > **`--no-variance`.** The two inter-model uncertainty panels need a per-model variance table, built by
@@ -937,7 +937,7 @@ a logistic resolves. This changes no gate - the tier and `MD_Selected` key on ge
 
 **Usage:**
 ```bash
-python 04_Dendrogram_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
+python 04_Dendrogram_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 **Output:** `03_<Tier>_Interactive_App.html` (one self-contained app per tree) - fully interactive D3.js tree viewable in any browser, featuring:
@@ -956,8 +956,8 @@ python 04_Dendrogram_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
 
 **Usage:**
 ```bash
-python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
-python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX --esp   # force QM ligand charges (ON by default)
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
+python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z --esp   # force QM ligand charges (ON by default)
 ```
 
 Interactive mode prompts tier selection if multiple tiers contain viable candidates; auto-selects the highest available tier after a 30-second timeout.
@@ -1045,7 +1045,7 @@ from every supported visualisation engine.
 
 **Usage:**
 ```bash
-python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX   # --test for a fast WaterMap 2 ns / MD 5 ns pass
+python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z   # --test for a fast WaterMap 2 ns / MD 5 ns pass
 ```
 
 **Pipeline (phased):**
@@ -1074,7 +1074,7 @@ Crash prevention (`systemd-oomd` masking) and heartbeat logging wrap the whole r
 
 **Usage:**
 ```bash
-python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX
+python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
 ```
 
 **Pipeline stages:**
@@ -1222,16 +1222,16 @@ As the final computational analysis step, the following design architectures are
 *   **Concurrency Control (`--workers`):** The frame/SN2 trajectory analysis runs concurrently across ranks in a thread pool (`ThreadPoolExecutor`), capped by default at **`os.cpu_count() − 2`**. The QM/MM (QSite/Jaguar) launches run **concurrently**, one core each: the QSite engine is single-threaded in practice (a job pins exactly one core no matter what `-PARALLEL` is given), so raising the per-job core count buys nothing and the only real parallelism is running several scans at once. The admitted job count is therefore set by `_qsite_concurrency()` from the CPU cap (`os.cpu_count() − PREP_CPU_RESERVE`) **and** the memory budget - `CFG.QSITE_RAM_PER_JOB_GB` against free RAM plus the swap fraction `CFG.QSITE_RAM_SWAP_FRAC`, so the scans use the machine fully without driving it into the OOM killer. In practice the number of scans is the binding constraint, not the budget: occupancy is `ranks × CFG.QSITE_N_FRAMES`. A live per-rank frame counter (`Processing: Rank_N: k/total frames`) prints as each trajectory streams (in place with `\r` for a single rank, throttled appended lines when several run in parallel). Override the analysis concurrency with `--workers` (use `--workers 1` for one rank at a time and clean single-line progress):
     ```bash
     # Run sequentially (rank-by-rank), clean in-place progress
-    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX --workers 1
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --workers 1
     ```
 
 *   **QSite execution control (`--no-run-qsite`, `--qsite-procs`):** By default (`CFG.QSITE_RUN = True`) the engine launches QSite automatically after writing each input. QM/MM relaxed scans are expensive, so two CLI overrides are provided:
     ```bash
     # Generate the QSite .in/.mae inputs only - do not launch QSite
-    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX --no-run-qsite
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --no-run-qsite
 
     # Cores handed to each QSite job (qsite -PARALLEL; default CFG.QSITE_PROCS = 1)
-    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z_DeFluorX --qsite-procs 2
+    python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z --qsite-procs 2
     ```
     `QSITE_PROCS` defaults to **1** because the engine does not thread: a scan given 10 cores still runs on one. Throughput comes from concurrency (above), so leave this at 1 unless a specific job is known to benefit. Because launches are idempotent (skip if a frame's `QSite_SN2/Frame_<rank>[_Best]_<traj>/` folder exists), an interrupted pipeline can be re-run safely - only frames without an output folder are submitted.
 *   **Automatic `systemd-oomd` masking:** The pipeline wrapper script masks systemd-oomd (`sudo systemctl mask systemd-oomd.socket`) before running Steps 06 and 07 to prevent termination by the system daemon, and unmasks it on completion. Step 07 masks it itself when run standalone, and records that it did so in a sentinel file (`~/.cache/defluorx_step07_oomd_masked`). The restore is therefore **crash-proof**: it runs from the signal handler and at exit, and if the process is killed outright the *next* 07 run sees the sentinel and unmasks on startup, so a hard kill cannot leave the machine permanently without its OOM daemon.
@@ -1364,7 +1364,7 @@ export SCHRODINGER=/opt/schrodinger   # adjust to cluster path
 python 02_Production_DeFluorX.py
 
 # Or resume after pre-emption
-# python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
+# python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
 For **step 07** (Desmond MD), reuse the template above with `--mem=64G --time=48:00:00` and the step-07 command (`python 07_QMMM_Defluorination_DeFluorX.py <Run>`); GPU offloading handles PME/non-bonded, and the 32 CPUs serve the CPU-side NAC trajectory analysis.
