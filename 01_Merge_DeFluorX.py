@@ -83,9 +83,9 @@ Scientific References:
 # SECTION 1: CONFIGURATION & IMPORTS
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import argparse
 import sys
 import logging
@@ -95,15 +95,15 @@ from pathlib import Path
 from typing import Set, Tuple, Dict
 import hashlib
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.2: Scientific Stack (Matplotlib configured for headless/HPC servers)
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
 for OS/desktop stability by limiting the thread-pool maths libraries (BLAS / MKL
 / OpenMP / NumExpr). Must precede numpy import to take effect; setdefault()
 preserves any value exported by the caller or pipeline runner.
-"""
+'''
 import os as _os
 _CPU_CAP = str(max(1, (_os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
@@ -116,18 +116,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import skew, gaussian_kde
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.3: Biopython
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 from Bio import SeqIO
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.4: Pipeline utilities (00_02) + config (00_01) via importlib
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 CFG supplies the QC thresholds (PREP_AMBIGUOUS_AA / PREP_MAX_AMBIGUOUS_PCT), the Secondary length
 filters and the dashboard palette/format; no geometric (structural) thresholds are used here.
-"""
+'''
 import importlib.util as _ilu
 # Consolidated top-level imports; any optional/heavy dependency stays local to its caller.
 import time as _time
@@ -146,9 +146,9 @@ CFG             = _cfg_mod.CFG()
 clean_spines    = _utils_mod.clean_spines
 apply_figure_style = _utils_mod.apply_figure_style
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.5: Global Constants
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 AMBIGUOUS_AA = CFG.PREP_AMBIGUOUS_AA  # Non-standard amino acids for QC
 
 # =============================================================================
@@ -232,10 +232,10 @@ def clean_header(description: str) -> str:
     # 1. Splitting by space isolates the primary ID from the trailing metadata
     raw_id = description.split()[0]
 
-    """
+    '''
     2. Remove any bracketed numbers like (2), (3) etc.
     e.g. 'GOI1_(2)' becomes 'GOI1_'
-    """
+    '''
     clean_id = re.sub(r"\(\d+\)", "", raw_id)
 
     return clean_id
@@ -286,32 +286,32 @@ def process_and_write(
     for rec in iterator:
         stats["total"] += 1
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.1: Normalisation
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         clean_seq = clean_sequence_str(rec.seq)
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.2: Quality Control
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         valid, _reason = is_valid_protein(clean_seq)
         if not valid:
             stats["quality_fail"] += 1
             logger.debug(f"  Quality fail [{rec.id}]: {_reason}")   # keep the cause (stop codon vs ambiguous)
             continue
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.3: Length Filter (Optional)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         seq_len = len(clean_seq)
         if filter_length:
             if not (min_len <= seq_len <= max_len):
                 stats["length_fail"] += 1
                 continue
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.4: Deduplication (Strict Identity)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Hash the sequence to save RAM before checking the 'seen' set
         clean_hash = hashlib.sha256(clean_seq.encode("utf-8")).hexdigest()
 
@@ -319,16 +319,16 @@ def process_and_write(
             stats["dupes"] += 1
             continue
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.5: Header Preprocessing (Cleaning the name & Collision check)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         clean_id = clean_header(rec.description)
 
-        """
+        '''
         Disambiguate identical headers on distinct sequences: two different sequences that
         carry the same cleaned name would otherwise collide on ID, so a numeric suffix is
         appended to keep every record's identifier unique.
-        """
+        '''
         original_clean_id = clean_id
         counter = 1
         while clean_id in seen_ids:
@@ -336,9 +336,9 @@ def process_and_write(
             clean_id = f"{original_clean_id}_{counter}"
             counter += 1
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.6: Update Database
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         seen_ids.add(clean_id)
         seen_sequences.add(clean_hash)
 
@@ -349,14 +349,16 @@ def process_and_write(
         stats["retained_lengths"].append(seq_len)
 
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 4.7: Write to Stream (Single line per sequence)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         if keep_gaps:
-            # Preserve gap characters, but still upper-case and strip a trailing stop
-            # so the emitted record matches the QC that ran on clean_seq. Tolerate a
-            # stop followed by trailing gaps (e.g. "…*-"), which a plain endswith("*")
-            # would miss and leak an internal stop into the final FASTA.
+            '''
+            Preserve gap characters, but still upper-case and strip a trailing stop
+            so the emitted record matches the QC that ran on clean_seq. Tolerate a
+            stop followed by trailing gaps (e.g. "…*-"), which a plain endswith("*")
+            would miss and leak an internal stop into the final FASTA.
+            '''
             seq_to_write = re.sub(r"\*(-*)$", r"\1", str(rec.seq).upper())
         else:
             seq_to_write = clean_seq
@@ -388,9 +390,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     """
     apply_figure_style(CFG)   # installs the CFG-driven savefig format router (SSOT: VIS_FIGURE_FORMAT)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.1: Palette Definition (Unified Consistency)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     PALETTE = CFG.MERGE_QC_COLOUR       # single source (00_01 §visual palettes)
 
     # Configure Matplotlib fonts
@@ -410,9 +412,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     for d in data_map:
         all_lengths.extend(d["stats"]["retained_lengths"])
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.2: Canvas Setup (Dense Collage)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     fig = plt.figure(figsize=(16, 9), facecolor=PALETTE["Bg"])
 
     # Layout: Top row (Bar + Violin), Bottom row (KDE)
@@ -422,9 +424,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax2 = fig.add_subplot(gs[0, 1]) # Top Right: Violins
     ax3 = fig.add_subplot(gs[1, :]) # Bottom: KDE
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.3: Subplot 1 - Pipeline Throughput (Bar Chart)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     bar_labels = ["Master", "Secondary", "FINAL\nDATASET"]
     bar_inputs = [s1["total"], s2["total"], total_input]
     bar_kept   = [s1["kept"], s2["kept"], total_kept]
@@ -449,10 +451,10 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 
     # --- Smart Annotation Logic ---
     max_val = max(bar_inputs) if bar_inputs else 1
-    """
+    '''
     Estimation: approximate text width relative to axis (approx 15-20%)
     This prevents cramming text into small bars
-    """
+    '''
     width_threshold = max_val * 0.18
 
     for i, (inp, kp) in enumerate(zip(bar_inputs, bar_kept)):
@@ -484,9 +486,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 
     ax1.legend(loc="upper right", frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.4: Subplot 2 - Length Heterogeneity (Violin Plot)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     violin_data = [d["stats"]["retained_lengths"] for d in data_map]
     safe_violin_data = [d if len(d) > 0 else [0] for d in violin_data]
 
@@ -514,9 +516,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     apply_clean_spines(ax2)
     ax2.grid(axis="y", linestyle=":", alpha=0.5)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.5: Subplot 3 - Consolidated Architecture (KDE Plot)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     ax3.set_xlabel("Sequence Length (Residues)", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
     ax3.set_ylabel("Density", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
 
@@ -589,9 +591,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 # =============================================================================
 
 def main():
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.1: Parse Arguments & Setup
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     parser = argparse.ArgumentParser(description="Production Grade FASTA Merge (2 Files)")
     parser.add_argument("--master", required=True, help="File 1 (MASTER): Trusted.")
     parser.add_argument("--secondary", required=True, help="File 2 (Secondary): Deduped & Filtered.")
@@ -625,9 +627,9 @@ def main():
 
     with open(out_path, "w") as out_handle:
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 6.2: Process Master File (Highest Priority)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Rules: No filtering, adds to 'seen' database first.
         stats_master = process_and_write(
             f1_path, out_handle, "Master",
@@ -635,9 +637,9 @@ def main():
             keep_gaps=args.keep_gaps
         )
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 6.3: Process Secondary File
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Rules: Length filtering + Deduplicates against Master.
         stats_secondary = process_and_write(
             f2_path, out_handle, "Secondary",
@@ -646,9 +648,9 @@ def main():
             filter_length=True, keep_gaps=args.keep_gaps
         )
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.4: Generate Visual Report (QC Dashboard)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     logger.info("\nGenerating Visual Report...")
     try:
         plot_path = generate_plots(stats_master, stats_secondary, out_path, logger)
@@ -657,9 +659,9 @@ def main():
         traceback.print_exc()
         plot_path = "FAILED"
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.5: Final Reporting & Shutdown
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     logger.info(_utils_mod.SEPARATOR_HEAVY)
     logger.info("FINAL REPORT")
     logger.info(_utils_mod.SEPARATOR_HEAVY)

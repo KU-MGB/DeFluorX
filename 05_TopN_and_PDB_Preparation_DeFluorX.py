@@ -94,18 +94,18 @@ Scientific References:
 # SECTION 1: SYSTEM CONFIGURATION & IMPORTS
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import os
 import sys
 
-"""
+'''
 CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
 for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
 MKL / OpenMP / NumExpr). Must precede numpy/pandas import to take effect;
 setdefault() preserves any value exported by the caller or pipeline runner.
-"""
+'''
 _CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
             "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -149,17 +149,17 @@ RDLogger.DisableLog('rdApp.*')
 DEFAULT_BASE_PATH = Path.cwd()
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.2: Scientific Stack
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import gemmi
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.3: Pipeline modules (00_01 config, 00_02 utils) via importlib
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 Filenames begin with digits and cannot be imported with standard `import`.
-"""
+'''
 import importlib.util as _ilu
 # --- consolidated top-level imports (optional/heavy + Schrodinger stay function-local) ---
 from collections import Counter as _Counter
@@ -189,14 +189,14 @@ save_ramachandran_comparison = _utils_mod.save_ramachandran_comparison
 safe_name                    = _utils_mod.safe_name
 SEPARATOR                    = "-" * 80
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.4: Global Constants & Paths
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-"""
+'''
 Ensure SCHRODINGER is set in the process environment so child processes
 (PrepWizard subprocess calls) inherit it without requiring a prior `export`.
-"""
+'''
 if "SCHRODINGER" not in os.environ:
     os.environ["SCHRODINGER"] = "/opt/schrodinger"
 
@@ -221,11 +221,11 @@ PROTEIN_ASSOCIATED = CFG.PREP_PROTEIN_ASSOCIATED
 # SECTION 2: LOGGING INFRASTRUCTURE
 # =============================================================================
 
-"""
+'''
 Logging and console functions are provided by 00_02_Project_Utils.
 Script-level wrappers capture the module-global `logger` so existing call
 sites require no modification.
-"""
+'''
 
 def setup_logging(prep_base_dir: Path) -> Path:
     """Initialises the preparation log via the shared utility."""
@@ -249,9 +249,9 @@ def console_separator() -> None:
 # SECTION 3: CORE LOGIC & HELPERS
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.1: File Indexing & Metadata
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def index_existing_files(directory: Path, suffix: str) -> dict:
     """Creates a fast lookup dictionary {JobIndex: Path} for existing files.
     Special handling for Controls (ID 0000000) to avoid collisions.
@@ -264,10 +264,10 @@ def index_existing_files(directory: Path, suffix: str) -> dict:
             parts = f.name.split("_")
             if parts and parts[0].isdigit():
                 idx = parts[0]
-                """
+                '''
                 If it's a control ID, it is not indexed for renaming
                 because multiple controls share this ID.
-                """
+                '''
                 if idx == CFG.CONTROL_JOB_PREFIX:
                     continue
                 index[idx] = f
@@ -346,9 +346,9 @@ def load_md_selected_jobs(prod_dir: Path) -> set:
         if logger: logger.debug(f"Error loading MD selection: {e}")
         return set()
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.2: PDB Manipulation (Header & Source Tracking)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def get_source_tag(pdb_path: Path) -> str:
     """Reads the REMARK 999 SOURCE_CIF tag from a PDB file."""
     try:
@@ -385,9 +385,9 @@ def update_pdb_header(pdb_path: Path, job_name: str, rank: str, source_cif: str)
         if logger: logger.warning(f"Could not update header for {job_name}: {e}")
         return False
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.3: Conversion Engine (Gemmi)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def cif_to_pdb_gemmi(cif_path: Path, pdb_path: Path, job_name: str, rank: str):
     """
     Converts mmCIF to PDB using Gemmi.
@@ -424,9 +424,11 @@ def cif_to_pdb_gemmi(cif_path: Path, pdb_path: Path, job_name: str, rank: str):
                     del chain[i]
                     has_ligands = True
 
-            # Re-number Chain L residues sequentially so multiple ligand copies
-            # (homodimers / multiple identical PFAS) never collide on res.seqid,
-            # which would break PyMOL/PLIP selections downstream.
+            '''
+            Re-number Chain L residues sequentially so multiple ligand copies
+            (homodimers / multiple identical PFAS) never collide on res.seqid,
+            which would break PyMOL/PLIP selections downstream.
+            '''
             for _new_seq, _lres in enumerate(lig_chain, start=1):
                 _lres.seqid = gemmi.SeqId(_new_seq, " ")
 
@@ -442,9 +444,9 @@ def cif_to_pdb_gemmi(cif_path: Path, pdb_path: Path, job_name: str, rank: str):
     except Exception as e:
         return False, f"Gemmi Error: {str(e)}"
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.4: Preparation Engine (Schrödinger PrepWizard)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def run_prepwizard(raw_pdb: Path, final_dest: Path):
     """
     Wraps Schrödinger's prepwizard for headless protein-ligand preparation.
@@ -467,10 +469,10 @@ def run_prepwizard(raw_pdb: Path, final_dest: Path):
         output_pdb_name = f"{job_name}_Prepared.pdb"
         shutil.copy2(raw_pdb, input_pdb_local)
 
-        """
+        '''
         Headless execution environment - strip Python-env overrides that confuse
         Schrödinger's bundled Python interpreter.
-        """
+        '''
         env = os.environ.copy()
         env["SCHRODINGER"]     = str(SCHRODINGER_PATH)
         env["QT_QPA_PLATFORM"] = "offscreen"
@@ -671,10 +673,12 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     df = df.dropna(subset=["raw_sn2_angle", "prep_sn2_angle"])
     if df.empty:
         return None
-    # Group the two cohorts on the y-axis: controls together at the foot, MD-selected together above
-    # them, each block sorted by prepared angle. Reading the MD candidates as one contiguous set is
-    # clearer than interleaving them with the controls by angle. The 'job' secondary key keeps equal
-    # angles deterministic (rows otherwise arrive in thread-completion order).
+    '''
+    Group the two cohorts on the y-axis: controls together at the foot, MD-selected together above
+    them, each block sorted by prepared angle. Reading the MD candidates as one contiguous set is
+    clearer than interleaving them with the controls by angle. The 'job' secondary key keeps equal
+    angles deterministic (rows otherwise arrive in thread-completion order).
+    '''
     df["_is_md"] = ~df["job"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
 
     def _short(j):
@@ -729,10 +733,12 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
                         fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_zc, style="italic",
                         alpha=0.9, zorder=1, clip_on=True)
         for _i, (_cf, _a, _b) in enumerate(zip(df[ccif], df[c0], df[c1])):
-            # Three stages on one row: CIF (open circle) → RAW (small dot, ≈CIF) → MINIMISED (arrowhead).
-            # The arrow runs RAW → MINIMISED, because that leg carries all the movement; the CIF→RAW leg
-            # is the lossless conversion and is shown only as the two coincident markers.
-            # 'worse' = away from the gate. For the angle the gate is a floor; for the distance a ceiling.
+            '''
+            Three stages on one row: CIF (open circle) → RAW (small dot, ≈CIF) → MINIMISED (arrowhead).
+            The arrow runs RAW → MINIMISED, because that leg carries all the movement; the CIF→RAW leg
+            is the lossless conversion and is shown only as the two coincident markers.
+            'worse' = away from the gate. For the angle the gate is a floor; for the distance a ceiling.
+            '''
             _worse = (_b < _a) if worse_is == "down" else (_b > _a)
             _col = CFG.VIS_BAND["low"] if _worse else CFG.VIS_BAND["high"]
             ax.annotate("", xy=(_b, _i), xytext=(_a, _i),
@@ -753,12 +759,12 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
         ax.axvline(gate, ls="--", lw=1.4, color=CFG.VIS_INK["dark"], alpha=0.9, zorder=2)
         ax.axvline(relaxed, ls=":", lw=1.2, color=CFG.VIS_INK["ghost"], zorder=2)
         ax.axvline(strict, ls="-.", lw=1.3, color=CFG.VIS_ACCENT["blue"], alpha=0.9, zorder=2)
-        """
+        '''
         The gate labels sit in the MARGIN ABOVE the panel, not inside it. Rotated 90° across the data
         they crossed arrows, values and rows - the reader had to decode the label before reading the
         plot. Anchored to the axis in data-x and figure-y, they stay attached to their own line and
         collide with nothing.
-        """
+        '''
         for _gv, _gl, _gc in ((gate, gate_lbl, CFG.VIS_INK["dark"]),
                               (relaxed, relaxed_lbl, CFG.VIS_INK["ghost"])):
             ax.annotate(_gl, xy=(_gv, 1.0), xycoords=("data", "axes fraction"),
@@ -787,10 +793,12 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
         _t.set_color(CFG.VIS_ACCENT["blue"] if _md else CFG.VIS_INK["muted"])
     ax_a.set_ylim(-0.8, len(df) - 0.2)
 
-    # The movement handles carry an arrowhead, because the figure draws arrows - the legend must show
-    # the same mark. The three zone bands are NOT in the legend: they are labelled in place, inside their
-    # own fills at the foot of each panel, so the legend only explains the marks the reader cannot
-    # otherwise decode (the two pose markers and the two drift directions).
+    '''
+    The movement handles carry an arrowhead, because the figure draws arrows - the legend must show
+    the same mark. The three zone bands are NOT in the legend: they are labelled in place, inside their
+    own fills at the foot of each panel, so the legend only explains the marks the reader cannot
+    otherwise decode (the two pose markers and the two drift directions).
+    '''
     _h = [_Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["white"],
                   markeredgecolor=CFG.VIS_INK["dark"], ms=8, label="CIF  (Boltz - what the screen scored)"),
           _Line2D([0], [0], marker="o", ls="", markerfacecolor=CFG.VIS_INK["muted"],
@@ -824,15 +832,17 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
     return _path
 
 
-# The eight catalytic residues, in the order the figure stacks them: the reactive relay that does the
-# chemistry first, then the machinery that positions the substrate. Each entry is
-# (role_key, ranked-CSV column, short label, functional group, partner). The PARTNER is what the residue
-# actually engages mechanistically - and it is NOT the substrate for every residue. FAcD's catalysis is a
-# RELAY: the nucleophile attacks the substrate carbon, but the base (His) engages the NUCLEOPHILE, and the
-# acid (Asp) engages the BASE (the Asp–His dyad that polarises it, "not a ligand contact" per Step 02).
-# Measuring the acid or the base against the substrate would report them as "disengaged" when the dyad is
-# in fact intact, which is exactly backwards. So each residue is measured against its own partner:
-# "substrate" for the direct contacts, or another role_key for the relay links.
+'''
+The eight catalytic residues, in the order the figure stacks them: the reactive relay that does the
+chemistry first, then the machinery that positions the substrate. Each entry is
+(role_key, ranked-CSV column, short label, functional group, partner). The PARTNER is what the residue
+actually engages mechanistically - and it is NOT the substrate for every residue. FAcD's catalysis is a
+RELAY: the nucleophile attacks the substrate carbon, but the base (His) engages the NUCLEOPHILE, and the
+acid (Asp) engages the BASE (the Asp–His dyad that polarises it, "not a ligand contact" per Step 02).
+Measuring the acid or the base against the substrate would report them as "disengaged" when the dyad is
+in fact intact, which is exactly backwards. So each residue is measured against its own partner:
+"substrate" for the direct contacts, or another role_key for the relay links.
+'''
 _MACHINERY_ROLES = [
     ("Nuc",     "Mapped_Nucleophile",  "Nucleophile → warhead C", "reactive",   "substrate"),
     ("Base",    "Mapped_Base",         "Base → nucleophile",      "reactive",   "Nuc"),
@@ -996,9 +1006,11 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
             ax.plot(_i + float(_rng.uniform(-0.14, 0.14)), _v, "o", ms=6.5 if _md else 4.5,
                     color=_pc, markeredgecolor=CFG.VIS_INK["dark"], markeredgewidth=0.6,
                     alpha=0.95 if _md else 0.7, zorder=6 if _md else 5)
-        # Drift stem: the MD-SELECTED cohort's median engagement, CIF → minimised. Only the MD-selected
-        # complexes are pooled here - those are the poses that go to MD, and pooling the controls (a
-        # different enzyme in the DeHa4 case) into one median would not be a meaningful number.
+        '''
+        Drift stem: the MD-SELECTED cohort's median engagement, CIF → minimised. Only the MD-selected
+        complexes are pooled here - those are the poses that go to MD, and pooling the controls (a
+        different enzyme in the DeHa4 case) into one median would not be a meaningful number.
+        '''
         _cif_md = [r.get("cif_eng", {}).get(_rk) for r in rows
                    if not str(r["job"]).startswith(CFG.CONTROL_JOB_PREFIX)]
         _cif_md = [v for v in _cif_md if v is not None and v == v]
@@ -1040,11 +1052,13 @@ def plot_machinery_distribution(rows: list, out_dir: Path) -> Path | None:
     ax.yaxis.set_major_locator(MultipleLocator(0.2))     # finer gridlines for reading the tight spread
     ax.grid(True, axis="y", alpha=CFG.VIS_GRID_ALPHA, color=CFG.VIS_GRID_COLOUR)
     ax.set_axisbelow(True)
-    # Zone labels at the right edge, each centred in its VISIBLE band. The reactive label rides just
-    # ABOVE its dashed line on the top layer (high zorder) so the line never sits over it. The "in
-    # contact" band is only drawn up to the visible top (_outer may exceed the axis), and the "out of
-    # contact" label is drawn only when that band is actually on screen (_ymax > _outer) - otherwise
-    # the two upper labels would collide at the top.
+    '''
+    Zone labels at the right edge, each centred in its VISIBLE band. The reactive label rides just
+    ABOVE its dashed line on the top layer (high zorder) so the line never sits over it. The "in
+    contact" band is only drawn up to the visible top (_outer may exceed the axis), and the "out of
+    contact" label is drawn only when that band is actually on screen (_ymax > _outer) - otherwise
+    the two upper labels would collide at the top.
+    '''
     _mod_top = min(_outer, _ymax)
     _zlabels = [(_react, f"reactive ≤{_react:g} Å", CFG.VIS_BAND["high"], "bottom", 3),
                 ((_react + _mod_top) / 2, f"in contact ≤{_outer:g} Å", CFG.VIS_INK["muted"], "center", 0)]
@@ -1145,9 +1159,11 @@ def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> di
     if nuc_resnum is None:
         _out["status"] = "no_mapped_nucleophile"
         return _out
-    # ASP/ASH only, and only the aspartate's own carboxylate oxygens. FAcD attacks with an aspartate;
-    # admitting GLU here would let a glutamate at the mapped position pass as the nucleophile, which is
-    # the same mistake - by residue type instead of by residue number - that put a serine in Step 03.
+    '''
+    ASP/ASH only, and only the aspartate's own carboxylate oxygens. FAcD attacks with an aspartate;
+    admitting GLU here would let a glutamate at the mapped position pass as the nucleophile, which is
+    the same mistake - by residue type instead of by residue number - that put a serine in Step 03.
+    '''
     _nucs = [(r, a) for r in _prot
              if r.seqid.num == int(nuc_resnum) and r.name.strip().upper() in ("ASP", "ASH")
              for a in r if a.name.strip() in ("OD1", "OD2")]
@@ -1171,9 +1187,11 @@ def measure_sn2_geometry(struct_path: Path, nuc_resnum: int | None = None) -> di
             _v2 = np.array([_f.pos.x - _c.pos.x, _f.pos.y - _c.pos.y, _f.pos.z - _c.pos.z])
             _cs = float(np.dot(_v1, _v2) / (np.linalg.norm(_v1) * np.linalg.norm(_v2) + 1e-12))
             _ang = math.degrees(math.acos(max(-1.0, min(1.0, _cs))))
-            # JOINT: the same oxygen must satisfy the distance AND the angle. The distance sigmoid is
-            # written EXACTLY as Step 02 writes it - plain d, with the negative SOFT_K_NUC doing the
-            # inversion. Negating d as well would invert it twice and score the FARTHEST oxygen best.
+            '''
+            JOINT: the same oxygen must satisfy the distance AND the angle. The distance sigmoid is
+            written EXACTLY as Step 02 writes it - plain d, with the negative SOFT_K_NUC doing the
+            inversion. Negating d as well would invert it twice and score the FARTHEST oxygen best.
+            '''
             _score = _sig(_d, CFG.SOFT_K_NUC, CFG.NAC_DIST_STRICT) * _sig(_ang, CFG.SOFT_K_ANG, CFG.NAC_ANGLE_STRICT)
             if _best is None or _score > _best[0]:
                 _best = (_score, _ang, _d, f"{_r.name}{_r.seqid.num}:{_o.name.strip()}")
@@ -1282,9 +1300,11 @@ def enforce_catalytic_protonation(pdb_path: Path, anchors: dict, job_name: str) 
 
         _strip = {h.upper() for h in _pol.get("strip_H", ())}
 
-        # Histidine base → GUARANTEE HID (Nδ1-H present, Nε2 free) for any input tautomer. Keyed on the
-        # ROLE's canonical residue (CFG), so a CHARMM-named histidine (HSD/HSE/HSP) - admitted by the
-        # identity set - takes the His path, not the aspartate carboxyl strip.
+        '''
+        Histidine base → GUARANTEE HID (Nδ1-H present, Nε2 free) for any input tautomer. Keyed on the
+        ROLE's canonical residue (CFG), so a CHARMM-named histidine (HSD/HSE/HSP) - admitted by the
+        identity set - takes the His path, not the aspartate carboxyl strip.
+        '''
         if _pol.get("residue") == "HIS":
             _has_hd1, _has_he2 = "HD1" in _names, "HE2" in _names
             if _has_hd1 and _has_he2:                       # HIP → HID
@@ -1365,7 +1385,7 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
             _prot = enforce_catalytic_protonation(final_prep_path, anchors or {}, job_name)
         update_pdb_header(final_prep_path, job_name, rank, raw_source or "Unknown")
 
-        """
+        '''
         Measure the pose that is actually handed to MD, and the pose it came from.
 
         The screen tiers on the Boltz CIF; MD starts here. Preparation moves the geometry - measurably,
@@ -1373,13 +1393,15 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
         drift is reported. This is instrumentation, not a gate: nothing is rejected on these numbers.
         A candidate whose prepared pose has fallen out of the relaxed NAC envelope is FLAGGED, so that
         it is known before a week of GPU time is spent on it, and never silently dropped.
-        """
+        '''
         _nuc_res = (anchors or {}).get("Nuc")
-        # Three stages: the Boltz CIF (what the screen scored), the RAW PDB (gemmi conversion), and the
-        # minimised PDB (what MD starts from). The CIF is measured directly rather than assumed equal to
-        # RAW: the conversion is lossless, but MEASURING it proves that per structure instead of citing an
-        # aggregate, and lets the figure show CIF and RAW as coincident points - the visual proof that all
-        # the drift is in minimisation. The CIF mirror is flat: 2_Best_Complexes_CIFs/<job>_model_*.cif.
+        '''
+        Three stages: the Boltz CIF (what the screen scored), the RAW PDB (gemmi conversion), and the
+        minimised PDB (what MD starts from). The CIF is measured directly rather than assumed equal to
+        RAW: the conversion is lossless, but MEASURING it proves that per structure instead of citing an
+        aggregate, and lets the figure show CIF and RAW as coincident points - the visual proof that all
+        the drift is in minimisation. The CIF mirror is flat: 2_Best_Complexes_CIFs/<job>_model_*.cif.
+        '''
         _cif_g = {"sn2_angle": float("nan"), "dist_nuc": float("nan")}
         try:
             _cif_dir = dir_raw.parent.parent / "2_Best_Complexes_CIFs"
@@ -1421,10 +1443,10 @@ def preparation_step(job_name: str, dir_raw: Path, dir_prep_clean: Path, rank: s
     return {"job": job_name, "status": status, "rank": rank, "protonation": _prot, **_geo}
 
 
-# =============================================================================
-# SECTION 4B: QM (Jaguar ESP) LIGAND CHARGES  -  opt-in, CFG.ESP_CHARGES_ENABLE / --esp
-# =============================================================================
-"""
+# #############################################################################
+# SUBSECTION 4B: QM (Jaguar ESP) LIGAND CHARGES  -  opt-in, CFG.ESP_CHARGES_ENABLE / --esp
+# #############################################################################
+'''
 WHY THIS IS HERE, AND NOT IN 07.
 
 The ligand's charges reach the physics through exactly one door: the Desmond SYSTEM BUILD, which Step 06
@@ -1439,7 +1461,7 @@ WHAT IT DOES NOT DO. It does not build a system, and it does not run MD or Water
 work. It writes <ligand>_ESP.mae and stops. Step 06 name-matches each complex's own _ESP.mae by stem,
 writes those charges into the built .cms force field, and re-reads them through msys to prove they
 reached the MD engine - a charge set that silently failed to apply would be worse than none.
-"""
+'''
 
 _ESP_BUILD = r"""
 import sys
@@ -1741,7 +1763,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     acid_found, acid_offset = find_type_near(acid_ref, ASP_TYPES)
     base_found, base_offset = find_type_near(base_ref, HIS_TYPES)
 
-    """
+    '''
     QC: the catalytic nucleophile Asp must be DEPROTONATED for the SN2 attack; a protonated
     carboxylic acid cannot attack, so a protonated nucleophile is a catalytically DEAD enzyme.
 
@@ -1754,7 +1776,7 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
     This is a WARNING, not an edit: enforce_catalytic_protonation strips exactly this hydrogen from the
     nucleophile, so the chemistry is already imposed. The warning's job is to report when the preparation
     has handed over a dead enzyme in the first place, which the enforcement step alone never surfaces.
-    """
+    '''
     _CARBOXYL_H = {h.upper() for h in cfg.CATALYTIC_PROTONATION_POLICY["Nuc"]["strip_H"]}
     if nuc_found is not None:
         _nuc_atoms = resnum_to_atoms.get(nuc_found, set())
@@ -1766,10 +1788,10 @@ def _check_residue_identity_guard(prepared_pdb_path: Path, job_name: str, cfg, a
                     f"pH: the preparation produced a catalytically dead nucleophile.")
             (logger.warning if logger else print)(_msg)
 
-    """
+    '''
     Use the most common non-zero offset (consensus across Nuc/Acid/Base);
     fall back to 0 when all three agree on the reference numbering.
-    """
+    '''
     offsets = [o for o in (nuc_offset, acid_offset, base_offset) if o is not None and o != 0]
     offset = _Counter(offsets).most_common(1)[0][0] if offsets else 0
 
@@ -1816,9 +1838,11 @@ def load_reference_data(input_data_dir: Path):
 
     # 1. Load FASTA
     if SeqIO:
-        # Sorted: two FASTAs carrying the same sequence ID would otherwise overwrite each other in
-        # seq_map in whatever order the filesystem listed them, so the surviving sequence could differ
-        # between runs on identical input.
+        '''
+        Sorted: two FASTAs carrying the same sequence ID would otherwise overwrite each other in
+        seq_map in whatever order the filesystem listed them, so the surviving sequence could differ
+        between runs on identical input.
+        '''
         for f in sorted(input_data_dir.glob("*.fasta")) + sorted(input_data_dir.glob("*.fa")):
             try:
                 for r in SeqIO.parse(str(f), "fasta"):
@@ -1834,9 +1858,11 @@ def load_reference_data(input_data_dir: Path):
                     '''
                     _stripped = re.sub(r"^\d+_", "", clean_id)
                     if _stripped in seq_map and seq_map[_stripped] != _seq:
-                        # Two prefixed entries collapse to the same bare name but carry
-                        # different sequences; overwriting would silently hand the wrong
-                        # sequence to the earlier candidate. Keep the first, warn loudly.
+                        '''
+                        Two prefixed entries collapse to the same bare name but carry
+                        different sequences; overwriting would silently hand the wrong
+                        sequence to the earlier candidate. Keep the first, warn loudly.
+                        '''
                         console_info(
                             f"Warning: stripped sequence key '{_stripped}' collides with a "
                             f"differing sequence (from '{clean_id}'); keeping the first occurrence.")
@@ -1866,9 +1892,9 @@ def load_reference_data(input_data_dir: Path):
 
     return seq_map, smi_map, fasta_count, smi_count
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.1: Molecule Handling
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def extract_chain_l_mol(pdb_path: Path):
     """Extracts Chain L (Ligand) lines from PDB and returns RDKit Mol."""
     ligand_lines = []
@@ -1907,13 +1933,13 @@ def _fig_constants():
         "TIMEOUT_PLIP":   CFG.VIS_TIMEOUT_PLIP,
     }
 
-"""
+'''
 Per-interaction-type distance ceilings for filtering PLIP output down to the
 project's Schrödinger-Maestro criteria (CFG §3 - single source of truth).
 PLIP's own internal cutoffs are looser (e.g. H-bond 4.1 Å, salt 5.5 Å); any
 PLIP contact whose reported distance exceeds the matching CFG ceiling is
 dropped so all three figure engines agree on what counts as a bond.
-"""
+'''
 def _plip_cfg_cutoffs():
     return {
         "hbond":       CFG.THRESHOLD_HB_DIST_MAX,    # D···A proxy (PLIP reports D-A distance)
@@ -1926,7 +1952,7 @@ def _plip_cfg_cutoffs():
     }
 
 
-"""
+'''
 ANGLE CRITERIA - the half of the definition that a distance-only clamp cannot enforce.
 
 A hydrogen bond is not "an N or O within 3.5 Å"; a halogen bond is not "a halogen within 3.5 Å". Both
@@ -1945,7 +1971,7 @@ Not listed, deliberately:
   · the aromatic-H-bond family (AROM_HB_*) - a Maestro interaction class PLIP does not model at all.
     Those constants describe a criterion no engine in this pipeline can evaluate; they are reference,
     not configuration, and are marked as such in CFG.
-"""
+'''
 _PLIP_ANGLE_RULES: dict = {
     "hbond":   [("don_angle", CFG.THRESHOLD_HB_ANGLE_MIN, None)],
     "halogen": [("don_angle", CFG.HALOGEN_DON_ANGLE_MIN, None),
@@ -1999,9 +2025,9 @@ def load_metadata(ext_dir: Path):
     except ImportError:
         pass  # pandas optional; filenames fall back to base_name
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: logger (separate from the extraction logger) ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 _fig_logger = None
 
 def _fig_log(text=""):
@@ -2021,9 +2047,9 @@ def _append_auxiliary_log(tool_name, complex_name, log_path):
     except Exception as e:
         _fig_logger.debug(f"Failed to append figure log: {e}")
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: subprocess runner ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
     """Run external command; explicitly kill the subprocess on timeout so no orphans remain."""
     run_env = os.environ.copy()
@@ -2033,10 +2059,10 @@ def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
     run_env["LIBGL_ALWAYS_SOFTWARE"] = "1"
     if "DISPLAY" not in run_env:
         run_env["DISPLAY"] = ":99"
-    """
+    '''
     Cap internal threading in numpy/OpenBabel/MKL so each subprocess uses
     exactly 1 thread; concurrency is controlled at the pool level instead.
-    """
+    '''
     run_env.setdefault("OMP_NUM_THREADS",      "1")
     run_env.setdefault("MKL_NUM_THREADS",      "1")
     run_env.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -2086,9 +2112,9 @@ def _run_cmd(cmd_list, cwd=None, env=None, timeout=60, log_file=None):
             try: f_handle.close()
             except Exception: pass
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: visualisation engines (PyMOL / PLIP) ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _run_pymol(pdb_path, fig_root, log_dir, base_name, lig_name, lig_num, has_f, sw, C):
     if not sw["PyMOL"]: return "Missing"
     out_dir = fig_root / "PyMOL"
@@ -2100,17 +2126,17 @@ def _run_pymol(pdb_path, fig_root, log_dir, base_name, lig_name, lig_num, has_f,
     pml             = out_dir / f"{base_name}_render.pml"
     log_path        = log_dir / f"{base_name}_PyMOL.log"
 
-    """
+    '''
     Precise ligand selection: chain L residue number is authoritative.
     Using AND (not OR) prevents UNK/non-standard protein residues also placed
     in chain L by Schrödinger prep from being selected as ligand atoms.
-    """
+    '''
     lig_sel = f"(chain L and resi {lig_num})"
 
-    """
+    '''
     Cap PyMOL ray-tracing threads: 2 PyMOL workers run concurrently, so each
     should use at most (cpu-2)//2 ray threads to stay within the cpu-2 budget.
-    """
+    '''
     _max_rt = max(1, CFG.GLOBAL_MAX_WORKERS // 2)
 
     script = [
@@ -2236,11 +2262,11 @@ def _parse_plip_xml(xml_path, lig, pro):
 
     def _register(resnr, restype, reschain, dist, itype, protcoo_3d, ligcoo_3d, node=None):
         key = (reschain, int(resnr), restype)
-        """
+        '''
         Clamp PLIP's looser internal cutoffs to the project's CFG (Maestro) criteria - on DISTANCE and
         on ANGLE - so PLIP, PyMOL and InteractionMap all agree on what counts as a bond, and so the
         geometry half of each definition is actually applied rather than left to PLIP's own defaults.
-        """
+        '''
         ceil = _cfg_cut.get(itype)
         if ceil is not None and dist > ceil:
             return
@@ -2321,9 +2347,11 @@ def _parse_plip_xml(xml_path, lig, pro):
             _register(hp.find("resnr").text, hp.find("restype").text,
                       hp.find("reschain").text, dist, "hydrophobic", protcoo, ligcoo)
 
-        # bs_residues with contact="True" and no typed interaction → "contact"
-        # Index protein residues by (chain, resnum) once so the lookup below is O(1)
-        # rather than a linear scan of `pro` per contact residue.
+        '''
+        bs_residues with contact="True" and no typed interaction → "contact"
+        Index protein residues by (chain, resnum) once so the lookup below is O(1)
+        rather than a linear scan of `pro` per contact residue.
+        '''
         _pro_by_cr = {(k[0], k[1]): k for k in pro}
         for bsr in bs.findall("./bs_residues/bs_residue"):
             if bsr.get("contact", "False") != "True":
@@ -2346,11 +2374,11 @@ def _parse_plip_xml(xml_path, lig, pro):
                         "lig_atom": la, "prot_atom": "", "center": protcoo,
                     }
 
-    """
+    '''
     A filter that removes contacts silently is indistinguishable from a filter that is not running. The
     count of contacts PLIP found and the CFG geometry rejected is reported, so tightening a criterion in
     CFG has a visible consequence rather than an invisible one.
-    """
+    '''
     if _ANGLE_REJECTS:
         _msg = ", ".join(f"{_n} {_t}" for _t, _n in sorted(_ANGLE_REJECTS.items()))
         console_info(f"    PLIP contacts rejected on the CFG angle criterion: "
@@ -2533,9 +2561,9 @@ def _run_plip(pdb_path, fig_root, log_dir, base_name, sw, C, role_resnums=None):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: matplotlib interaction diagram (pure Python, no PyMOL) ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 _IM_CONTACT_DIST  = CFG.CATALYTIC_DIST_CUTOFF
 _IM_HBOND_DIST    = CFG.THRESHOLD_HB_DIST_MAX
@@ -2775,10 +2803,12 @@ def _im_find_contacts(lig, pro, lig_hb=None):
             if ah is not None:
                 itype, disp = "arom_hbond", ah
 
-        # 3) Salt bridge (formally charged groups within CFG cutoff). Residue-aware:
-        # only ASP/GLU carboxylate O and ARG/LYS/HIS(+) cationic N count - atom-name
-        # prefix alone would mislabel neutral ASN/GLN amide (ND2/OD1, NE2/OE1) and
-        # backbone atoms as ionic. Ligand partner must be an O/N (elem-gated).
+        '''
+        3) Salt bridge (formally charged groups within CFG cutoff). Residue-aware:
+        only ASP/GLU carboxylate O and ARG/LYS/HIS(+) cationic N count - atom-name
+        prefix alone would mislabel neutral ASN/GLN amide (ND2/OD1, NE2/OE1) and
+        backbone atoms as ionic. Ligand partner must be an O/N (elem-gated).
+        '''
         if itype is None:
             _rn = str(res.get("resname", "")).upper()
             _anion  = _rn in {"ASP", "GLU"} and pname in {"OD1", "OD2", "OE1", "OE2"}
@@ -2905,10 +2935,10 @@ def _draw_interaction_diagram(pdb_path, fig_root, base_name, C, role_resnums=Non
         contacts = _im_find_contacts(lig, pro, lig_hb)
         if not contacts:
             return "Failed"
-        """
+        '''
         Detector already assigns c['itype'] (hbond / arom_hbond / salt / contact).
         Only refine a plain steric contact on a hydrophobic residue for display.
-        """
+        '''
         for c in contacts:
             if c["itype"] == "contact" and c["resname"] in _IM_HYDROPHOBIC:
                 c["itype"] = "hydrophobic"
@@ -2921,9 +2951,9 @@ def _draw_interaction_diagram(pdb_path, fig_root, base_name, C, role_resnums=Non
         return "Failed"
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: software manager ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 class SoftwareManager:
     """Handles verification and automated installation of visual tools."""
 
@@ -2933,11 +2963,11 @@ class SoftwareManager:
     def check_all(self):
         _fig_log(f"\n{ConsoleColours.BOLD}>>> Checking Visualisation Engine Availability{ConsoleColours.ENDC}")
 
-        """
+        '''
         1. PyMOL - prefer the binary in the running conda env over the system one
         (system /usr/bin/pymol on Ubuntu 24.04 uses python3-pymol 2.5 which
         calls `from imp import find_module`; imp is absent in Python 3.12+)
-        """
+        '''
         _conda_pymol = Path(sys.executable).parent / "pymol"
         if _conda_pymol.exists():
             self.status["PyMOL"] = str(_conda_pymol)
@@ -3020,12 +3050,12 @@ class SoftwareManager:
         _found_lig = False
         # Try filename-based name lookup: e.g. '25_TFA' in stem → name='TFA'
         if smi_map:
-            """
+            '''
             The stem is scanned for EVERY ligand key it contains, not just the first. Taking the first
             match and breaking silently would pick one ligand out of an ambiguous filename and give no
             sign that another was equally valid - the kind of choice that is only ever discovered when
             the wrong ligand turns up in a result table.
-            """
+            '''
             _parts = pdb_path.stem.split("_")
             _matches = [_parts[_i + 1] for _i, _p in enumerate(_parts[:-1])
                         if f"{_p}_{_parts[_i + 1]}" in smi_map]
@@ -3051,9 +3081,9 @@ class SoftwareManager:
             pass
         return res_name, res_num, has_f
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- Figure engine: phase-2 entry point ---
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def run_figure_generation(run_dir: Path, ext_dir: Path):
     """
     Phase 2: Run PyMOL and PLIP rendering on all PDB files under ext_dir.
@@ -3099,11 +3129,11 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
 
     _fig_log(f"\n{ConsoleColours.BOLD}Multi-Engine Figure Generation Pipeline (Concurrency: {workers}){ConsoleColours.ENDC}")
 
-    """
+    '''
     Build separate task queues:
     - subprocess_tasks: PyMOL + PLIP (spawn external processes - thread-safe)
     - imap_tasks: InteractionMap (matplotlib Agg - NOT thread-safe, run serially)
-    """
+    '''
     subprocess_tasks = []
     imap_tasks       = []
     for d in dirs:
@@ -3130,10 +3160,10 @@ def run_figure_generation(run_dir: Path, ext_dir: Path):
 
     _plip_tasks  = [t for t in subprocess_tasks if t[0] == "PLIP"]
     _pymol_tasks = [t for t in subprocess_tasks if t[0] == "PyMOL"]
-    """
+    '''
     PyMOL workers capped at 2: ray-tracing is CPU-bound; high concurrency causes
     CPU saturation, massively inflated render times, and timeout-related orphan processes.
-    """
+    '''
     _pymol_workers = min(2, max(1, workers))
     _fig_log(
         f"Subprocess tasks: PLIP={len(_plip_tasks)} ({workers} workers) | "
@@ -3253,12 +3283,14 @@ def prep_and_convert_phase(args):
     jobs = collect_best_cifs(best_cifs_dir)
     _n_all_cifs = len(jobs)
 
-    # SECTION 18 gate: restrict to the MD-ready cohort so only the MD_Selected complexes are converted
-    # and prepared, not the whole predicted library. Of the control jobs (ID 0000000_*) only the single
-    # CFG-designated MD control is kept - the reference structure paired with a CFG.CONTROL_MD_LIGANDS
-    # ligand (3R3U × fluoroacetate); the other reference systems (3R3U-DFA/TFA, DeHa4-*) are scored and
-    # tiered upstream but never simulated, so they are not converted here. Falls back to all CIFs when
-    # the ranked CSV carries no MD_Selected column.
+    '''
+    SECTION 18 gate: restrict to the MD-ready cohort so only the MD_Selected complexes are converted
+    and prepared, not the whole predicted library. Of the control jobs (ID 0000000_*) only the single
+    CFG-designated MD control is kept - the reference structure paired with a CFG.CONTROL_MD_LIGANDS
+    ligand (3R3U × fluoroacetate); the other reference systems (3R3U-DFA/TFA, DeHa4-*) are scored and
+    tiered upstream but never simulated, so they are not converted here. Falls back to all CIFs when
+    the ranked CSV carries no MD_Selected column.
+    '''
     _md_jobs = load_md_selected_jobs(prod_dir)
     if _md_jobs:
         jobs = [(jn, cif) for (jn, cif) in jobs
@@ -3289,9 +3321,9 @@ def prep_and_convert_phase(args):
     console_info(f"Parallel Jobs: {MAX_PREP_JOBS} (Globally managed by CFG)")
     console_separator()
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.1: Raw PDB Generation (With Source Validation)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     print(SEPARATOR_LIGHT, flush=True)
     console_info("Generating Raw PDBs")
 
@@ -3351,9 +3383,11 @@ def prep_and_convert_phase(args):
                     if res["status"] in ("Success", "Renamed", "Skipped"):
                         final_valid_raw_names.append(res["job"])
                     else:
-                        # Conversion failures are otherwise silent - record them so
-                        # an all-fail run is surfaced rather than queuing zero
-                        # PrepWizard jobs and exiting 0.
+                        '''
+                        Conversion failures are otherwise silent - record them so
+                        an all-fail run is surfaced rather than queuing zero
+                        PrepWizard jobs and exiting 0.
+                        '''
                         _raw_failures.append((res["job"], res.get("reason", res["status"])))
                     if count % 100 == 0 or count == total_gen:
                         if sys.stdout.isatty():
@@ -3382,9 +3416,9 @@ def prep_and_convert_phase(args):
               "Aborting before PrepWizard.", file=sys.stderr, flush=True)
         sys.exit(1)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.2: Protein Preparation via PrepWizard (With Stale Check)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     print(SEPARATOR_LIGHT, flush=True)
     console_info("Protein Preparation")
 
@@ -3437,11 +3471,11 @@ def prep_and_convert_phase(args):
                         job_id_num = "?"
                     print(f"({count}/{total_prep} | ID:{job_id_num}) {symbol} {res['job']} | [{stat_text}]", flush=True)
                     if logger: logger.info(f"{symbol} {res['job']} | [{stat_text}]")
-                    """
+                    '''
                     The catalytic protonation is REPORTED, never silent. A residue whose charge was
                     changed - or one left as it was - decides whether the SN2 can happen at all, and
                     the run log is where that decision has to be visible.
-                    """
+                    '''
                     for _role, (_rn, _num, _act) in (res.get("protonation") or {}).items():
                         _msg = f"      protonation · {_role:<5} {_rn}{_num} → {_act}"
                         print(_msg, flush=True)
@@ -3461,7 +3495,7 @@ def prep_and_convert_phase(args):
                     else:
                         _prep_fail += 1
 
-    """
+    '''
     The prepared-pose geometry is written out as its own table, because it answers a question no other
     file in the run can: does the structure that MD actually starts from still hold the geometry the
     tier was granted on? The screen tiers the Boltz CIF; preparation then moves the angle by ~6° and the
@@ -3472,7 +3506,7 @@ def prep_and_convert_phase(args):
     is cached - a second run queues zero PrepWizard jobs - so measuring only the newly-prepared ones
     would leave the table empty on exactly the runs where the structures already exist, which is most of
     them. The measurement is cheap; the cache is not a reason to under-report.
-    """
+    '''
     _measured = {r["job"] for r in _prep_geom_rows}
     for _pp in sorted(dir_prep_clean.glob("*_Prepared.pdb")):
         _job = _pp.name.replace("_Prepared.pdb", "")
@@ -3581,10 +3615,10 @@ def prep_and_convert_phase(args):
         except Exception as _e:                                   # noqa: BLE001
             console_info(f"  ! Machinery-engagement figure skipped: {type(_e).__name__}: {_e}")
 
-    """
+    '''
     QM ligand charges - only when asked for. The step is minutes of DFT per ligand, so it must never run
     by surprise. Step 06 consumes the resulting .mae when it builds and charges the MD system.
-    """
+    '''
     if bool(getattr(CFG, "ESP_CHARGES_ENABLE", False)) or bool(globals().get("_ESP_REQUESTED", False)):
         console_separator()
         try:
@@ -3617,9 +3651,9 @@ def prep_and_convert_phase(args):
 def topn_extraction_phase(args):
     """Phase 2 - extract, validate and render the MD-ready complexes for handover."""
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.3: Path validation
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     run_dir = DEFAULT_BASE_PATH / args.run_folder_name
     if not run_dir.exists():
         # Fallback to check relative path if not in default base
@@ -3632,10 +3666,12 @@ def topn_extraction_phase(args):
     prep_dir = run_dir / "5_TopN_and_Preparation"        # Step 05 consolidated folder
     input_data_dir = next((prod_dir / n for n in ["1_Input_Data", "1_Input_FASTA_and_SMILES"] if (prod_dir / n).exists()), prod_dir / "1_Input_Data")
 
-    # Comparison + handover outputs (Ramachandran, Controls, handover files, combined
-    # CSV) live under 3_Comparative_Analysis/. The raw and prepared PDBs themselves
-    # are NOT duplicated here - they stay in the sibling 1_Converted_Raw_PDB/ and
-    # 2_Prepared_PDBs/ folders, where their figures are also rendered.
+    '''
+    Comparison + handover outputs (Ramachandran, Controls, handover files, combined
+    CSV) live under 3_Comparative_Analysis/. The raw and prepared PDBs themselves
+    are NOT duplicated here - they stay in the sibling 1_Converted_Raw_PDB/ and
+    2_Prepared_PDBs/ folders, where their figures are also rendered.
+    '''
     final_dir = prep_dir / "3_Comparative_Analysis"
     final_dir.mkdir(parents=True, exist_ok=True)
     setup_logging_extraction(prep_dir)   # append to the single Step-05 log in the parent
@@ -3643,9 +3679,9 @@ def topn_extraction_phase(args):
     raw_pdb_dir  = prep_dir / "1_Converted_Raw_PDB"
     prep_pdb_dir = prep_dir / "2_Prepared_PDBs"
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.4: Load ranking logic
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Primary: DeFluorX Ranked CSV written by 02_Production_DeFluorX.py
     rank_csvs = (sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV)) or
                  sorted(prod_dir.glob("*_Ranked_*.csv")))
@@ -3674,30 +3710,34 @@ def topn_extraction_phase(args):
     else:
         console_info("Warning: Rank column missing. Using default sort.")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.5: Load reference data (FASTA/SMILES)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     console_info("Loading reference sequences and SMILES...")
     seq_map, smi_map, fasta_count, smi_count = load_reference_data(input_data_dir)
     console_info(f"Loaded {fasta_count} Sequences, {smi_count} SMILES.")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.6: Tier / MD-ready selection
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
 
     TIER_ORDER = CFG.TIER_ORDER
 
-    # Separate controls from candidates. Only the CFG-designated control (3R3U × fluoroacetate) is
-    # extracted - the other reference systems (3R3U-DFA/TFA, DeHa4-*) are never converted/prepared
-    # (SECTION 18 gate), so listing them here only produced spurious "Missing Raw/Prepared Control"
-    # warnings. The prefix test isolates control rows; _is_reference_control keeps the one real control.
+    '''
+    Separate controls from candidates. Only the CFG-designated control (3R3U × fluoroacetate) is
+    extracted - the other reference systems (3R3U-DFA/TFA, DeHa4-*) are never converted/prepared
+    (SECTION 18 gate), so listing them here only produced spurious "Missing Raw/Prepared Control"
+    warnings. The prefix test isolates control rows; _is_reference_control keeps the one real control.
+    '''
     _is_control = df["job_name"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)
     df_controls   = df[_is_control & df["job_name"].map(_is_reference_control)].copy()
     df_candidates = df[~_is_control].copy()
 
-    # SECTION 18 gate: when the ranked CSV carries MD_Selected, extract exactly that
-    # cohort and skip the interactive tier prompt (non-interactive and reproducible,
-    # matching the CIF->PDB preparation stage).
+    '''
+    SECTION 18 gate: when the ranked CSV carries MD_Selected, extract exactly that
+    cohort and skip the interactive tier prompt (non-interactive and reproducible,
+    matching the CIF->PDB preparation stage).
+    '''
     _md_col = getattr(CFG, "MD_SELECTED_COL", "MD_Selected")
     _md_subset = None
     if _md_col in df_candidates.columns:
@@ -3732,11 +3772,13 @@ def topn_extraction_phase(args):
 
     if _md_subset is not None:
         subset = _md_subset
-        # Route the MD-selected 3R3U reference control (Step 02 forces 3R3U × fluoroacetate into
-        # MD_Selected) through the SAME handover + MD machinery as the candidates, so Step 06
-        # simulates it as a first-class job. It carries its own Scientific_Rank, so its handover
-        # PDB is R{rank}_..._3R3U_Control_...; downstream flags it via is_control (looked up by
-        # job_name from the ranked CSV), and the run gets a real WT-FAcD·FA reference trajectory.
+        '''
+        Route the MD-selected 3R3U reference control (Step 02 forces 3R3U × fluoroacetate into
+        MD_Selected) through the SAME handover + MD machinery as the candidates, so Step 06
+        simulates it as a first-class job. It carries its own Scientific_Rank, so its handover
+        PDB is R{rank}_..._3R3U_Control_...; downstream flags it via is_control (looked up by
+        job_name from the ranked CSV), and the run gets a real WT-FAcD·FA reference trajectory.
+        '''
         if _md_col in df_controls.columns:
             _ctrl_md = df_controls[df_controls[_md_col].astype(str).str.lower().isin(["true", "1", "1.0"])]
             if len(_ctrl_md):
@@ -3791,9 +3833,9 @@ def topn_extraction_phase(args):
     console_info(f"  Extracting {top_n} structures from tier(s): {', '.join(selected_tiers)}")
     console_separator()
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 6.7: Prepare output folders
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     folder_tag = f"{tier_label}_{top_n}hits" if top_n else "Selected"
 
     # Comparative Ramachandran plots (raw vs prepared) for the selected cohort.
@@ -3816,9 +3858,7 @@ def topn_extraction_phase(args):
     sdf_writer = Chem.SDWriter(str(sdf_path))
     try:
 
-        # -------------------------------------------------------------------------------
-        # Step 6.7.1: Control-case extraction (always automatic)
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 6.7.1: Control-case extraction (always automatic) --
         ctrl_extracted_raw  = 0
         ctrl_extracted_prep = 0
         ctrl_csv_rows = []
@@ -3857,9 +3897,9 @@ def topn_extraction_phase(args):
             console_info("  Note: No control jobs found in the CSV (DeHa4_Control / 3R3U_Control).")
         console_separator()
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 6.8: Extraction loop with unique aggregation
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         extracted_raw_count = 0
         extracted_prep_count = 0
         extracted_fa = []
@@ -3904,9 +3944,11 @@ def topn_extraction_phase(args):
                         if resnum_str:
                             critical_res[int(resnum_str)] = (resname, role.strip())
 
-            # --- A. Ramachandran comparison (read canonical PDBs in-place; no copies) ---
-            # The raw and prepared PDBs already live in 1_Converted_Raw_PDB/ and
-            # 2_Prepared_PDBs/ - they are read directly rather than duplicated here.
+            '''
+            --- A. Ramachandran comparison (read canonical PDBs in-place; no copies) ---
+            The raw and prepared PDBs already live in 1_Converted_Raw_PDB/ and
+            2_Prepared_PDBs/ - they are read directly rather than duplicated here.
+            '''
             src_raw = raw_pdb_dir / fname_raw
             if src_raw.exists():
                 extracted_raw_count += 1
@@ -3947,20 +3989,22 @@ def topn_extraction_phase(args):
                 # Store Rank
                 ligand_ranks[smi].append(rank)
 
-                """
+                '''
                 Store Mol if this SMILES has not been seen yet
                 Only attempt extraction if a valid source file exists
-                """
+                '''
                 if smi not in ligand_data and mol_source:
                     mol = extract_chain_l_mol(mol_source)
-                    # The mol was parsed from PDB with sanitize=False (all-single-bond
-                    # topology). Restore true bond orders from the reference SMILES so the
-                    # handover SDF carries correct PFAS connectivity. NOTE: the SDF then
-                    # reflects the reference-SMILES protonation, NOT the pH-adjusted
-                    # (Epik) MD state - this SDF is a connectivity handover record; QM/MM
-                    # (Step 07) parametrises from the Schrödinger .maegz, not this SDF.
-                    # Best-effort: on any template-match failure keep the geometry-only
-                    # mol rather than dropping the ligand.
+                    '''
+                    The mol was parsed from PDB with sanitize=False (all-single-bond
+                    topology). Restore true bond orders from the reference SMILES so the
+                    handover SDF carries correct PFAS connectivity. NOTE: the SDF then
+                    reflects the reference-SMILES protonation, NOT the pH-adjusted
+                    (Epik) MD state - this SDF is a connectivity handover record; QM/MM
+                    (Step 07) parametrises from the Schrödinger .maegz, not this SDF.
+                    Best-effort: on any template-match failure keep the geometry-only
+                    mol rather than dropping the ligand.
+                    '''
                     if mol is not None and smi:
                         try:
                             _tmpl = Chem.MolFromSmiles(smi)
@@ -4001,19 +4045,19 @@ def topn_extraction_phase(args):
                 except Exception as e:
                     console_info(f"    ! Failed to copy MD-ready PDB to handover: {e}")
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 6.9: Unique ligand writing (SDF & SMILES)
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
 
         # Iterate through unique SMILES found
         for smi, ranks in ligand_ranks.items():
             # Sort ranks numerically
             sorted_ranks = sorted(list(set(ranks)))
 
-            """
+            '''
             Construct Composite Name: Rank-2-4-5___LigandName
             1. Join ranks with hyphens
-            """
+            '''
             rank_str = "-".join(map(str, sorted_ranks))
             l_name, mol = ligand_data.get(smi, ("Unknown", None))
 
@@ -4030,9 +4074,9 @@ def topn_extraction_phase(args):
                 mol.SetProp("Ligand_Name", l_name)
                 sdf_writer.write(mol)
 
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Step 6.10: Save data & summary
-        # -------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
 
         # Save CSV Data (hits + controls merged; controls appended with is_control flag). It lives in the
         # Molecular Handover folder - it is the scientific metadata for exactly those handover complexes.
@@ -4040,11 +4084,13 @@ def topn_extraction_phase(args):
         _ctrl_df = pd.DataFrame(ctrl_csv_rows) if ctrl_csv_rows else pd.DataFrame()
         if not _ctrl_df.empty:
             _ctrl_df = _ctrl_df.reindex(columns=subset.columns)
-        # Provenance flag so controls stay distinguishable from candidate hits in the merged CSV (the
-        # reindex above drops any control marker carried in the rows). The MD control (3R3U-FA) is both
-        # is_control and MD_Selected, so it was folded into `subset` for extraction AND is carried in
-        # _ctrl_df - drop it from the candidate side here so the merged CSV lists it once (from _ctrl_df,
-        # is_control=True) instead of twice.
+        '''
+        Provenance flag so controls stay distinguishable from candidate hits in the merged CSV (the
+        reindex above drops any control marker carried in the rows). The MD control (3R3U-FA) is both
+        is_control and MD_Selected, so it was folded into `subset` for extraction AND is carried in
+        _ctrl_df - drop it from the candidate side here so the merged CSV lists it once (from _ctrl_df,
+        is_control=True) instead of twice.
+        '''
         subset = subset[~subset["job_name"].astype(str).str.startswith(CFG.CONTROL_JOB_PREFIX)].copy()
         subset["is_control"] = False
         if not _ctrl_df.empty:
@@ -4078,9 +4124,11 @@ def topn_extraction_phase(args):
     with open(unique_fa_path, "w") as f:
         f.write("\n".join(unique_fa_lines))
 
-    # --- Delivery Package Summary ---
-    # Lists everything Step 05 produced, in the order it sits on disk, so the log is a complete map of
-    # the deliverables (including the analysis figures and, when generated, the ESP charges).
+    '''
+    --- Delivery Package Summary ---
+    Lists everything Step 05 produced, in the order it sits on disk, so the log is a complete map of
+    the deliverables (including the analysis figures and, when generated, the ESP charges).
+    '''
     _esp_dir = prep_dir / "4_Ligand_ESP_Charges"
     _dp_rows = [
         ("1", "Raw PDBs + PyMOL/PLIP figures",   str(raw_pdb_dir.resolve())),
@@ -4123,9 +4171,9 @@ def topn_extraction_phase(args):
         console_info(f"  │  {_k:<{_sk}}│  {str(_v):>{_sv}}  │")
     console_info(f"  └{'─'*(_sk+2)}┴{'─'*(_sv+4)}┘")
 
-    # ===============================================================================
+    # -----------------------------------------------------------------------------
     # Phase 2: Figure Generation
-    # ===============================================================================
+    # -----------------------------------------------------------------------------
     run_figure_generation(run_dir, final_dir)
 
 

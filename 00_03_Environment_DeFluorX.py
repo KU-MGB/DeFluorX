@@ -47,12 +47,12 @@ import shutil
 import time as _time
 
 
-"""
+'''
 ConsoleColours is defined locally because this script runs BEFORE the PFAS
 conda environment is guaranteed to exist - importing 00_02_Project_Utils is not
 safe here. The canonical definition lives in 00_02; if it changes, sync this copy
 manually (the drift assertion in main() guards the shared codes).
-"""
+'''
 class ConsoleColours:
     OKGREEN = "\033[92m"  # Green text designating success
     WARNING = "\033[93m"  # Yellow text designating caution
@@ -69,9 +69,9 @@ SEPARATOR_HEAVY = "═" * 80
 # SECTION 2: ENVIRONMENT MANAGEMENT
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.1: Environment Export
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def export_environment():
     """Exports the current active Conda environment to PFAS.yml and requirements.txt.
@@ -84,9 +84,11 @@ def export_environment():
 
     print(f"Exporting Conda environment to {_yml_path}...")
     try:
-        # Pin the export to the PFAS environment explicitly (-n PFAS) - never the
-        # ACTIVE env: running this from `base` would otherwise export base and
-        # silently overwrite PFAS.yml. --no-builds omits OS-specific build hashes.
+        '''
+        Pin the export to the PFAS environment explicitly (-n PFAS) - never the
+        ACTIVE env: running this from `base` would otherwise export base and
+        silently overwrite PFAS.yml. --no-builds omits OS-specific build hashes.
+        '''
         result = subprocess.run(
             ["conda", "env", "export", "-n", "PFAS", "--no-builds"],
             capture_output=True, text=True, check=True
@@ -139,9 +141,9 @@ def export_environment():
         sys.exit(1)
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.2: Environment Installation
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def install_environment(env_name: str):
     """Creates a fresh Conda environment from the exported PFAS.yml."""
@@ -167,9 +169,9 @@ def install_environment(env_name: str):
         sys.exit(1)   # propagate failure so the pipeline runner halts instead of running on a broken env
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.3: Environment Verification
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def verify_environment() -> None:
     """Verify the installed pipeline packages and HALT if a mandatory one is missing.

@@ -81,10 +81,12 @@ Scientific References:
          (pre-DOI); mechanism/kinetics confirmed in Chan et al. (2011), above.
        - FAcD small-substrate scope + TFA recalcitrance (graded chemistry/containment penalties):
          Wackett, L.P. (2022) Microb Biotechnol 15(3):773–792. DOI: https://doi.org/10.1111/1751-7915.13928
-    4. DEHA4 experimental defluorination (Delftia acidovorans D4B):
-       - Farajollahi, S. et al. (2024) ACS Omega 9(26):28546–28555.
+       - Aspartate-nucleophile Cα SN2 attack + covalent ester intermediate (original FAcD mechanism):
+         Liu, J.-Q., Kurihara, T., Ichiyama, S. et al. (1998) J Biol Chem 273(47):30897–30902. DOI: https://doi.org/10.1074/jbc.273.47.30897
+    4. Experimental FAcD defluorination (DEHA4 / Delftia acidovorans D4B; Burkholderia sp. FA1):
+       - Farajollahi, S. et al. (2024) ACS Omega 9(26):28546–28555.  (DEHA4, Delftia acidovorans D4B)
        - DOI: https://doi.org/10.1021/acsomega.4c02517
-       - Jitsumori, K. et al. (2009) J Bacteriol 191:2630–2637.
+       - Jitsumori, K. et al. (2009) J Bacteriol 191:2630–2637.  (FAcD, Burkholderia sp. FA1)
        - DOI: https://doi.org/10.1128/JB.01654-08
     5. Interaction-geometry cutoffs - operational source (§3):
        Every interaction distance/angle cutoff in §3 reproduces the Schrödinger
@@ -95,7 +97,7 @@ Scientific References:
        - Schrödinger Release 2026-1: Maestro, Schrödinger, LLC, New York, NY. https://www.schrodinger.com/maestro
        - H-bond geometry (H···A, angle): McDonald & Thornton (1994) J Mol Biol 238:777–793. DOI: https://doi.org/10.1006/jmbi.1994.1334
        - H-bond heavy-atom proxy (D···A ≈ H···A + ~1.0 Å, for H-free Boltz-2 CIF): Jeffrey, G.A. (1997) An Introduction to Hydrogen Bonding. Oxford University Press. ISBN 978-0-19-509549-4.
-       - Salt bridge (≤5.0 Å): Barlow & Thornton (1983) J Mol Biol 168:867–885, DOI: https://doi.org/10.1016/S0022-2836(83)80079-5; Kumar & Nussinov (2002) ChemBioChem 3:604–617. DOI: https://doi.org/10.1002/1439-7633(20020703)3:7<604::AID-CBIC604>3.0.CO;2-X
+       - Salt bridge (≤5.0 Å): Barlow & Thornton (1983) J Mol Biol 168:867–885, DOI: https://doi.org/10.1016/S0022-2836(83)80079-5; Kumar & Nussinov (2002) ChemBioChem 3:604–617. DOI: https://doi.org/10.1002/1439-7633(20020703)3:7<604::AID-CBIC604>3.0.CO;2-X; carboxylate-O ↔ Arg-guanidinium-N geometry Donald, J.E., Kulp, D.W. & DeGrado, W.F. (2011) Proteins 79:898–915. DOI: https://doi.org/10.1002/prot.22927
        - Hydrophobic contact: Salentin, S. et al. (2015) Nucleic Acids Res 43:W443–W447. DOI: https://doi.org/10.1093/nar/gkv315
        - Aromatic (weak) H-bond: Levitt & Perutz (1988) J Mol Biol 201:751–754. DOI: https://doi.org/10.1016/0022-2836(88)90471-8
        - π–π stacking: McGaughey, G.B. et al. (1998) J Biol Chem 273:15458–15463. DOI: https://doi.org/10.1074/jbc.273.25.15458
@@ -172,32 +174,32 @@ class CFG:
     EXT_*          §19    SSOT file-naming extensions
     """
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 1: PROJECT IDENTITY & BOLTZ-2 PREDICTION ENGINE  (Step 02)
-    # ===============================================================================
+    # =============================================================================
     PROJECT_NAME: str   = "PFAS-27"   # project identifier (used in CLI banners, e.g. Step 06)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 1.1: Executable & model
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     BOLTZ_EXECUTABLE: str          = "boltz"    # CLI binary name on PATH
     BOLTZ_MODEL_VERSION: str       = "boltz2"   # --model flag passed to boltz
     BOLTZ_OUTPUT_FORMAT: str       = "mmcif"    # --output_format flag
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 1.2: Sampling & batching
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     BOLTZ_RECYCLING_STEPS: int        = 1    # --recycling_steps per prediction
     BOLTZ_DIFFUSION_SAMPLES: int      = 5    # --diffusion_samples (structures per complex)
     BOLTZ_CACHE_DIR: str              = "~/.cache/boltz"   # Boltz-2 model cache (~ expanded at use); point to shared/scratch storage if needed
     BOLTZ_MAX_PROTEINS_PER_BATCH: int = 20   # proteins bundled in one boltz call
                                              # e.g. 20 proteins × 27 ligands = 540 jobs/batch
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 1.3: Retry & polling
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     BOLTZ_RETRY_MAX: int     = 2   # max retries after GPU failure before abandoning job
     BOLTZ_RETRY_SLEEP: int   = 6   # seconds to wait between retry attempts
-    """
+    '''
     Boltz-2 diffusion seed. The CLI default is None - NO seeding - so every prediction is stochastic
     and the same protein-ligand pair yields a different pose on every run. Measured on the DeHa4
     fluoroacetate control across two runs of identical code: the SN2 attack angle moved 145.5° → 132.4°
@@ -208,15 +210,15 @@ class CFG:
     Seeding costs nothing and makes a run reproducible from its config alone. It does NOT reduce
     conformational sampling: diffusion_samples still draws the full ensemble per complex; the seed
     only fixes where that ensemble starts, so the same command returns the same ensemble.
-    """
+    '''
     BOLTZ_SEED: int          = 42   # --seed passed to every Boltz prediction; fixes run-to-run drift
     CONTROL_RESIDUE_MATCH_RADIUS: float = 6.0   # Å - search radius when matching a control's catalytic residue onto its structural counterpart (Cα-anchored nearest same-type residue)
     BOLTZ_PREDICT_TIMEOUT_S: int = 3600  # per-prediction wall-clock ceiling; a single co-fold never approaches this, so a breach means a frozen GPU/CUDA driver → kill and retry rather than stall the pipeline
     BOLTZ_POLL_INTERVAL: int = 5   # seconds between job-status poll cycles
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 1.4: ColabFold MSA submission
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     COLABFOLD_API_URL: str        = "https://api.colabfold.com"
     COLABFOLD_SUBMIT_RETRIES: int = 8    # max attempts to POST an MSA ticket
     COLABFOLD_MSA_SUBMIT_TIMEOUT: int       = 30   # seconds - HTTP POST timeout for ticket submission
@@ -224,13 +226,13 @@ class CFG:
     COLABFOLD_MSA_POLL_REQUEST_TIMEOUT: int = 15   # seconds - HTTP GET timeout per polling cycle
     COLABFOLD_MSA_DOWNLOAD_TIMEOUT: int     = 120  # seconds - HTTP GET timeout for final tar.gz download
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 1.5: Confidence scoring weights
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Weights for the composite Boltz confidence score that ranks models.
     Higher weight = stronger contribution to final ranking.
-    """
+    '''
     BOLTZ_W_IPTM: float         = 3.0   # interface predicted TM-score (primary signal)
     BOLTZ_W_CROSS_PAE: float    = 2.5   # cross-interface predicted aligned error
     BOLTZ_W_PLDDT: float        = 2.0   # per-residue local confidence
@@ -240,7 +242,7 @@ class CFG:
     # Binding-probability logit normalisers (Step 02 binding_likelihood_computed).
     BIND_INT_DENSITY_NORM: float = 2.0   # interaction-density saturation normaliser in the logit
     BIND_CROSS_PAE_NORM: float   = 50.0  # cross-interface PAE normaliser in the logit
-    """
+    '''
     LOGIT CALIBRATION - without it the score has no variance where it matters.
 
     The raw weighted sum runs over terms that are each in [0, 1] with weights
@@ -257,26 +259,26 @@ class CFG:
     The raw sum is therefore centred on the midpoint of its own achievable range and scaled so that range
     maps onto roughly [-4, +4], where the logistic actually resolves. This changes no gate: the tier and
     MD_Selected key on geometry, and Binding_Probability is a reported/plotted quantity only.
-    """
+    '''
     BIND_LOGIT_CENTRE: float = 2.5    # midpoint of the achievable raw sum ([-2.5, +7.5])
     BIND_LOGIT_GAIN: float   = 1.25   # divides the centred sum so its full range spans about [-4, +4]
     BIND_LOGIT_CLAMP: float      = 50.0  # ± clamp on the logit before the sigmoid
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 2: INPUT & REFERENCE DATA
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.1: Reference ligand
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Fluoroacetate (FA) is the canonical FAcD substrate; benchmark for DEHA4 and 3R3U geometry calibration.
     FLUOROACETATE_SMILES: str = "C(C(=O)O)F"   # canonical SMILES for fluoroacetate
     INPUT_SMILES: str = "D_INP_PFAS-27_Ligands.smi"  # ligand SMILES panel
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.2: Reference protein sequence
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     DEHA4 = DeHa4_[Delftia acidovorans D4B] - experimental defluorination control sequence.
     Source: Farajollahi et al. (2024) - see header Scientific References §4.
     Position cross-validated; establishes HIS277 (not HIS288) in DEHA4 sequences.
@@ -284,7 +286,7 @@ class CFG:
     active-site mapping aligns every query against the RPA1163 3R3U crystal (RPA1163_3R3U_SEQ,
     below), the real fluoroacetate-dehalogenase structure; DeHa4 vs 3R3U were shown to yield
     identical catalytic residue picks, so the mapping is unchanged while the reference is the crystal.
-    """
+    '''
     DEHA4_CONTROL_SEQ: str = (
         "MHTDPWMPGLRQQRITVDDGVEINAWVGGQGPALLLVHGHPQTSAIWHRVAPRLAQQFTVVLADLRGYGDSSRPAGDPEH"
         "VNYSKRTMARDLLRLMARLGHEHFSVLAHDRGARVAHRLAMDYPASVQRLVLLDIAPTLAMYEQTGEAFARAYWHWFFLI"
@@ -293,7 +295,7 @@ class CFG:
     )
     REFERENCE_FASTA: str = "Reference_RPA1163_3R3U.fasta"   # per-run active-site alignment reference FASTA filename - holds RPA1163_3R3U_SEQ (SSOT: 02 writes)
 
-    """
+    '''
     RPA1163_3R3U_SEQ - the WILD-TYPE fluoroacetate dehalogenase RPA1163 sequence from the 3R3U
     crystal (Chan et al. 2011, header §3), used as the active-site alignment reference:
     REF_SEQUENCE_STR (§02) = this string, so every query is aligned against the real FAcD crystal.
@@ -307,7 +309,7 @@ class CFG:
     1-based position in THIS string EQUALS the 3R3U PDB residue number - REF_ACTIVE_SITE_MAP 'id' ==
     'pdb_id' (Asp110 = position 110, His280 = 280), and DREAM_TEAM_REFS (§11) uses that same PDB
     numbering directly for Step 07's alignment-map lookup. Result is the resolved core Met1…Pro302.
-    """
+    '''
     RPA1163_3R3U_SEQ: str = (
         "MPDLADLFPGFGSEWINTSSGRIFARVGGDGPPLLLLHGFPQTHVMWHRVAPKLAERFKVIVADLPGYGWSDMPESDEQH"
         "TPYTKRAMAKQLIEAMEQLGHVHFALAGHDRGARVSYRLALDSPGRLSKLAVLDILPTYEYWQRMNRAYALKIYHWSFLA"
@@ -315,25 +317,25 @@ class CFG:
         "PVPMLALWGASGIAQSAATPLDVWRKWASDVQGAPIESGHFLPEEAPDQTAEALVRFFSAAP"
     )
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.3: Crystal structure reference - PDB 3R3U
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Rhodopseudomonas palustris FAcD, wild-type, 1.60 Å resolution
     (no substrate bound; structure carries Ni²⁺ and Cl⁻ ions).
     Ref: Chan et al. (2011); Jitsumori et al. (2009) - see header Scientific References §3, §4.
-    """
+    '''
     REFERENCE_PDB_ID: str    = "3R3U"
     REFERENCE_PDB_URL: str   = "https://files.rcsb.org/download/3R3U.pdb"
     REFERENCE_PDB_FILE: str  = "3R3U.pdb"          # local copy filename (SSOT: 03 crystal read)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.4: Control ligand panel (fluoroacetate control substrates)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Three short-chain fluorinated substrates used for DEHA4 and 3R3U calibration runs.
     Format: (job_suffix, SMILES)
-    """
+    '''
     CTRL_LIGANDS: list = field(default_factory=lambda: [
         ("26_Fluoroacetate",   "C(C(=O)O)F"),         # fluoroacetate (canonical substrate)
         ("27_Difluoroacetate", "O=C(O)C(F)F"),        # difluoroacetate
@@ -360,11 +362,13 @@ class CFG:
     CTRL_POSITIVE: tuple = ("Fluoroacetate", "Difluoroacetate")   # must register as degraders - FAcD defluorinates FA (Goldman 1965; Chan et al. 2011), see header §3
     CTRL_NEGATIVE: tuple = ("TFA",)                               # must NOT - the decoy (Wackett 2022, header §3)
 
-    # Reference control complexes taken through the physics (Steps 05–07). The 3R3U crystal
-    # sequence (WT/apo RPA1163 fluoroacetate dehalogenase, EC 3.8.1.3) paired with each control
-    # substrate becomes a first-class MD job: the positive controls (FA/DFA) anchor what a real
-    # degrader looks like, the decoy (TFA) anchors the negative, so every downstream read-out
-    # (NAC dwell, MM-GBSA, QM/MM barrier) is judged against a known-answer yardstick.
+    '''
+    Reference control complexes taken through the physics (Steps 05–07). The 3R3U crystal
+    sequence (WT/apo RPA1163 fluoroacetate dehalogenase, EC 3.8.1.3) paired with each control
+    substrate becomes a first-class MD job: the positive controls (FA/DFA) anchor what a real
+    degrader looks like, the decoy (TFA) anchors the negative, so every downstream read-out
+    (NAC dwell, MM-GBSA, QM/MM barrier) is judged against a known-answer yardstick.
+    '''
     CONTROL_INTO_MD: bool   = True             # route the 3R3U reference control(s) through Step 05 selection + Step 06/07 physics
     CONTROL_MD_FOLDER_PREFIX: str = "CTRL_3R3U"  # readable MD-folder / job-name prefix for a control (candidates use desmond_md_job_R_N; the reserved "0000000" job-index in CONTROL_JOB_PREFIX (§16.1) remains the is-control test)
     CONTROL_MD_LIGANDS: list = field(default_factory=lambda: [
@@ -375,10 +379,10 @@ class CFG:
         "25_TFA":            "non_degrader",   # decoy - 3R3U × TFA must fail (validates the negative direction)
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.5: Reference active-site mapping (3R3U / DEHA4 canonical)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Residue identities, sequential IDs, and PDB-numbered IDs for the eight key
     catalytic / stabilising positions in the FAcD (RPA1163) active site. Every
     identity and role below is taken from the primary literature - no inferred or
@@ -411,7 +415,7 @@ class CFG:
     3R3U PDB residue number; 'pdb_id' is kept as the explicit PDB number for reporting/anchoring
     and DREAM_TEAM_REFS (§11) shares this numbering. Both verified to carry the canonical residue.
     role strings are consumed by ROLE_EXPECTED_RESIDUES (§2.7) - do not rename.
-    """
+    '''
     REF_ACTIVE_SITE_MAP: dict = field(default_factory=lambda: {
         "Nuc":    {"res": "ASP", "id": 110, "pdb_id": 110, "role": "Nucleophile"},
         "Carb1":  {"res": "ARG", "id": 111, "pdb_id": 111, "role": "Carboxylate_Clamp"},
@@ -423,15 +427,15 @@ class CFG:
         "Base":   {"res": "HIS", "id": 280, "pdb_id": 280, "role": "Base_Catalyst"},
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.6: Catalytic triad key set
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     CATALYTIC_TRIAD_KEYS: list = field(default_factory=lambda: ["Nuc", "Base", "Acid"])
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.7: Class-aware alignment search window
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     When a catalytic residue does not map cleanly to the exact aligned target
     position (numbering shift, indel, or substitution), scan ±this many target
     sequence positions for a residue of the EXPECTED chemical class and map to
@@ -448,13 +452,13 @@ class CFG:
     aromatic (Trp/Tyr/His) for the Trp156/Tyr219 cradle, and an H-bond donor /
     cationic group for the His155 fluoride stabiliser. PHE is excluded from both -
     its π-system offers no polar donor to stabilise the leaving F⁻.
-    """
+    '''
     RESIDUE_SEARCH_WINDOW: int = 5
-    """
+    '''
     Extra reach added to RESIDUE_SEARCH_WINDOW only when an ambiguous /
     non-standard residue (BXZJOU) sits inside the base window, so a genuine
     catalytic residue just beyond the ambiguous gap is still reachable.
-    """
+    '''
     RESIDUE_SEARCH_AMBIG_EXTENSION: int = 2
     ROLE_EXPECTED_RESIDUES: dict = field(default_factory=lambda: {
         "Nucleophile":       {"ASP", "ASH"},
@@ -465,10 +469,10 @@ class CFG:
         "Fluorine_Stabiliser": {"TRP", "TYR", "TYM", "HIS", "HID", "HIE", "HIP", "HSE", "HSD", "HSP", "ARG", "LYS", "LYN"},   # His155 stabilises leaving F⁻; PHE excluded - no polar H-bond donor
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.8: Spatial validation cutoff for resolved residues
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     After the class-aware ±window resolver maps a catalytic residue, the
     structure-level geometry check rejects any triad residue (Nuc/Base/Acid)
     whose nearest atom sits farther than this cutoff from the NEAREST LIGAND
@@ -479,17 +483,17 @@ class CFG:
     on a distant loop) from inflating tier-gate inputs. Catalytic contact is
     typically ≤4–7 Å; 10 Å allows generous conformational flexibility while
     still excluding spatially absurd matches (e.g. ASP ~19 Å on another loop).
-    """
+    '''
     RESOLVER_SPATIAL_CUTOFF: float = 10.0   # Å (nearest residue-atom → nearest ligand-atom)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.9: Protonation-variant → canonical residue name mapping
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Force-field engines (OPLS4, CHARMM, Amber) rename residues to encode
     protonation state. This map normalises them back to canonical 3-letter
     codes for class matching, structure filtering, and residue-class lookups.
-    """
+    '''
     PROTONATION_MAP: dict = field(default_factory=lambda: {
         "HID": "HIS", "HIE": "HIS", "HIP": "HIS",
         "HSE": "HIS", "HSD": "HIS", "HSP": "HIS",
@@ -498,15 +502,15 @@ class CFG:
         "LYN": "LYS", "TYM": "TYR",
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 2.10: Residue chemical-class sets (single source of truth)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Amino-acid groupings by chemical property, consumed by Step 02 for residue-role
     classification and structure filtering. Defined here (not inline in the worker) so
     every script shares one definition. RESIDUE_CLASS_GROUPS sets include force-field
     protonation variants so HID/HIE/HIP etc. are recognised.
-    """
+    '''
     POSITIVE_RES: set = field(default_factory=lambda: {"ARG", "LYS", "HIS"})
     NEGATIVE_RES: set = field(default_factory=lambda: {"ASP", "GLU"})
     RES_PROPS: dict = field(default_factory=lambda: {
@@ -541,16 +545,16 @@ class CFG:
         "POLAR":    {"SER", "THR", "ASN", "GLN", "TYR", "TYM"},
     })
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 3: INTERACTION GEOMETRY THRESHOLDS  (Step 02)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     All distances are heavy-atom unless labelled (HA = H-to-acceptor).
-    """
+    '''
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.0: Spatial validation thresholds (Steps 02, 07)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     CF_DIST_TOLERANCE: float       = 2.2    # Å  C–F bond-length ceiling for pairing a fluorine to its scissile carbon
     CLASH_DIST_TOLERANCE: float    = 2.5    # Å generic clash distance
     BACKBONE_CLASH_DIST: float     = 2.2    # Å ligand-tail atom vs protein backbone (N/CA/C/O) clash
@@ -573,74 +577,74 @@ class CFG:
         "20_GenX", "21_ADONA", "24_C6O4", "22_6-2-FTOH", "23_8-2-FTOH",
     ])
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.1: Hydrogen bonds (Schrödinger Maestro defaults)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Maestro H-bond criteria: H···A ≤ 2.8 Å, donor (D–H···A) ≥ 120°, acceptor
     (H···A–X) ≥ 90°. Applied where explicit H are present (PrepWizard-prepared
     PDB). For H-FREE structures (Boltz-2 mmCIF) the heavy-atom donor–acceptor
     (D···A) proxy ≤ 3.5 Å is used instead (Jeffrey 1997; D···A ≈ H···A + ~1.0 Å).
     McDonald & Thornton (1994) for the H···A + angle geometry.
-    """
+    '''
     THRESHOLD_HB_DIST_HA: float    = 2.8    # Å  Maestro H···A maximum (explicit-H structures)
     THRESHOLD_HB_ANGLE_MIN: float  = 120.0  # °  Maestro donor minimum angle (D–H···A)
     THRESHOLD_HB_ANGLE_ACC: float  = 90.0   # °  Maestro acceptor minimum angle (H···A–X)
     THRESHOLD_HB_DIST_MAX: float   = 3.5    # Å  heavy-atom D···A proxy maximum (H-free Boltz-2 CIF)
     THRESHOLD_HB_DIST_MIN: float   = 2.4    # Å  donor–acceptor (D···A) minimum
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.2: Salt bridges (Schrödinger Maestro default)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Maestro default: opposite-charge groups ≤ 5.0 Å. Underlying concept:
     Barlow & Thornton (1983) ≤ 4.0 Å; Kumar & Nussinov (2002) allow ~5–6 Å.
-    """
+    '''
     THRESHOLD_SALT_BRIDGE: float   = 5.0    # Å  Maestro salt-bridge maximum distance
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.3: Hydrophobic contacts
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     THRESHOLD_HYDROPHOBIC_MAX: float = 4.0  # Å  carbon–carbon centroid distance
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.4: π–π stacking (Schrödinger Maestro defaults)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Maestro: face–face ≤ 4.4 Å, tilt ≤ 30°; edge–face ≤ 5.5 Å, tilt ≥ 60°.
     Coincides with McGaughey et al. (1998) aromatic-aromatic geometry.
-    """
+    '''
     THRESHOLD_PI_FACE: float       = 4.4    # Å  centroid–centroid, face–face (alias: PI_STACK_FACE_DIST_MAX)
     THRESHOLD_PI_EDGE: float       = 5.5    # Å  centroid–centroid, edge–face (alias: PI_STACK_EDGE_DIST_MAX)
-    """
+    '''
     Backward-compatibility aliases reference the THRESHOLD_PI_* source above
     (not independent literals) so the pair can never silently diverge.
-    """
+    '''
     PI_STACK_FACE_DIST_MAX: float  = THRESHOLD_PI_FACE  # Å  alias of THRESHOLD_PI_FACE
     PI_STACK_FACE_ANGLE_MAX: float = 30.0   # °  maximum tilt angle, face–face
     PI_STACK_EDGE_DIST_MAX: float  = THRESHOLD_PI_EDGE  # Å  alias of THRESHOLD_PI_EDGE
     PI_STACK_EDGE_ANGLE_MIN: float = 60.0   # °  minimum tilt angle, edge–face
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.5: π–cation (Schrödinger Maestro default)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Maestro default: centroid-to-cation ≤ 6.6 Å; off-axis ≤ 30°.
     Underlying: Gallivan & Dougherty (1999).
-    """
+    '''
     THRESHOLD_PI_CATION_MAX: float = 6.6    # Å  Maestro ring-centroid to cation distance
     PI_CATION_ANGLE_MAX: float     = 30.0   # °  Maestro maximum off-axis angle
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.6: Halogen bonds (Schrödinger Maestro defaults)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Maestro: X···A ≤ 3.5 Å. As donor: donor angle ≥ 140°, acceptor angle ≥ 90°.
     As acceptor: donor angle ≥ 120°, acceptor angle 90–170°. Auffinger (2004);
     Wilcken (2013). NB: aliphatic C–F (PFAS) is a weak σ-hole donor - F···N/O/S
     within range are recorded as fluorine contacts (§14.5 FP/FL/FF), NOT bona-
     fide halogen bonds; the angle gates apply to true C(sp²)–X donors only.
-    """
+    '''
     HALOGEN_BOND_DIST_MAX: float    = 3.5    # Å  halogen···acceptor (X···A) maximum
     HALOGEN_DON_ANGLE_MIN: float    = 140.0  # °  as-donor:    donor minimum angle (C–X···A)
     HALOGEN_DON_ACC_ANGLE_MIN: float = 90.0  # °  as-donor:    acceptor minimum angle
@@ -648,18 +652,18 @@ class CFG:
     HALOGEN_ACC_ANGLE_MIN: float    = 90.0   # °  as-acceptor: acceptor minimum angle
     HALOGEN_ACC_ANGLE_MAX: float    = 170.0  # °  as-acceptor: acceptor maximum angle
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.6b: Aromatic H-bonds (Schrödinger Maestro defaults)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     """Weak H-bonds donated to aromatic π-acceptors. Levitt & Perutz (1988)."""
-    """
+    '''
     AROMATIC HYDROGEN BONDS - REFERENCE ONLY. NO ENGINE IN THIS PIPELINE EVALUATES THESE.
 
     A Maestro interaction class (C–H···O/N from an aromatic carbon). PLIP does not model it, and Step 02
     cannot: the Boltz-2 CIF carries no hydrogens at all. The criteria are recorded here so the project's
     definition of an interaction is complete and matches Maestro, NOT because anything reads them. They
     are documentation, and are marked as such so nobody assumes a contact was filtered on them.
-    """
+    '''
     AROM_HB_DIST_O_ACC: float       = 2.8    # Å  maximum distance, O acceptor
     AROM_HB_DIST_N_ACC: float       = 2.5    # Å  maximum distance, N= acceptor
     AROM_HB_DON_ANGLE_O: float      = 90.0   # °  donor minimum angle (O acceptor)
@@ -667,31 +671,31 @@ class CFG:
     AROM_HB_DON_ANGLE_N_MAX: float  = 130.0  # °  donor maximum angle (N= acceptor)
     AROM_HB_ACC_ANGLE_MIN: float    = 90.0   # °  acceptor minimum angle
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.6c: Water-mediated bridges
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Water-bridged H-bond: donor···Wat and Wat···acceptor both in range, with a
     permitted water-bridging angle (A···Wat···D). Maestro renders the same
     water-mediated H-bonds qualitatively, but the numeric ranges below are taken
     from Salentin et al. (2015) - Maestro does not expose explicit water-bridge
     cutoffs.
-    """
+    '''
     WATER_BRIDGE_DIST_MIN: float    = 2.5    # Å  min donor/acceptor···water distance
     WATER_BRIDGE_DIST_MAX: float    = 4.0    # Å  max donor/acceptor···water distance
     WATER_BRIDGE_OMEGA_MIN: float   = 75.0   # °  min water-bridging angle (A···Wat···D)
     WATER_BRIDGE_OMEGA_MAX: float   = 140.0  # °  max water-bridging angle
     WATER_BRIDGE_DON_ANGLE_MIN: float = 100.0  # °  donor minimum angle (D–H···Wat)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.6d: Steric contacts (Schrödinger Maestro "Contacts")
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Contact quality = interatomic distance ÷ Σ van-der-Waals radii (Bondi 1964).
     ratio ≥ GOOD → acceptable; BAD/UGLY flag progressively severe clashes.
     H-bonds, salt bridges, and 1,4 interactions are excluded from the contact
     set (matching Maestro's "Exclude" checkboxes).
-    """
+    '''
     CONTACT_RATIO_GOOD: float       = 1.30   # ratio threshold - good contact
     CONTACT_RATIO_BAD: float        = 0.89   # ratio threshold - bad contact
     CONTACT_RATIO_UGLY: float       = 0.75   # ratio threshold - ugly (severe clash)
@@ -705,47 +709,47 @@ class CFG:
         "NA": 2.27, "K": 2.75, "MG": 1.73, "CA": 2.31, "ZN": 1.39,
     })
     VDW_RADIUS_DEFAULT: float       = 1.70    # Å  fallback vdW radius (carbon) for unlisted elements
-    """
+    '''
     Maximum donor–H bond length for assigning hydrogens to their heavy-atom
     donor when detecting true H···A geometry on protonated (PrepWizard) PDBs.
-    """
+    '''
     HB_DH_BOND_MAX: float           = 1.30    # Å  X–H covalent bond ceiling
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.7: Metal coordination
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Harding (2006): metal–ligand bond ≤ 2.8 Å.
     METAL_COORD_DIST_MAX: float    = 2.8    # Å  metal–ligand coordination bond
     METALS: set = field(default_factory=lambda: {
         "MG", "ZN", "MN", "CA", "FE", "CO", "NI", "CU", "NA", "K",
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.8: General catalytic site
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     CATALYTIC_DIST_CUTOFF: float   = 6.0    # Å  residue included as "near active site"
     TAIL_MIN_BOND_DISTANCE: int    = 3      # topological bond distance (> this) defining ligand "tail" atoms for the mainchain-clash metric (Step 02)
     PLIP_CONTACT_FALLBACK_DIST: float = 5.0 # Å  fallback distance when a PLIP bs_residue lacks min_dist
     LIG_COVALENT_BOND_DIST: float  = 1.85   # Å  max inter-atom distance drawn as a covalent bond (2D interaction diagram)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 3.9: Coordinate–structure match
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     COORD_MATCH_DIST_MAX: float    = 1.8    # Å  map residue to reference coordinate
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 4: NAC (Near Attack Conformation) GEOMETRY  (Steps 02, 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Substrate: fluoroacetate; electrophile: C–F carbon; nucleophile: Asp O.
     Ideal SN2 backside attack: Nu–C–F collinear at 180°.
     References: Lightstone & Bruice (1996); Bruice (2002).
-    """
+    '''
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 4.1: Strict NAC - publication-grade catalytic viability
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     ── The prepared-pose measurement (Step 05) ──
     The tier is decided on the Boltz CIF; the MD starts from the PrepWizard PDB. Measured across the MD
     picks and the six controls, preparation moves the SN2 angle by 6.3° on average (max 18.5°) and pushes
@@ -754,36 +758,36 @@ class CFG:
     itself selected for. The ladder's 5° rungs and 0.2 Å step are therefore finer than the structure is
     reproducible. These constants let Step 05 re-measure the pose it actually hands to MD, so the drift is
     recorded rather than silent; they do not gate anything.
-    """
+    '''
     CF_BOND_MAX_A: float        = 1.80   # Å  a C–F pair closer than this is a bond (the scissile C–F)
     NUC_SEARCH_RADIUS_A: float  = 8.0    # Å  how far from the attack carbon to look for a carboxylate O
     NAC_DIST_STRICT: float   = 3.2    # Å  nucleophile O to electrophilic C
     NAC_ANGLE_STRICT: float  = 155.0  # °  O–C–F attack angle at C (180° = ideal backside)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 4.2: Relaxed NAC - pre-reactive / entropy-inclusive sampling
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     NAC_DIST_RELAXED: float  = 3.8    # Å  relaxed nucleophile–C distance
     NAC_ANGLE_RELAXED: float = 145.0  # °  relaxed attack angle
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 4.3: Pocket residency
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     POCKET_RESIDENCY_DIST: float = 8.0   # Å  ligand considered "pocket-bound" when nuc–C ≤ this
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 4.4: Fluoride cradle detection (TRP / TYR aromatic basket)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     The fluoride cradle is the TRP/TYR aromatic shell that stabilises the
     departing fluoride in FAcD-family dehalogenases.
-    """
+    '''
     F_CRADLE_RADIUS: float   = 12.0   # Å  search radius from nucleophile to TRP/TYR heavy atoms
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 5: CATALYTIC TRIAD INTEGRITY  (Steps 02, 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Reference: FAcD crystal structure PDB 3R3U (Chan et al. 2011 - see header §3).
     NB = nucleophile O to catalytic base N; BA = catalytic base N to acid O.
 
@@ -792,16 +796,16 @@ class CFG:
       MD     (Step 07) - +2.0 Å / +2.0 Å buffer for 300 K thermal fluctuations in
                          solution; justified by Asp–His distance variance in FAcD MD
                          trajectories (σ ≈ 1–2 Å at 300 K).
-    """
+    '''
     THRESHOLD_TRIAD_NB: float    = 4.5   # Å  crystal/static (Step 02)
     THRESHOLD_TRIAD_BA: float    = 7.0   # Å  crystal/static (Step 02)
     THRESHOLD_TRIAD_NB_MD: float = 6.5   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
     THRESHOLD_TRIAD_BA_MD: float = 9.0   # Å  MD-calibrated  (Step 07) = crystal + 2.0 Å
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.1: Mechanistic-score & soft-score contact gates  (Step 02)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Used by 02_Production analyse_candidate_structure() mech_score / soft_score.
     These are distinct from the §8 tier-cascade gates: they score the physical
     anchor set (halide stabiliser, carboxylate clamp, triad proximity) plus the
@@ -809,20 +813,20 @@ class CFG:
     reuses NAC_DIST_STRICT (§4.1) and the soft-score angle sigmoid reuses
     NAC_ANGLE_STRICT so the contact gates stay in lock-step. The mech_score angle
     term is graded separately via MECH_W_ANGLE (below).
-    """
+    '''
     MECH_STAB_RADIUS: float  = 5.5   # Å  TRP/TYR (or dynamic polar) → F⁻ halide-stabilisation contact
     MECH_CLAMP_RADIUS: float = 5.0   # Å  ARG carboxylate clamp → ligand contact
-    """
+    '''
     Mutation-tolerant fluoride-cradle detection. When the alignment-mapped
     canonical cradle residue (TRP/TYR/HIS) is absent (gap/substitution), an
     aromatic sidechain within this radius of the ligand's leaving halogen is
     accepted as a functional cradle - mirrors the dynamic nucleophile search.
-    """
+    '''
     MECH_CRADLE_RADIUS: float = 5.5  # Å  aromatic sidechain → leaving halogen (dynamic cradle)
     BOND_DIST_MAX: float     = 1.9   # Å  max heavy-atom separation treated as a covalent bond (structure-only geometry)
     MECH_NB_GATE: float      = 5.0   # Å  Nuc–Base distance gate (mech: MECH_W_NB)
     MECH_BA_GATE: float      = 5.5   # Å  Base–Acid distance gate (mech: MECH_W_BA)
-    """
+    '''
     Mechanistic-score component weights (sum = 1.00 → mech_score saturates at 1.0
     only for a complete anchor set AND an ideal 180° SN2 trajectory). The score is
     holistic: five binary anchor checks (weight 0.70 total) plus a graded SN2
@@ -838,7 +842,7 @@ class CFG:
     The penalty is deliberately small: a "teflon clash" is a ligand fluorine near the Asp
     oxygen, which is intrinsic to a fluorinated substrate sitting in the active site, so it
     nudges rather than nullifies the score.
-    """
+    '''
     MECH_W_NUC: float        = 0.15   # nucleophile NAC reach   (d_nuc ≤ NAC_DIST_STRICT)
     MECH_W_NB: float         = 0.10   # Nuc–Base relay          (≤ MECH_NB_GATE)
     MECH_W_BA: float         = 0.10   # Base–Acid relay         (≤ MECH_BA_GATE)
@@ -847,16 +851,18 @@ class CFG:
     MECH_W_ANGLE: float      = 0.30   # graded SN2 attack angle, Šidák multiplicity-corrected (1-p1)^n for scissile C–F count
     MECH_CLASH_PENALTY: float = 0.03  # mech points subtracted per steric clash (small, graded)
     MECH_CLASH_PENALTY_MAX: float = 0.15  # cap on total clash penalty so clashes never dominate
-    # Backside steric-occlusion (geometric SN2 determinant, Bento & Bickelhaupt 2008: the
-    # nucleophile needs an open backside anti to the leaving F) is a single-source feasibility
-    # penalty applied ONCE, in the graded angle-faded chemistry term (§5.2b, CHEM_PEN_W_OCCL),
-    # which feeds mechanistic_score_effective. It is deliberately NOT also subtracted inside the
-    # raw mechanistic_score below - that would double-penalise an occluded trajectory.
+    '''
+    Backside steric-occlusion (geometric SN2 determinant, Bento & Bickelhaupt 2008: the
+    nucleophile needs an open backside anti to the leaving F) is a single-source feasibility
+    penalty applied ONCE, in the graded angle-faded chemistry term (§5.2b, CHEM_PEN_W_OCCL),
+    which feeds mechanistic_score_effective. It is deliberately NOT also subtracted inside the
+    raw mechanistic_score below - that would double-penalise an occluded trajectory.
+    '''
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.2: SN2 dead-end consensus check (scissile C–F energy + backside sterics)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     A pose is flagged a non-productive SN2 dead-end only when BOTH indicators agree
     (consensus → robust against single-signal false positives), and even then the final
     chemical verdict is deferred to Step-07 QM/MM + MD/WaterMap.
@@ -872,7 +878,7 @@ class CFG:
         (anti to the leaving F), measured from the docked pose. Above the cutoff the
         pentacoordinate SN2 transition state is sterically blocked
         (Bento & Bickelhaupt 2008; Bondi 1964 vdW radii - see header §9).
-    """
+    '''
     SCISSILE_CF_BDE: dict = field(default_factory=lambda: {1: 109.9, 2: 119.5, 3: 127.5})
     SCISSILE_CF_BDE_MAX: float   = 123.0   # kcal/mol; above → C–F too strong to cleave (3F=127.5 fails, 2F=119.5 passes)
     SN2_BACKSIDE_OCCL_MAX: float = 2.0     # Å (Σ vdW); above → backside SN2 approach sterically blocked (2×F=2.94 fails, 1×F=1.47 passes)
@@ -880,7 +886,7 @@ class CFG:
     GATE_ACTIVE_SITE_MIN: float  = 0.75    # active-site integrity at/above → catalytic machinery intact for the gate census
 
     # Graded chemical-feasibility factor (feasibility_factor) - continuous, never a veto.
-    """
+    '''
     A FLOOR ABOVE THE DATA IS NOT A FLOOR - IT IS A CEILING ON DISCRIMINATION.
 
     At 0.50 the floor sat ABOVE every product the recalcitrant class actually produces, so all of them
@@ -899,16 +905,16 @@ class CFG:
     Its original purpose - keeping a recalcitrant-but-real substrate such as TFA visible rather than
     buried - is served properly by MD_SELECTION_MODE = "per_ligand": the best complex for EACH ligand is
     taken, so TFA reaches MD on its own merit and does not need an artificial score propping it up.
-    """
+    '''
     FEASIBILITY_FLOOR: float     = 0.10    # below the library minimum (PFOS, 0.16), so it never flattens a real gradient
     FEAS_BDE_LO: float           = 120.0   # kcal/mol; scissile C–F BDE ≤ this → no BDE penalty (FA 109.9, DFA 119.5 pass)
     FEAS_BDE_HI: float           = 132.0   # kcal/mol; BDE ≥ this → full BDE penalty. An α-CF3 carbon (scissile C–F 127.5) lands graded (~0.38), not on the floor, so it is not flattened onto the recalcitrant class; and 127.5 is below the Tier_1A bond-strength ceiling (TIER_ELITE_BDE_MAX = 128, §8.5), so eligibility for the elite tier is decided by the pose it earns, held near the tier floor by the graded C–F penalty rather than capped
     FEAS_BETA_PER_F: float       = 0.35    # per-β-fluorine penalty: f_beta = 1/(1 + this·β_F) (FA/DFA β=0; PFAS β≥2)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.2b: Graded feasibility + pocket-fit penalties folded into the tier-gate mech
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Continuous penalties subtracted from the geometric mechanistic_score to form the
     feasibility-weighted score that gates the degrader tier (competence/ranking keep the
     raw geometry). Both engage only past a chemistry/steric threshold, so genuine
@@ -935,8 +941,8 @@ class CFG:
                    genuine wide-pocket homolog that really does enclose a longer chain is spared
                    and the same ligand can score differently in different enzymes. Long-PFAS
                    hydrolytic-SN2 hits remain EXPLORATORY, not degraders.
-    """
-    """
+    '''
+    '''
     CHEM_PEN_W_BDE is the flat cost per kcal/mol of scissile C–F strength above SCISSILE_CF_BDE_MAX.
     It answers one question - how much harder is this bond to break - and nothing else.
 
@@ -948,21 +954,23 @@ class CFG:
     already been removed - and would bar an α-CF3 from the elite tier by arithmetic rather than by
     evidence. The bond-strength ceiling (TIER_ELITE_BDE_MAX, §8.5) remains the hard limit, and
     Step-07 QM/MM remains the arbiter of whether the barrier is actually surmountable.
-    """
+    '''
     CHEM_PEN_W_BDE: float    = 0.015   # penalty per kcal/mol of scissile C–F BDE above SCISSILE_CF_BDE_MAX
     CHEM_PEN_W_OCCL: float   = 0.13    # penalty per Å of backside occlusion above SN2_BACKSIDE_OCCL_MAX
     CHEM_PEN_W_BETA: float   = 0.08    # penalty per β-withdrawal unit on the attack-carbon environment: a vicinal fluorine and an ether/oxa oxygen each count as one (the β counter in 02 crosses a single ether O, so perfluoro-ether acids such as C6O4/ADONA are seen, not read as difluoroacetate). Each unit inductively withdraws electron density from the α-C–F, raising its cleavage barrier beyond the raw α-F-count BDE. Continuous and pose-independent; a substrate with no β-withdrawal (β=0: FA/DFA/TFA) is governed by the α-BDE/occlusion penalty above
-    # The angle fade applies to the backside-occlusion term ONLY: full at/below
-    # CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. The BDE,
-    # β-fluorination and containment terms do not fade - none of them is a trajectory
-    # obstruction that a good angle can relieve. Step-07 QM/MM remains the final arbiter.
+    '''
+    The angle fade applies to the backside-occlusion term ONLY: full at/below
+    CHEM_PEN_ANGLE_FULL, zero at/above CHEM_PEN_ANGLE_NONE, linear between. The BDE,
+    β-fluorination and containment terms do not fade - none of them is a trajectory
+    obstruction that a good angle can relieve. Step-07 QM/MM remains the final arbiter.
+    '''
     CHEM_PEN_ANGLE_FULL: float = 175.0   # ° SN2 angle at/below which the occlusion penalty applies in full
     CHEM_PEN_ANGLE_NONE: float = 180.0   # ° SN2 angle at/above which the occlusion penalty is fully waived
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.2c: Pocket containment - TWO protein-aware measurements
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Containment asks whether the ENZYME holds the ligand, so both measurements are made
     against protein coordinates. They answer two different questions and are reported
     side by side for every pose.
@@ -981,11 +989,11 @@ class CFG:
         not cavity fit: a long tail leaving the shell says the tail is outside the reactive
         machinery, which is a mechanistic statement rather than a size penalty. Reported and
         plotted; it does not gate.
-    """
+    '''
     BURIAL_RAYS: int          = 42     # rays per ligand heavy atom (icosphere-like Fibonacci sphere)
     BURIAL_PROBE_A: float     = 8.0    # Å; ray length searched for a blocking protein atom
     BURIAL_RAY_CLEARANCE: float = 1.8  # Å; a protein heavy atom within this of the ray axis blocks it
-    """
+    '''
     BURIAL_MIN is calibrated on the corpus, not assumed. Measured mean contained-atom fraction over
     5 poses per ligand at four candidate thresholds:
 
@@ -1004,16 +1012,16 @@ class CFG:
     are measuring how deep a small ligand sits, not whether the pocket holds it. 0.70 keeps the
     native substrates high, holds the mid-chain PFCAs near 0.9, and separates the genuinely oversized
     C14+ chains that spill out of any pocket.
-    """
+    '''
     BURIAL_MIN: float         = 0.70   # buriedness at/above which a ligand heavy atom counts as cavity-contained
     SITE8_SHELL_A: float      = 5.0    # Å; ligand heavy atom within this of an active-site residue atom is engaged
     CONTAIN_PEN_TARGET: float = 0.85   # cavity containment at/above this → no penalty
     CONTAIN_PEN_W: float      = 1.00   # penalty per unit of cavity-containment shortfall below the target
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.2d: Angle multiplicity - the Šidák exponent and the effective attack angle
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     A poly-fluorinated attack carbon gets more than one chance at a near-linear backside angle, and
     that advantage is geometric, not catalytic. An α-CF3 has three equivalent C–F bonds arranged
     about the Cα–COO⁻ axis: rotate the head group and SOME fluorine always lands roughly opposite the
@@ -1051,7 +1059,7 @@ class CFG:
     not to turn it over. The analytic null sets the SIZE of the deflation, not its justification. A
     rotor-appropriate or sample-derived null would be a refinement; it is not a correction, and it
     must be declared as an assumption in any manuscript that quotes the effective angle.
-    """
+    '''
     def sn2_effective_angle(self, angle: float, scissile_f_count: int = 1) -> float:
         _n = max(1, int(scissile_f_count))
         if _n == 1:
@@ -1063,10 +1071,10 @@ class CFG:
         _cos = max(-1.0, min(1.0, 1.0 - 2.0 * _p_eff))
         return float(180.0 - math.degrees(math.acos(_cos)))
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.3: Reactive-centre gating - α-carbon attack + bidentate carboxylate clamp
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Reactive-centre gating ties every ligand-side gate to the same mechanistically
     correct atom - the α-carbon (the carbon bonded to the substrate carboxylate, the
     position FAcD defluorinates) - and requires the substrate carboxylate to be held by
@@ -1076,22 +1084,22 @@ class CFG:
       • SCISSILE_REQUIRE_ALPHA - the SN2 attack carbon used for the distance/angle gates
         must be the α-carbon adjacent to the ligand carboxylate; a mid-chain CF2 near the
         nucleophile does not qualify. FAcD attacks Cα of a 2-haloalkanoate (Chan et al.
-        2011; Kurihara & Esaki 2008 - see header §3/§6).
+        2011; Liu et al. 1998 - see header §3).
       • CLAMP_REQUIRE_BIDENTATE - the elite (Tier_1A) gate requires the ligand carboxylate
         oxygens to salt-bridge BOTH distinct clamp arginines (Arg111/Arg114 equivalents).
         Non-carboxylate heads (sulfonate –SO3⁻, ether) cannot satisfy this and so cannot
         reach the elite tier via the FAcD carboxylate-anchoring mechanism.
       • CLAMP_SALT_BRIDGE_DIST - max carboxylate-O ↔ Arg-guanidinium-N separation for a
-        clamp arm to count as engaged (Maestro salt-bridge geometry; Donald et al. 2011).
-    """
+        clamp arm to count as engaged (Maestro salt-bridge geometry; Donald et al. 2011 - see header §5).
+    '''
     SCISSILE_REQUIRE_ALPHA: bool  = True
     CLAMP_REQUIRE_BIDENTATE: bool = True
     CLAMP_SALT_BRIDGE_DIST: float = 4.0   # Å  carboxylate O ↔ Arg guanidinium N (salt-bridge contact)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.4: Nucleophile alignment-rescue audit (±window resolver QC)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     The ±RESIDUE_SEARCH_WINDOW resolver (§2.7) maps the canonical Asp110 column through the
     sequence alignment, then - if that column is a gap/substitution - scans nearby target
     positions for an Asp. Because Asp is common, a wide rescue can latch onto a
@@ -1101,13 +1109,13 @@ class CFG:
     NUC_RESCUE_MAX_OFFSET_ELITE) so a far-fetched rescued Asp cannot seed a Tier_1A call.
     The intra-protein Nuc–Base distance gate rejects a spatially remote rescue; this is an
     explicit, auditable second guard.
-    """
+    '''
     NUC_RESCUE_MAX_OFFSET_ELITE: int = 2   # residues; max |rescue − aligned column| for elite eligibility
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.5: Model consensus (robust pose across Boltz diffusion samples)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     model_degrader_consensus is the fraction of a candidate's Boltz diffusion samples that
     independently reach a degrader tier. The representative pose is the best-tier model
     (see select_best_degrader_model). The consensus fraction is REPORTED per candidate
@@ -1117,7 +1125,7 @@ class CFG:
     reproducible pose above a single-frame fluke) without ever crossing a tier or competence
     boundary. It is NEITHER a hard degrader gate NOR a filter: a conformationally flexible
     true substrate keeps its tier and is never dropped for its sampling spread.
-    """
+    '''
 
     def mechanistic_score(self, d_nuc: float, dist_nuc_base: float,
                           dist_base_acid: float, clamp_ok: bool, stabilised: bool,
@@ -1165,7 +1173,7 @@ class CFG:
         if dist_base_acid <= self.MECH_BA_GATE:  s += self.MECH_W_BA
         if clamp_ok:                             s += self.MECH_W_CLAMP
         if stabilised:                           s += self.MECH_W_STAB
-        """
+        '''
         Šidák multiplicity-corrected attack-angle credit. The exponent is the number of equivalent
         C–F bonds on the scissile carbon (§5.2d) - the number of chances the POSE had at presenting
         some fluorine anti-periplanar to the nucleophile.
@@ -1178,7 +1186,7 @@ class CFG:
         had three ways to look good. Measured on the DeHa4 control across all five diffusion samples,
         TFA out-angles fluoroacetate in every one (151–159° vs 95–145°) - a best-of-3 advantage that
         is not a catalytic one, and precisely the inflation this correction exists to remove.
-        """
+        '''
         _delta = max(0.0, 180.0 - float(angle))
         _p1    = (1.0 - math.cos(math.radians(_delta))) / 2.0
         _n     = max(1, int(angle_multiplicity))
@@ -1186,9 +1194,11 @@ class CFG:
         s += self.MECH_W_ANGLE * _q
         if steric_clashes > 0:
             s -= min(self.MECH_CLASH_PENALTY * steric_clashes, self.MECH_CLASH_PENALTY_MAX)
-        # Backside occlusion is deliberately NOT subtracted here: it is applied once, as the
-        # angle-faded chemistry penalty in mechanistic_score_effective (§5.2b). The unused
-        # backside_occlusion parameter is retained for call-site signature stability.
+        '''
+        Backside occlusion is deliberately NOT subtracted here: it is applied once, as the
+        angle-faded chemistry penalty in mechanistic_score_effective (§5.2b). The unused
+        backside_occlusion parameter is retained for call-site signature stability.
+        '''
         return round(max(0.0, s), 2)
 
     def feasibility_factor(self, scissile_cf_bde: float = 0.0, beta_f_count: int = 0) -> float:
@@ -1209,10 +1219,10 @@ class CFG:
         f_beta = 1.0 / (1.0 + self.FEAS_BETA_PER_F * max(0, int(beta_f_count)))
         return max(self.FEASIBILITY_FLOOR, f_bde * f_beta)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 5.6: Gated continuous competence score (Step 02 - Scientific-ranking key)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     The Scientific-ranking key. A single continuous 0–1 score in which every independent
     catalytic axis enters exactly ONCE, under hard chemistry gates. Unlike mechanistic_score
     (binary anchors → saturates near 1.0 within a tier) and soft_catalytic_score (geometry
@@ -1232,7 +1242,7 @@ class CFG:
         • traj   - SN2 trajectory deviation, smaller = higher
         • triad  - Nuc–Base and Base–Acid relay closeness (mean)
         • halide - fluoride-cradle stabilisation present
-    """
+    '''
     COMP_DIST_MIN: float   = 2.4    # Å  ideal Asp-Oδ → α-carbon (full distance credit at/below)
     COMP_DIST_MAX: float   = 3.8    # Å  relaxed reach (zero distance credit at/above)
     COMP_TRAJ_MAX: float   = 2.5    # Å  trajectory deviation giving zero traj credit
@@ -1304,15 +1314,17 @@ class CFG:
         s = (self.COMP_W_ANGLE * angle_term + self.COMP_W_DIST * dist_term
              + self.COMP_W_CLAMP * clamp_term + self.COMP_W_TRAJ * traj_term
              + self.COMP_W_TRIAD * triad_term + self.COMP_W_HALIDE * halide_term)
-        # Scale geometric competence by the physical reactivity barrier (within-tier rank
-        # only; never a tier gate). Separates a long PFCA from DFA - geometrically identical
-        # at the α-CF2 centre, distinguished solely by β-fluorination / C–F BDE.
+        '''
+        Scale geometric competence by the physical reactivity barrier (within-tier rank
+        only; never a tier gate). Separates a long PFCA from DFA - geometrically identical
+        at the α-CF2 centre, distinguished solely by β-fluorination / C–F BDE.
+        '''
         s *= self.feasibility_factor(scissile_cf_bde, beta_f_count)
         return round(max(0.0, min(1.0, s)), 3)
-    """
+    '''
     Soft-score (sigmoid) triad midpoints; nucleophile/angle sigmoids reuse the
     strict NAC cutoffs directly (NAC_DIST_STRICT / NAC_ANGLE_STRICT).
-    """
+    '''
     SOFT_NB_MIDPOINT: float  = 4.5   # Å  soft s_int Nuc–Base sigmoid midpoint (= THRESHOLD_TRIAD_NB)
     SOFT_BA_MIDPOINT: float  = 5.0   # Å  soft s_int Base–Acid sigmoid midpoint
     # soft_catalytic_score component weights (must sum to 1.0): nucleophile reach, SN2 angle, triad integrity.
@@ -1323,30 +1335,30 @@ class CFG:
     SOFT_K_NUC: float        = -4.0  # s_nuc nucleophile-distance sigmoid steepness
     SOFT_K_ANG: float        = 0.15  # s_ang SN2-angle sigmoid steepness
     SOFT_K_TRIAD: float      = -2.0  # s_int triad-relay sigmoid steepness (Nuc–Base and Base–Acid)
-    """
+    '''
     Intentionally < THRESHOLD_TRIAD_BA (7.0 Å): sigmoid midpoint sets
     the steepest scoring gradient in the 4–6 Å pre-reactive range;
     the hard 7.0 Å cutoff is the gate, not the sigmoid centre.
-    """
+    '''
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 6: SN2 / WALDEN INVERSION GEOMETRY  (Step 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     SN2 backside attack at sp³ C: ideal Walden-inversion trajectory = 180°.
     Note: the Bürgi–Dunitz angle (107°) applies to nucleophilic addition at
     sp² carbonyl carbons; it must NOT be conflated with the linear SN2 angle
     here (see calculate_burgi_dunitz() in 00_03 - auxiliary metric only).
-    """
+    '''
     WALDEN_IMPROPER_MAX: float = 15.0  # °  |improper dihedral| < this → TS-like (planar) geometry
     WALDEN_TS_FRAME_BONUS: float = 1.1  # MD frame-score multiplier for a TS-flat (Walden) frame (Step 07 frame selection)
     SN2_ANGLE_MARGINAL_MIN: float = 120.0  # °  lower bound of the marginal SN2-angle band for figure colour-coding (Step 07); ≥ NAC_ANGLE_RELAXED is favourable
     MD_EAF_SMOOTH_WINDOW: int = 50      # frames - rolling-average window for EAF-MSA trajectory smoothing (Step 07; frame count, independent of stride)
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 7: SMART-LOCK RESIDUE DETECTION  (Step 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Geometry-biased scoring that steers 3D triad & fluoride-cradle detection
     toward known residue positions from the 3R3U canonical mapping.
     Negative values are distance bonuses (subtracted from the candidate distance;
@@ -1356,7 +1368,7 @@ class CFG:
     comparable to inter-residue spacing - so a clearly closer geometric candidate
     can still win over the sequence-aligned hint. SMART_LOCK_NUC_MAX_DIST and the
     Nuc–Base sanity check remain the hard safety nets.
-    """
+    '''
     SMART_LOCK_BIAS_DIST: float    =   -5.0  # Å  soft bonus when residue matches mapped-hint position
     SMART_LOCK_CHAIN_BIAS: float   =   -2.5  # Å  additional soft bonus for same-chain residue
     SMART_LOCK_RESNUM_WINDOW: int  =    15   # residue-number window (±N) around each hint
@@ -1365,21 +1377,21 @@ class CFG:
     SMART_LOCK_OD_FALLBACK_ANGLE: float = 120.0  # °  minimum backside approach angle (anti-F) in Oδ fallback
     SMART_LOCK_MAPPING_SANITY_DIST: float = 15.0  # Å  max plausible Nuc–Base dist; beyond = mapping error
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 8: CATALYTIC TIER CLASSIFICATION  (Steps 02, 03, 04, 06)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     The tier cascade is evaluated in strict descending order.
     The top tier is index 0 in TIER_ORDER, the lowest is the last element.
     A structure is assigned the highest tier whose ALL criteria are met.
     Criteria: nucleophile distance + attack angle + triad distances + mech score.
-    """
+    '''
 
     # --- Dynamic Tier Taxonomy ---
-    """
+    '''
     Alphanumeric sorting dictates the strict hierarchy.
     Tier_1A automatically sorts to index 0 (Top Tier), Tier_5_Decoy to the bottom.
-    """
+    '''
     TIER_NAMES: list[str] = field(default_factory=lambda: [
         "Tier_1A", "Tier_1B", "Tier_2A", "Tier_2B",
         "Tier_3", "Tier_4", "Tier_5_Decoy"
@@ -1399,9 +1411,9 @@ class CFG:
     def TIER_HIGH_QUALITY(self) -> list: return self.TIER_ORDER[:4]
 
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.1: Nucleophile–C distance thresholds (Å, upper bound)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     TIER_NUC_DIST: dict = field(default_factory=lambda: {
         "Tier_1A": 3.0,   # tight pre-reactive geometry; 2.7 Å unrealistically tight for Boltz-2 ground-state (true SN2 TS ~ 2.0–2.3 Å)
         "Tier_1B": 3.2,   # excellent pre-reactive geometry
@@ -1411,17 +1423,19 @@ class CFG:
         "Tier_4":      8.0,   # pocket-bound, geometrically unproductive
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.2: Attack angle reference thresholds (°, lower bound)
-    # -------------------------------------------------------------------------------
-    # Per-tier minimum raw SN2 attack angle. These ARE hard tier gates at the elite and
-    # functional-top rungs: the ladder tests angle_effective >= this value at Tier_1A (170°),
-    # Tier_1B (165°) and Tier_2A (155°). Tier_2B carries NO raw-angle gate, so a bent-but-feasible
-    # substrate (e.g. difluoroacetate, ~108°) is retained at 2B rather than cliffed below a
-    # straight-posed decoy. The angle ALSO enters the mechanistic score continuously (graded angle
-    # term), so it penalises a bent pose there too; the true attack-angle dynamics are resolved in
-    # MD. Poly-fluorinated / high-BDE decoys are additionally held out of the functional band by the
-    # competence-feasibility floor (TIER_COMP_MIN), not by angle alone.
+    # -----------------------------------------------------------------------------
+    '''
+    Per-tier minimum raw SN2 attack angle. These ARE hard tier gates at the elite and
+    functional-top rungs: the ladder tests angle_effective >= this value at Tier_1A (170°),
+    Tier_1B (165°) and Tier_2A (155°). Tier_2B carries NO raw-angle gate, so a bent-but-feasible
+    substrate (e.g. difluoroacetate, ~108°) is retained at 2B rather than cliffed below a
+    straight-posed decoy. The angle ALSO enters the mechanistic score continuously (graded angle
+    term), so it penalises a bent pose there too; the true attack-angle dynamics are resolved in
+    MD. Poly-fluorinated / high-BDE decoys are additionally held out of the functional band by the
+    competence-feasibility floor (TIER_COMP_MIN), not by angle alone.
+    '''
     TIER_ANGLE_MIN: dict = field(default_factory=lambda: {
         "Tier_1A": 170.0,   # near-ideal linear SN2 trajectory (within ~10° of the 180° Walden-inversion TS)
         "Tier_1B": 165.0,
@@ -1429,9 +1443,9 @@ class CFG:
         "Tier_2B":    145.0,   # = NAC_ANGLE_RELAXED
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.3: Catalytic triad distance thresholds (Å, upper bound)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     TIER_NB_MAX: dict = field(default_factory=lambda: {
         "Tier_1A": 3.5,   # tightest triad - Nuc–Base ≤ 3.5 Å
         "Tier_1B": 4.0,
@@ -1445,10 +1459,10 @@ class CFG:
         "Tier_2B":    7.0,   # loosest still-connected Base–Acid pair; beyond this the acid is dissociated → not a degrader
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.4: Mechanistic score thresholds (0–1, lower bound)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Calibrated against the six control jobs (DeHa4 / 3R3U × FA / DFA / TFA) under the
     holistic mech_score (anchors 0.70 + graded Šidák-corrected SN2 angle 0.30, §5.1).
     A full-machinery mono-F pose scores 0.70 + 0.30·(1-p1), p1=(1-cos(180-angle))/2, so
@@ -1456,7 +1470,7 @@ class CFG:
     Tier_2A(155°)≈0.958. The
     minima below sit under those so the gate stays meaningful (binding only when an
     anchor is missing) while the control tiers are reproduced.
-    """
+    '''
     TIER_MECH_MIN: dict = field(default_factory=lambda: {
         "Tier_1A": 0.85,   # elite mech floor; further refined by the coupled machinery gate below. Tier_1A also hard-gates the raw SN2 angle (>= TIER_ANGLE_MIN['Tier_1A']) and the elite BDE ceiling; the mech score additionally carries the graded angle + chemistry penalty
         "Tier_1B": 0.85,   # complete anchors + high mechanistic competence
@@ -1464,8 +1478,10 @@ class CFG:
         "Tier_2B": 0.55,   # marginal degrader floor (mech). 2B has NO raw-angle gate (keeps a bent-but-feasible substrate such as DFA) but does apply the competence floor below
     })
 
-    """
-    Step 8.4a: Feasibility (competence_score) floors for the FUNCTIONAL band.
+    # -----------------------------------------------------------------------------
+    # Step 8.4a: Feasibility (competence_score) floors for the FUNCTIONAL band.
+    # -----------------------------------------------------------------------------
+    '''
     mech_score (mechanistic_score_effective) is largely geometry and is too flat to
     separate substrate feasibility - the 3R3U references score mech 0.99/0.90/0.80 for
     FA/DFA/TFA, all above the 2A mech floor. competence_score is the feasibility-weighted
@@ -1476,13 +1492,13 @@ class CFG:
     the 2A raw-angle gate (which drops a bent pose such as DFA from 2A to 2B), the three
     references separate cleanly FA → 2A, DFA → 2B, TFA → Tier_3. Applied to every complex,
     not just the controls - it is a general substrate-feasibility gate.
-    """
+    '''
     TIER_COMP_MIN: dict = field(default_factory=lambda: {
         "Tier_2A": 0.50,   # high feasibility required for the functional-degrader tier
         "Tier_2B": 0.40,   # minimum feasibility; clears the whole TFA family (competence ≤ 0.351) into Tier_3
     })
 
-    """
+    '''
     Coupled elite-machinery gate (Tier_1A refinement, Step 02 - downgrade-only).
     A pose holds Tier_1A only if it has either (a) complete catalytic machinery and an
     open SN2 backside (mech ≥ MECH_ELITE_HI), OR (b) near-complete machinery
@@ -1492,12 +1508,12 @@ class CFG:
     as α-CF3 trifluoroacetate can still register as elite - but only its single most
     crystal-perfect pose, not every mediocre one. This is geometry/machinery only; no
     substrate-class label is used.
-    """
+    '''
     MECH_ELITE_HI: float            = 0.90   # mech at/above which the backside is open enough for elite on its own
     MECH_ELITE_LO: float            = 0.85   # mech floor for the constellation-compensated elite route
     MECH_ELITE_CONSTELLATION: float = 0.74   # constellation that compensates a mech in [LO, HI) for Tier_1A (RMSD ≲ 0.35 Å, crystal-grade)
 
-    """
+    '''
     Elite bond-strength ceiling (Tier_1A, downgrade-only). A scissile C–F above TIER_ELITE_BDE_MAX
     cannot hold the elite tier at any attack angle: the strength of the bond being broken is a
     property of the bond, not of the approach geometry, so no near-linear trajectory lowers it. Such
@@ -1514,10 +1530,10 @@ class CFG:
     The ceiling is chemically specific: only an α-CF3 carbon reaches 127.5. The long perfluoro
     carboxylates present an α-CF2 (119.5) and are held below the elite tier by the β-fluorine and
     containment penalties, not by this bond-strength ceiling.
-    """
+    '''
     TIER_ELITE_BDE_MAX: float       = 128.0  # kcal/mol; a scissile C–F above this cannot hold Tier_1A at any attack angle
 
-    """
+    '''
     Top-tier confidence guard. The catalytic machinery for Tier_1A is enforced by the tier
     ladder itself - all eight catalytic residues mapped to the correct type at catalytic
     distances with the fluoride cradle engaging the leaving F (Chan 2011). Global sequence
@@ -1541,14 +1557,14 @@ class CFG:
 
     TIER_ELITE_CONF_MIN stays as the FALLBACK for a pose that carries no per-residue confidence, so
     such a pose is still checked rather than waved through.
-    """
+    '''
     TIER_ELITE_AS_PLDDT_MIN: float = 90.0   # active-site pLDDT (0–100) floor for the Tier_1A top label
     TIER_ELITE_CONF_MIN: float = 0.85       # global Boltz confidence floor - fallback when active_site_plddt is absent
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.4b: Catalytic-constellation (Criterion B) per-tier floors (0–1, lower bound)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     TWO active-site criteria. Criterion A - active_site_integrity - asks only whether the eight
     catalytic residues are PRESENT and correctly typed (sequence/identity). Criterion B -
     catalytic_constellation_score - asks whether they are GEOMETRICALLY ASSEMBLED like the 3R3U
@@ -1563,7 +1579,7 @@ class CFG:
     Tier_5_Decoy (B==0, constellation unmeasurable), with is_degrader cleared. geometric_tier
     preserves the pre-demotion call. The floor is set to retain a near-ideal Tier_1A pose (crystal-grade
     constellation, B ≳ 0.62) while downgrading only a genuinely mis-assembled active site.
-    """
+    '''
     TIER_CONSTELLATION_MIN: dict = field(default_factory=lambda: {
         "Tier_1A": 0.55,   # RMSD ≲ 0.8 Å - eight-residue constellation floor at crystal-grade agreement; the coupled elite-machinery gate + pocket-fit cap do the elite separation, so this floor is deliberately permissive (any pose with B ≳ 0.66 clears it)
         "Tier_1B": 0.45,   # RMSD ≲ 1.2 Å
@@ -1581,33 +1597,33 @@ class CFG:
     '''
     TIER_1A_MAX_LIGAND_EXTENT: float = 5.0   # Å - threshold defining the controls-only validation subset (ligands ≤ this, ≈2-carbon haloacetate controls ~3.5 Å; long-chain PFAS exceed it). The tier ladder itself is size-agnostic.
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.4c: Substrate / inhibitor classification (Figs 19, 25)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Derived from the tier gates so every figure classifies identically.
     SUBSTRATE_ANGLE_MIN: float = 165.0   # = TIER_ANGLE_MIN['Tier_1B']: SN2 ≥ this → substrate geometry
     INHIBITOR_ANGLE_MAX: float = 145.0   # = TIER_ANGLE_MIN['Tier_2B']:   SN2 < this → potential inhibitor
     SUBSTRATE_CONF_MIN:  float = 0.75    # Boltz confidence ≥ this → AI-confident pose
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.4d: Confidence-vs-tier conflict thresholds (Fig 20 / Hidden-Gem rescue)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Used by 03_Validation_Figures analyse_conflicts() to split structures into
     Consensus High / Hidden Gem / Consensus Low / Decoy. Kept separate from
     SUBSTRATE_CONF_MIN: this axis is AI-vs-physics agreement, not substrate geometry.
-    """
+    '''
     CONFLICT_CONF_HIGH: float = 0.70   # Boltz confidence ≥ this → AI-confident (Consensus High; high-tier below = no rescue)
     CONFLICT_CONF_LOW:  float = 0.60   # Boltz confidence < this → AI-doubtful (low-tier below = Consensus Low)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.5: Tier scoring & ranking weights
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     TIER_SCORE       - additive points for composite scoring
     TIER_RANK        - integer rank for quality-sorted operations
     TIER_SORT_WEIGHT - weight for multi-key DataFrame sorting
-    """
+    '''
     TIER_SCORE: dict = field(default_factory=lambda: {
         "Tier_1A": 20, "Tier_1B": 15, "Tier_2A": 10,
         "Tier_2B":     8, "Tier_3":       4, "Tier_4":    1, "Tier_5_Decoy": 0,
@@ -1621,9 +1637,9 @@ class CFG:
         "Tier_2B":    20, "Tier_3":      10, "Tier_4":    1, "Tier_5_Decoy": 0,
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.6: Tier display colours (Okabe-Ito colourblind-safe palette)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     TIER_COLOUR: dict = field(default_factory=lambda: {
         "Tier_1A": "#009E73",   # green
         "Tier_1B": "#7B3FBF",   # violet
@@ -1635,9 +1651,9 @@ class CFG:
         "Control":   "#333333",   # dark grey
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.7: Conflict category colours
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     CONFLICT_COLOUR: dict = field(default_factory=lambda: {
         "Consensus High": "#0072B2",
         "Hidden Gem":     "#CC79A7",
@@ -1646,9 +1662,9 @@ class CFG:
         "Ambiguous":      "#BBBBBB",
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.8: Alignment grade colours (worst I = brown → best A = green)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Keys match single-letter ALIGN_GRADE_LABELS; tuple = (lo%, hi%, hex)
     GRADE_COLOUR: dict = field(default_factory=lambda: {
         "A": "#2E7D52", "B": "#559B6A", "C": "#88B88A",
@@ -1674,11 +1690,13 @@ class CFG:
         "A (≥90%)":   "#2E7D52",
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.8b: Active-site residue display order + role-group colours (Fig 01)
-    # -------------------------------------------------------------------------------
-    # Mechanistic role sequence for the active-site mapping-coverage figure:
-    # nucleophile → acid/base catalysis → carboxylate clamp → fluoride pocket.
+    # -----------------------------------------------------------------------------
+    '''
+    Mechanistic role sequence for the active-site mapping-coverage figure:
+    nucleophile → acid/base catalysis → carboxylate clamp → fluoride pocket.
+    '''
     ACTIVE_SITE_ROLE_ORDER: list = field(default_factory=lambda: [
         "Nuc", "Acid", "Base", "Carb1", "Carb2", "Stab_H", "Stab_W", "Stab_Y",
     ])
@@ -1697,13 +1715,13 @@ class CFG:
         "Fluoride pocket":      "#CC79A7",
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.9: Mechanistic outcome colours (Fig 25b)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Deliberately a different hue family from the tier palette so the two
     stacked bars in Fig 25b never read as the same encoding.
-    """
+    '''
     OUTCOME_COLOUR: dict = field(default_factory=lambda: {
         "Substrate":           "#0E7C7B",   # teal
         "Borderline":          "#C9A227",   # mustard
@@ -1712,9 +1730,9 @@ class CFG:
         "Potential Inhibitor": "#6E2C00",   # brown-maroon
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 8.9b: PFAS chain-length bin colours (Fig 25b master bars)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     PFAS_SIZE_BIN_COLOUR: list = field(default_factory=lambda:
         ["#6A51A3", "#2171B5", "#238B45", "#D94801", "#A50F15"])
 
@@ -1730,13 +1748,13 @@ class CFG:
     SANKEY_MECH_GRAD: list = field(default_factory=lambda:
         ["#D73027", "#FDAE61", "#A6D96A", "#1B7837"])   # worst→best, 4 bins
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 9: MD TRAJECTORY ANALYSIS  (Step 07)
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.1: Solvent / water residue names
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     SOLVENT_RESTYPES: tuple = (
         "SPC", "TIP3P", "TIP4P", "SPCE", "OPC", "HOH", "WAT", "SOL",
         "T3P",   # Desmond internal name for TIP3P
@@ -1760,14 +1778,17 @@ class CFG:
         "CL", "CL-", "CLA", "BR", "IOD", "F-",
     )
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.2: WaterMap integration
-    # -------------------------------------------------------------------------------
-    # Abel et al. (2008): site radius 5.0 Å captures active-site hydration shell.
+    # -----------------------------------------------------------------------------
+    '''
+    WaterMap hydration-site methodology: Abel et al. (2008). 5.0 Å below is an
+    operational inclusion radius for the active-site shell, not a value from Abel.
+    '''
     WATERMAP_SITE_RADIUS: float     = 5.0   # Å  radius to include WaterMap hydration sites
     WATERMAP_BLOCKADE_RADIUS: float = 3.0   # Å  cylinder radius for nucleophile-runway blockade check
     WATERMAP_MATCH_RADIUS: float    = 1.5   # Å  MD water ↔ WaterMap site assignment distance
-    """
+    '''
     Fold-integrity guard on the frame→reference superposition. The WaterMap sites are computed in
     one reference frame and carried into each trajectory frame by a rigid Kabsch transform. A rigid
     transform exists between ANY two point sets, so a frame whose fold has drifted, unfolded, or
@@ -1775,9 +1796,9 @@ class CFG:
     at arbitrary positions. Above this Cα RMSD the frame's WaterMap term is withheld rather than
     trusted. 3.0 Å is a loose fold-identity bound: normal thermal breathing of a folded protein
     stays well below it, so only genuinely broken frames are rejected.
-    """
+    '''
     MD_FOLD_RMSD_MAX: float         = 3.0   # Å  Cα RMSD above which a frame's WaterMap mapping is discarded
-    """
+    '''
     Counter-ion capping of the reactive centre. A PFAS carboxylate pairs strongly with Na⁺, and the
     FAcD active site is an anion trap (Asp nucleophile, Asp acid, substrate carboxylate). System
     Builder's ion-exclusion region keeps counter-ions out at BUILD time, but one can diffuse in during
@@ -1790,10 +1811,10 @@ class CFG:
     counted in the stats (Frames_Cation_Capped / Cation_Capped_Pct), and barred from QM/MM frame
     selection - a QM region containing a Na⁺ on the nucleophile computes that ion pair's barrier,
     not the enzyme's.
-    """
+    '''
     CATION_CAP_DIST: float          = 3.0   # Å  cation ↔ nucleophile Oδ / ligand carboxylate O: inner-sphere coordination
 
-    """
+    '''
     NPT equilibration verification (Step 07, from the Desmond <job>.ene stream).
 
     Every quantity Step 07 reports - NAC occupancy, strict-NAC dwell, MM-GBSA - is an equilibrium
@@ -1802,7 +1823,7 @@ class CFG:
     statistics. The box VOLUME is the slow coordinate (the barostat is still working on it long after
     the thermostat has settled), so equilibration is declared from V and T is a separate thermostat
     sanity check. Frames before the equilibration time are excluded from the sampled statistics.
-    """
+    '''
     MD_EQUIL_SKIP_FRAC: float          = 0.20   # leading fraction of the run treated as relaxation when forming the production-window reference
     MD_EQUIL_BLOCKS: int               = 200    # volume is block-averaged into this many blocks before the settled test - an equilibrated NPT box still spikes instantaneously (measured: 0.02 % of points exceed 1 % of the mean), so a point-wise test would reject a settled trajectory
     MD_EQUIL_V_TOL_PCT: float          = 1.0    # %  block-mean box volume within this of the production mean counts as settled
@@ -1814,19 +1835,19 @@ class CFG:
                                                 # anomalous block late in an equilibrated run would otherwise
                                                 # invalidate every block before it and collapse the production
                                                 # window to almost nothing.
-    """
+    '''
     The box can settle while the PROTEIN does not. A variant that is unfolding, or whose active site is
     being prised open by a bulky PFAS ligand, reaches a stable volume and a stable temperature and
     passes a barostat-only gate - the very failure the gate exists to catch. Equilibration therefore
     also requires the backbone to have stopped moving: the Ca RMSD to the starting structure must be
     within this bound, judged over the production window.
-    """
+    '''
     MD_EQUIL_CA_RMSD_MAX_A: float      = 3.0    # A  mean Ca RMSD over the production window
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.2b: Ligand-retention restraints (Step 06 MD production msj)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     A crystal-quality Michaelis complex is NOT automatically a stable minimum once Desmond releases
     the System-Builder equilibration restraints: a small substrate such as fluoroacetate relaxes out
     of the reactive pose and DIFFUSES INTO BULK within the first nanoseconds, and every downstream
@@ -1852,51 +1873,51 @@ class CFG:
     applies a corrective force every timestep (it is continuous, not a discrete count of "catches");
     its work is quantified by the restraint potential energy ½·k·Σ|r_i − r_i^ref|² = ½·k·N·RMSD²,
     which stays a few kcal/mol here (a light, constant tension), never a hard yank.
-    """
+    '''
     MD_RESTRAIN_LIGAND: bool        = True   #      hold the ligand in the pocket through the whole production run
     MD_RESTRAIN_LIG_FORCE_K: float  = 5.0    # kcal/mol/Å²  ligand heavy-atom positional restraint (res.ptype LIG)
     MD_RESTRAIN_BB_FORCE_K: float   = 2.0    # kcal/mol/Å²  gentle backbone-heavy-atom anchor (prevents box drift / tumble)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.3: Frame scoring weights (QM/MM frame selection only)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     These weights rank MD frames to select the single best input for QSite.
     They do NOT affect NAC counts or catalytic viability percentages.
-    """
+    '''
     SCORE_DIST_WEIGHT: float     = 100.0   # per Å below NAC_DIST_RELAXED
     SCORE_ANGLE_WEIGHT: float    =   5.0   # per degree above NAC_ANGLE_RELAXED
     SCORE_BLOCKADE_WEIGHT: float =  50.0   # per water blockade unit
     SCORE_WATERMAP_WEIGHT: float =  10.0   # per kcal mol⁻¹ WaterMap dG unit
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.4: Catalytic viability display thresholds (%)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Colour-codes console output and figures in Step 07.
     Boltz-2 predicted structures (not crystal structures) typically show
     lower NAC populations (0.01–2%) owing to the Boltz-2 starting geometry
     not being pre-optimised for the reactive SN2 trajectory.
-    """
+    '''
     VIABILITY_PASS_THRESHOLD: float = 0.05   # % - below this → "NAC FAIL" (red)
     VIABILITY_HIGH_THRESHOLD: float = 5.0    # % - above this → "NAC PASS – High" (green)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 9.5: Force field - Desmond MD
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     System solvation, ion neutralisation, and NPT production MD all use the
     OPLS4 force field (Roos et al. 2019; Lu et al. 2021, JCTC) as configured
     in the Desmond .msj job file generated by the user via Maestro.
     The Python script (07_QMMM_Defluorination_DeFluorX.py) reads the
     completed trajectory - it does not control force-field selection.
     OPLS4 force field: Lu et al. (2021); Roos et al. (2019) - see header §13.
-    """
+    '''
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 10: QM/MM EXTRACTION - QSite  (Step 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Level of theory: B3LYP / 6-31+G(d,p) - Becke (1993) + Lee, Yang & Parr (1988)
     hybrid functional; Rosta et al. (2006) QM/MM free-energy methodology;
     Murphy et al. (2000) QSite implementation.
@@ -1905,8 +1926,8 @@ class CFG:
     Meta-GGA hybrids (e.g. M06-2X) and dispersion-corrected variants (B3LYP-D3)
     are rejected by QSite with frozen cuts, hence B3LYP for the residue-selective
     QM/MM coordinate scan.
-    """
-    """
+    '''
+    '''
     DFT functional. Plain B3LYP carries no dispersion term, and that IS a real limitation here: the
     substrate is polyfluorinated and the C–F···π contacts holding it against the Trp/Tyr cradle are
     dispersion-bound, so the barrier is computed without them.
@@ -1917,21 +1938,21 @@ class CFG:
     DFT(b3lyp-d3)" (verified against a real QM/MM input). Dispersion would require
     abandoning the frozen-cut QM region, which is a larger change than it buys. The limitation is
     declared in the paper rather than hidden.
-    """
+    '''
     QSITE_FUNCTIONAL: str   = "b3lyp"        # DFT functional (the only family QSite frozen cuts accept)
     QSITE_BASIS_SET: str    = "6-31+G(d,p)"  # basis for single-point energies (the relaxed scan
                                              # runs QSITE_SCAN_BASIS, which is non-diffuse for SCF
                                              # stability - see §10.2)
     QSITE_CHARGE: int       = -1             # default QM region charge (anionic carboxylate/sulfonate PFAS)
-    """
+    '''
     Neutral ligands (alcohols, non-ionised at pH 8) override the default charge.
     Keys are substrings of the job-name ligand suffix (case-insensitive match).
-    """
+    '''
     LIGAND_QM_CHARGES: dict = field(default_factory=lambda: {
         "FTOH": 0,   # fluorotelomer alcohols (6:2-FTOH, 8:2-FTOH) - neutral at pH 8
     })
     QSITE_MULT: int         = 1              # spin multiplicity (closed-shell singlet)
-    """
+    '''
     Force field for the MM half of the QM/MM Hamiltonian, emitted into &mmkey.
 
     The keyword is qsite_ff and it takes a STRING. Confirmed against Schrodinger's own QSite driver
@@ -1965,7 +1986,7 @@ class CFG:
     environment in the barrier is scored two generations older. That mismatch sits in the classical
     surroundings, not in the QM region where the bond breaks. A working OPLS_2005 QM/MM barrier is
     the only barrier QSite can produce for a frozen-cut region; an opls3e request produces none.
-    """
+    '''
     QSITE_MM_FF: str        = ""   # empty &mmkey → Impact default OPLS_2005, the only FF QSite runs with frozen cuts
     '''
     Solvation: the extracted frame carries its explicit TIP3P water box in the MM
@@ -1988,13 +2009,13 @@ class CFG:
                                              # The 0.13 Å spacing lands a grid point on the ~2.2 Å SN2 saddle,
                                              # so the barrier maximum is sampled directly.
     QSITE_PROFILE_DIST_TICK_A: float = 0.20  # Å  per-frame reaction-profile bottom x-axis tick spacing
-    """
+    '''
     Execution of the generated QSite jobs from Step 07. When True, Step 07
     launches `$SCHRODINGER/qsite` on each freshly extracted frame, writing all
     output inside a per-job folder; jobs whose folder already exists are skipped
     (idempotent, mirroring the PDB-preparation cache). QM/MM relaxed scans are
     expensive - disable with --no-run-qsite to only write the .in/.mae inputs.
-    """
+    '''
     QSITE_IMPVERSION: str   = "huge"         # Jaguar &gen impversion (memory/architecture tier; tune per cluster). igeopt=1 (relaxed scan) and mmqm=1 (QM/MM) are required mode flags for this calculation and stay fixed in the writer.
     QSITE_RUN: bool         = True
     QSITE_PROCS: int        = 1              # fallback CPUs per QSite job (qsite -PARALLEL) when the CPU
@@ -2007,13 +2028,13 @@ class CFG:
                                             # min(QSITE_MAX_THREADS, (cores - reserve) / concurrent scans)
                                             # threads, using otherwise-idle cores to speed each SCF while
                                             # keeping threads x concurrency within the CPU budget.
-    """
+    '''
     QSite concurrency budget. Each Jaguar QM job holds ~QSITE_RAM_PER_JOB_GB resident, so the number of
     scans that may run at once is min(total_cpu - PREP_CPU_RESERVE, RAM budget). The RAM budget mirrors
     the MM-GBSA planner: free RAM plus a slice of free SWAP, times a headroom fraction. Counting swap lets
     the CPU cap bind rather than the RAM cap, so the QM/MM phase reaches total_cpu-2 busy cores; a QM job
     whose working set spills to swap runs at disk speed, which is the accepted trade for utilisation.
-    """
+    '''
     QSITE_RAM_PER_JOB_GB: float   = 1.5      # resident set of one Jaguar QM/MM scan
     QSITE_RAM_HEADROOM_FRAC: float = 1.00    # fraction of (free RAM + counted swap) the QM/MM phase may occupy; 1.0 = use it all, so the CPU cap binds
     QSITE_RAM_SWAP_FRAC: float    = 1.0      # fraction of FREE SWAP added to the budget; 1.0 = use it all
@@ -2025,18 +2046,20 @@ class CFG:
     QSITE_N_FRAMES: int = 3                  # number of top pre-organised NAC frames to run the QM/MM SN2 scan on; the reported ΔE‡ is min/mean/σ over them. 1 scans only the single best frame, which reports a lower bound rather than an ensemble
     QSITE_BARRIER_MAX_KCAL: float = 200.0    # kcal/mol; a parsed ΔE‡ above this is not a physical transition state but a non-converged (nofail-retained) scan point, so the barrier is reported as NaN rather than a spurious large value that would inflate the ensemble.
 
-    # Step 07 phase orchestration. The SN2 / pose analysis (Phase A) is cheap and embarrassingly
-    # parallel, so it runs across all ranks at once behind a single live \r progress line. QSite
-    # (Phase B) is the expensive quantum step: running it SEQUENTIALLY, one job at a time at the
-    # full CPU allowance (cores − 2), lands the first barrier in ~1 day (testable early, fail-fast)
-    # instead of many under-resourced parallel jobs that all surface a failure a week later.
+    r'''
+    Step 07 phase orchestration. The SN2 / pose analysis (Phase A) is cheap and embarrassingly
+    parallel, so it runs across all ranks at once behind a single live \r progress line. QSite
+    (Phase B) is the expensive quantum step: running it SEQUENTIALLY, one job at a time at the
+    full CPU allowance (cores − 2), lands the first barrier in ~1 day (testable early, fail-fast)
+    instead of many under-resourced parallel jobs that all surface a failure a week later.
+    '''
     QSITE_MAX_QM_RESIDUES: int = 8           # cap on catalytic residues in the QM region (nucleophile/base/acid/stab first, then nearest cradle). A very large QM region (e.g. 17 residues) inflates the electron count and makes molchg/electron-parity errors likely → Jaguar 'incorrect molecular charge' and every scan point skipped. 0 = no cap.
-    """
+    '''
     The QM/MM system around the reaction centre. The droplet is the MM shell the QSite job keeps
     around the QM region; the QM waters are the few molecules close enough to the reactive centre
     that leaving them classical would misdescribe the fluoride's first solvation shell.
-    """
-    """
+    '''
+    '''
     The MM solvation droplet kept around the QM region. The periodic water box is trimmed to this
     radius around the ligand, which leaves the droplet with a FREE SURFACE: QSite has no periodic
     boundary and exposes no frozen-shell or boundary-potential keyword (its `&mmkey` section takes
@@ -2049,9 +2072,9 @@ class CFG:
     QM region feels. At 15 Å the surface is two solvation shells away from the ligand - far enough
     that its relaxation cannot reach the scissile bond over the short scan - and the cost is MM-only
     (a few thousand extra classical waters), which is negligible beside the DFT.
-    """
+    '''
     QSITE_DROPLET_RADIUS: float = 15.0       # Å  MM droplet retained around the QM region
-    """
+    '''
     The droplet's boundary, in three zones around the ligand. QSite reads them from a per-atom
     property on the structure (`i_i_constraint`), and Jaguar reports back exactly how many atoms it
     took as frozen and as constrained - verified against a live QM/MM job, where the
@@ -2062,7 +2085,7 @@ class CFG:
     the electrostatics the QM region sits in. Freezing the outer shell removes that surface, while
     the buffer stays restrained (not rigid) so the solvation shell around the reaction centre can
     still respond to the reaction.
-    """
+    '''
     QSITE_FREE_RADIUS: float   = 5.0         # Å  ≤ this from the ligand: fully mobile
     QSITE_BUFFER_RADIUS: float = 8.0         # Å  ≤ this: restrained; beyond: frozen (the surface)
     QSITE_QM_WATER_RADIUS: float = 3.5       # Å  a water within this of the reactive centre goes QM
@@ -2073,13 +2096,13 @@ class CFG:
                                              # selection distance for sitting on a STRUCTURAL WaterMap
                                              # site (dG<0). Biases QM-water choice toward the
                                              # thermodynamically important F-stabilising waters rather
-                                             # than the merely nearest. 0 = pure geometry (old behaviour)
-    """
+                                             # than the merely nearest. 0 = pure geometry
+    '''
     SCF accuracy grid for the relaxed scan. 1 is the fast/robust grid; 2-3 densify the integration
     grid, which matters for an anionic leaving group (F⁻ has a diffuse, slowly-decaying density) at
     a cost the scan can ill afford - each point is already ~3 h. Raise it for a final single-point
     re-evaluation of the barrier rather than for the scan itself.
-    """
+    '''
     QSITE_SCF_IACC: int = 1
     QSITE_SCF_VSHIFT: float = 5.0    # SCF level shift (stabilises convergence) - read by the 07 QSite _gen writer
     QSITE_SCF_MAXIT: int    = 200    # max SCF iterations - read by the 07 QSite _gen writer
@@ -2097,7 +2120,7 @@ class CFG:
     SOLVENT_SPHERE_SAMPLE_FRAMES: int = 12   # frames sampled when measuring the solvent sphere
 
     # --- Step 10.3: Defluorination verdict - the concrete "does it defluorinate?" gate (Step 07) ---
-    """
+    '''
     Binding (MM-GBSA) proves a Michaelis complex, not turnover. A candidate is called
     defluorination-competent only when it (i) persists in a STRICT near-attack
     conformation for a real dwell, (ii) surmounts a QM/MM SN2 barrier at body
@@ -2106,7 +2129,7 @@ class CFG:
     RANKING proxy (not a rate - it carries the electronic barrier ΔE‡ only, with no ZPE, no thermal
     correction and no entropy term):  P(strict-NAC) · exp(−ΔE‡ / RT)  (RT from GAS_CONSTANT_KCAL ×
     MMGBSA_TEMPERATURE_K). Rank candidates by that proxy, not by ΔG_bind.
-    """
+    '''
     '''
     WHAT "STRICT" MEANS HERE, because the name has been misread as a claim about occupancy.
 
@@ -2129,9 +2152,11 @@ class CFG:
     DEFLUOR_BARRIER_MAX_KCAL: float         = 22.0   # Z  - max surmountable QM/MM SN2 barrier ΔE‡ (kcal/mol)
     DEFLUOR_DERXN_MAX_KCAL: float           = 0.0    # SN2 reaction energy ceiling - product must be ≤ reactant (ΔE_rxn ≤ this)
 
-    # --- Step 10.4: Defluorination figure parameters (Step 07 reaction-profile,
-    #     MM-GBSA-decomposition, and landscape plots) - all colours + thresholds
-    #     here so no Step-07 figure hard-codes them (SSOT). ---
+    '''
+    --- Step 10.4: Defluorination figure parameters (Step 07 reaction-profile,
+        MM-GBSA-decomposition, and landscape plots) - all colours + thresholds
+        here so no Step-07 figure hard-codes them (SSOT). ---
+    '''
     '''
     Mulliken charge on the departing fluorine at or below which the C–F bond is declared
     cleaved. A free fluoride is −1 e; a covalent C–F fluorine sits near −0.25 e. Half-way
@@ -2200,9 +2225,11 @@ class CFG:
         "elem_C": "#333333", "elem_O": "#CC2222", "elem_F": "#17A2B8",  # ligand element colours
         "water": "#2E86C1",
         "scissile": "#CC2222"})   # red ring marking the scissile fluorine (bonded on the ligand + departed)
-    # Rank colours shared with the Step-06 combined figures (candidates green/amber/vermillion/blue/
-    # magenta/sky by rank; the control takes its own distinct colour), so a rank reads the same colour
-    # across every 06 and 07 figure.
+    '''
+    Rank colours shared with the Step-06 combined figures (candidates green/amber/vermillion/blue/
+    magenta/sky by rank; the control takes its own distinct colour), so a rank reads the same colour
+    across every 06 and 07 figure.
+    '''
     DEFLUOR_JOB_PALETTE: list = field(default_factory=lambda: [
         "#009E73", "#E69F00", "#D55E00", "#0072B2", "#CC79A7", "#56B4E9",
         "#8C564B", "#0F766E", "#A16207", "#6D28D9"])
@@ -2211,10 +2238,10 @@ class CFG:
     ENGAGE_HEATMAP_CMAP: str = "RdYlGn_r"
     ENGAGE_HEATMAP_NAN: str  = "#E5E7EB"
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 11: CANONICAL RESIDUE MAPPING - 3R3U Reference  (Step 07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Reference sequence positions in RPA1163_3R3U_SEQ numbering (the alignment
     reference, REF_SEQUENCE_STR = RPA1163_3R3U_SEQ). Step 07 looks these up as keys in
     aln_dict, which is keyed by the 3R3U reference positions parsed from the
@@ -2229,7 +2256,7 @@ class CFG:
     does NOT protonate fluoride - F⁻ leaves stabilised as the anion by the pocket).
     Halide pocket (3 H-bonds to F⁻): His155, Trp156, Tyr219. Oxyanion hole:
     backbone amides of Phe40 + Arg111. Carboxylate clamp: Arg111, Arg114.
-    """
+    '''
     DREAM_TEAM_REFS: dict = field(default_factory=lambda: {
         "Nuc":    110,   # Asp110 - nucleophile; SN2 attack, forms covalent glycolyl-ester intermediate
         "Clamp1": 111,   # Arg111 - carboxylate clamp 1 (also oxyanion-hole backbone amide)
@@ -2241,9 +2268,9 @@ class CFG:
         "Base":   280,   # His280 - general base; activates hydrolytic water (3R3U PDB numbering)
     })
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 12: PROCESSING PARAMETERS
-    # ===============================================================================
+    # =============================================================================
 
     @property
     def GLOBAL_MAX_WORKERS(self) -> int:
@@ -2255,13 +2282,13 @@ class CFG:
     MERGE_SECONDARY_LEN_MIN: int =  250   # aa - discard secondary sequences shorter than this
     MERGE_SECONDARY_LEN_MAX: int =  360   # aa - discard secondary sequences longer than this
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 13: VISUALISATION PARAMETERS
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.1: Global rendering (Step 07)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     VIS_IMG_WIDTH: int   = 2400   # px  export width  (publication-quality figure)
     VIS_IMG_HEIGHT: int  = 2400   # px  export height
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
@@ -2279,19 +2306,19 @@ class CFG:
     UPSET_BAR_WIDTH: float      = 0.72  # intersection-bar width (axis units)
     UPSET_HEADROOM: float       = 1.16  # y-limit multiplier above the tallest intersection bar
     UPSET_COVERAGE_GUIDE: float = 80.0  # % guide line drawn on the cumulative-coverage axis
-    """
+    '''
     Typography and canvas - ONE definition for every figure the pipeline draws, applied through
     utils.apply_figure_style(). The point sizes carry the hierarchy on their own: axis labels are
     set in plain weight, since bolding every label emphasises nothing. Weight is spent only where
     it must be read against a filled bar (the value written inside it) or where a tick label
     doubles as a legend (a colour-coded role or tier name).
-    """
-    """
+    '''
+    '''
     Thresholds the DIAGNOSTIC figures judge by. They live here so a figure cannot disagree with the
     gate it is drawn to illustrate. The reactive-engagement panel calls a candidate 'ready' by the
     same nucleophile distance and attack angle used everywhere else, and a distance at or beyond the
     sentinel means the measurement is absent, not that the contact is long.
-    """
+    '''
     VIS_DIAG_READY_DIST_A: float   = 3.5    # Å  nucleophile-C distance at/below which a pose is 'ready'
     VIS_DIAG_ANGLE_MIN_DEG: float  = 150.0  # °  backside attack angle required alongside it
     VIS_DIAG_PROD_LO_A: float      = 2.5    # Å  productive window, lower edge (shading only)
@@ -2310,9 +2337,11 @@ class CFG:
     VIS_FONT_LEGEND: float      = 9.5    # legend entries (one size for every figure, every step)
     VIS_FONT_LEGEND_TITLE: float = 10.0  # legend title (one size everywhere; slightly above the entries)
     VIS_FONT_ANNOT: float       = 9.0    # in-figure annotations (values on/inside bars)
-    # Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
-    # than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,
-    # nothing hardcoded). Ordered largest -> smallest; scale the ladder to grow/shrink the whole scene.
+    '''
+    Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
+    than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,
+    nothing hardcoded). Ordered largest -> smallest; scale the ladder to grow/shrink the whole scene.
+    '''
     MECH_FONT_ATOM_XL: float    = 13.0   # the departing fluoride glyph (emphasised)
     MECH_FONT_ATOM: float       = 11.5   # substrate element glyphs (C/O/F) + verdict badge
     MECH_FONT_LABEL: float      = 10.5   # emphasised atom label
@@ -2326,12 +2355,12 @@ class CFG:
     VIS_GRID_LINEWIDTH: float   = 0.6
     VIS_GRID_ALPHA: float       = 0.25   # the grid is a reading aid, never a mark competing with the data
     VIS_GRID_COLOUR_EMPHASIS: str = "#BFBFBF"
-    """
+    '''
     One distinct hue per catalytic-machinery series on the active-site dynamics panel. The same
     colour carries a series' time-trace, its violin and its inline residue label, so the eye can
     follow one residue across all three representations. Maximally separated hues - these bands sit
     close together and a sequential ramp would make neighbours unreadable.
-    """
+    '''
     VIS_ACTIVE_SITE_COLOUR: tuple = (
         "#E6194B", "#3CB44B", "#4363D8", "#F58231", "#911EB4", "#42D4F4",
         "#F032E6", "#469990", "#9A6324", "#800000", "#000075",
@@ -2345,7 +2374,7 @@ class CFG:
     VIS_LEGEND_BORDERPAD: float      = 0.4
     VIS_LEGEND_HANDLELENGTH: float   = 1.6
     VIS_LEGEND_BORDERAXESPAD: float  = 0.4
-    """
+    '''
     ── Step 03 ink: every mark colour in the validation figures that is not a tier, grade, conflict or
     role colour (those have their own dicts above). The candidate/tier colours say WHAT a mark is; the
     ink here says how it is drawn - medians, reference lines, annotation text, box edges, fills.
@@ -2353,7 +2382,7 @@ class CFG:
     Kept in one place for the reason the rest of this file exists: a restyle must be one edit, not a
     hunt through ten thousand lines of plotting code. Keys are by ROLE, not by hue, so changing the
     'reference line' colour changes every reference line and nothing else.
-    """
+    '''
     VIS_INK: dict = field(default_factory=lambda: {
         # neutrals - text, strokes, edges, fills
         "black":      "#000000",
@@ -2389,11 +2418,11 @@ class CFG:
         "ink_deep":   "#2C3E50",
         "ink_pure":   "#1A1A1A",
     })
-    """
+    '''
     Qualitative accents. The base six are Okabe-Ito (colour-blind safe) and carry the same meaning
     wherever they appear; the rest are role-specific accents the validation figures need - the MD
     star, the twin-axis pair, the pass/fail marks.
-    """
+    '''
     VIS_ACCENT: dict = field(default_factory=lambda: {
         # Okabe-Ito qualitative base
         "blue":       "#0072B2",
@@ -2423,12 +2452,12 @@ class CFG:
         "alert":      "#CC0000",
         "error":      "#FF6B6B",
     })
-    """
+    '''
     Ramachandran plot palette (Steps 03/05 via 00_02's save_ramachandran_* helpers): the three
     quality classes, the two pale region backgrounds, the neutral axis/grid/box greys, and the
     catalytic-triad marker fills+edges. Held here so the Ramachandran figures share the pipeline's
     single colour source rather than carrying their own literals.
-    """
+    '''
     VIS_RAMA: dict = field(default_factory=lambda: {
         "favoured": "#2e7d32", "allowed": "#f57f17", "outlier": "#c62828",
         "region_favoured": "#dcedc8", "region_allowed": "#fff9c4",
@@ -2439,10 +2468,10 @@ class CFG:
         "default_fc": "#9c27b0", "default_ec": "#4a148c",
         "title": "#1f4e79",
     })
-    """
+    '''
     Sequential ramps and the pale tints used behind annotations. A ramp is ordered - light to dark -
     and is indexed, never picked from by name, so a figure cannot silently reorder its own scale.
-    """
+    '''
     VIS_RAMP: dict = field(default_factory=lambda: {
         "green":  ("#D4EFDF", "#A1D99B", "#238B45", "#1B7837", "#0B5345"),
         "orange": ("#FCE4D0", "#E08A3C", "#D94801", "#B84000", "#7E3E00"),
@@ -2456,14 +2485,14 @@ class CFG:
         "blue":   "#CFE0EA",
         "cream":  "#FFF3CC",
     })
-    """
+    '''
     The three qualitative bands - strong / moderate / weak - used by every figure that shades a zone
     or labels a threshold region (confidence bands, engagement bands, mechanistic zones, tertiles).
 
     One green, one gold, one red, for ALL of them. The same band label must not be one green in the
     confidence figure and a slightly different green in the engagement figure: a reader who sees two
     greens is entitled to assume they mean two different things.
-    """
+    '''
     VIS_BAND: dict = field(default_factory=lambda: {
         "high":      "#007A50",
         "moderate":  "#8A6000",
@@ -2472,10 +2501,10 @@ class CFG:
         "mod_fill":  "#FFF3CC",
         "low_fill":  "#FADBD8",
     })
-    """
+    '''
     Interaction (bond) types, one colour each, wherever an interaction profile is stacked or split.
     Sourced here so the H-bond in one figure is the H-bond in every other.
-    """
+    '''
     BOND_TYPE_COLOUR: dict = field(default_factory=lambda: {
         "H-Bond":        "#4C72B0",
         "Salt Bridge":   "#DD8452",
@@ -2484,23 +2513,23 @@ class CFG:
         "F-Hydrophobic": "#8172B2",
         "Hydrophobic":   "#937860",
     })
-    """
+    '''
     Step-05 ball-and-stick interaction diagram (InteractionMap + PLIP). The shared bond types read
     their colour straight from BOND_TYPE_COLOUR above (so the H-bond here is the H-bond in every other
     figure); only the diagram-only types that BOND_TYPE_COLOUR does not carry are defined here.
     INTERACTION_DIAGRAM_STYLE carries the per-type line geometry (width, dash pattern, whether the
     distance label is drawn); the colour is looked up separately, never duplicated.
-    """
+    '''
     INTERACTION_DIAGRAM_EXTRA_COLOUR: dict = field(default_factory=lambda: {
         "arom_hbond": "#17A589",
         "water":      "#5DADE2",
         "pistack":    "#2471A3",
         "pication":   "#7D3C98",
     })
-    """
+    '''
     Chrome of the ligand-interaction diagram: the parts that are not an interaction type. Kept here
     so a restyle of the diagram is one edit, the same rule the figure palette follows everywhere else.
-    """
+    '''
     INTERACTION_DIAGRAM_CHROME: dict = field(default_factory=lambda: {
         "pocket_fill":      "#EAF2FF",   # binding-pocket disc, filled
         "pocket_edge":      "#AED6F1",   # binding-pocket disc, outline
@@ -2523,10 +2552,10 @@ class CFG:
         "hydrophobic": (0.9, (0, (2, 4)),        False),
         "contact":     (0.9, (0, (2, 4)),        False),
     })
-    """
+    '''
     Residue-type and ligand-element colours for the same Step-05 diagram: the residue node fill and its
     legend swatch read the same entry here, so a node can never disagree with its own legend.
-    """
+    '''
     RESIDUE_TYPE_COLOUR: dict = field(default_factory=lambda: {
         "ASP": "#C0392B", "GLU": "#C0392B",
         "ARG": "#2471A3", "LYS": "#2471A3",
@@ -2541,11 +2570,11 @@ class CFG:
         "C": "#2C3E50", "N": "#1A5276", "O": "#A93226",
         "F": "#1D8348", "S": "#D4AC0D", "other": "#717D7E",
     })
-    """
+    '''
     Step-01 merge QC figure (sequence length / identity distributions). Master = the seed set, Secondary
     = the expanded BLAST set, Total = the combined line/labels; grey_fill and box_edge are the KDE fill
     and the stats-box edge.
-    """
+    '''
     MERGE_QC_COLOUR: dict = field(default_factory=lambda: {
         "Master":    "#2181B9",
         "Secondary": "#F1590D",
@@ -2554,10 +2583,10 @@ class CFG:
         "grey_fill": "#C0C0C0",
         "box_edge":  "#CCCCCC",
     })
-    """
+    '''
     Ordered series palettes. Indexed, never name-picked, so a figure cannot silently reorder its scale.
     RADAR carries one colour per plotted ligand; TREND one per metric on a multi-metric trend panel.
-    """
+    '''
     VIS_RADAR_SERIES: tuple = ("#057759", "#0BF1E2", "#E69F00", "#CC79A7", "#0072B2",
                                "#56B4E9", "#F0E442", "#009E73", "#D55E00", "#CC79A7")
     VIS_TREND_SERIES: tuple = ("#0072B2", "#E69F00", "#9467BD", "#009E73", "#D55E00")
@@ -2577,10 +2606,10 @@ class CFG:
                                 "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
     VIS_CLADE_SERIES: tuple  = ("#E69F00", "#56B4E9", "#009E73", "#F0E442",
                                 "#0072B2", "#D55E00", "#CC79A7", "#cbd5e1")
-    """
+    '''
     Deep/secondary shades of the accents, for the marks that must sit ON a filled band of the same
     hue and still be legible (a dark-green label on the pale-green 'strong' fill, and so on).
-    """
+    '''
     VIS_ACCENT_DEEP: dict = field(default_factory=lambda: {
         "green":      "#005840",
         "green_alt":  "#1B4D2E",
@@ -2624,11 +2653,13 @@ class CFG:
         "orange_deepest": "#6E2C00",   # the no-fit / potential-inhibitor mark
         "gold_muted":     "#C9A227",   # edge of an amber annotation box
     })
-    # Step-07 MD/QM-MM figure palette. Every colour the reaction-profile, NAC and dwell figures draw
-    # lives here (07 had no hex literal SSOT while 03 does); a restyle is one edit. Semantic keys, not
-    # raw hex, at the 07 call sites.
-    # (pass-zone / distance-gate / angle-gate reuse VIS_ACCENT green/vermillion/blue at the 07 call sites,
-    # not re-literalled here - one Okabe-Ito definition.)
+    '''
+    Step-07 MD/QM-MM figure palette. Every colour the reaction-profile, NAC and dwell figures draw
+    lives here (07 had no hex literal SSOT while 03 does); a restyle is one edit. Semantic keys, not
+    raw hex, at the 07 call sites.
+    (pass-zone / distance-gate / angle-gate reuse VIS_ACCENT green/vermillion/blue at the 07 call sites,
+    not re-literalled here - one Okabe-Ito definition.)
+    '''
     VIS_MD_PALETTE: dict = field(default_factory=lambda: {
         "good":            "#15803D",   # within the relaxed gate (green)
         "marginal":        "#EA580C",   # between the relaxed gate and the marginal cut (orange)
@@ -2661,14 +2692,14 @@ class CFG:
     VIS_PYMOL_LABEL_COLOR: str         = "white"
     VIS_PYMOL_SURFACE_RADIUS: float    = 18.0  # Å  render surface only within this radius of the ligand; the far protein is off-frame after zoom/clip, so this cuts ray time with no visible change
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.1b: Boltz confidence quality bands (figure shading - Step 03)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Confidence-score band edges and Okabe–Ito colour-blind-safe band colours used by
     Step 03 figures to shade high / acceptable / below-threshold confidence zones.
     Single source so band edges and colours stay consistent across every figure.
-    """
+    '''
     CONF_BAND_HIGH: float       = 0.90   # confidence ≥ this → high-quality zone
     CONF_BAND_ACCEPTABLE: float = 0.80   # confidence ≥ this → acceptable zone
     CONF_BAND_COLOURS: dict = field(default_factory=lambda: {
@@ -2676,16 +2707,16 @@ class CFG:
         "acceptable": "#E69F00",   # amber  - acceptable
         "below":      "#D55E00",   # vermillion - below threshold
     })
-    """
+    '''
     Active-site RMSD-to-crystal quality bands (Å) for Step 03 figure shading.
     ≤EXCELLENT green · ≤ACCEPTABLE amber · ≤DIVERGED vermillion · above → severe.
-    """
-    """
+    '''
+    '''
     Geometry helpers used while READING structures, not while judging them. The C–O cut-off simply
     asks 'are these two atoms bonded' (a C–O bond is 1.21-1.43 Å; 1.6 Å separates bonded from
     non-bonded with room to spare), and the degeneracy tolerance decides when two principal axes of
     a pocket are too close in length to be told apart.
-    """
+    '''
     BOND_CO_MAX_A: float          = 1.6    # Å  above this, a C and an O are not bonded
     PCA_DEGENERACY_TOL: float     = 0.15   # relative gap below which two axes are degenerate
     '''
@@ -2700,22 +2731,22 @@ class CFG:
     RMSD_BAND_EXCELLENT: float  = 1.0   # Å  ≤ this → excellent
     RMSD_BAND_ACCEPTABLE: float = 2.0   # Å  ≤ this → acceptable
     RMSD_BAND_DIVERGED: float   = 3.0   # Å  ≤ this → diverged (above → severe)
-    """
+    '''
     Mechanistic-score quality bands (0–1) - Step 03 figure shading. Rescaled for the
     holistic mech_score (full machinery alone = 0.70; the linear SN2 angle term lifts
     it toward 1.0): strong = complete anchors + a near-linear productive trajectory.
-    """
+    '''
     MECH_FP_BAND_STRONG: float   = 0.90   # ≥ this → strong
     MECH_FP_BAND_MODERATE: float = 0.75   # ≥ this → moderate (below → weak)
-    """
+    '''
     Active-site engagement fraction quality bands (0–1) - Step 03 figure shading.
-    """
+    '''
     ENGAGEMENT_BAND_HIGH: float     = 0.75   # ≥ this → high engagement
     ENGAGEMENT_BAND_MODERATE: float = 0.50   # ≥ this → moderate (below → low)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.2: Per-structure rendering timeouts - seconds (Step 07)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     VIS_TIMEOUT_PYMOL: int    = 600   # PyMOL render timeout (2× 2400-px ray traces, pocket-local surface - a few min on CPU)
     VIS_TIMEOUT_CHIMERAX: int = 180   # ChimeraX render timeout
     VIS_TIMEOUT_MAESTRO: int  = 300   # Maestro render timeout
@@ -2723,19 +2754,19 @@ class CFG:
     VIS_TIMEOUT_LIGPLOT: int     =  60   # LigPlot+ render timeout
     VIS_TIMEOUT_PYMOL_HEAVY: int = 1200  # s  PyMOL timeout for structures with ≥4 C–F bonds (polyfluorinated PFAS)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.3: Geometric highlight radii (Step 07)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     VIS_F_CONTACT_RADIUS: float = 4.0   # Å  fluorine contact highlight sphere
     VIS_POCKET_RADIUS: float    = 5.5   # Å  binding-pocket cartoon / surface shell
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.4: Tier summary figure layout (Step 03)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Pixel dimensions and typography for the per-tier stacked-bar / star-plot
     panels produced by 03_Validation_Figures_DeFluorX.py.
-    """
+    '''
     VIS_TT_STAR_SIZE: int    = 460    # px  star marker diameter
     VIS_TT_SHRINK_BORDER: int =  12   # px  border shrink for tight layout
     VIS_TT_IMG_PX: int       = 800    # px  panel image width
@@ -2746,9 +2777,9 @@ class CFG:
     VIS_TT_AX_WIDTH: float   =   0.12 # fraction of figure width for axis panel
     VIS_TT_ZOOM_BUFFER: float =  1.0  # Å  PyMOL zoom padding around the pocket (lower = more zoomed-in)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 13.5: Maximum display ranks (Step 03)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     VIS_MAX_RANKS_DISPLAY: int = 50   # top-N entries shown in ranked output plots
     VIS_MAX_THUMBNAILS: int = 10   # max structure thumbnails embedded in a quality-space panel (top-N by Scientific_Rank)
     VIS_RADAR_MAX_HITS: int = 10   # max series plotted on a radar / spider chart (top-N by ranking key)
@@ -2788,17 +2819,17 @@ class CFG:
         "Score":        ["Binding_Probability_Score", "Binding_Probability", "ActiveSite_Conservation_Score", "binding_likelihood_computed"]
     })
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 14: SEQUENCE ALIGNMENT & SCORING PARAMETERS  (Step 02)
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.1: Pairwise sequence alignment
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Biopython PairwiseAligner configured for global BLOSUM62 alignment.
     Ref: Cock et al. (2009); Henikoff & Henikoff (1992) - see header §14.
-    """
+    '''
     ALIGN_OPEN_GAP_SCORE: float   = -10.0  # open-gap penalty (full gap initiation cost)
     ALIGN_EXTEND_GAP_SCORE: float = -0.5   # gap-extension penalty (per-residue gap cost)
     ALIGN_MIN_SEQ_IDENTITY: float = 25.0   # %  identity_pct ≥ this → active-site mapping flagged reliable
@@ -2806,54 +2837,56 @@ class CFG:
     CONSERV_W_INTEGRITY: float = 0.60  # Criterion-A active-site integrity (8 catalytic residues correctly mapped)
     CONSERV_W_GEO: float       = 0.30  # active-site geometric fit to control (RMSD-derived)
     CONSERV_W_IDENT: float     = 0.10  # global sequence identity (light corroborating signal)
-    # Reference-structure conservation score (3R3U crystal + DeHa4 control): a 2-term
-    # identity/geometry blend, distinct from the 3-term candidate score above. Control
-    # rows pass identity = 100.0, so the identity term contributes CONSERV_REF_W_IDENT*100.
+    '''
+    Reference-structure conservation score (3R3U crystal + DeHa4 control): a 2-term
+    identity/geometry blend, distinct from the 3-term candidate score above. Control
+    rows pass identity = 100.0, so the identity term contributes CONSERV_REF_W_IDENT*100.
+    '''
     CONSERV_REF_W_IDENT: float = 0.25  # reference-structure conservation: sequence-identity weight
     CONSERV_REF_W_GEO: float   = 0.75  # reference-structure conservation: active-site geometric-fit weight
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.1b: Alignment grade bins (Step 02)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Used with pd.cut() to assign letter grades to Alignment_Score_Pct.
     bins[i] < score ≤ bins[i+1] → label[i].  right=True (default for pd.cut).
-    """
+    '''
     ALIGN_GRADE_BINS:   list = field(default_factory=lambda:
                               [0, 20, 30, 40, 50, 60, 70, 80, 90, 100])
     ALIGN_GRADE_LABELS: list = field(default_factory=lambda:
                               ["I", "H", "G", "F", "E", "D", "C", "B", "A"])
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.2: Dynamic alignment cost-matrix scaling
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     ALIGN_DYNAMIC_PENALTY_FACTOR: float   = 2.0  # scale factor applied to max(cost) for dynamic penalty
     ALIGN_DYNAMIC_PENALTY_FALLBACK: float = 5.0  # penalty value when cost matrix is empty
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.2b: Alignment-free k-mer dendrogram (Step 04)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     DENDRO_KMER_SIZE: int          = 3          # k-mer length for sequence frequency profiles
     DENDRO_DISTANCE_METRIC: str    = "cosine"   # pairwise distance metric (scipy pdist)
     DENDRO_LINKAGE_METHOD: str     = "average"  # hierarchical linkage (average = UPGMA)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.3: Likelihood scoring thresholds (Step 02)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Applied during Likelihood_Degrader_Score computation.
     SCORE_DESOLVATION_THRESHOLD: float        = 0.5   # hydrophobic desolvation ratio above which bonus applies
     SCORE_DESOLVATION_BONUS_FACTOR: float     = 10.0  # multiplier for desolvation bonus (× ratio)
     SCORE_INHIBITION_DENSITY_THRESHOLD: float = 1.5   # interaction-density above which the active-site contact flag fires
     SCORE_INHIBITION_PENALTY_FACTOR: float    = 15.0  # scaling factor for the active-site contact flag
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.4: GPU batch watchdog
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     GPU_WATCHDOG_TIMEOUT_PER_JOB: int = 600  # seconds per job before GPU-batch watchdog kills the run
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 14.5: Affinity interaction contribution weights (Step 02)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # custom_affinity_score = Σ w·interaction_count - w_dist·avg_dist
     SCORE_W_AFF_HB:   float = 1.5    # hydrogen bond
     SCORE_W_AFF_HP:   float = 1.0    # hydrophobic contact
@@ -2866,17 +2899,17 @@ class CFG:
     SCORE_W_AFF_MC:   float = 2.5    # metal coordination
     SCORE_W_AFF_DIST: float = 0.05   # average distance penalty
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 15: PDB PREPARATION - Schrödinger PrepWizard  (Step 05)
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 15.1: PrepWizard protonation & minimisation
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # PrepWizard protocol - Sastry et al. (2013) - see header §15.
     PREPWIZARD_PROPKA_PH: float      = 8.0  # protein protonation pH (FAcD physiological context)
     PREPWIZARD_EPIK_PH: float        = 8.0  # PFAS ligand protonation pH via Epik
-    """
+    '''
     Catalytic protonation, enforced by ROLE after PrepWizard.
 
     PropKa assigns protonation per structure from a pKa prediction, and it does so without knowing
@@ -2910,7 +2943,7 @@ class CFG:
     Deprotonation is read from the HYDROGENS, not the residue NAME: Schrödinger keeps the name ASP whether
     or not the carboxyl carries its proton (ASH is an AMBER convention it never writes), so the observable
     that distinguishes the two states is the HD2 proton, not an 'ASH' name test.
-    """
+    '''
     PREPWIZARD_ENFORCE_PROTONATION: bool = True
     CATALYTIC_PROTONATION_POLICY: dict = field(default_factory=lambda: {
         "Nuc":   {"role_key": "Nucleophile",        "residue": "ASP", "state": "deprotonated (-1)",
@@ -2953,7 +2986,7 @@ class CFG:
     screen less.
     '''
     PREPWIZARD_RMSD_RESTRAIN: float  = 0.15  # Å - RMSD restraint for clash-resolving minimisation
-    """
+    '''
     PrepWizard's restrained-minimisation force field. Its own default is OPLS_2005 - a different
     force field from the one every downstream stage uses (the Desmond system build, the MD production
     run, WaterMap and Prime MM-GBSA all run the OPLS4 family, exposed by prepwizard as 'S-OPLS').
@@ -2961,10 +2994,10 @@ class CFG:
     so the prepared geometry the MD starts from is not a minimum of the MD's own potential and
     relaxes the moment the simulation begins. The only two values prepwizard accepts are S-OPLS and
     OPLS_2005.
-    """
+    '''
     PREPWIZARD_FORCEFIELD: str       = "S-OPLS"   # OPLS4-family; matches Desmond/WaterMap/Prime
 
-    """
+    '''
     QM (Jaguar ESP) partial charges for the MD-ready ligands - Step 05b.
 
     Desmond takes its ligand charges from OPLS4. A fixed-charge force field represents fluorine's low
@@ -2977,10 +3010,10 @@ class CFG:
     formal charge (fluoroacetate: -1.000). The fit is done on the PREPARED geometry - the structure
     the MD actually starts from - because a charge set derived from a different conformer is a charge
     set for a different molecule.
-    """
+    '''
     ESP_CHARGE_BASIS: str            = "6-31G**"   # basis for the ESP single point
     ESP_CHARGE_DFT: str              = "b3lyp"     # functional for the ESP single point
-    """
+    '''
     QM (Jaguar ESP) ligand charges - Step 05, OPT-IN.
 
     OPLS4 assigns the ligand's charges by atom type, so it cannot see the one quantity an SN2 rate turns
@@ -2994,25 +3027,25 @@ class CFG:
 
     It is irrelevant to Step 07: QSite puts the ligand INSIDE the QM region, where DFT computes its
     density directly and never consults a point charge.
-    """
+    '''
     ESP_CHARGES_ENABLE: bool         = True        # ON by default: every Step-05 run writes 4_Ligand_ESP_Charges (Jaguar DFT, minutes/ligand); --esp also forces it
     ESP_KEEP_SCRATCH: bool           = False       # Jaguar leaves ~26 scratch files per ligand
                                                    # (babel.com, symtry.*, restart.*, *_tmp.mae …);
                                                    # they are deleted unless this is set
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 15.2: Parallelism
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     PREP_CPU_RESERVE: int  = 2  # CPU cores to reserve for OS/desktop stability (not used by PrepWizard)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 15.3: Chain assignment
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     PREP_LIGAND_CHAIN: str = "L"  # chain identifier for non-protein (ligand) residues in converted PDB
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 15.4: Standard amino-acid residue set (used for ligand filtering)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     PREP_STANDARD_AA: set = field(default_factory=lambda: {
         "ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS", "ILE",
         "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
@@ -3022,12 +3055,12 @@ class CFG:
     })
     PREP_AMBIGUOUS_AA: set = field(default_factory=lambda: set("BXZJOU"))
 
-    """
+    '''
     Three-letter → one-letter residue code, including the force-field protonation variants that
     PREP_STANDARD_AA already recognises. Figures name a mapped catalytic residue as one letter plus
     its position (e.g. ASP110 → D110); the POSITION always comes from the ranked sheet's Mapped_*
     column for that homolog, never from a literal in the plotting code.
-    """
+    '''
     AA_THREE_TO_ONE: dict = field(default_factory=lambda: {
         "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLU": "E", "GLN": "Q",
         "GLY": "G", "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F",
@@ -3037,9 +3070,9 @@ class CFG:
     })
     PREP_MAX_AMBIGUOUS_PCT: float = 5.0   # %  sequence rejected if ambiguous-residue fraction exceeds this
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 15.5: Protein-associated residues (stay in protein chain)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Modified amino acids and structural metals that must NOT be moved to Chain L.
     PREP_PROTEIN_ASSOCIATED: set = field(default_factory=lambda: {
         # Modified AAs
@@ -3048,23 +3081,25 @@ class CFG:
         "ZN", "MG", "CA", "FE", "MN", "CO", "NI", "CU", "NA", "K",
     })
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 16: DATA REGISTRY & VISUAL AESTHETICS
-    # ===============================================================================
+    # =============================================================================
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 16.1: CSV Column Names
-    # -------------------------------------------------------------------------------
-    # Registry for all master CSV columns to prevent hardcoding string keys.
-    # Controls are emitted by 02 with a reserved zero job index, so a job name beginning with this
-    # prefix IS a control. Kept here because several steps test for it and a literal "0000000" in
-    # three scripts is three places to get it wrong.
-    """
+    # -----------------------------------------------------------------------------
+    '''
+    Registry for all master CSV columns to prevent hardcoding string keys.
+    Controls are emitted by 02 with a reserved zero job index, so a job name beginning with this
+    prefix IS a control. Kept here because several steps test for it and a literal "0000000" in
+    three scripts is three places to get it wrong.
+    '''
+    '''
     The sentinel for a quantity that could not be measured. Written as a number rather than NaN because
     it has to survive a CSV round-trip and an integer cast; anything reading it MUST filter it out
     before averaging or normalising. A 999 that reaches a min-max scaler crushes every real value into
     the bottom of the range, which is how a metric becomes a flat line at zero and nobody notices.
-    """
+    '''
     SENTINEL_UNDEFINED: float = 999.0
     '''
     Any value at or above this is a sentinel, not a measurement. It sits below SENTINEL_UNDEFINED so a
@@ -3082,12 +3117,12 @@ class CFG:
     '''
     RDKIT_EMBED_SEED: int = 0xF00D   # ETKDG conformer embedding for the ligand template (02)
     ANALYSIS_SEED: int    = 42       # UMAP projection, subsampling and bootstraps in the figures (03)
-    """
+    '''
     Columns where a SMALLER number is BETTER, so 0.0 is the optimum and can never stand in for 'missing'.
     A missing value in one of these is filled with SENTINEL_UNDEFINED, not with zero: filling an absent
     nucleophile distance with 0.0 A does not record 'unknown', it records a nucleophile sitting on top of
     the carbon - and it would clear every distance gate in the pipeline.
-    """
+    '''
     INVERTED_METRIC_COLUMNS: tuple = (
         "Dist_Nucleophile", "dist_Nuc_nearest_O", "Active_Site_RMSD", "Active_Site_RMSD_to_Control",
         "r3u_Active_Site_RMSD", "sn2_backside_occlusion", "chem_penalty", "SN2_Trajectory_Deviation_A",
@@ -3112,13 +3147,13 @@ class CFG:
     COL_LIKE_S:   str = "ActiveSite_Conservation_Score"
     COL_ALN_G:    str = "Alignment_Grade"
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 16.2: Visual Plotting Properties
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Canonical marker sizes (S) and opacities (A) for each tier.
     Tier_1/Tier_2 tiers are drawn larger and more opaque.
-    """
+    '''
     @property
     def VIS_TIER_SIZES(self) -> dict:
         return {
@@ -3133,9 +3168,9 @@ class CFG:
             self.TIER_ORDER[3]: 0.38, self.TIER_ORDER[4]: 0.22, self.TIER_ORDER[5]: 0.18, self.TIER_ORDER[6]: 0.10
         }
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 16.3: Alignment Grade Bins
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Define identity % ranges for each grade letter.
     ALIGN_GRADE_DEFS: list = field(default_factory=lambda: [
         (90.0, 100.0, "A"), (80.0, 90.0, "B"), (70.0, 80.0, "C"),
@@ -3143,9 +3178,9 @@ class CFG:
         (30.0, 40.0,  "G"), (20.0, 30.0, "H"), (0.0,  20.0, "I")
     ])
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 16.4: Tier meanings
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     TIER_MEANING: dict = field(default_factory=lambda: {
         "Tier_1A": "Elite",
         "Tier_1B": "Excellent",
@@ -3157,20 +3192,24 @@ class CFG:
         "Control": "Reference Control"
     })
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 16.5: Canonical pipeline artefact filenames (cross-script SSOT)
-    # -------------------------------------------------------------------------------
-    # Written by one stage, read by another - centralised so the producer and
-    # consumer filename cannot drift apart.
-    """
+    # -----------------------------------------------------------------------------
+    '''
+    Written by one stage, read by another - centralised so the producer and
+    consumer filename cannot drift apart.
+    '''
+    '''
     File-name masks. Every one of these is a CONTRACT between two steps - 05 globs what 03 wrote,
     07 globs what 06 wrote - and a mask spelled out at the call site is a contract only one side
     can see. A rename then breaks the consumer silently (an empty glob reads as 'nothing to do',
     not as an error).
-    """
-    # SINGLE SOURCE OF TRUTH for the two Step-02 production CSV names. Change the leading number (or the
-    # base) HERE ONLY: 02 builds the filename as f"{STEM}_{timestamp}.csv" and every consumer globs the
-    # matching GLOB_* (derived below in __post_init__). The number prefixes the production folder order.
+    '''
+    '''
+    SINGLE SOURCE OF TRUTH for the two Step-02 production CSV names. Change the leading number (or the
+    base) HERE ONLY: 02 builds the filename as f"{STEM}_{timestamp}.csv" and every consumer globs the
+    matching GLOB_* (derived below in __post_init__). The number prefixes the production folder order.
+    '''
     RANKED_CSV_STEM:    str = "6_Boltz2_DeFluorX_Ranked"        # 02 writes → 03/05/06/07 read (the ranked sheet)
     MASTER_CSV_STEM:    str = "5_Boltz2_DeFluorX_Master"        # 02 writes → all-jobs superset (not tier-ranked)
     GLOB_RANKED_CSV:    str = ""                             # derived: f"{RANKED_CSV_STEM}_*.csv"
@@ -3184,18 +3223,18 @@ class CFG:
     FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes (its own combined figures); 07 aggregates per-rank
     FILE_VALIDATED_MASTER: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source - 02's ranked CSV is authoritative.
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 17: PRIME MM-GBSA  (Step 06 - end-state binding free energy)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Runs $SCHRODINGER/run thermal_mmgbsa.py <job>-out.cms per completed MD job.
     MM-GBSA gives the ensemble ligand BINDING free energy (non-covalent,
     end-state) - complementary to, NOT a substitute for, the QSite QM/MM
     reaction barrier. GB implicit solvent overstabilises anionic PFAS, so treat
     ΔG_bind as a RELATIVE ranking, never an absolute value.
-    """
+    '''
     MMGBSA_RUN: bool        = True           # run thermal_mmgbsa.py in Step 06
-    """
+    '''
     Frame subsampling for Prime. 0 or 1 = every frame; N>1 appends `-step_size N`, scoring
     every Nth frame. Prime cost is linear in the number of structures, so this is the only
     knob that changes MM-GBSA wall-clock by an order of magnitude.
@@ -3208,7 +3247,7 @@ class CFG:
     discards redundancy, not information, and leaves ⟨ΔG_bind⟩, its spread and the ranking
     statistically indistinguishable. Step 06 derives and prints the resulting frame spacing
     from the trajectory itself, so this value can be changed freely without touching code.
-    """
+    '''
     MMGBSA_STEP_SIZE: int   = 10
     MMGBSA_LIGAND_ASL: str  = "res.ptype LIG"   # ASL passed to thermal_mmgbsa via its -lig_asl flag so Prime scores the correct molecule (matches Step 07's --lig LIG convention). A heavily fluorinated PFAS can be misassigned as solvent by auto-detection; empty string "" reverts to auto-detect.
     LIGAND_RESNAME_ASSERT: str = "LIG"          # the built complex MUST carry the ligand under this residue name. thermal_mmgbsa's own AslLigandSearcher auto-detect drops anything below 5 atoms; a bare fluoroacetate (5 heavy / 7 total) sits on that edge, so Step 05/06 assert this name rather than trust size-based detection - res.ptype LIG then selects the whole substrate regardless of size.
@@ -3225,12 +3264,12 @@ class CFG:
     DEFLUOR_NAC_ANGLE_DEG: float = 150.0        # in-line Od–C(alpha)–F attack angle cutoff (deg)
     DEFLUOR_ENGAGE_A: float    = 4.0            # residue counted as engaged with the ligand within this distance (Å)
     DEFLUOR_POCKET_RADIUS_A: float = 8.0        # frame-0 pocket = protein Cα within this radius of the ligand (COM reference)
-    """
+    '''
     Layout of the merged reactive-pose trajectory figure (01): three stacked panels (SN2 attack
     geometry, fluoride cradle, carboxylate clamp) sharing one Time axis. The x-grid is drawn heavier
     than the y-grid because the vertical time gridlines were otherwise near-invisible under the traces.
     Edge-label offsets are fractions of the axis span so residue names sit clear in the left margin.
-    """
+    '''
     DEFLUOR_MERGED_FIGSIZE: tuple = (11.0, 11.0)         # width, height (in) of the 3-panel figure
     DEFLUOR_PANEL_HEIGHT_RATIOS: tuple = (1.15, 1.0, 1.0)  # panel A slightly taller (dual-axis geometry)
     DEFLUOR_GRID_X_LW: float = 0.7              # time (x) gridline weight - heavier so it stays visible
@@ -3242,23 +3281,23 @@ class CFG:
     DEFLUOR_EDGE_LABEL_X: float = 0.006         # residue-tag x anchor left of t=0, fraction of total_ns
     DEFLUOR_EDGE_LABEL_GAP: float = 0.085       # min vertical separation between stacked tags, fraction of y-span
     MMGBSA_PROGRESS_INTERVAL_SEC: int = 30    # heartbeat cadence for the in-place (\r) MM-GBSA progress ticker
-    """
+    '''
     Failed Prime minimisations. A small PFAS ligand cannot bind at −1000 kcal/mol; frames that
     far outside the ensemble are minimisation artefacts (a blown-up structure), not physics. They
     are a fraction of a percent but they wreck an axis and drag the arithmetic mean, so the per-job
     figure scales to the ROBUST core (percentile clip) and flags them explicitly rather than
     silently deleting them. Frames beyond K × IQR from the quartiles are counted as failures.
-    """
+    '''
     MMGBSA_DG_OUTLIER_IQR_K: float = 3.0   # Tukey fence multiplier for FLAGGING failed minimisations
     MMGBSA_PLOT_CLIP_PCT: float = 0.5      # per-job figure y-axis spans this to (100 − this) percentile
-    """
+    '''
     Statistics for the cross-rank comparison. MD frames are NOT independent: neighbouring frames
     are the same configuration re-measured, so a t-test or Mann-Whitney over ~10⁴ frames returns
     p ≈ 0 for any difference whatsoever and is meaningless. The defensible test is a MOVING-BLOCK
     BOOTSTRAP - resample contiguous blocks longer than the correlation time, so each block is
     effectively one independent draw - giving a confidence interval on the median. Effect size is
     reported as Cliff's delta, which needs no distributional assumption and is unmoved by outliers.
-    """
+    '''
     MMGBSA_BOOTSTRAP_N: int = 2000          # bootstrap resamples for the median confidence interval
     MMGBSA_BOOTSTRAP_BLOCK: int = 50        # FLOOR on frames per block; the actual block is derived per series
     MMGBSA_BOOTSTRAP_BLOCK_TAU_MULT: float = 2.0   # block = this × the series' measured autocorrelation time τ
@@ -3278,12 +3317,12 @@ class CFG:
     # gridlines are coloured to match the axis they belong to and cannot be misread as one another.
     MMGBSA_GRID_LEFT: str  = "#4C72B0"   # bottom/left axis  (time course)
     MMGBSA_GRID_RIGHT: str = "#937860"   # top/right axis    (cumulative fraction)
-    """
+    '''
     Ink palette - every non-candidate mark colour in Step 06's figures. The candidate colours come
     from MMGBSA_RANK_PALETTE; these are the neutrals and accents used for medians, means, outlier
     flags, strokes and legend proxies. Kept here so a restyle is one edit, never a hunt through the
     plotting code.
-    """
+    '''
     MMGBSA_INK: dict = field(default_factory=lambda: {
         "dark":    "#111111",   # medians, in-figure text, box edges
         "light":   "#FFFFFF",   # box fills and the stroke behind outlined text
@@ -3301,7 +3340,7 @@ class CFG:
     # strengthens binding (favourable pre-organisation) and reads green; a positive shift reads amber.
     MMGBSA_DELTA_FAVOURABLE:   str = "#16A34A"
     MMGBSA_DELTA_UNFAVOURABLE: str = "#B45309"
-    """
+    '''
     ── Step 07: the reactive-pose figures (MM-GBSA decomposition · machinery engagement) ──
     Both figures compare the whole trajectory against the frames in which the pose is reactive, so
     every constant that decides what is DRAWN lives here rather than in the plotting code.
@@ -3310,7 +3349,7 @@ class CFG:
     THRESHOLD_SALT_BRIDGE of the warhead carbon - the outermost of the four criterion bands the
     figure already draws - so the percentage written in each bar is judged by the same cut-off the
     band shows.
-    """
+    '''
     DEFLUOR_COMPONENT_MIN_KCAL: float = 0.5     # an MM-GBSA term is plotted only if it reaches this
     DEFLUOR_COMPONENT_ALWAYS: tuple = ("Covalent",)   # these MM-GBSA terms are always shown, even below the cutoff (Covalent tracks bond formation, so its near-zero value is itself the signal)
                                                 # magnitude in at least one candidate; below it the
@@ -3320,19 +3359,19 @@ class CFG:
     DEFLUOR_ENGAGE_Y_MIN_TOP: float = 10.0      # floor on the engagement axis ceiling (the ceiling
                                                 # itself is taken from the data), so the criterion
                                                 # bands always have room
-    """
+    '''
     The four criterion bands, in the order the engagement figure stacks them: reactive contact,
     H-bond range, relaxed NAC, electrostatic range. The ramp runs green → amber → red, so a bar's
     height alone says whether the residue sits where the mechanism works or is merely in
     electrostatic reach.
-    """
+    '''
     DEFLUOR_BAND_COLOURS: tuple = ("#2E9E5B", "#7FBF3F", "#E8A33D", "#D1495B")
     DEFLUOR_BAND_ALPHA: float = 0.13            # band fill: under the bars, still four distinct bands
-    """
+    '''
     Ligand abbreviations for every figure in the pipeline. The full names ('Difluoroacetate') are
     long enough to push a legend across a panel, and the abbreviations are the names actually used
     in the chemistry. A ligand not listed here keeps its full name rather than being mangled.
-    """
+    '''
     VIS_LIGAND_SHORT: dict = field(default_factory=lambda: {
         # short PFAS acids: the long acid name collapses to FA / DFA / TFA
         "fluoroacetate":      "FA",
@@ -3353,24 +3392,24 @@ class CFG:
         "pfteda":  "PFTeDA", "pfhxda":  "PFHxDA", "pfoda":   "PFODA",  "genx":  "GenX",
         "adona":   "ADONA",  "6-2-ftoh":"6-2-FTOH", "8-2-ftoh":"8-2-FTOH", "c6o4": "C6O4",
     })
-    """
+    '''
     Prime subjob parallelism. The target is GLOBAL_MAX_WORKERS (cpu_count − PREP_CPU_RESERVE),
     exactly like every other step; MMGBSA_MAX_NJOBS = 0 means 'no extra ceiling'. Step 06 only
     drops below that target when the disk holding the Schrödinger scratch cannot hold one
     ~MMGBSA_SCRATCH_GB_PER_SUBJOB staging copy per subjob within MMGBSA_SCRATCH_HEADROOM_FRAC
     of its free space - the condition that fills the disk and kills the job.
-    """
-    """
+    '''
+    '''
     Tokens the SID-out.eaf Result vector carries per trajectory frame. Step 06's completion gate is
     EAF_TOKENS_PER_FRAME · traj_frames: 1 is the standard per-frame scalar series. If a SID analysis
     writes k > 1 tokens per frame, a partial EAF can still reach traj_frames tokens and be misjudged
     complete under a bare per-frame test; scaling the threshold by the true k closes that gap.
-    """
+    '''
     EAF_TOKENS_PER_FRAME: int = 1
     MMGBSA_MAX_NJOBS: int = 0                      # 0 = no ceiling beyond GLOBAL_MAX_WORKERS
     MMGBSA_SCRATCH_GB_PER_SUBJOB: float = 22.0     # measured staging footprint of one Prime subjob (full complexes copy)
     MMGBSA_SCRATCH_HEADROOM_FRAC: float = 0.75     # fraction of the scratch disk's free space the run may occupy
-    """
+    '''
     Sharded MM-GBSA. A bare thermal_mmgbsa.py run is serial where it hurts: ONE process
     reads every trajectory frame (one core, hours, and its RSS grows ~0.36 GB per 1000
     frames - ~40 GB by frame 100k) and only then hands the whole ensemble to Prime, so the
@@ -3382,26 +3421,26 @@ class CFG:
     is a scheduling change, not a subsampling one. Shard CSVs are concatenated into the
     single per-job CSV the rest of the step already reads.
     Set MMGBSA_SHARD_FRAMES = 0 to fall back to one plain serial thermal_mmgbsa run.
-    """
+    '''
     MMGBSA_SHARD_FRAMES: int = 2000        # trajectory frames per shard (0 = no sharding)
     MMGBSA_SHARD_PRIME_NJOBS: int = 0      # Prime subjobs per shard; 0 = auto-pick with concurrency from CPU+RAM (see _shard_plan)
     MMGBSA_PRIME_EFFECTIVE_CORES: int = 3  # live Prime workers thermal_mmgbsa actually runs per shard (measured ~2-3, not the requested -NJOBS); the auto planner counts busy cores against this, not the request
     MMGBSA_SHARD_CONCURRENCY: int = 0      # shards in flight (0 = auto: GLOBAL_MAX_WORKERS // MMGBSA_SHARD_PRIME_NJOBS, then clamped to free RAM)
-    """
+    '''
     Memory budget for the shard plan: a shard costs one reader plus its MMGBSA_SHARD_PRIME_NJOBS
     Prime subjobs, and Prime is the dominant term (measured ~1.8 GB × 30 subjobs ≈ 54 GB - enough
     to exhaust a 60 GB box on its own and push it into swap). Step 06 shrinks the shard
     concurrency until reader + Prime fit in free RAM. Raise MMGBSA_RAM_HEADROOM_FRAC (or lower
     MMGBSA_PRIME_RAM_GB) to run more subjobs and accept some swapping; lower it to be safer.
     A reader's RSS is a base plus growth with the frames it reads, so a stride shrinks it.
-    """
+    '''
     MMGBSA_READER_RAM_BASE_GB: float = 3.6          # reader RSS before any frames are read
     MMGBSA_READER_RAM_PER_1K_FRAMES_GB: float = 0.36  # reader RSS growth per 1000 frames read
     MMGBSA_PRIME_RAM_GB: float = 1.8                # measured peak RSS of ONE Prime subjob
     MMGBSA_RAM_HEADROOM_FRAC: float = 0.90          # fraction of the (free RAM + free swap) budget the run may occupy; 0.90 keeps the RAM cap from binding before the CPU cap so the planner reaches total_cpu-2 busy cores
     MMGBSA_RAM_SWAP_FRAC: float = 1.0               # fraction of FREE SWAP added to the RAM budget. 1.0 = use ALL free swap so the shard planner packs the most concurrent Prime shards and drives the CPU post-processing to total_cpu-2 (fastest). Prime working set that spills onto swap pages to disk (slower per shard) and raises OOM risk - deliberate: user opted for maximum utilisation over caution. Lower toward 0 if it thrashes/OOM-kills.
     MMGBSA_SHARD_SUBDIR: str = "_MMGBSA_Shards"   # per-shard logs and Prime outputs live here, out of the job folder's glob path
-    """
+    '''
     Frame-ensemble averaging estimator for the headline per-job ΔG_bind.
     "mean" = arithmetic ⟨ΔGᵢ⟩ (default; the standard thermal MM-GBSA estimate - MD
     frames are already Boltzmann-sampled, so an unweighted mean is the ensemble
@@ -3410,27 +3449,27 @@ class CFG:
     only, as it re-weights an already-canonical ensemble and collapses toward the
     single most negative frame. The summary CSV always reports all three columns;
     this knob only selects which one drives the combined bar plot and the headline value.
-    """
+    '''
     MMGBSA_AVERAGING: str   = "mean"          # "mean" | "median" | "boltzmann"
     GAS_CONSTANT_KCAL: float = 1.9872036e-3   # kcal/mol/K - R for the boltzmann estimator
-    """
+    '''
     The Boltzmann estimator weights frames by exp(-ΔG/RT), so its T must be the temperature the frames
     were actually SAMPLED at - not standard state. The frames come from the Desmond ensemble, whose
     thermostat set point is MD_EQUIL_TARGET_T, so the estimator reads that number rather than carrying
     a second, independent one. Holding 298.15 here while the trajectory ran at 300.0 K would weight an
     ensemble against a Boltzmann distribution it was never drawn from.
-    """
+    '''
     MMGBSA_TEMPERATURE_K: float = 300.0       # K - MUST equal MD_EQUIL_TARGET_T (the sampled ensemble)
 
-    # ===============================================================================
-    # SECTION 17b: ESP PHYSICS - System Builder / MD / WaterMap simulation (Step 06)
-    # ===============================================================================
-    """
+    # #############################################################################
+    # SUBSECTION 17b: ESP PHYSICS - System Builder / MD / WaterMap simulation (Step 06)
+    # #############################################################################
+    '''
     Simulation settings for the Step-06 explicit-solvent physics: Desmond System Builder,
     MD production, and WaterMap. The MD thermostat set point is MD_EQUIL_TARGET_T (defined
     above) - the same number the equilibration check and MM-GBSA read, so the run has one
     temperature, not three.
-    """
+    '''
     PHYS_SOLVENT_MODEL: str    = "TIP3P"       # explicit water model for the MD solvent box
     PHYS_FORCEFIELD: str       = "OPLS4"       # force field for System Builder + MD
     PHYS_BOX_SHAPE: str        = "orthorhombic"
@@ -3456,10 +3495,10 @@ class CFG:
     PHYS_TEST_MD_FRAMES: int   = 500
     PHYS_TEST_WM_NS: float     = 2.0
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 18: MD-READY SELECTION  (gates heavy downstream compute - Steps 05→07)
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Single source of truth for WHICH complexes receive the expensive downstream
     pipeline (CIF→PDB, PrepWizard, MM-GBSA, MD). Step 02 writes two columns into the
     ranked CSV - MD_Selected (bool) and MD_Rank (1..N over the selected set, ordered
@@ -3475,14 +3514,16 @@ class CFG:
                        is True the ligand roster is DATA-DRIVEN: every unique ligand that
                        reached the tier is represented (no hardcoded selection). When
                        False the explicit MD_PER_LIGAND panel is used instead.
-    """
+    '''
     MD_SELECTION_MODE: str  = "per_ligand"        # "tier" | "topN" | "per_ligand"
     MD_TIERS: list          = field(default_factory=lambda: ["Tier_1A"])
     MD_TOP_N: int           = 10                   # used when MD_SELECTION_MODE == "topN"
     MD_PER_LIGAND_TIER: list = field(default_factory=lambda: ["Tier_1A"])   # per_ligand MD reps: one best complex per unique ligand, drawn from Tier_1A only (accepts a single tier string too). Keeps the MD cohort strictly elite - a small, honest set of the highest-confidence degraders - rather than diluting it with lower-tier leads
-    # Data-driven roster (default): one best complex per UNIQUE ligand that reached
-    # MD_PER_LIGAND_TIER - no hardcoded ligand list. Set False to use the explicit
-    # MD_PER_LIGAND panel below (curated chemotype-stratified subset).
+    '''
+    Data-driven roster (default): one best complex per UNIQUE ligand that reached
+    MD_PER_LIGAND_TIER - no hardcoded ligand list. Set False to use the explicit
+    MD_PER_LIGAND panel below (curated chemotype-stratified subset).
+    '''
     MD_PER_LIGAND_AUTO: bool = True
     MD_PER_LIGAND: list     = field(default_factory=lambda: [
         "Fluoroacetate", "Difluoroacetate", "TFA",        # α-fluorination ladder (mono/di/tri)
@@ -3492,13 +3533,13 @@ class CFG:
     MD_SELECTED_COL: str = "MD_Selected"          # bool column written to the ranked CSV
     MD_RANK_COL: str     = "MD_Rank"              # int (1..N over selected), NaN otherwise
 
-    # ===============================================================================
+    # =============================================================================
     # SECTION 19: SSOT FILE-NAMING EXTENSIONS
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Standard suffixes appended to file basenames for downstream tasks.
     Centralized here to ensure uniformity across the Preparation and MD stages.
-    """
+    '''
     EXT_QMMM_READY: str  = "_QMMM_Ready.pdb"
     EXT_LIGAND_SDF: str  = "_Ligand.sdf"
     EXT_COMPLEX_PDB: str = "_Complex.pdb"
@@ -3519,9 +3560,11 @@ class CFG:
         assert _isclose(self.TIER_ANGLE_MIN["Tier_2B"], self.NAC_ANGLE_RELAXED), "TIER_ANGLE_MIN['Tier_2B'] must equal NAC_ANGLE_RELAXED"
         assert _isclose(self.SUBSTRATE_ANGLE_MIN, self.TIER_ANGLE_MIN["Tier_1B"]), "SUBSTRATE_ANGLE_MIN must equal TIER_ANGLE_MIN['Tier_1B']"
         assert _isclose(self.INHIBITOR_ANGLE_MAX, self.NAC_ANGLE_RELAXED), "INHIBITOR_ANGLE_MAX must equal NAC_ANGLE_RELAXED"
-        # The Boltzmann estimator must weight the ensemble at the temperature that ensemble was sampled
-        # at. If the thermostat set point is ever changed, this fails at import rather than silently
-        # re-weighting the trajectory against a distribution it was never drawn from.
+        '''
+        The Boltzmann estimator must weight the ensemble at the temperature that ensemble was sampled
+        at. If the thermostat set point is ever changed, this fails at import rather than silently
+        re-weighting the trajectory against a distribution it was never drawn from.
+        '''
         assert _isclose(self.MMGBSA_TEMPERATURE_K, self.MD_EQUIL_TARGET_T), \
             "MMGBSA_TEMPERATURE_K must equal MD_EQUIL_TARGET_T (the sampled ensemble temperature)"
         # Component-weight sets that must sum to 1.0.
@@ -3530,8 +3573,10 @@ class CFG:
         assert _isclose(self.SOFT_W_NUC + self.SOFT_W_ANG + self.SOFT_W_INT, 1.0), "soft_catalytic_score weights must sum to 1.0"
         assert _isclose(self.CONSERV_W_INTEGRITY + self.CONSERV_W_GEO + self.CONSERV_W_IDENT, 1.0), "candidate conservation weights must sum to 1.0"
         assert _isclose(self.CONSERV_REF_W_IDENT + self.CONSERV_REF_W_GEO, 1.0), "reference conservation weights must sum to 1.0"
-        # Derived file-name globs - the ONLY place they are built, from the STEM single-source-of-truth
-        # above (object.__setattr__ because the dataclass is frozen). Bump the number/base in RANKED_CSV_STEM
-        # / MASTER_CSV_STEM and every producer (02) and consumer (03/05/06/07) tracks it with no other edit.
+        '''
+        Derived file-name globs - the ONLY place they are built, from the STEM single-source-of-truth
+        above (object.__setattr__ because the dataclass is frozen). Bump the number/base in RANKED_CSV_STEM
+        / MASTER_CSV_STEM and every producer (02) and consumer (03/05/06/07) tracks it with no other edit.
+        '''
         object.__setattr__(self, "GLOB_RANKED_CSV", f"{self.RANKED_CSV_STEM}_*.csv")
         object.__setattr__(self, "GLOB_MASTER_CSV", f"{self.MASTER_CSV_STEM}_*.csv")

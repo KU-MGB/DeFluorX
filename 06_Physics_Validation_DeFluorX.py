@@ -145,9 +145,11 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-# Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter. The ESP/build/
-# WaterMap/MD stage bodies import `schrodinger` in-process, so the script must run under
-# $SCHRODINGER/run; this lets it also be launched as a plain `python 06_...py` (project conda env).
+'''
+Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter. The ESP/build/
+WaterMap/MD stage bodies import `schrodinger` in-process, so the script must run under
+$SCHRODINGER/run; this lets it also be launched as a plain `python 06_...py` (project conda env).
+'''
 try:
     import schrodinger  # noqa: F401
 except ModuleNotFoundError:
@@ -170,20 +172,20 @@ import math as _math
 import shutil as _sh
 import signal
 
-"""
+'''
 CPU usage cap (total cores - 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
 for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
 MKL / OpenMP / NumExpr) used by downstream tools and any numerical imports.
 setdefault() preserves any value exported by the caller or pipeline runner.
-"""
+'''
 _CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
             "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_tv, _CPU_CAP)
 
-# -------------------------------------------------------------------------------
+# =============================================================================
 # SECTION 1: PIPELINE MODULES (00_01 CFG, 00_02 utils) via importlib
-# -------------------------------------------------------------------------------
+# =============================================================================
 def _load_module(name: str, path: Path):
     if not path.exists():
         raise FileNotFoundError(f"Required module not found: {path}")
@@ -214,31 +216,39 @@ _RULE = _utils_mod.SEPARATOR_LIGHT   # ─×80 - house step / subsection rule
 _DEFAULT_FRAME_TOTAL = 100_000   # heartbeat fallback when the trajectory length is unreadable
 EXIT_WARN = 3   # step completed but a complementary part (MM-GBSA) was deferred/failed; the pipeline runner renders WARN and continues (0=PASS, 1=hard error, 3=warn)
 
-# Schrödinger jobs run under jobserverd, independent of this process - so on Ctrl-C / kill they would
-# outlive the script. Every WaterMap/build/MD job name (and each MM-GBSA shard's Prime subjob) is registered
-# here BEFORE submit and removed only on clean completion; a signal/atexit handler cancels whatever is still
-# registered (see _install_job_cleanup).
+'''
+Schrödinger jobs run under jobserverd, independent of this process - so on Ctrl-C / kill they would
+outlive the script. Every WaterMap/build/MD job name (and each MM-GBSA shard's Prime subjob) is registered
+here BEFORE submit and removed only on clean completion; a signal/atexit handler cancels whatever is still
+registered (see _install_job_cleanup).
+'''
 _LAUNCHED_JOBS: "set[str]" = set()
-# Local Schrödinger subprocesses that do NOT go through the job server - SID (analyze_simulation/event_analysis,
-# run -LOCAL) and the MM-GBSA thermal_mmgbsa drivers. These reparent to init on a kill and keep running, so the
-# same handler terminates each one's process group. Launched via _run_tracked, which registers and removes them.
+'''
+Local Schrödinger subprocesses that do NOT go through the job server - SID (analyze_simulation/event_analysis,
+run -LOCAL) and the MM-GBSA thermal_mmgbsa drivers. These reparent to init on a kill and keep running, so the
+same handler terminates each one's process group. Launched via _run_tracked, which registers and removes them.
+'''
 _LAUNCHED_PROCS: "set[subprocess.Popen]" = set()
 _CLEANUP_DONE = False
 
-# Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
-# completion gate (is_eaf_complete): threshold = EAF_TOKENS_PER_FRAME · traj_frames.
-# 1 is the standard per-frame scalar series; set to the measured ratio once read
-# off a known-good, fully-analysed EAF so a partial high-k EAF cannot pass.
+'''
+Tokens the SID-out.eaf Result vector carries per trajectory frame. Governs the
+completion gate (is_eaf_complete): threshold = EAF_TOKENS_PER_FRAME · traj_frames.
+1 is the standard per-frame scalar series; set to the measured ratio once read
+off a known-good, fully-analysed EAF so a partial high-k EAF cannot pass.
+'''
 EAF_TOKENS_PER_FRAME = int(CFG.EAF_TOKENS_PER_FRAME)
 
 
 # =============================================================================
 # SECTION 2: SMALL HELPERS
 # =============================================================================
-# Main-log file handle for this step, opened in main() once the run directory is known. Every _echo
-# line is mirrored to it (ANSI stripped), so Step 06 has the same 00_<StepName>.log every other step
-# writes. The per-\r progress bars (written straight to sys.stdout) are deliberately NOT mirrored -
-# a log does not want carriage-return redraws.
+r'''
+Main-log file handle for this step, opened in main() once the run directory is known. Every _echo
+line is mirrored to it (ANSI stripped), so Step 06 has the same 00_<StepName>.log every other step
+writes. The per-\r progress bars (written straight to sys.stdout) are deliberately NOT mirrored -
+a log does not want carriage-return redraws.
+'''
 _LOG_FH = None
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -254,11 +264,13 @@ def _open_step_log(physics_dir: Path) -> None:
         _LOG_FH = None
 
 
-# One live \r progress line at a time across all threads. The MD heartbeat (main thread) and the CPU
-# post-processing bars (worker thread - extraction, SID, MM-GBSA) share the terminal, so every \r write
-# and every full-line _echo takes this lock: a full line first clears the open bar, and no two writers
-# interleave bytes on the same line. Progress bars are never mirrored to the log file - only _echo lines
-# are - so the on-disk log stays clean of carriage-return redraws.
+r'''
+One live \r progress line at a time across all threads. The MD heartbeat (main thread) and the CPU
+post-processing bars (worker thread - extraction, SID, MM-GBSA) share the terminal, so every \r write
+and every full-line _echo takes this lock: a full line first clears the open bar, and no two writers
+interleave bytes on the same line. Progress bars are never mirrored to the log file - only _echo lines
+are - so the on-disk log stays clean of carriage-return redraws.
+'''
 _CONSOLE_LOCK = threading.RLock()
 _BAR_OPEN = False
 
@@ -339,19 +351,19 @@ def _section(title: str) -> None:
 
 
 # ── Per-phase / per-job wall-clock timing ─────────────────────────────────────────────────────────
-"""
+'''
 Every heavy sub-job (one WaterMap, one System Builder, one MD, one SID, one MM-GBSA) records its
 own wall-clock here via _timed(). The Summary then prints the individual job times, the per-phase
 totals (all WaterMaps, all builds, …) and a grand total, and writes them to 00_Phase_Timings.csv.
-"""
+'''
 _TIMINGS: list = []
-"""
+'''
 Settle gate after an MD job lands (and after each rank's CPU post-processing finishes): the job
 directory is re-scanned until no file's size or mtime changes for _SETTLE_STABLE_SEC, so a fresh run
 never collides with an in-flight write. Watching the files (rather than sleeping a fixed duration)
 covers a large multisim that takes a variable time to flush, archive its production tgz and unpack
 the trajectory. _SETTLE_TIMEOUT_SEC caps the wait so a stuck archive never blocks forever.
-"""
+'''
 _SETTLE_STABLE_SEC = 45
 _SETTLE_POLL_SEC = 15
 _SETTLE_TIMEOUT_SEC = 3600
@@ -664,9 +676,9 @@ class OomdGuard:
 
 # =============================================================================
 # SECTION 4: HEARTBEATS (in-place progress for the long-running steps)
-#   Heartbeat      - one process, one log  (SID; serial MM-GBSA)
-#   ShardHeartbeat - many shard logs at once (sharded MM-GBSA)
 # =============================================================================
+# Heartbeat      - one process, one log  (SID; serial MM-GBSA)
+# ShardHeartbeat - many shard logs at once (sharded MM-GBSA)
 class Heartbeat:
     """Periodically report a long Schrödinger step's progress by tailing its log.
 
@@ -696,9 +708,11 @@ class Heartbeat:
                  read_phase: str = ""):
         self.log_file = Path(log_file)
         self.label = label
-        # Wording for the frame-reading phase. SID reads frames for its whole run, so it
-        # leaves this empty; MM-GBSA labels it "PHASE 1/2" to distinguish it from the Prime
-        # minimisation that follows.
+        '''
+        Wording for the frame-reading phase. SID reads frames for its whole run, so it
+        leaves this empty; MM-GBSA labels it "PHASE 1/2" to distinguish it from the Prime
+        minimisation that follows.
+        '''
         self.read_phase = f"{read_phase} " if read_phase else ""
         self.total = max(int(total), 1)
         self.patterns = [re.compile(p) for p in (patterns or [r"analyzing frame# (\d+)"])]
@@ -725,9 +739,11 @@ class Heartbeat:
                 best = max(best, int(m[-1]))
         return best
 
-    # thermal_mmgbsa hands the read frames to a separate Prime MM-GBSA job whose
-    # progress is written elsewhere; the main log falls silent. Detect that hand-off
-    # so the heartbeat reports the Prime scoring phase instead of a frozen frame count.
+    '''
+    thermal_mmgbsa hands the read frames to a separate Prime MM-GBSA job whose
+    progress is written elsewhere; the main log falls silent. Detect that hand-off
+    so the heartbeat reports the Prime scoring phase instead of a frozen frame count.
+    '''
     _PRIME_HANDOFF = re.compile(r"Passing\s+\d+\s+structures\s+to\s+Prime|Running Prime MMGBSA", re.IGNORECASE)
 
     def _prime_progress(self) -> "tuple[int, int] | None":
@@ -778,11 +794,13 @@ class Heartbeat:
                 text = self.log_file.read_text(errors="ignore")
             except Exception:
                 text = ""
-            # Prime MM-GBSA scoring phase: trajectory read is complete; Prime now
-            # minimises every structure. Announce the transition once (colour banner
-            # on its own line), then keep the single \r line refreshing - reporting
-            # WHICH structure is being minimised (structure N/total, like PHASE 1's
-            # frame count), falling back to subjob count, then elapsed time.
+            r'''
+            Prime MM-GBSA scoring phase: trajectory read is complete; Prime now
+            minimises every structure. Announce the transition once (colour banner
+            on its own line), then keep the single \r line refreshing - reporting
+            WHICH structure is being minimised (structure N/total, like PHASE 1's
+            frame count), falling back to subjob count, then elapsed time.
+            '''
             if self._PRIME_HANDOFF.search(text):
                 if not self._prime_announced:
                     self._prime_announced = True
@@ -887,9 +905,11 @@ class ShardHeartbeat:
 
     def __enter__(self):
         self._start = time.time()
-        # Baseline = shards already scored on disk from a previous run (resumed). done_fn() is 0 at this
-        # instant - the worker pool has not registered the resume-skips yet - so reading it here would
-        # credit those instant resumes to this run's clock and make the ETA far too short. Count the CSVs.
+        '''
+        Baseline = shards already scored on disk from a previous run (resumed). done_fn() is 0 at this
+        instant - the worker pool has not registered the resume-skips yet - so reading it here would
+        credit those instant resumes to this run's clock and make the ETA far too short. Count the CSVs.
+        '''
         try:
             self._scored0 = sum(1 for _ in self.shard_dir.glob("*_shard*-prime-out.csv"))
         except Exception:
@@ -933,9 +953,11 @@ class MDHeartbeat:
         self._start = 0.0
         self._line_open = False
         self._last: "tuple[float, float] | None" = None   # (wall_s, t_ps) of the previous sample, for the rate
-        # multisim runs the job under jsc, so the LIVE multisim log and the production .ene do not sit in
-        # wd - they live in the job-server scratch, /tmp/<user>/jobs/<jobid>/ (and the production stage is
-        # its own subjob, in a sibling <jobid>/ dir). Search those too, keyed by jobname, newest mtime wins.
+        '''
+        multisim runs the job under jsc, so the LIVE multisim log and the production .ene do not sit in
+        wd - they live in the job-server scratch, /tmp/<user>/jobs/<jobid>/ (and the production stage is
+        its own subjob, in a sibling <jobid>/ dir). Search those too, keyed by jobname, newest mtime wins.
+        '''
         self._jobname = self.wd.name
         _user = os.environ.get("USER") or Path.home().name
         _roots = {os.environ.get("SCHRODINGER_TMPDIR") or "", tempfile.gettempdir(), "/tmp"}
@@ -1104,10 +1126,10 @@ def scan_jobs(job_dirs: list[Path]) -> list[Path]:
         cms_file = d / f"{job_name}{CFG.SUFFIX_CMS_OUT}"
         trj_dir = d / f"{job_name}_trj"
 
-        """
+        '''
         1. No -out.cms => MD simulation not finished. A live process here means
         the SIMULATION is running (job-name match avoids SID processes).
-        """
+        '''
         if not cms_file.is_file():
             if _proc_alive(job_name):
                 running += 1
@@ -1117,10 +1139,10 @@ def scan_jobs(job_dirs: list[Path]) -> list[Path]:
                 _echo(f"  - Rank {rank}: no MD output (-out.cms) and nothing running - SID cannot start.")
             continue
 
-        """
+        '''
         2. -out.cms present => MD done. Classify by SID-out.eaf completeness,
         measured against the actual trajectory length.
-        """
+        '''
         if out_eaf.is_file():
             of = out_eaf_frames(out_eaf)
             tf = traj_frame_count(trj_dir)
@@ -1271,22 +1293,26 @@ def process_jobs(to_run: list[Path], job_index: int | None = None,
 
 # =============================================================================
 # SECTION 8: PRIME MM-GBSA (end-state binding free energy over the MD ensemble)
-#   8.1  result discovery and failure diagnosis
-#   8.2  execution - sharded (default) and serial
-#   8.3  statistics - ΔG estimators, failed-minimisation flagging
-#   8.4  figures - per job and combined
-#   8.5  phase driver
 # =============================================================================
-"""
+'''
+8.1  result discovery and failure diagnosis
+8.2  execution - sharded (default) and serial
+8.3  statistics - ΔG estimators, failed-minimisation flagging
+8.4  figures - per job and combined
+8.5  phase driver
+'''
+'''
 Mirrors the manual workflow:
     cd <desmond_md_job_R_N> ; $SCHRODINGER/run thermal_mmgbsa.py <job>-out.cms
 run folder-wise and idempotent (skip when a valid results CSV already exists),
 then plots per-job + combined ΔG_bind. MM-GBSA is complementary to the QSite
 QM/MM reaction barrier (Step 07), not a replacement: it scores binding, not
 bond cleavage. GB implicit solvent overstabilises anionic PFAS → relative only.
-"""
+'''
 
-# ── 8.1  Result discovery and failure diagnosis ──────────────────────────────
+# -----------------------------------------------------------------------------
+# Step 8.1: Result discovery and failure diagnosis
+# -----------------------------------------------------------------------------
 def _mmgbsa_csv(job_dir: Path, job_name: str):
     """Locate a thermal_mmgbsa results CSV in `job_dir` (name varies by version).
     Returns the newest match or None."""
@@ -1360,7 +1386,9 @@ def _diagnose_mmgbsa_failure(job_dir: Path, job_name: str) -> "str | None":
     return m.group(0).strip() if m else None
 
 
-# ── 8.2  Execution: shard planning, frame stamping, the sharded/serial runners ─
+# -----------------------------------------------------------------------------
+# Step 8.2: Execution: shard planning, frame stamping, the sharded/serial runners
+# -----------------------------------------------------------------------------
 def _avail_ram_gb() -> float:
     """Free RAM the kernel expects to hand out without swapping (MemAvailable)."""
     try:
@@ -1395,7 +1423,7 @@ def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, 
     size = max(1, int(getattr(CFG, "MMGBSA_SHARD_FRAMES", 2000)))
     ranges = [(a, min(a + size, total)) for a in range(0, total, size)]
 
-    """
+    '''
     Per-shard cost feeds both the RAM fit and the core count. A shard is one frame reader (a fixed
     RSS base plus growth with the strided frames it reads) plus its Prime subjobs - the reader is
     one core, the Prime workers the rest. The budget is physical RAM the kernel hands out without
@@ -1404,7 +1432,7 @@ def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, 
     default 0). thermal_mmgbsa does not saturate a large -NJOBS - it runs about
     MMGBSA_PRIME_EFFECTIVE_CORES live workers per shard - so a shard's core benefit is scored against
     that effective figure, not the request, and njobs above it would only reserve RAM for idle cores.
-    """
+    '''
     _read_n = max(1, size // max(1, step))
     _reader = (float(getattr(CFG, "MMGBSA_READER_RAM_BASE_GB", 3.6))
                + float(getattr(CFG, "MMGBSA_READER_RAM_PER_1K_FRAMES_GB", 0.36)) * _read_n / 1000.0)
@@ -1426,12 +1454,12 @@ def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, 
         njobs = njobs_cfg
         conc = conc_cfg or _fit_conc(njobs)
     else:
-        """
+        '''
         Auto. Search njobs and take the (njobs, concurrency) pair that keeps the most cores busy -
         more Prime subjobs per shard means fewer shards fit, so the two trade off. Busy cores are
         scored against the effective Prime figure, and ties break toward more concurrent shards,
         since overlapping readers are what hide the serial per-shard read phase.
-        """
+        '''
         best = None
         for nj in range(1, min(ncpu, 8) + 1):
             c = _fit_conc(nj)
@@ -1450,9 +1478,11 @@ def _shard_plan(total: int, ncpu: int, step: int = 1) -> "tuple[list[tuple[int, 
     return ranges, conc, njobs
 
 
-# Every mark colour in this step's figures comes from CFG (per-rank candidate colours from
-# CFG.VIS_ACCENT via _ctrl_palette - the control distinct - everything else from MMGBSA_INK);
-# none is written here.
+'''
+Every mark colour in this step's figures comes from CFG (per-rank candidate colours from
+CFG.VIS_ACCENT via _ctrl_palette - the control distinct - everything else from MMGBSA_INK);
+none is written here.
+'''
 _INK = CFG.MMGBSA_INK
 
 MMGBSA_FRAME_COL = "Frame"   # trajectory frame index each scored structure came from
@@ -1557,11 +1587,11 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     """
     shard_dir = job_dir / getattr(CFG, "MMGBSA_SHARD_SUBDIR", "_MMGBSA_Shards")
     shard_dir.mkdir(exist_ok=True)
-    """
+    '''
     The .cms names its trajectory relatively (s_chorus_trajectory_file = '<job>_trj'), so a
     shard run from shard_dir needs both the .cms and the _trj folder visible beside it.
     Symlinks keep the shard outputs out of the job folder without copying 33 GB.
-    """
+    '''
     for src in (cms_file, job_dir / f"{job_name}_trj"):
         link = shard_dir / src.name
         if not link.exists():
@@ -1569,11 +1599,11 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
 
     ranges, conc, njobs = _shard_plan(total, ncpu, step)
     _scored = total if step <= 1 else -(-total // step)     # structures Prime will minimise
-    """
+    '''
     Report the plan as aligned fields rather than prose: the numbers (frames, stride, shards,
     cores, memory) are what a reader actually checks, and they are all derived - the trajectory
     span comes from the frames' own timestamps, so nothing here assumes a run length.
-    """
+    '''
     _span = traj_span_ns(job_dir / f"{job_name}_trj")
     _echo(f"    Trajectory     : {total:,} frames" + (f" · {_span:,.0f} ns" if _span > 0 else ""))
     if step > 1:
@@ -1595,12 +1625,12 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     done: dict[int, Path] = {}
     failed: list[int] = []
     _lock = threading.Lock()
-    """
+    '''
     Fail fast. A shard that dies for an environmental reason - job server down, no license,
     disk full - will kill every other shard the same way, each only AFTER re-reading its
     frames. Abort the rank once the first full wave has failed without a single success,
     so the cause is reported in a minute instead of an hour.
-    """
+    '''
     _abort = threading.Event()
 
     def _shard_csv(i: int) -> Path:
@@ -1633,9 +1663,11 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
         if step > 0:
             cmd += ["-step_size", str(step)]
         slog = shard_dir / f"{sname}.log"
-        # thermal_mmgbsa drives a Prime subjob named "{sname}-prime" on the job server; register it so a
-        # kill cancels it (like MD), and run the driver itself through _run_tracked so its process group
-        # is terminated too. Both are removed in the finally, so a completed shard leaves nothing registered.
+        '''
+        thermal_mmgbsa drives a Prime subjob named "{sname}-prime" on the job server; register it so a
+        kill cancels it (like MD), and run the driver itself through _run_tracked so its process group
+        is terminated too. Both are removed in the finally, so a completed shard leaves nothing registered.
+        '''
         _prime_job = f"{sname}-prime"
         _LAUNCHED_JOBS.add(_prime_job)
         try:
@@ -1674,10 +1706,12 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
     with hb, cf.ThreadPoolExecutor(max_workers=conc) as pool:
         list(pool.map(lambda r: _run_shard(r[0], r[1][0], r[1][1]), list(enumerate(ranges))))
 
-    # Each shard's thermal_mmgbsa -NJOBS should block, but if a build submits its Prime batch to
-    # jobserverd and returns early, a shard's Prime subjobs can outlive the pool. Drain any job
-    # whose name carries this rank's prefix before returning, so the next rank's MD never shares the
-    # scratch disk with a still-running Prime batch (the serial path drains at run_mmgbsa's tail).
+    '''
+    Each shard's thermal_mmgbsa -NJOBS should block, but if a build submits its Prime batch to
+    jobserverd and returns early, a shard's Prime subjobs can outlive the pool. Drain any job
+    whose name carries this rank's prefix before returning, so the next rank's MD never shares the
+    scratch disk with a still-running Prime batch (the serial path drains at run_mmgbsa's tail).
+    '''
     _await_mmgbsa_jobserver(f"{job_name}_mmgbsa")
 
     if failed or len(done) != len(ranges):
@@ -1778,9 +1812,11 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     """Run thermal_mmgbsa.py on <job>-out.cms inside its MD folder. Idempotent:
     returns the existing CSV when already computed. Returns the results CSV path
     or None on failure."""
-    # The disable gate lives HERE, not only in run_mmgbsa_phase: the sequential MD loop calls
-    # run_mmgbsa() directly, so gating only in the phase wrapper would run the whole Prime batch and
-    # then print "disabled - skipped".
+    '''
+    The disable gate lives HERE, not only in run_mmgbsa_phase: the sequential MD loop calls
+    run_mmgbsa() directly, so gating only in the phase wrapper would run the whole Prime batch and
+    then print "disabled - skipped".
+    '''
     if not getattr(CFG, "MMGBSA_RUN", True):
         _echo("    ✘ Skipped      : MM-GBSA disabled (CFG.MMGBSA_RUN = False).")
         return None
@@ -1790,13 +1826,13 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
         return None
     existing = _mmgbsa_csv(job_dir, job_name)
     if existing is not None and _mmgbsa_complete(existing, job_dir, job_name):
-        """
+        '''
         A CSV written before frame stamping existed carries no `Frame` column, and Step 07 must not
         infer the frame from the row position (row i is frame i·step under a stride). Stamp it in
         place - the frame list is reconstructible from the shard plan - so an already-scored run is
         brought up to the current format without re-scoring anything. A 100%-complete CSV here means
         MM-GBSA never re-runs; any leftover shard scratch is tidied away.
-        """
+        '''
         _retrofit_frame_stamps(existing, job_dir, job_name, rank)
         _echo(f"    ✔ Already done : reusing {existing.name} (delete it to force a re-score).")
         _cleanup_mmgbsa_shards(job_dir, job_name, rank)
@@ -1805,19 +1841,19 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
         _echo(f"    ⚠ Partial CSV  : {existing.name} has fewer rows than the trajectory expects "
               f"- re-scoring to complete it.")
 
-    """
+    '''
     Parallelise frame subjobs across cores: total cores − reserve (same cap as
     the rest of the pipeline, CFG.GLOBAL_MAX_WORKERS = cpu_count − PREP_CPU_RESERVE).
-    """
+    '''
     _ncpu = max(1, int(getattr(CFG, "GLOBAL_MAX_WORKERS", max(1, (os.cpu_count() or 4) - 2))))
-    """
+    '''
     Disk-aware safety net on the Prime-subjob count. Each Prime subjob stages its own
     copy of the complexes file (~22 GB here), so N concurrent subjobs need ~N × 22 GB of
     scratch. The cores-minus-reserve figure above is the target; it is only reduced when
     the disk that actually holds the scratch cannot hold that many copies. Probe THAT disk
     (SCHRODINGER_TMPDIR if the environment sets it, else /tmp - the job server's default
     scratch location).
-    """
+    '''
     try:
         _probe = os.environ.get("SCHRODINGER_TMPDIR") or "/tmp"
         if not os.path.isdir(_probe):
@@ -1844,12 +1880,12 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     # Ground-truth frame count (same source the SID phase uses).
     _total = traj_frame_count(job_dir / f"{job_name}_trj") or _DEFAULT_FRAME_TOTAL
 
-    """
+    '''
     Sharded path (default): concurrent frame-range shards, so the trajectory read is
     parallel and overlaps Prime instead of blocking it on one core. Same frames, same
     scores - see run_mmgbsa_sharded. CFG.MMGBSA_SHARD_FRAMES = 0 keeps the plain single
     serial thermal_mmgbsa run below.
-    """
+    '''
     _shard_frames = int(getattr(CFG, "MMGBSA_SHARD_FRAMES", 0) or 0)
     if _shard_frames > 0 and _total > _shard_frames:
         return run_mmgbsa_sharded(job_dir, job_name, rank, cms_file, _lig_asl_cfg,
@@ -1857,9 +1893,11 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
 
     cmd = [SCHROD_RUN, "thermal_mmgbsa.py", cms_file.name,
            "-j", f"{job_name}_mmgbsa", "-NJOBS", str(_ncpu)]
-    # Pin the ligand explicitly via thermal_mmgbsa's -lig_asl flag so Prime scores the substrate;
-    # a small or heavily-fluorinated ligand is otherwise misassigned by auto-detection. The ASL was
-    # resolved once above (configured name if it matches, else the ≥5-atom fallback, else empty).
+    '''
+    Pin the ligand explicitly via thermal_mmgbsa's -lig_asl flag so Prime scores the substrate;
+    a small or heavily-fluorinated ligand is otherwise misassigned by auto-detection. The ASL was
+    resolved once above (configured name if it matches, else the ≥5-atom fallback, else empty).
+    '''
     _lig_asl = _lig_asl_cfg
     if _lig_asl:
         cmd += ["-lig_asl", _lig_asl]
@@ -1875,13 +1913,13 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     _interval = max(5, int(getattr(CFG, "MMGBSA_PROGRESS_INTERVAL_SEC", 30)))
     # Ground-truth denominator (same source the SID phase uses).
     _total = traj_frame_count(job_dir / f"{job_name}_trj") or _DEFAULT_FRAME_TOTAL
-    """
+    '''
     thermal_mmgbsa logs "Reading frame N..." during the (serial) trajectory
     extraction phase and "Structure N" during the parallel Prime phase. The
     Heartbeat tails the log and renders ONE "[PROGRESS] …" line, rewritten in
     place (\\r) from start to finish across both phases, with a single closing
     newline when the step ends (completion or failure).
-    """
+    '''
     _hb_patterns = [r"Reading frame (\d+)", r"[Ss]tructure[:\s]+(\d+)",
                     r"[Ff]rame\s+(\d+)", r"Processing\s+(\d+)"]
     try:
@@ -1908,9 +1946,11 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
                                 return None
                 else:
                     proc.wait()
-        # thermal_mmgbsa -NJOBS should block until its Prime subjobs finish; if a build submits them
-        # async and returns early, wait for the job server to drain this rank's batch before returning,
-        # so the next rank's MD never shares the scratch disk with a still-running Prime batch.
+        '''
+        thermal_mmgbsa -NJOBS should block until its Prime subjobs finish; if a build submits them
+        async and returns early, wait for the job server to drain this rank's batch before returning,
+        so the next rank's MD never shares the scratch disk with a still-running Prime batch.
+        '''
         _await_mmgbsa_jobserver(f"{job_name}_mmgbsa")
         if proc.returncode != 0:
             _echo(f"  [Rank {rank}] MM-GBSA exited rc={proc.returncode} - see {log.name}.")
@@ -1921,10 +1961,10 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     except Exception as e:
         _echo(f"  [Rank {rank}] MM-GBSA failed ({e}) - see {log.name}.")
         return None
-    """
+    '''
     Stamp the frame index on the serial path too, so both paths hand downstream code a CSV
     that says which frame each row came from instead of leaving it to be inferred.
-    """
+    '''
     _csv = _mmgbsa_csv(job_dir, job_name)
     if _csv is not None:
         try:
@@ -1939,7 +1979,9 @@ def run_mmgbsa(job_dir: Path, job_name: str, rank: str) -> Path | None:
     return _csv
 
 
-# ── 8.3  Statistics: ΔG estimators and failed-minimisation flagging ──────────
+# -----------------------------------------------------------------------------
+# Step 8.3: Statistics: ΔG estimators and failed-minimisation flagging
+# -----------------------------------------------------------------------------
 def _mmgbsa_dg_series(csv_path: Path) -> "pd.Series":
     """Extract the per-frame ΔG_bind series, tolerant of column-name variants."""
     try:
@@ -1954,12 +1996,12 @@ def _mmgbsa_dg_series(csv_path: Path) -> "pd.Series":
             return pd.Series(dtype=float)
         col = cands[0]
     _s = pd.to_numeric(df[col], errors="coerce")
-    """
+    '''
     Index the series by the TRAJECTORY frame each structure came from, not by row number.
     Under a stride, row 150 is frame 1,500 - plotting against the row index would compress a
     1000 ns run onto a meaningless 0–10,000 axis and hide where in the simulation an event
     happened. Falls back to the row index only for an unstamped (every-frame) CSV.
-    """
+    '''
     if MMGBSA_FRAME_COL in df.columns:
         _s.index = pd.to_numeric(df[MMGBSA_FRAME_COL], errors="coerce")
         _s.index.name = MMGBSA_FRAME_COL
@@ -2112,7 +2154,9 @@ def _dg_failures(dg: "pd.Series") -> "pd.Series":
     return dg[(dg < lo) | (dg > hi)]
 
 
-# ── 8.4  Figures ─────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# Step 8.4: Figures
+# -----------------------------------------------------------------------------
 def _block_bootstrap_median_ci(dg: "pd.Series") -> "tuple[float, float]":
     """Confidence interval on the median by MOVING-BLOCK bootstrap.
 
@@ -2123,14 +2167,14 @@ def _block_bootstrap_median_ci(dg: "pd.Series") -> "tuple[float, float]":
     """
     v = dg.to_numpy(dtype=float)
     n = len(v)
-    """
+    '''
     Block length must EXCEED the series' own correlation time, or the resampled blocks are still
     correlated with one another, the bootstrap behaves as if there were far more independent
     samples than there are, and the interval comes out too narrow. Derive it from the measured
     autocorrelation (τ ≈ n / 2N_eff) and take a multiple of that; CFG.MMGBSA_BOOTSTRAP_BLOCK is
     only a floor. A slowly-drifting ΔG series (N_eff of a few dozen) therefore gets a long block
     and an honestly wide interval, instead of a falsely precise one.
-    """
+    '''
     _neff = max(1.0, _effective_n(dg))
     _tau  = max(1.0, n / (2.0 * _neff))
     blk = int(max(int(getattr(CFG, "MMGBSA_BOOTSTRAP_BLOCK", 50)),
@@ -2214,12 +2258,12 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     else:
         _xlabel = "Trajectory frame"
 
-    """
+    '''
     Y-window from the CORE ensemble (failures already excluded), not from the full series -
     otherwise a handful of near-failures at −100 still stretch the axis and squash the band
     where 99% of the data lives. The failures are not hidden: they are drawn at the floor and
     counted in the legend.
-    """
+    '''
     _clip = float(getattr(CFG, "MMGBSA_PLOT_CLIP_PCT", 0.5))
     _ref = _core if len(_core) > 10 else dg
     _lo, _hi = _ref.quantile(_clip / 100.0), _ref.quantile(1 - _clip / 100.0)
@@ -2234,16 +2278,18 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
                                    gridspec_kw={"width_ratios": [3, 1], "wspace": 0.05},
                                    sharey=True)
 
-    # ── Panel 1: ΔG_bind over the simulation ──────────────────────────────────────────────
-    # Plot the core points only; the failures appear once, as markers at the floor, so a blown-up
-    # frame is never shown twice (as a stray dot AND as a flagged failure).
+    '''
+    ── Panel 1: ΔG_bind over the simulation ──────────────────────────────────────────────
+    Plot the core points only; the failures appear once, as markers at the floor, so a blown-up
+    frame is never shown twice (as a stray dot AND as a flagged failure).
+    '''
     _cx = _core.index.to_numpy(dtype=float) * (ns_per_frame if ns_per_frame > 0 else 1.0)
     ax1.scatter(_cx, _core.values, s=3, color=_INK["series"], alpha=0.28, linewidths=0, zorder=2)
-    """
+    '''
     Rolling trend on the CORE ensemble. Computing it on the full series lets a single blown-up
     frame drag the window's lower quartile hundreds of kcal/mol, flaring the band downward
     wherever a failure sits - an artefact of the failure, not a change in binding.
-    """
+    '''
     _w = max(5, len(_core) // 50)
     _roll = _core.rolling(_w, min_periods=max(1, _w // 4), center=True)
     ax1.fill_between(_cx, _roll.quantile(0.25).values, _roll.quantile(0.75).values,
@@ -2264,11 +2310,11 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     ax1.set_xlabel(_xlabel)
     ax1.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  Prime MM-GBSA")
     ax1.set_ylim(_ylo, _yhi)
-    """
+    '''
     Span the WHOLE simulation, not merely the last sampled frame: with a stride the final frame
     falls short of the run's end (999.8 of 1000 ns), which would clip the axis just before its
     round final tick. Round the upper limit up so the axis reads 0 → the true trajectory length.
-    """
+    '''
     _xmax = float(np.ceil(_x.max() / 100.0) * 100) if ns_per_frame > 0 else float(_x.max())
     ax1.set_xlim(0, _xmax)
     # Single-row legend inside the panel: one column per entry so it never wraps to a second row;
@@ -2359,9 +2405,11 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     for i, b in enumerate(parts["bodies"]):
         b.set_facecolor(_cols[i]); b.set_alpha(0.45)
         b.set_edgecolor(_cols[i]); b.set_linewidth(1.2)
-    # The box is the INTERQUARTILE RANGE: its edges are the 25th/75th percentiles (half of all
-    # frames lie inside it), the bar is the median and the whiskers reach 1.5 × IQR. White fill
-    # so it reads against the violin.
+    '''
+    The box is the INTERQUARTILE RANGE: its edges are the 25th/75th percentiles (half of all
+    frames lie inside it), the bar is the median and the whiskers reach 1.5 × IQR. White fill
+    so it reads against the violin.
+    '''
     ax1.boxplot([c.values for c in _cores], positions=_x, widths=0.18, showfliers=False,
                      patch_artist=True,
                      medianprops=dict(color=_INK["dark"], linewidth=2.2),
@@ -2372,12 +2420,12 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
              linestyle="--", zorder=6)
     ax1.plot(_x, _meds, marker="o", markersize=7, color=_INK["dark"], linewidth=1.6,
              zorder=6)
-    """
+    '''
     The median's value belongs ON the median, not floating above the panel where the reader has to
     match it back by position. It is written beside the marker in the candidate's colour, with a
     white stroke around the glyphs so it stays legible wherever the violin is dense. The outlier
     count sits below the distribution, out of the data's way.
-    """
+    '''
     _stroke = [pe.withStroke(linewidth=2.6, foreground=_INK["light"])]
     for i, (m, n) in enumerate(zip(_meds, _nbad)):
         ax1.annotate(f"{m:.1f}", xy=(_x[i], m), xytext=(_x[i] + 0.30, m),
@@ -2390,11 +2438,11 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     ax1.set_xticks(_x); ax1.set_xticklabels(_labels)
     ax1.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  per-frame Prime MM-GBSA")
     ax1.set_ylim(_lo - _pad, _hi + _pad)
-    """
+    '''
     One legend, inside, lower right - no caption under the panel. The violin needs no entry: it IS
     the distribution and reads as one on sight. What does need saying is what the white box and its
     whiskers mean, so the box appears as a SWATCH rather than as a sentence.
-    """
+    '''
     _hdlA = [
         Patch(facecolor=_INK["light"], edgecolor=_INK["dark"], linewidth=1.2,
               label="box = IQR · whiskers = 1.5 × IQR"),
@@ -2424,12 +2472,12 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                  fontsize=CFG.VIS_FONT_AXIS_LABEL, fontweight="bold", color=_INK["dark"], zorder=9,
                  path_effects=[pe.withStroke(linewidth=3.0, foreground=_INK["light"])])
     # Effect size vs the tightest binder - the number that says whether a gap MATTERS.
-    """
+    '''
     Effect size, reported PAIRWISE. There is no control or reference candidate here - these are
     three substrates compared against each other - so singling one out as a baseline would
     invent a hierarchy the design does not have. Cliff's delta is computed for every pair
     instead: δ(X vs Y) > 0 means X's frames sit at HIGHER (weaker-binding) ΔG than Y's.
-    """
+    '''
     _pairs = []
     for i in range(len(per_job)):
         for j in range(i + 1, len(per_job)):
@@ -2440,20 +2488,20 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     ax3.axhline(0.0, color=_INK["outline"], linewidth=0.8)
     ax3.set_xticks(_x); ax3.set_xticklabels(_labels)
     ax3.set_ylabel("Median ΔG$_{bind}$ (kcal/mol)")
-    """
+    '''
     The marks are labelled ON the bars rather than in a legend: the median is already printed inside
     each bar, and the two error bars are named once, in place, on the first bar - a legend for two
     marks that are visible at a glance is wasted panel space. Only the pairwise effect sizes, which
     have nowhere natural to sit, remain as a boxed note.
-    """
+    '''
     _lo_ci0, _hi_ci0 = _cis[0]
     # Named in place, INSIDE the bar, beside the mark each label refers to - no leader lines to
     # cross a neighbouring bar, and no legend entry for something already visible.
-    """
+    '''
     Each label sits beside the mark it names. They are BLACK on a white stroke, so they read the same
     whether they land on the coloured bar or on the panel behind it - a single colour that depends on
     the background would vanish on one of the two.
-    """
+    '''
     _stroke_b = [pe.withStroke(linewidth=2.6, foreground=_INK["light"])]
     ax3.text(_x[0] + 0.16, _q1[0], "IQR", fontsize=CFG.VIS_FONT_LEGEND, color=_INK["dark"], fontweight="bold",
              va="center", ha="left", zorder=9, path_effects=_stroke_b)
@@ -2479,11 +2527,11 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     # ── Panel 4: time course + cumulative distribution, on one shared ΔG axis ───────────
     _draw_time_cumulative(ax4, per_job, _cols, ligands, nspf, controls)
 
-    """
+    '''
     Publication finish: label the panels A/B/C (a reader cites 'panel B', not 'the top-right one'),
     drop the top/right spines that carry no data, and give every axes the same tick geometry. The
     time+cumulative panel keeps its top spine - a second x-axis lives there.
-    """
+    '''
     # Tick labels in each candidate's own colour: the label and its violin/bar then read as one
     # object, and the eye does not have to match them through a legend.
     for _ax in (ax1, ax3):
@@ -2636,7 +2684,9 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
                ncol=max(1, math.ceil(len(hdl) / _rows)))
 
 
-# ── 8.5  Phase driver ────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# Step 8.5: Phase driver
+# -----------------------------------------------------------------------------
 def _plot_rank_mmgbsa(md_dir: Path, job_dir: Path, job_name: str, rank: str, csv: Path, quiet: bool = False) -> None:
     """Draw ONE rank's MM-GBSA profile from an existing CSV - never re-scores.
 
@@ -2718,12 +2768,12 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
                   f"(IQR {float(dg.quantile(.25)):.1f} to {float(dg.quantile(.75)):.1f}) "
                   f"over {dg.size:,} scored frames")
             if len(_bad):
-                """
+                '''
                 Only the strongly-negative tail is a blown-up minimisation. Outliers on the WEAK
                 side (a frame where the ligand had drifted out of the pocket) are ordinary
                 unbinding events, not numerical failures - calling them 'blown-up' and quoting
                 their minimum would misdescribe them.
-                """
+                '''
                 _q1, _q3 = dg.quantile(.25), dg.quantile(.75)
                 _lo_tail = _bad[_bad < _q1]
                 _hi_tail = _bad[_bad > _q3]
@@ -2785,16 +2835,16 @@ def run_mmgbsa_phase(md_dir: Path, run_root: Path, plots_only: bool = False) -> 
     return "ok"
 
 
-# =============================================================================
-# SECTION 8b: DEFLUORINATION GEOMETRY (native per-rank trajectory analysis)
-# =============================================================================
-"""SN2-defluorination geometry per rank, read straight from the Desmond cms + _trj
+# #############################################################################
+# SUBSECTION 8b: DEFLUORINATION GEOMETRY (native per-rank trajectory analysis)
+# #############################################################################
+'''SN2-defluorination geometry per rank, read straight from the Desmond cms + _trj
 with Schrodinger's own traj API (no format conversion, no external MD toolkit). The
 eight catalytic residues come from the ranked CSV per rank (their numbering shifts
 between ranks); the ligand's alpha-carbon, leaving fluoride and carboxylate oxygens
 are auto-detected from its bond graph, so any carboxylate PFAS works. Writes three
 figures + one merged CSV + a log + descriptions to Defluorination/Defluorination_R{N}/.
-"""
+'''
 # All colours from CFG (single source of truth); order preserved for _DEFL_OKABE[i] usage.
 _DEFL_OKABE = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["green"],
                CFG.VIS_ACCENT["magenta"], CFG.VIS_ACCENT["vermillion"], CFG.VIS_ACCENT["sky"],
@@ -2901,10 +2951,12 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     _echo(f"  Defluorination geometry - Rank {rank}  ·  SN2 attack pose · NAC · fluoride cradle · "
           f"carboxylate clamp · MM-GBSA drivers  (native from cms + _trj)")
 
-    # ── atom selections as trajectory gids ────────────────────────────────────────────
-    # Catalytic residues come from the ranked CSV (per rank); the ligand's alpha-carbon,
-    # leaving fluoride and carboxylate oxygens are auto-detected from its bond graph. Every
-    # selection is mapped to trajectory gids so positions can be read straight from a frame.
+    '''
+    ── atom selections as trajectory gids ────────────────────────────────────────────
+    Catalytic residues come from the ranked CSV (per rank); the ligand's alpha-carbon,
+    leaving fluoride and carboxylate oxygens are auto-detected from its bond graph. Every
+    selection is mapped to trajectory gids so positions can be read straight from a frame.
+    '''
     from schrodinger.application.desmond.packages import topo, traj
     msys, cms = topo.read_cms(str(cms_file))
     fs = cms.fsys_ct
@@ -2943,9 +2995,11 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
                   if a.resnum in set(v) and a.element.strip() != "H" and int(a) in aid2gid]
               for k, v in res8.items()}
 
-    # ── per-frame geometry over the strided trajectory ────────────────────────────────
-    # attack distance + SN2 angle, fluoride cradle, carboxylate clamp, per-residue
-    # engagement, protein Rg and ligand-COM displacement - all minimum-image (PBC-aware).
+    '''
+    ── per-frame geometry over the strided trajectory ────────────────────────────────
+    attack distance + SN2 angle, fluoride cradle, carboxylate clamp, per-residue
+    engagement, protein Rg and ligand-COM displacement - all minimum-image (PBC-aware).
+    '''
     tr = traj.read_traj(str(trj))
     stride = max(1, int(getattr(CFG, "DEFLUOR_STRIDE", 100)))
     idx = list(range(0, len(tr), stride))
@@ -2978,12 +3032,14 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         o = od[np.argmin(dd)]
         v1 = _defl_min_image((o - pos[gC])[None, :], box)[0]
         n1 = np.linalg.norm(v1)
-        # Leaving fluoride, chosen per frame: SN2 breaks the C-F bond anti-periplanar to the
-        # incoming nucleophile, so among the alpha-carbon fluorines the reactive one is whichever
-        # is most backside-aligned (largest Od-Ca-F angle, nearest the collinear 180 deg attack
-        # trajectory). On a rotating CF2/CF3 this identity changes frame-to-frame; a fixed choice
-        # would track a spectator F and read a spuriously low angle. The chosen F also sets the
-        # fluoride-cradle distance for that frame.
+        '''
+        Leaving fluoride, chosen per frame: SN2 breaks the C-F bond anti-periplanar to the
+        incoming nucleophile, so among the alpha-carbon fluorines the reactive one is whichever
+        is most backside-aligned (largest Od-Ca-F angle, nearest the collinear 180 deg attack
+        trajectory). On a rotating CF2/CF3 this identity changes frame-to-frame; a fixed choice
+        would track a spectator F and read a spuriously low angle. The chosen F also sets the
+        fluoride-cradle distance for that frame.
+        '''
         best = -1.0; f = pos[gFs[0]]
         for gFi in gFs:
             vf = _defl_min_image((pos[gFi] - pos[gC])[None, :], box)[0]
@@ -3007,11 +3063,13 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     dist_pct = 100 * (attack < _DEFL_NAC_DIST).mean()
     angle_pct = 100 * (angle > _DEFL_NAC_ANGLE).mean()
 
-    # ── MM-GBSA binding joined per frame ──────────────────────────────────────────────
-    # Frame-stamped CSV; the defluorination (strided) frames are a subset of the scored
-    # frames, so they join directly. Reactivity (NAC) and binding (ΔG_bind) together gate
-    # turnover - a ligand must reach the attack pose AND stay bound. GB overstabilises
-    # anionic PFAS, so ΔG_bind (total + per-component terms) is relative-only.
+    '''
+    ── MM-GBSA binding joined per frame ──────────────────────────────────────────────
+    Frame-stamped CSV; the defluorination (strided) frames are a subset of the scored
+    frames, so they join directly. Reactivity (NAC) and binding (ΔG_bind) together gate
+    turnover - a ligand must reach the attack pose AND stay bound. GB overstabilises
+    anionic PFAS, so ΔG_bind (total + per-component terms) is relative-only.
+    '''
     _COMPS = [("Coulomb", "_Coulomb"), ("vdW", "_vdW"), ("Hbond", "_Hbond"), ("Lipo", "_Lipo"),
               ("Packing", "_Packing"), ("SelfCont", "_SelfCont"), ("Solv_GB", "_Solv_GB"),
               ("Solv_SA", "_Solv_SA"), ("Covalent", "_Covalent")]
@@ -3065,16 +3123,18 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.grid(axis="y", color=_DEFL_GRID_Y, lw=float(CFG.DEFLUOR_GRID_Y_LW), alpha=float(CFG.DEFLUOR_GRID_Y_ALPHA))
         ax.set_axisbelow(True)
 
-    # 01 reactive-pose trajectory - three stacked panels sharing one Time axis: (A) SN2 attack geometry
-    # (Oδ···Cα distance on the left axis, backside attack angle on the right), (B) leaving-F fluoride
-    # cradle, (C) carboxylate clamp. The near-attack window (global NAC frames: attack < cut AND angle >
-    # cut) is shaded green in every panel so cradle/clamp engagement can be read at the frames when the
-    # ligand is attack-ready. It is the same global reaction-coordinate mask on all three panels - never a
-    # per-residue claim - and is named in each panel's legend so it cannot be misread as residue-specific.
-    # The attack angle is a property of the ligand carbon (Oδ-Cα-F), so its right-hand axis appears on
-    # panel A only, not mirrored onto the cradle/clamp panels where it would be meaningless. Residue names
-    # come from the trace keys (mapped per homolog), never hardcoded; tags min-separate in y so they never
-    # overlap. Distance panels use unit (1 Å) y-ticks over a 0-based range spanning the data and the cut-off.
+    '''
+    01 reactive-pose trajectory - three stacked panels sharing one Time axis: (A) SN2 attack geometry
+    (Oδ···Cα distance on the left axis, backside attack angle on the right), (B) leaving-F fluoride
+    cradle, (C) carboxylate clamp. The near-attack window (global NAC frames: attack < cut AND angle >
+    cut) is shaded green in every panel so cradle/clamp engagement can be read at the frames when the
+    ligand is attack-ready. It is the same global reaction-coordinate mask on all three panels - never a
+    per-residue claim - and is named in each panel's legend so it cannot be misread as residue-specific.
+    The attack angle is a property of the ligand carbon (Oδ-Cα-F), so its right-hand axis appears on
+    panel A only, not mirrored onto the cradle/clamp panels where it would be meaningless. Residue names
+    come from the trace keys (mapped per homolog), never hardcoded; tags min-separate in y so they never
+    overlap. Distance panels use unit (1 Å) y-ticks over a 0-based range spanning the data and the cut-off.
+    '''
     _axlab = float(CFG.VIS_FONT_AXIS_LABEL); _lblf = float(CFG.VIS_FONT_TICK_DENSE)
     _band_a = float(CFG.DEFLUOR_NAC_BAND_ALPHA)
     _xleft = -total_ns * float(CFG.DEFLUOR_LEFT_MARGIN)     # left xlim: empty margin the residue tags sit inside
@@ -3191,9 +3251,11 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     if np.isfinite(dG).any():
         m = np.isfinite(dG)
         _dv = dG[m]
-        # clip the y-axis to the physical spread: a few Prime blown-up minimisations reach
-        # hundreds of kcal/mol. A Tukey fence (Q1 − 3·IQR) drops those so the real 0…−20 band
-        # fills the panel instead of leaving it mostly empty.
+        '''
+        clip the y-axis to the physical spread: a few Prime blown-up minimisations reach
+        hundreds of kcal/mol. A Tukey fence (Q1 − 3·IQR) drops those so the real 0…−20 band
+        fills the panel instead of leaving it mostly empty.
+        '''
         _q1, _q3 = np.percentile(_dv, [25, 75])
         _phys = _dv[_dv >= _q1 - 3.0 * (_q3 - _q1)]
         _lo = float(_phys.min()) if _phys.size else float(_dv.min())
@@ -3214,9 +3276,11 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
         fig.tight_layout(); fig.savefig(out / "03_Binding_vs_Reactivity.svg", dpi=_dpi); plt.close(fig)
 
-    # The MM-GBSA energy-component decomposition (reactive vs rest) is drawn once, in Step 07's
-    # per-rank MMGBSA_NAC_Decomposition figure, from the same per-frame Prime terms; the per-component
-    # columns are still written to the geometry CSV below so 07 (or any reader) can decompose them.
+    '''
+    The MM-GBSA energy-component decomposition (reactive vs rest) is drawn once, in Step 07's
+    per-rank MMGBSA_NAC_Decomposition figure, from the same per-frame Prime terms; the per-component
+    columns are still written to the geometry CSV below so 07 (or any reader) can decompose them.
+    '''
 
     # ── run log + figure-description file ─────────────────────────────────────────────
     log = [f"FAcD defluorination MD analysis - Rank {rank}",
@@ -3263,9 +3327,11 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     if not root.is_dir():
         return
     rows = []
-    # Rank from the 'Defluorination_R{N}' folder name (note: _natural_rank expects the '_R_N' spelling
-    # and does NOT match this one). Non-controls by rank, the 3R3U control LAST - consistent with every
-    # other combined figure.
+    '''
+    Rank from the 'Defluorination_R{N}' folder name (note: _natural_rank expects the '_R_N' spelling
+    and does NOT match this one). Non-controls by rank, the 3R3U control LAST - consistent with every
+    other combined figure.
+    '''
     def _defl_rank(p: Path) -> int:
         m = re.search(r"_R(\d+)", p.name)
         return int(m.group(1)) if m else 0
@@ -3464,9 +3530,11 @@ def _cancel_launched_jobs() -> None:
     names = set(_LAUNCHED_JOBS)
     try:
         out = subprocess.run([f"{SCHRO}/jsc", "list", "-j"], capture_output=True, text=True, timeout=30).stdout
-        # Match a registered job AND its stage subjobs: multisim runs the MD as stage subjobs named
-        # "<jobname>_<stage>" (production is the last), so cancelling only the exact parent name misses
-        # the detached stage that is actually on the GPU. Prefix-match catches "desmond_md_job_R_8_7".
+        '''
+        Match a registered job AND its stage subjobs: multisim runs the MD as stage subjobs named
+        "<jobname>_<stage>" (production is the last), so cancelling only the exact parent name misses
+        the detached stage that is actually on the GPU. Prefix-match catches "desmond_md_job_R_8_7".
+        '''
         ids = [p[0] for ln in out.splitlines()
                if len(p := ln.split()) >= 2 and (p[1] in names or any(p[1].startswith(n + "_") for n in names))]
         if ids:
@@ -3584,9 +3652,9 @@ def _install_job_cleanup() -> None:
             pass
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECTION 10: INPUT DISCOVERY (handover complexes + ESP charges)
-# -----------------------------------------------------------------------------
+# =============================================================================
 def _resnum(v) -> int:
     m = re.search(r"(\d+)", str(v or ""))
     return int(m.group(1)) if m else 0
@@ -3643,9 +3711,9 @@ def find_esp(esp_dir: Path, stem: str) -> Path:
     return hits[0]
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECTION 11: STAGE 1 - ESP MERGE
-# -----------------------------------------------------------------------------
+# =============================================================================
 def merge_esp(prepared_pdb: Path, esp_mae: Path, out_mae: Path, base_resnum: int) -> dict:
     """Write the ESP ligand charges onto the prepared holo complex, matched strictly by atom name.
 
@@ -3670,9 +3738,11 @@ def merge_esp(prepared_pdb: Path, esp_mae: Path, out_mae: Path, base_resnum: int
         a.partial_charge = esp_by_name[a.pdbname.strip()]
         tot += a.partial_charge
 
-    # A neutral/corrupt ESP file (charges never written, or run on the wrong protonation state) sums to
-    # a net charge that does not match the ligand's formal charge. Building MD on a mis-charged ligand
-    # silently changes the α-carbon electrophilicity the SN2 depends on, so refuse rather than proceed.
+    '''
+    A neutral/corrupt ESP file (charges never written, or run on the wrong protonation state) sums to
+    a net charge that does not match the ligand's formal charge. Building MD on a mis-charged ligand
+    silently changes the α-carbon electrophilicity the SN2 depends on, so refuse rather than proceed.
+    '''
     if round(tot) != esp_formal:
         raise RuntimeError(
             f"ESP net charge {tot:+.3f} e (rounds to {round(tot):+d}) ≠ ligand formal charge "
@@ -3692,9 +3762,9 @@ def merge_esp(prepared_pdb: Path, esp_mae: Path, out_mae: Path, base_resnum: int
     return {"lig_atoms": len(lig), "lig_charge_sum": round(tot, 4), "base_state": base_state}
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECTION 12: STAGE 3 - SYSTEM BUILDER (minimise-volume + build + ESP into force field)
-# -----------------------------------------------------------------------------
+# =============================================================================
 def _lig_atom_indices(complex_mae: Path) -> str:
     from schrodinger import structure
     st = structure.StructureReader.read(str(complex_mae))
@@ -3720,10 +3790,10 @@ def run_build(complex_mae: Path, jobname: str, wd: Path) -> Path:
     _LAUNCHED_JOBS.add(jobname)                       # cancelled on Ctrl-C/kill if it does not finish
     cmd = [f"{SCHRO}/utilities/multisim", "-JOBNAME", jobname, "-HOST", "localhost",
            "-maxjob", "1", "-m", str(msj), "-o", str(out_cms), str(oriented), "-WAIT"]
-    """multisim inherits the terminal and writes its own lines at their own indent - the JobId lands
+    '''multisim inherits the terminal and writes its own lines at their own indent - the JobId lands
     at column 0, out of step with every other line this phase prints. Stream it instead and re-emit
     each line through _log at the step's indent, which also mirrors multisim's output into the step
-    log file. check=True is reproduced explicitly so a build failure still raises."""
+    log file. check=True is reproduced explicitly so a build failure still raises.'''
     proc = subprocess.Popen(cmd, cwd=str(wd), stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
     for line in proc.stdout:
@@ -3779,9 +3849,11 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
                 if a.pdbname.strip() in esp:
                     ct.ffio.site[a.index].charge = esp[a.pdbname.strip()]
                     applied += 1
-    # Atomic write, re-asserting the same invariant on the written .tmp. A Cms.write() that
-    # flattens the partition leaves an unusable build (MM-GBSA and topo.read_cms iterate comp_ct);
-    # the collapsed write is raised and never replaces the good file.
+    '''
+    Atomic write, re-asserting the same invariant on the written .tmp. A Cms.write() that
+    flattens the partition leaves an unusable build (MM-GBSA and topo.read_cms iterate comp_ct);
+    the collapsed write is raised and never replaces the good file.
+    '''
     _tmp = out_cms.with_suffix(out_cms.suffix + ".tmp")
     model.write(str(_tmp))
     _chk = cmsmod.Cms(str(_tmp))
@@ -3808,9 +3880,11 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
                 bad.append(f"{a.pdbname.strip()} FF={msys.atom(i).charge:+.4f} ESP={want:+.4f}")
             else:
                 verified += 1
-    # Fail-CLOSED: the whole point of this function is to guarantee ESP reached the force field. A
-    # ligand PDB-name mismatch after System Builder writes nothing and verifies nothing; a lenient
-    # `if bad` test would pass silently while returning the ESP file's own sum. Require every LIG atom.
+    '''
+    Fail-CLOSED: the whole point of this function is to guarantee ESP reached the force field. A
+    ligand PDB-name mismatch after System Builder writes nothing and verifies nothing; a lenient
+    `if bad` test would pass silently while returning the ESP file's own sum. Require every LIG atom.
+    '''
     if n_lig == 0:
         raise RuntimeError("reapply_esp_to_cms: no LIG atoms in the built cms.")
     if applied != n_lig or verified != n_lig or bad:
@@ -3822,9 +3896,9 @@ def reapply_esp_to_cms(out_cms: Path, esp_mae: Path) -> float:
     return round(lig_sum, 4)   # the sum READ BACK from the engine, not from the ESP file
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECTION 13: STAGE 4 - MOLECULAR DYNAMICS
-# -----------------------------------------------------------------------------
+# =============================================================================
 def _md_msj(time_ps: float, interval_ps: float) -> str:
     relax = Path(f"{SCHRO}/mmshare-v7.3/data/desmond/desmond_npt_relax.msj")
     if not relax.exists():
@@ -3835,14 +3909,16 @@ def _md_msj(time_ps: float, interval_ps: float) -> str:
                            "unequilibrated box (equilibration must precede production).")
     relax_text = Path(relax).read_text()
 
-    # The stock relaxation releases ALL restraints in its final "NPT and no restraints" stage. With the
-    # ligand unrestrained for that stage, the substrate relaxes out of the near-attack docked pose
-    # (Boltz/PrepWizard place Oδ···Cα in-line at ~170°; the classical OPLS4 minimum is a side-on ~90°
-    # contact) BEFORE production's restraint engages, so production then locks the collapsed pose and
-    # every downstream frame - including the Step-07 QM/MM starting geometry - is non-reactive. Inject
-    # the production restraint block into that final stage so the ligand pose is held continuously from
-    # equilibration into production. The stage title is the marker; if a Schrödinger update renames it,
-    # fail loudly rather than silently run the collapsing protocol.
+    '''
+    The stock relaxation releases ALL restraints in its final "NPT and no restraints" stage. With the
+    ligand unrestrained for that stage, the substrate relaxes out of the near-attack docked pose
+    (Boltz/PrepWizard place Oδ···Cα in-line at ~170°; the classical OPLS4 minimum is a side-on ~90°
+    contact) BEFORE production's restraint engages, so production then locks the collapsed pose and
+    every downstream frame - including the Step-07 QM/MM starting geometry - is non-reactive. Inject
+    the production restraint block into that final stage so the ligand pose is held continuously from
+    equilibration into production. The stage title is the marker; if a Schrödinger update renames it,
+    fail loudly rather than silently run the collapsing protocol.
+    '''
     _rblock = _restraint_block()
     if _rblock:
         _title_re = re.compile(r'(title\s*=\s*")NPT and no restraints([^"]*")')
@@ -3950,10 +4026,10 @@ def _unpack_md_production(wd: Path, jobname: str, expected_time_ps: "float | Non
         _worker_progress(f"{jobname}: production trajectory already unpacked - skipping extraction.")
         return
 
-    """Production packed into a stage archive. Take the highest-numbered stage (production is the last
+    '''Production packed into a stage archive. Take the highest-numbered stage (production is the last
     simulate), but install it only after its cfg confirms it is the full-length run - an equilibration
     tgz can never stand in for production. The cfg sits ahead of the frames in the stream, so reading it
-    with --occurrence=1 stops tar early rather than decompressing the whole multi-GB archive."""
+    with --occurrence=1 stops tar early rather than decompressing the whole multi-GB archive.'''
     def _stage_num(p: Path) -> int:
         return int(re.search(rf"{re.escape(jobname)}_(\d+)-out\.tgz$", p.name).group(1))
     for tgz in sorted(wd.glob(f"{jobname}_*-out.tgz"), key=_stage_num, reverse=True):
@@ -3968,18 +4044,22 @@ def _unpack_md_production(wd: Path, jobname: str, expected_time_ps: "float | Non
             continue
         if expected_time_ps is not None and abs(float(m.group(1)) - expected_time_ps) > 1.0:
             continue                                     # an equilibration stage, not production
-        # --strip-components=1 drops the {stage}/ parent so the trajectory lands directly in the job dir
-        # rather than a nested {stage}/ subdir; only the {stage}_N basename is then flattened to {job}.
-        # A non-zero tar exit (gzip CRC / truncated member) raises inside _extract_with_progress, so a
-        # corrupt archive is caught and the production tgz below is never removed.
+        '''
+        --strip-components=1 drops the {stage}/ parent so the trajectory lands directly in the job dir
+        rather than a nested {stage}/ subdir; only the {stage}_N basename is then flattened to {job}.
+        A non-zero tar exit (gzip CRC / truncated member) raises inside _extract_with_progress, so a
+        corrupt archive is caught and the production tgz below is never removed.
+        '''
         _extract_with_progress(tgz, wd, [f"{stage}/{stage}_trj", f"{stage}/{stage}.ene"], jobname)
         (wd / f"{stage}_trj").rename(wd / f"{jobname}_trj")
         ene = wd / f"{stage}.ene"
         if ene.exists():
             ene.rename(wd / f"{jobname}.ene")
-        # Leave the job dir as Maestro does: production loose at the root, the archive gone. The small
-        # equilibration archives ({job}_1..6-out.tgz) stay - Maestro keeps those too. Removed only after
-        # the verified extract above, so the loose trajectory is never deleted without its replacement.
+        '''
+        Leave the job dir as Maestro does: production loose at the root, the archive gone. The small
+        equilibration archives ({job}_1..6-out.tgz) stay - Maestro keeps those too. Removed only after
+        the verified extract above, so the loose trajectory is never deleted without its replacement.
+        '''
         tgz.unlink(missing_ok=True)
         _repoint_cms()
         return
@@ -4007,9 +4087,9 @@ def run_md(system_cms: Path, jobname: str, wd: Path, time_ns: float, frames: int
     return out_cms                                        # raw multisim output; extraction runs on the CPU worker
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # SECTION 14: STAGE 2 - WATERMAP (+ CSV export for Step 07)
-# -----------------------------------------------------------------------------
+# =============================================================================
 def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_dist: float) -> Path:
     """Run WaterMap through Schrödinger's own WaterMapInput, on a local scratch, and copy the result back.
 
@@ -4052,10 +4132,12 @@ def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_
             else:
                 cmd = [f"{SCHRO}/watermap", "-JOBNAME", jobname, "-HOST", "localhost",
                        "-m", msj.name, in_mae.name, "-WAIT"]   # basenames: cwd is the scratch
-            # Launch through a bash login shell with a detached environment (see _clean_job_env), and
-            # with the input given by BASENAME from the scratch cwd. Both matter: a job that inherits the
-            # $SCHRODINGER/run session, or is handed an absolute input path, fails to stage its GCMC ligand
-            # companion to the sub-job and dies at stage 8.
+            '''
+            Launch through a bash login shell with a detached environment (see _clean_job_env), and
+            with the input given by BASENAME from the scratch cwd. Both matter: a job that inherits the
+            $SCHRODINGER/run session, or is handed an absolute input path, fails to stage its GCMC ligand
+            companion to the sub-job and dies at stage 8.
+            '''
             try:
                 subprocess.run(["bash", "-lc", " ".join(shlex.quote(c) for c in cmd)],
                                cwd=str(scratch), check=True, env=_clean_job_env())
@@ -4089,10 +4171,12 @@ def run_watermap(complex_mae: Path, jobname: str, wd: Path, time_ns: float, lig_
         out = wd / f"{jobname}_wm.maegz"
         shutil.copy2(src, out)
         if in_mae.exists():
-            # Retain the WaterMap INPUT frame alongside the output. Its Cα are the reference the static
-            # hydration sites are aligned onto before use (Step 07 load_watermap_reference_ca + frame
-            # superposition); the *_wm.maegz output carries only sites, no protein backbone, so without
-            # this the sites cannot be superimposed onto any MD frame and the WaterMap guidance no-ops.
+            '''
+            Retain the WaterMap INPUT frame alongside the output. Its Cα are the reference the static
+            hydration sites are aligned onto before use (Step 07 load_watermap_reference_ca + frame
+            superposition); the *_wm.maegz output carries only sites, no protein backbone, so without
+            this the sites cannot be superimposed onto any MD frame and the WaterMap guidance no-ops.
+            '''
             shutil.copy2(in_mae, wd / in_mae.name)
         cluster = scratch / f"{jobname}-cluster.maegz"
         if cluster.exists():
@@ -4699,9 +4783,11 @@ def _phase_watermap(entry: dict, dirs: dict, a) -> None:
             wmout = run_watermap(entry["complex_mae"], f"watermap_R_{rank}", wm_dir, a.wm_ns, a.lig_dist)
         n = export_watermap_csv(wmout, csv_out)
         if n <= 0:
-            # export writes NO csv when the maegz carries no dG site, so claiming ✔ here would print a
-            # success for a file that does not exist and the next run's existence-gate would re-run the
-            # whole multi-hour WaterMap anyway. Report it as a skip so it is visible and retried.
+            '''
+            export writes NO csv when the maegz carries no dG site, so claiming ✔ here would print a
+            success for a file that does not exist and the next run's existence-gate would re-run the
+            whole multi-hour WaterMap anyway. Report it as a skip so it is visible and retried.
+            '''
             _warn(f"[watermap] R_{rank} produced 0 hydration sites - no CSV written; will retry next run.")
         else:
             _ok(f"[watermap] R_{rank} ✔ {wmout.name} · {n} sites → {csv_out.name}")
@@ -4722,12 +4808,14 @@ def _phase_build(entry: dict, dirs: dict) -> None:
     if not entry["complex_mae"].exists():
         raise RuntimeError(f"no ESP complex {entry['complex_mae'].name} - merge first")
     if setup_cms.exists():
-        # Resume over an existing build. reapply_esp_to_cms REFUSES a collapsed/corrupt build
-        # (the comp_ct invariant), so a resume must not treat that refusal as a permanent failure -
-        # reapply is the only path here and run_build lives in the rebuild branch below. Quarantine the
-        # bad file and fall through to a fresh build, rather than bricking the rank on every re-run
-        # when its on-disk setup_cms is collapsed (comp_ct=1). A genuine ESP name-mismatch will still
-        # fail on the fresh build's own reapply, which is correct.
+        '''
+        Resume over an existing build. reapply_esp_to_cms REFUSES a collapsed/corrupt build
+        (the comp_ct invariant), so a resume must not treat that refusal as a permanent failure -
+        reapply is the only path here and run_build lives in the rebuild branch below. Quarantine the
+        bad file and fall through to a fresh build, rather than bricking the rank on every re-run
+        when its on-disk setup_cms is collapsed (comp_ct=1). A genuine ESP name-mismatch will still
+        fail on the fresh build's own reapply, which is correct.
+        '''
         try:
             q = reapply_esp_to_cms(setup_cms, entry["esp"])
             _ok(f"[build] R_{rank} ✔ already built - ESP re-verified (sum {q:+.3f} e)")
@@ -4808,10 +4896,12 @@ def main() -> int:
 
     ok, failed = [], []
 
-    # Hydrate esp/base/complex_mae for every entry up front (pure lookups), so any --stages subset -
-    # not just a run that includes 'merge' - has the keys the later phases read. Without this,
-    # --stages build/md/watermap KeyError inside the phase and (for watermap) the retry handler swallows
-    # it, so main returns 0 = PASS having produced nothing.
+    '''
+    Hydrate esp/base/complex_mae for every entry up front (pure lookups), so any --stages subset -
+    not just a run that includes 'merge' - has the keys the later phases read. Without this,
+    --stages build/md/watermap KeyError inside the phase and (for watermap) the retry handler swallows
+    it, so main returns 0 = PASS having produced nothing.
+    '''
     for e in entries:
         try:
             _hydrate(e, ranked_map, dirs)
@@ -4880,14 +4970,16 @@ def main() -> int:
         run_root = run
         md_dir = dirs["md"]
         with _guard:                                     # reuse the guard primed at start (idempotent)
-            # Pipelined per rank (GPU produces, CPU consumes). Each rank's MD runs on the GPU (blocking,
-            # sequential - there is one GPU); the instant it lands, that rank's extract → SID → MM-GBSA →
-            # Defluorination is put on a queue and the GPU immediately starts the NEXT rank's MD. A single
-            # CPU worker drains the queue one rank at a time: if a later MD finishes while an earlier
-            # rank's post-processing is still running, the new rank waits in the queue. Exactly ONE
-            # Prime MM-GBSA batch touches the scratch disk at a time, while the GPU runs the next rank's
-            # MD through the hours of CPU post-processing instead of sitting idle.
-            # NB: MD (main thread) and SID/MM-GBSA (worker thread) log concurrently - lines interleave.
+            '''
+            Pipelined per rank (GPU produces, CPU consumes). Each rank's MD runs on the GPU (blocking,
+            sequential - there is one GPU); the instant it lands, that rank's extract → SID → MM-GBSA →
+            Defluorination is put on a queue and the GPU immediately starts the NEXT rank's MD. A single
+            CPU worker drains the queue one rank at a time: if a later MD finishes while an earlier
+            rank's post-processing is still running, the new rank waits in the queue. Exactly ONE
+            Prime MM-GBSA batch touches the scratch disk at a time, while the GPU runs the next rank's
+            MD through the hours of CPU post-processing instead of sitting idle.
+            NB: MD (main thread) and SID/MM-GBSA (worker thread) log concurrently - lines interleave.
+            '''
             _active_entries = [e for e in entries if not e.get("_skip")]
             _job_total = len(_active_entries)
             _post_q: "queue.Queue" = queue.Queue()
@@ -4980,9 +5072,11 @@ def main() -> int:
                 except Exception as exc:
                     _warn(f"[qc] MD trajectory-QC figure skipped - {str(exc).splitlines()[0]}")
 
-    # Combined WaterMap landscape - drawn every run from the WaterMaps already on disk (never gated on a
-    # fresh export, so a resume where WaterMap is skipped still refreshes it), like the other cross-rank
-    # figures in 06_Analysis. Reads only the CSVs present and no-ops when none exist.
+    '''
+    Combined WaterMap landscape - drawn every run from the WaterMaps already on disk (never gated on a
+    fresh export, so a resume where WaterMap is skipped still refreshes it), like the other cross-rank
+    figures in 06_Analysis. Reads only the CSVs present and no-ops when none exist.
+    '''
     try:
         plot_watermap_combined(dirs["wm"], _analysis_dir(out_root))
     except Exception as exc:

@@ -78,9 +78,9 @@ Scientific References:
 # SECTION 1: IMPORTS & CONFIGURATION
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import sys
 import argparse
 import json
@@ -90,15 +90,15 @@ import traceback
 from pathlib import Path
 from collections import Counter
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.2: Scientific Stack Imports
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
 for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
 MKL / OpenMP / NumExpr). Must precede numpy/scipy import to take effect;
 setdefault() preserves any value exported by the caller or pipeline runner.
-"""
+'''
 import os as _os
 _CPU_CAP = str(max(1, (_os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
@@ -111,9 +111,9 @@ from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, to_tree
 from Bio import SeqIO
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.3: Pipeline modules (00_01) via importlib
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import importlib.util as _ilu
 # Consolidated top-level imports; any optional/heavy dependency stays local to its caller.
 import time as _time
@@ -133,9 +133,9 @@ _console_info   = _utils_mod.console_info
 _console_sep    = _utils_mod.console_separator
 _setup_logging  = _utils_mod.setup_logging
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.4: Global Configuration
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 SEPARATOR = "-" * 80
 
 # Fallback column mapping for compatibility across slightly different CSV schemas
@@ -179,9 +179,9 @@ def clean_id(name: str) -> str:
 # SECTION 3: BIO-MATHEMATICS
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.1: K-mer Profiling
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def get_kmer_counts(seq: str, k: int = CFG.DENDRO_KMER_SIZE) -> dict:
     """Generates K-mer frequency profile for a given amino acid sequence."""
@@ -189,16 +189,16 @@ def get_kmer_counts(seq: str, k: int = CFG.DENDRO_KMER_SIZE) -> dict:
     return dict(Counter(seq[i:i+k] for i in range(len(seq) - k + 1)))
 
 
-"""
+'''
 NB: pairwise cosine distances are computed in bulk via scipy.spatial.distance.pdist
 (metric='cosine') inside generate_upgma_newick - one vectorised BLAS call, so no
 scalar per-pair distance helper is needed.
-"""
+'''
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 3.2: UPGMA Clustering
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
     """Computes pairwise cosine distance matrix and performs UPGMA clustering to Newick."""
@@ -210,10 +210,10 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
 
     profiles = [get_kmer_counts(sequences[l]) for l in labels]
 
-    """
+    '''
     Build dense k-mer matrix and compute all pairwise cosine distances in one
     vectorised BLAS call (pdist) instead of an O(N²) Python loop.
-    """
+    '''
     all_kmers      = sorted(set(k for p in profiles for k in p))
     kmer_mat       = np.array([[p.get(k, 0) for k in all_kmers] for p in profiles],
                                dtype=np.float64)
@@ -228,12 +228,14 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
         return re.sub(r"[\s(),:;\[\]'\"]+", "_", str(lbl))
 
     def build_newick(node, parentdist):
-        # Clamp branch length at 0: a non-monotonic linkage can give node.dist >
-        # parentdist, which would emit a negative branch length (rejected by most
-        # tree parsers). max(0.0, …) keeps the Newick valid.
-        # UPGMA is ultrametric: node height = half the cophenetic (merge) distance
-        # scipy stores in node.dist, so each branch length is (parent−node)/2. Without
-        # the /2 every leaf-to-leaf path is exactly 2× the true cosine distance.
+        '''
+        Clamp branch length at 0: a non-monotonic linkage can give node.dist >
+        parentdist, which would emit a negative branch length (rejected by most
+        tree parsers). max(0.0, …) keeps the Newick valid.
+        UPGMA is ultrametric: node height = half the cophenetic (merge) distance
+        scipy stores in node.dist, so each branch length is (parent−node)/2. Without
+        the /2 every leaf-to-leaf path is exactly 2× the true cosine distance.
+        '''
         if node.is_leaf():
             return f"{_nwk_safe(labels[node.id])}:{max(0.0, (parentdist - node.dist) / 2.0):.4f}"
         left_str  = build_newick(node.left,  node.dist)
@@ -251,9 +253,9 @@ def generate_upgma_newick(sequences: dict) -> tuple[str, list]:
 # SECTION 4: PHYLOGENY DEPLOYMENT
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.1: Suite Packaging
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
                         csv_df: pd.DataFrame, labels: list,
@@ -271,10 +273,10 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     csv_str = csv_df.to_csv(index=False)
     csv_path.write_text(csv_str)
 
-    """
+    '''
     Deduplicate to one row per protein for the embedded HTML state.
     The full CSV (all ligand×protein rows) can be multi-MB and slow browsers.
-    """
+    '''
     prot_col = next((c for c in CFG.VIS_PHYLO_COLUMN_MAP["Protein_Name"] if c in csv_df.columns), None)
     if prot_col and len(csv_df) > len(labels):
         embed_df = csv_df.drop_duplicates(subset=[prot_col], keep="first")
@@ -313,9 +315,9 @@ def package_deployment(out_dir: Path, prefix: str, nwk_str: str,
     reporter.log(f"  ✔ Suite Generated: {prefix} ({len(labels)} proteins{_lig_txt}) -> {out_dir.resolve()}")
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.2: Dendrogram Engine
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
                           out_dir: Path, reporter: ReportManager):
@@ -369,9 +371,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         clean_key = re.sub(r"^\d+_", "", raw_id, count=1)
         fasta_dict[clean_key] = str(r.seq)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Phase 1: Global Master Dendrogram
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Master Dendrogram\n")
 
     valid_csv_prots = set(df[prot_col].astype(str).unique())
@@ -383,9 +385,11 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         if clean_id(k) in _valid_clean_ids
     }
 
-    # Reporting only (does NOT change the matching): name the CSV proteins with no FASTA sequence, so
-    # their absence from the tree is logged rather than silent. The controls (3R3U_Control, DeHa4_Control)
-    # are absent by construction - their sequences are not in the merged FASTA.
+    '''
+    Reporting only (does NOT change the matching): name the CSV proteins with no FASTA sequence, so
+    their absence from the tree is logged rather than silent. The controls (3R3U_Control, DeHa4_Control)
+    are absent by construction - their sequences are not in the merged FASTA.
+    '''
     _fasta_clean = {clean_id(k) for k in fasta_dict}
     _unmatched = sorted(p for p in valid_csv_prots if clean_id(p) not in _fasta_clean)
     if _unmatched:
@@ -399,9 +403,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
     nwk_str, labels = generate_upgma_newick(global_seqs)
     package_deployment(out_dir, "Global_Master", nwk_str, df, labels, reporter)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Phase 2: Tier-Specific Phylogenies
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     _TIER_RANK_ORDER = CFG.TIER_ORDER
 
     if tier_col:
@@ -476,9 +480,11 @@ def main():
     out_dir  = run_path / "4_Dendrogram"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build the reporter FIRST: its __init__ opens the log "w" (writes the header), so doing it after
-    # _setup_logging would truncate the handler's first lines (e.g. "Loaded: <csv>"). Header first, then
-    # the logging handler appends.
+    '''
+    Build the reporter FIRST: its __init__ opens the log "w" (writes the header), so doing it after
+    _setup_logging would truncate the handler's first lines (e.g. "Loaded: <csv>"). Header first, then
+    the logging handler appends.
+    '''
     reporter = _make_reporter(out_dir)
 
     global logger

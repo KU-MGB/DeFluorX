@@ -18,17 +18,17 @@
 <text x="180.1953125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_01_Project_Config_DeFluorX.py</text>
 <text x="180.1953125" y="151.0" font-size="9.2" fill="#0f766e">single source of truth - thresholds, weights, paths</text>
 <text x="180.1953125" y="163.5" font-size="9.2" fill="#0f766e">tiers · geometry cutoffs · restraint · gates</text>
-<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,537</text>
+<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,582</text>
 <g filter="url(#ds)"><rect x="467.328125" y="118" width="259.7" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="483.328125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_02_Project_Utils_DeFluorX.py</text>
 <text x="483.328125" y="151.0" font-size="9.2" fill="#0f766e">console &amp; logging · atomic CSV / JSON</text>
 <text x="483.328125" y="163.5" font-size="9.2" fill="#0f766e">geometry · Kabsch · figure-style SSOT</text>
-<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,256</text>
+<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,264</text>
 <g filter="url(#ds)"><rect x="755.0078125" y="118" width="220.8" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="771.0078125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_03_Environment_DeFluorX.py</text>
 <text x="771.0078125" y="151.0" font-size="9.2" fill="#0f766e">Conda env → PFAS.yml +</text>
 <text x="771.0078125" y="163.5" font-size="9.2" fill="#0f766e">requirements.txt</text>
-<text x="964.8" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~312</text>
+<text x="964.8" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~314</text>
 <line x1="570.0" y1="89.0" x2="570.0" y2="101.0" stroke="#0d9488" stroke-width="1.5" marker-end="url(#vio)"/>
 <rect x="40" y="229.5" width="284.8" height="162.0" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="182.4" y="248.5" font-size="11.5" font-weight="800" fill="#15803d" text-anchor="middle" letter-spacing="0.3">Phase 1 - Ingest</text>
@@ -39,7 +39,7 @@
 <text x="72" y="327.5" font-size="10.4" font-weight="800" fill="#065f46">01_Merge_DeFluorX.py</text>
 <text x="72" y="342.5" font-size="9.2" fill="#047857">merge multi-source FASTA → non-redundant set</text>
 <text x="72" y="355.0" font-size="9.2" fill="#047857">dedup + QC → merged FASTA</text>
-<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~707</text>
+<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~709</text>
 <rect x="372.8" y="229.5" width="776.9" height="162.0" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="761.2" y="248.5" font-size="11.5" font-weight="800" fill="#be185d" text-anchor="middle" letter-spacing="0.3">Phase 2 - High-Throughput Screening</text>
 <g filter="url(#ds)"><rect x="388.76953125" y="259.5" width="245.6" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
@@ -50,7 +50,7 @@
 <text x="404.76953125" y="330.0" font-size="9.2" fill="#9d174d">6-tier ladder · elite-angle + floor</text>
 <text x="404.76953125" y="342.5" font-size="9.2" fill="#9d174d">controls FA→2A · DFA→2B · TFA→3</text>
 <text x="404.76953125" y="355.0" font-size="9.2" fill="#9d174d">→ ranked + master CSV · best CIFs</text>
-<text x="623.3" y="355.0" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~7,437</text>
+<text x="623.3" y="355.0" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~7,466</text>
 <g filter="url(#ds)"><rect x="662.34375" y="259.5" width="239.3" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="678.34375" y="277.5" font-size="10.4" font-weight="800" fill="#9d174d">03_Validation_Figures_DeFluorX.py</text>
 <text x="678.34375" y="292.5" font-size="9.2" fill="#9d174d">the judge - 69 panels · 7 folders</text>
@@ -58,14 +58,14 @@
 <text x="678.34375" y="317.5" font-size="9.2" fill="#9d174d">BH stats · Ramachandran · control★</text>
 <text x="678.34375" y="330.0" font-size="9.2" fill="#9d174d">multi-model variance · separators</text>
 <text x="678.34375" y="342.5" font-size="9.2" fill="#9d174d">→ Figure_Enriched_Dataset.csv</text>
-<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,669</text>
+<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,807</text>
 <g filter="url(#ds)"><rect x="929.67578125" y="259.5" width="204.0" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="945.67578125" y="277.5" font-size="10.4" font-weight="800" fill="#9d174d">04_Dendrogram_DeFluorX.py</text>
 <text x="945.67578125" y="292.5" font-size="9.2" fill="#9d174d">alignment-free k-mer (k=3)</text>
 <text x="945.67578125" y="305.0" font-size="9.2" fill="#9d174d">UPGMA phylogeny</text>
 <text x="945.67578125" y="317.5" font-size="9.2" fill="#9d174d">interactive D3 tree</text>
 <text x="945.67578125" y="330.0" font-size="9.2" fill="#9d174d">per-tier · zoom / search</text>
-<text x="1122.6" y="330.0" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~1,676</text>
+<text x="1122.6" y="330.0" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~1,682</text>
 <rect x="40" y="419.5" width="675.9" height="149.5" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="377.9" y="438.5" font-size="11.5" font-weight="800" fill="#1d4ed8" text-anchor="middle" letter-spacing="0.3">Phase 4 - Dynamics &amp; Quantum Mechanics</text>
 <g filter="url(#ds)"><rect x="56" y="449.5" width="308.6" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
@@ -76,7 +76,7 @@
 <text x="72" y="520.0" font-size="9.2" fill="#1e40af">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="72" y="532.5" font-size="9.2" fill="#1e40af">departing-F Mulliken charge → cleavage check</text>
 <text x="72" y="545.0" font-size="9.2" fill="#1e40af">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,999</text>
+<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,217</text>
 <g filter="url(#ds)"><rect x="392.5859375" y="449.5" width="307.3" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="408.5859375" y="467.5" font-size="10.4" font-weight="800" fill="#1e40af">06_Physics_Validation_DeFluorX.py</text>
 <text x="408.5859375" y="482.5" font-size="9.2" fill="#1e40af">explicit-solvent physics for each MD-selected complex</text>
@@ -85,7 +85,7 @@
 <text x="408.5859375" y="520.0" font-size="9.2" fill="#1e40af">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="408.5859375" y="532.5" font-size="9.2" fill="#1e40af">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="408.5859375" y="545.0" font-size="9.2" fill="#1e40af">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,003</text>
+<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,097</text>
 <rect x="763.9" y="419.5" width="323.7" height="149.5" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="925.7" y="438.5" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 3 - Selection &amp; Prep</text>
 <g filter="url(#ds)"><rect x="779.87109375" y="449.5" width="291.7" height="105.5" rx="10" fill="#fed7aa" stroke="#fb923c" stroke-width="1.5"/></g>
@@ -96,7 +96,7 @@
 <text x="795.87109375" y="520.0" font-size="9.2" fill="#9a3412">PyMOL / PLIP contact figures</text>
 <text x="795.87109375" y="532.5" font-size="9.2" fill="#9a3412">pose-drift + 8-residue machinery figures</text>
 <text x="795.87109375" y="545.0" font-size="9.2" fill="#9a3412">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,163</text>
+<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,211</text>
 <line x1="182.4" y1="302.5" x2="182.4" y2="306.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="327.8" y1="310.5" x2="369.8" y2="310.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="637.3" y1="312.2" x2="659.3" y2="312.2" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>

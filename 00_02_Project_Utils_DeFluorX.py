@@ -220,11 +220,11 @@ def setup_logging(
 # =============================================================================
 # SECTION 3: CONSOLE OUTPUT FUNCTIONS
 # =============================================================================
-"""
+'''
 All functions accept an optional `logger` parameter. Pass the module-level
 logger from the calling script so output goes to both terminal and log file.
 When `logger=None`, output is terminal-only (useful for standalone testing).
-"""
+'''
 
 def _strip_ansi(s: str) -> str:
     """Remove all ANSI/VT100 escape sequences from a string."""
@@ -412,15 +412,17 @@ def apply_figure_style(cfg) -> None:
         "savefig.bbox": "tight",
     })
 
-    # ---- Central figure-format SSOT ----------------------------------------------------------------
-    # Every matplotlib save (fig.savefig / plt.savefig) is routed to cfg.VIS_FIGURE_FORMAT regardless
-    # of the suffix a call site happens to name: the suffix and the write format are rewritten here, so
-    # one CFG edit re-targets all plots (svg / pdf / tiff / png / jpg). A call that passes an explicit
-    # format= (a PIL-composited or PyMOL raster tile that must stay png) is left untouched. The patch is
-    # installed once at the class level (idempotent guard) and reads the format from matplotlib each
-    # call, so a later apply_figure_style with a different CFG re-targets without re-patching. It
-    # composes with Step-03's savefig redirect: that wrapper rewrites the folder, then delegates to this
-    # one which rewrites the extension.
+    '''
+    ---- Central figure-format SSOT ----------------------------------------------------------------
+    Every matplotlib save (fig.savefig / plt.savefig) is routed to cfg.VIS_FIGURE_FORMAT regardless
+    of the suffix a call site happens to name: the suffix and the write format are rewritten here, so
+    one CFG edit re-targets all plots (svg / pdf / tiff / png / jpg). A call that passes an explicit
+    format= (a PIL-composited or PyMOL raster tile that must stay png) is left untouched. The patch is
+    installed once at the class level (idempotent guard) and reads the format from matplotlib each
+    call, so a later apply_figure_style with a different CFG re-targets without re-patching. It
+    composes with Step-03's savefig redirect: that wrapper rewrites the folder, then delegates to this
+    one which rewrites the extension.
+    '''
     matplotlib._deflx_fig_fmt = str(getattr(cfg, "VIS_FIGURE_FORMAT", "svg")).lower().lstrip(".")
     if not getattr(matplotlib, "_deflx_savefig_patched", False):
         _SWAP = {"png", "jpg", "jpeg", "tif", "tiff", "pdf", "svg", "eps", "ps"}
@@ -435,9 +437,11 @@ def apply_figure_style(cfg) -> None:
                 pass
             return fname
         def _deflx_rasterize_dense(fig):
-            # Dense per-point vector layers (large scatters, meshes, line/patch collections) inflate an
-            # SVG to hundreds of MB, past what renderers and submission systems accept; rasterize only
-            # those layers so the points embed as a compact image while axes, ticks and text stay vector.
+            '''
+            Dense per-point vector layers (large scatters, meshes, line/patch collections) inflate an
+            SVG to hundreds of MB, past what renderers and submission systems accept; rasterize only
+            those layers so the points embed as a compact image while axes, ticks and text stay vector.
+            '''
             try:
                 for ax in fig.axes:
                     for art in list(ax.collections):
@@ -836,9 +840,9 @@ def save_ramachandran_plot(angles: list[tuple], title: str, out_path: Path | str
 # SECTION 5: GEOMETRIC & BIO-MATHEMATICAL UTILITIES
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.1: Minimum Image Convention (MIC) Vector
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def get_mic_vector(pos1, pos2, box):
     """
@@ -876,9 +880,9 @@ def get_mic_vector(pos1, pos2, box):
     return vec
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.2: Distance
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def distance(pos1, pos2, box=None) -> float:
     """PBC-corrected or Euclidean distance between two Cartesian coordinates (Å)."""
@@ -946,9 +950,9 @@ def mic_dists_2d(pos_a: np.ndarray, pos_b: np.ndarray, box) -> np.ndarray:
     return np.linalg.norm(vecs, axis=2)
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.3: Angle
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def calculate_angle(p1, p2, p3, box=None) -> float:
     """
@@ -966,9 +970,9 @@ def calculate_angle(p1, p2, p3, box=None) -> float:
     return np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.4: Dihedral
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
     """
@@ -989,9 +993,9 @@ def calculate_dihedral(p1, p2, p3, p4, box=None) -> float:
     return np.degrees(np.arctan2(y, x))
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.5: Improper Dihedral (Walden Inversion / TS Flattening)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     """
@@ -1025,9 +1029,9 @@ def calculate_improper_dihedral(p1, p2, p3, p4, box=None) -> float:
     return 90.0 - np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.6: Bürgi–Dunitz Angle
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def calculate_burgi_dunitz(nuc_pos, c_pos, o_pos) -> float:
     """
@@ -1044,9 +1048,9 @@ def calculate_burgi_dunitz(nuc_pos, c_pos, o_pos) -> float:
     return calculate_angle(nuc_pos, c_pos, o_pos)
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.6b: Oδ Orientation Fallback for Smart-Lock nucleophile search
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def find_nucleophile_od_fallback(
     asp_candidates: list,
@@ -1110,9 +1114,9 @@ def find_nucleophile_od_fallback(
     return best
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.7: Flippin–Lodge Angle
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
     """
@@ -1150,9 +1154,11 @@ def calculate_flippin_lodge(nuc_pos, c_pos, r1_pos, r2_pos) -> float:
         vec_r1  = r1  - c
         vec_r2  = r2  - c
 
-        # Unit-normalise with a 1e-6 zero-length guard. Degenerate geometry
-        # (collinear R1–C–R2 or coincident atoms) gives a zero-length vector; raising
-        # here routes such cases to the 999.0 fallback rather than emitting NaN.
+        '''
+        Unit-normalise with a 1e-6 zero-length guard. Degenerate geometry
+        (collinear R1–C–R2 or coincident atoms) gives a zero-length vector; raising
+        here routes such cases to the 999.0 fallback rather than emitting NaN.
+        '''
         def _unit(v):
             n = np.linalg.norm(v)
             if n < 1e-6:
@@ -1201,9 +1207,11 @@ def get_alignment_grade(identity_pct, cfg) -> str:
     Resolve a letter grade (A-I) for a given sequence identity percentage
     using bins defined in Project Config.
     """
-    # Left-open, right-closed intervals (lo, hi] to match the pd.cut(right=True)
-    # grading used for the CSV Alignment_Grade column, so a boundary value such as
-    # 90.0% receives the same letter from both code paths.
+    '''
+    Left-open, right-closed intervals (lo, hi] to match the pd.cut(right=True)
+    grading used for the CSV Alignment_Grade column, so a boundary value such as
+    90.0% receives the same letter from both code paths.
+    '''
     for lo, hi, letter in cfg.ALIGN_GRADE_DEFS:
         if lo < identity_pct <= hi:
             return letter

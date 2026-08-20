@@ -240,15 +240,17 @@ import json
 import math
 import os
 
-# =============================================================================
-# SCHRÖDINGER BOOTSTRAP
-# =============================================================================
-# Auto-sets SCHRODINGER=/opt/schrodinger if the env var is absent.
-# When invoked with plain `python`, re-invokes transparently via
-# $SCHRODINGER/run so the Schrödinger Python interpreter is used.
-# Both forms are equivalent:
-#   python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
-#   $SCHRODINGER/run 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+'''
+=============================================================================
+SCHRÖDINGER BOOTSTRAP
+=============================================================================
+Auto-sets SCHRODINGER=/opt/schrodinger if the env var is absent.
+When invoked with plain `python`, re-invokes transparently via
+$SCHRODINGER/run so the Schrödinger Python interpreter is used.
+Both forms are equivalent:
+  python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+  $SCHRODINGER/run 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z
+'''
 import subprocess as _sp
 
 if "SCHRODINGER" not in os.environ:
@@ -273,10 +275,12 @@ import warnings
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
-# for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
-# MKL / OpenMP / NumExpr). Must precede numpy import to take effect;
-# setdefault() preserves any value exported by the caller or pipeline runner.
+'''
+CPU usage cap (total cores − 2; mirrors CFG.PREP_CPU_RESERVE). Reserve 2 cores
+for OS/desktop stability by limiting the thread-pool maths libraries (BLAS /
+MKL / OpenMP / NumExpr). Must precede numpy import to take effect;
+setdefault() preserves any value exported by the caller or pipeline runner.
+'''
 _CPU_CAP = str(max(1, (os.cpu_count() or 4) - 2))
 for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
             "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -380,7 +384,7 @@ _mic_dists_2d           = _utils_mod.mic_dists_2d
 clean_spines            = _utils_mod.clean_spines
 _calc_improper_dihedral = _utils_mod.calculate_improper_dihedral
 _ensure_box_3x3             = _utils_mod._ensure_box_3x3
-"""
+'''
 THE NUCLEOPHILE IS AN ASPARTATE. CFG SAYS SO; THIS SCRIPT NOW ASKS IT.
 
 Both call sites hardcoded {'ASP', 'GLU', 'ASH', 'GLH'} - a set that admits GLUTAMATE, which
@@ -392,7 +396,7 @@ ASH is retained because it is the same aspartate under a force-field name for it
 question of NOMENCLATURE, not of identity. Whether that aspartate is actually deprotonated (and so able
 to attack) is decided in Step 05 by enforce_catalytic_protonation, which strips the acidic proton. The
 recognition set names the residue; the protonation policy makes it a nucleophile.
-"""
+'''
 _NUCLEOPHILE_RESIDUES = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Nucleophile"])
 _ACID_RESIDUES         = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Acid_Catalyst"])
 _BASE_RESIDUES         = frozenset(CFG.ROLE_EXPECTED_RESIDUES["Base_Catalyst"])
@@ -405,24 +409,32 @@ PLOT_LOCK = threading.Lock()
 # =============================================================================
 # SECTION 1: GLOBAL CONSTANTS & CONFIGURATION
 # =============================================================================
-# All thresholds sourced from 00_01_Project_Config_DeFluorX.py (CFG).
-# Fallback literals are numerically identical - activate only when CFG is
-# unavailable (e.g., standalone testing outside the repository).
+'''
+All thresholds sourced from 00_01_Project_Config_DeFluorX.py (CFG).
+Fallback literals are numerically identical - activate only when CFG is
+unavailable (e.g., standalone testing outside the repository).
+'''
 
-# ── § 1.1  NAC geometry thresholds (SN2 attack) ──────────────────────────────
+# -----------------------------------------------------------------------------
+# Step 1.1: NAC geometry thresholds (SN2 attack)
+# -----------------------------------------------------------------------------
 THRESHOLD_STRICT_NAC_DIST   = CFG.NAC_DIST_STRICT    # 3.2 Å - strict nucleophile–C
 THRESHOLD_STRICT_NAC_ANGLE  = CFG.NAC_ANGLE_STRICT   # 155°  - strict O–C–F angle
 THRESHOLD_RELAXED_NAC_DIST  = CFG.NAC_DIST_RELAXED   # 3.8 Å - relaxed nucleophile–C
 THRESHOLD_RELAXED_NAC_ANGLE = CFG.NAC_ANGLE_RELAXED  # 145°  - relaxed O–C–F angle
 POCKET_RESIDENCY_DIST       = CFG.POCKET_RESIDENCY_DIST  # 8.0 Å - pocket-bound cutoff
 
-# ── § 1.2  Catalytic triad integrity thresholds (MD-calibrated) ───────────────
+# -----------------------------------------------------------------------------
+# Step 1.2: Catalytic triad integrity thresholds (MD-calibrated)
+# -----------------------------------------------------------------------------
 # Crystal thresholds (4.5 Å NB / 7.0 Å BA) + 2.0 Å thermal-fluctuation buffer
 # for 300 K Desmond simulations; see CFG §6 for derivation.
 THRESHOLD_TRIAD_NB          = CFG.THRESHOLD_TRIAD_NB_MD   # 6.5 Å - Nuc–Base (crystal = 4.5 Å)
 THRESHOLD_TRIAD_BA          = CFG.THRESHOLD_TRIAD_BA_MD   # 9.0 Å - Base–Acid (crystal = 7.0 Å)
 
-# ── § 1.3  Physical chemistry scoring parameters ──────────────────────────────
+# -----------------------------------------------------------------------------
+# Step 1.3: Physical chemistry scoring parameters
+# -----------------------------------------------------------------------------
 _WALDEN_IMPROPER_MAX        = CFG.WALDEN_IMPROPER_MAX  # 15.0° - improper dihedral for TS geometry
 _SOLVENT_RESTYPES           = CFG.SOLVENT_RESTYPES     # residue names for water blockade detection
 _SAFE_SOLVENT_RESTYPES      = [r for r in _SOLVENT_RESTYPES if r.isalnum() or '_' in r]  # ASL-safe subset (reused by the water-aware frame selection)
@@ -431,7 +443,9 @@ _SCORE_W_ANGLE              = CFG.SCORE_ANGLE_WEIGHT   #   5.0 - per ° above re
 _SCORE_W_BLOCK              = CFG.SCORE_BLOCKADE_WEIGHT #  50.0 - per water blockade unit
 _SCORE_W_WM                 = CFG.SCORE_WATERMAP_WEIGHT #  10.0 - per kcal mol⁻¹ WaterMap dG unit
 
-# ── § 1.4  8-Residue Dream Team reference mapping (PDB 3R3U / DEHA4) ─────────
+# -----------------------------------------------------------------------------
+# Step 1.4: 8-Residue Dream Team reference mapping (PDB 3R3U / DEHA4)
+# -----------------------------------------------------------------------------
 # Reference residue numbers in canonical FAcD; alignment map from master CSV
 # translates these to enzyme-specific sequential numbers per job.
 DREAM_TEAM_REF = CFG.DREAM_TEAM_REFS
@@ -578,9 +592,11 @@ def console_qmm_ready(msg: str) -> None:
 # SECTION 3: GEOMETRY & MATHEMATICAL UTILITIES
 # =============================================================================
 
-# NOTE: This function is NOT equivalent to 00_02_Project_Utils.calculate_min_distance.
-# It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
-# The API divergence is intentional - required for Schrödinger/Maestro integration.
+'''
+NOTE: This function is NOT equivalent to 00_02_Project_Utils.calculate_min_distance.
+It uses the Schrödinger frame API (frame.pos(idx)) rather than numpy arrays.
+The API divergence is intentional - required for Schrödinger/Maestro integration.
+'''
 def calculate_min_distance(frame, indices_A: list, indices_B: list, cms=None) -> float:
     """Minimum PBC-corrected distance between two atom-id sets (vectorised).
 
@@ -630,12 +646,14 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
         console_info(f"    {ConsoleColours.FAIL}[!] No C-F bonds found in ligand.{ConsoleColours.ENDC}")
         return None, None, None, None, None
 
-    # Restrict the warhead to the scissile α-carbon - the carbon adjacent to the ligand
-    # carboxylate head - mirroring Step 02's reactive-centre gating. Only C–F bonds ON
-    # that α-carbon are candidate scissile bonds, so an internal CF2/CF3 of a polyfluoro
-    # decoy (e.g. PFOA) is not modelled as the reaction centre. TFA's α-CF3 is retained
-    # (its scissile carbon IS the α-carbon). Falls back to all C–F bonds, logged, when no
-    # carboxylate/α-carbon can be identified (e.g. a non-carboxylate chemotype).
+    '''
+    Restrict the warhead to the scissile α-carbon - the carbon adjacent to the ligand
+    carboxylate head - mirroring Step 02's reactive-centre gating. Only C–F bonds ON
+    that α-carbon are candidate scissile bonds, so an internal CF2/CF3 of a polyfluoro
+    decoy (e.g. PFOA) is not modelled as the reaction centre. TFA's α-CF3 is retained
+    (its scissile carbon IS the α-carbon). Falls back to all C–F bonds, logged, when no
+    carboxylate/α-carbon can be identified (e.g. a non-carboxylate chemotype).
+    '''
     def _carboxylate_alpha_carbon():
         """
         The α-carbon is the FLUORINATED carbon next to a ligand carboxylate. Every carboxylate is
@@ -706,12 +724,14 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
             min_eff = d + bonus; best_nuc_key = res_key; actual_dist = d
 
     if not best_nuc_key or actual_dist > CFG.SMART_LOCK_NUC_MAX_DIST:
-        # ── Oδ Orientation Fallback ────────────────────────────────────────────
-        # Primary geometry search exhausted.  Delegate to shared utility
-        # find_nucleophile_od_fallback() (00_02_Project_Utils_DeFluorX.py).
-        # The function accepts plain NumPy arrays only; extract positions here
-        # before calling so CMS atom-group objects never enter the utility.
-        # Threshold aligns with CFG.NAC_ANGLE_RELAXED.
+        '''
+        ── Oδ Orientation Fallback ────────────────────────────────────────────
+        Primary geometry search exhausted.  Delegate to shared utility
+        find_nucleophile_od_fallback() (00_02_Project_Utils_DeFluorX.py).
+        The function accepts plain NumPy arrays only; extract positions here
+        before calling so CMS atom-group objects never enter the utility.
+        Threshold aligns with CFG.NAC_ANGLE_RELAXED.
+        '''
         c_idx, f_idx = cf_pairs[0]
         # frame.pos() indexes by gid; convert the atom-ids first (see calculate_min_distance).
         c_pos_np   = np.array(frame_0.pos(topo.aids2gids(cms_model, [c_idx])[0]), dtype=float)
@@ -762,9 +782,11 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
     idx_base = []
     best_base_key = None; min_eff = float('inf')
     for res_key, data in res_dict.items():
-        # CFG's set also carries the AMBER/CHARMM histidine names (HSD/HSE/HSP). The hardcoded set here
-        # listed only the OPLS ones, so a base named HSD/HSE/HSP would have been invisible - the Smart-Lock
-        # would have reported "no base found" on a structure that has one.
+        '''
+        CFG's set also carries the AMBER/CHARMM histidine names (HSD/HSE/HSP). The hardcoded set here
+        listed only the OPLS ones, so a base named HSD/HSE/HSP would have been invisible - the Smart-Lock
+        would have reported "no base found" on a structure that has one.
+        '''
         if not data['N_idx'] or data['ptype'] not in _BASE_RESIDUES:
             continue
         d     = calculate_min_distance(frame_0, idx_nuc, data['N_idx'], cms_model)
@@ -797,10 +819,12 @@ def extract_hybrid_smart_system(cms_model, tr, lig_resname: str,
                          f"{res_dict[best_acid_key]['ptype']} {res_dict[best_acid_key]['resnum']} "
                          f"[Chain {res_dict[best_acid_key]['chain']}]{ConsoleColours.ENDC}")
 
-    # 6. Fluorine cradle: TRP/TYR/HIS heavy atoms within fluorine cradle radius of
-    #    nucleophile. HIS is the third fluoride-stabilising H-bond donor (His155 in
-    #    native FAcD). The catalytic base His (best_base_key) is excluded so it is
-    #    not double-counted as both the general base and a cradle stabiliser.
+    '''
+    6. Fluorine cradle: TRP/TYR/HIS heavy atoms within fluorine cradle radius of
+       nucleophile. HIS is the third fluoride-stabilising H-bond donor (His155 in
+       native FAcD). The catalytic base His (best_base_key) is excluded so it is
+       not double-counted as both the general base and a cradle stabiliser.
+    '''
     idx_cradle = []
     _fcr = CFG.F_CRADLE_RADIUS
     _cradle_types = {'TRP', 'TYR', 'HIS', 'HIP', 'HIE', 'HID'}
@@ -1087,7 +1111,7 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         _v_ref = float(_V[_i0:].mean())
         _tol = _v_ref * float(CFG.MD_EQUIL_V_TOL_PCT) / 100.0
 
-        """
+        '''
         Equilibration is judged on BLOCK MEANS of the volume, not on instantaneous values. The
         instantaneous box volume of an equilibrated NPT system still spikes past any sane tolerance a
         few times in a million steps - measured on this project's own trajectory, 0.02 % of points
@@ -1095,12 +1119,12 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         A test that demands every later point stay inside the tolerance therefore never passes until
         the final steps, and would discard an entire equilibrated trajectory. Averaging into blocks
         removes the fluctuation and leaves the drift, which is the thing being asked about.
-        """
+        '''
         _nb = min(int(CFG.MD_EQUIL_BLOCKS), max(2, len(_t) // 2))
         _bs = len(_t) // _nb
         _vb = _V[:_nb * _bs].reshape(_nb, _bs).mean(axis=1)
 
-        """
+        '''
         A block is settled when the REST of the run is settled - but `.all()` demands that every later
         block, without exception, sits inside the tolerance. One anomalous block near the end of an
         otherwise perfectly equilibrated run then invalidates everything before it, and equilibration is
@@ -1108,17 +1132,17 @@ def check_md_equilibration(md_dir: Path, job_name: str) -> dict:
         because of a single spike. The test is therefore on the FRACTION of later blocks that are
         settled, which is the question actually being asked - is the box still moving? - and is not
         hostage to one outlier.
-        """
+        '''
         _within = np.abs(_vb - _v_ref) <= _tol
         _need = float(CFG.MD_EQUIL_BLOCK_FRAC_MIN)
         _equil_b = next((_i for _i in range(_nb) if _within[_i:].mean() >= _need), _nb - 1)
-        """
+        '''
         The block test decided WHEN the box settled but never decided WHETHER it did. `_equil_b` fell back
         to the last block when no window met the fraction - and the verdict below then ignored that
         entirely and asked only whether the residual DRIFT was small. A box that oscillates around a
         stable mean has near-zero drift and no settled window at all: it passed. The fraction of settled
         blocks over the production window is therefore carried into the verdict as a first-class term.
-        """
+        '''
         _blocks_ok = bool(_within[_equil_b:].mean() >= _need)
         # The block's leading edge, not its midpoint: frames from the start of the settled block on
         # are samples.
@@ -1372,9 +1396,11 @@ def load_triad_mapping(csv_path: Path) -> dict:
             return {}
 
         def get_col(keywords):
-            # Short keywords (<=4 chars) match only as a whole underscore/space token,
-            # so 'ang' cannot hit 'range', 'dist' cannot hit 'distribution', and 'prob'
-            # cannot hit 'problem'. Longer keywords keep substring matching.
+            '''
+            Short keywords (<=4 chars) match only as a whole underscore/space token,
+            so 'ang' cannot hit 'range', 'dist' cannot hit 'distribution', and 'prob'
+            cannot hit 'problem'. Longer keywords keep substring matching.
+            '''
             for k in keywords:
                 kl = k.lower()
                 for col in df.columns:
@@ -1441,11 +1467,11 @@ def load_triad_mapping(csv_path: Path) -> dict:
 # SECTION 5: VISUALISATION ENGINES
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# SECTION 5a: PER-RANK & COMPARATIVE DASHBOARDS
+# #############################################################################
+# SUBSECTION 5a: PER-RANK & COMPARATIVE DASHBOARDS
+# #############################################################################
 # The standard MD-validation figures - per-rank NAC dashboard, the global
 # comparative dashboard, and the viability/retention bar chart.
-# -----------------------------------------------------------------------------
 def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
                                   output_path: Path, stats: dict) -> None:
     """2-panel per-job dashboard: SN2 scatter and dual-trace anchoring time series."""
@@ -1477,9 +1503,11 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax1.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color=_C['tail'], linestyle='--', linewidth=2.5)
         ax1.set_xlabel("Nucleophile – ligand distance (Å)  ·  S$_N$2 reaction trajectory")
         ax1.set_ylabel("Attack Angle: O–C–F (°)")
-        # Start the angle axis at the data floor (rounded down to 10°) rather than 0, so the near-attack
-        # cluster is shown in detail. The floor is capped at the relaxed cut-off so its dashed line and the
-        # S_N2 zones stay visible even when every frame sits above it; no data point is clipped.
+        '''
+        Start the angle axis at the data floor (rounded down to 10°) rather than 0, so the near-attack
+        cluster is shown in detail. The floor is capped at the relaxed cut-off so its dashed line and the
+        S_N2 zones stay visible even when every frame sits above it; no data point is clipped.
+        '''
         _a_all = df["NAC_Angle_Deg"].to_numpy(dtype=float)
         _a_min = float(np.nanmin(_a_all)) if np.isfinite(_a_all).any() else 0.0
         _y1_lo = max(0.0, np.floor((min(_a_min, THRESHOLD_RELAXED_NAC_ANGLE) - 10.0) / 10.0) * 10.0)
@@ -1607,9 +1635,11 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     combined_df = combined_df.copy()
     combined_df["NAC_Distance_A_Transformed"] = transform_distance(combined_df["NAC_Distance_A"])
 
-    # Data-driven axis ranges: the ligand sits at near-attack distance / wide attack angles for the whole
-    # trajectory, so a fixed 0-50 A / 0-180 deg axis leaves most of the panel empty. Scale each axis to the
-    # observed distribution (robust percentiles), while keeping the criterion threshold in view.
+    '''
+    Data-driven axis ranges: the ligand sits at near-attack distance / wide attack angles for the whole
+    trajectory, so a fixed 0-50 A / 0-180 deg axis leaves most of the panel empty. Scale each axis to the
+    observed distribution (robust percentiles), while keeping the criterion threshold in view.
+    '''
     _dvals = combined_df["NAC_Distance_A"].dropna()
     _avals = combined_df["NAC_Angle_Deg"].dropna()
     _dmax = int(min(max(math.ceil(float(np.nanpercentile(_dvals, 99.5))) if len(_dvals) else 5, 5), 50))
@@ -1728,14 +1758,14 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     _matrix.index   = _labels
     _matrix.columns = [lbl for lbl, _ in _cols]
 
-    """
+    '''
     The colour scale runs over the CRITERION BANDS, not over an arbitrary distance window: green at
     the reactive contact (NAC_DIST_STRICT - the geometry the mechanism requires) through to red at
     the electrostatic limit (THRESHOLD_SALT_BRIDGE - beyond which the residue is not in contact at
     all). The engagement figure judges the same distances against the same four cut-offs, so a cell
     and a bar now mean the same thing. Anything past the outer band saturates red: how far beyond
     'not in contact' a residue sits carries no further meaning.
-    """
+    '''
     _contact = float(CFG.NAC_DIST_STRICT)
     _outer   = float(CFG.THRESHOLD_SALT_BRIDGE)
 
@@ -1944,17 +1974,17 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     console_info(f"    Viability Bar Chart Saved   : {deflx_fig_name(out_path.resolve())}")
 
 
-# -----------------------------------------------------------------------------
-# SECTION 5b: DEFLUORINATION FIGURES (verdict landscape + reactive-state decomp)
+# #############################################################################
+# SUBSECTION 5b: DEFLUORINATION FIGURES (verdict landscape + reactive-state decomp)
+# #############################################################################
 # Colours/thresholds from CFG.DEFLUOR_FIG_COLOUR / DEFLUOR_ENGAGE_* (SSOT).
-# -----------------------------------------------------------------------------
 def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) -> None:
     """The whole-story figure, as a per-candidate multi-metric panel. Each decisive metric (strict-NAC
     viability, NAC dwell, QM/MM barrier ΔE‡, reaction energy ΔE_rxn, C-F cleavage, MM-GBSA binding,
     defluorination propensity) is a small horizontal-bar sub-plot comparing every candidate, coloured by
     its shared rank colour (the control distinct), with the competence-gate threshold dashed where one
-    applies. This replaces the persistence×barrier scatter, which collapsed onto a single axis point when
-    the NAC dwell is ~0 ns for every candidate. Panels with no data are dropped rather than drawn empty."""
+    applies. The bar form stays legible even when a metric is ~0 for every candidate (e.g. NAC dwell ~0 ns).
+    Panels with no data are dropped rather than drawn empty."""
     try:
         d = df_master.copy()
         _lab = "Job_Name" if "Job_Name" in d.columns else d.columns[0]
@@ -2036,23 +2066,24 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
         console_info(f"    [!] Defluorination landscape failed ({_e}).")
 
 
-# -----------------------------------------------------------------------------
-# SECTION 5c: REACTIVE-POSE FIGURES (MM-GBSA decomposition + trace · machinery engagement)
-#
-# Both ask the same question - what CHANGES when the ligand reaches the reactive
-# geometry - and both are built from the per-frame tables the run already writes:
-# 02_NAC_Data.csv (geometry, one row per frame) and the frame-stamped MM-GBSA CSV
-# from Step 06. Per candidate the decomposition bars are stacked with their own
-# ΔG_bind trajectory trace into one 06_MMGBSA_Decomposition_and_Trace overview
-# (plot_mmgbsa_combined); the cross-candidate merged decomposition is still drawn
-# once at the end. Every colour, cut-off and threshold comes from CFG.
-# -----------------------------------------------------------------------------
-"""
+# #############################################################################
+# SUBSECTION 5c: REACTIVE-POSE FIGURES (MM-GBSA decomposition + trace · machinery engagement)
+# #############################################################################
+'''
+Both ask the same question - what CHANGES when the ligand reaches the reactive
+geometry - and both are built from the per-frame tables the run already writes:
+02_NAC_Data.csv (geometry, one row per frame) and the frame-stamped MM-GBSA CSV
+from Step 06. Per candidate the decomposition bars are stacked with their own
+ΔG_bind trajectory trace into one 06_MMGBSA_Decomposition_and_Trace overview
+(plot_mmgbsa_combined); the cross-candidate merged decomposition is still drawn
+once at the end. Every colour, cut-off and threshold comes from CFG.
+'''
+'''
 The catalytic machinery, in the order it acts: the nucleophile attacks the warhead carbon, the
 acid/base pair runs the proton chemistry, the clamp holds the carboxylate, the cradle stabilises the
 departing fluoride. Each residue's per-frame distance column is paired with its CFG role-group
 colour and with the ranked CSV's alignment column that names the residue in THIS homolog.
-"""
+'''
 _ENGAGE_ROLES = [
     ("DT_Nuc_LigC_A",    "Nucleophile",         "Nuc",        "Mapped_Nucleophile"),
     ("DT_Base_LigC_A",   "Acid/base catalysis", "Base",       "Mapped_Base"),
@@ -2243,13 +2274,13 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         rr = [entry] if _external_ax else (_scored if merged else [entry])
         if not _external_ax:
             fig, ax = plt.subplots(figsize=(14 if merged else 12, 6.6))
-        """
+        '''
         Drop the components that carry no signal - but decide that from the DATA, and only when the
         term is below CFG.DEFLUOR_COMPONENT_MIN_KCAL in every candidate AND both ensembles. A term
         that is zero for two candidates and non-zero for the third is a difference BETWEEN them and
         must stay. The omitted terms are named under the panel with their largest magnitude: an
         empty box is noise, but a silently deleted term is a lie.
-        """
+        '''
         _always = set(getattr(CFG, "DEFLUOR_COMPONENT_ALWAYS", ()))   # shown even below the cutoff
         keep, dropped = [], []
         for t in _MMGBSA_TERMS:
@@ -2285,12 +2316,12 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                        [vals.get(t, np.nan) for t in terms], width=width * 0.92,
                        color=bar_cols, alpha=alpha, edgecolor=_ink["outline"], linewidth=0.6,
                        zorder=3, hatch=("////" if si == 0 else None))
-            """
+            '''
             One legend row per candidate, not two. The faint/solid pair means the same thing for
             every candidate, so it is stated ONCE as a neutral shade key. On a single-candidate
             panel the bars carry the component colours, so a coloured swatch would claim a meaning
             it does not have and the candidate is named by the text alone.
-            """
+            '''
             if merged:      # cross-rank panel: name each candidate so the ranks can be told apart
                 hdl.append(Patch(facecolor=col, edgecolor=_ink["outline"],
                                  label=f"{r['ligand']} (R{r['rank']}, n={n_scored:,})"))
@@ -2314,10 +2345,12 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                               lo=_lo + _pad * 0.2, hi=_hi - _pad * 0.2)
         ax.set_ylim(_lo, _hi)
 
-        # Value labels + the whole→reactive Δ shift = the figure's actual question ("what CHANGES on
-        # reaching the reactive geometry"). Single-case only: a merged panel of 3 candidates × 2
-        # ensembles would be unreadable with per-bar numbers. A more-negative shift (more binding) is
-        # favourable pre-organisation and reads green; a positive shift reads amber.
+        '''
+        Value labels + the whole→reactive Δ shift = the figure's actual question ("what CHANGES on
+        reaching the reactive geometry"). Single-case only: a merged panel of 3 candidates × 2
+        ensembles would be unreadable with per-bar numbers. A more-negative shift (more binding) is
+        favourable pre-organisation and reads green; a positive shift reads amber.
+        '''
         if not merged:
             _r0 = rr[0]; _fr0, _ = _reactive_frames(_r0["nac"])
             _allc = _mmgbsa_components(_r0["mmgbsa"], None)
@@ -2331,9 +2364,11 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                     _v = _vals.get(t, np.nan)
                     if _v != _v:
                         continue
-                    # value 90deg inside the bar when it is tall enough to hold the label, else just outside
-                    # the tip. Solid reactive bar takes an auto-contrast colour; the faint whole bar reads
-                    # light, so its inside label stays dark.
+                    '''
+                    value 90deg inside the bar when it is tall enough to hold the label, else just outside
+                    the tip. Solid reactive bar takes an auto-contrast colour; the faint whole bar reads
+                    light, so its inside label stays dark.
+                    '''
                     if abs(_v) > 0.16 * _span:
                         _yv, _va = _v * 0.5, "center"
                         _tc = auto_label_colour(CFG, _bc) if _si == 1 else _ink["outline"]
@@ -2353,9 +2388,11 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
                                 fontsize=_f_ann, fontweight="bold", color=_dc, zorder=6,
                                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=_dc, lw=0.8, alpha=0.9))
         else:
-            # Merged panel: every candidate × ensemble bar carries its value, written at 90° up the bar
-            # tip so the eight bars per term stay readable. Coloured to the candidate; the faint (whole)
-            # bar's number is lighter than the solid (reactive-pose) one, matching the bars themselves.
+            '''
+            Merged panel: every candidate × ensemble bar carries its value, written at 90° up the bar
+            tip so the eight bars per term stay readable. Coloured to the candidate; the faint (whole)
+            bar's number is lighter than the solid (reactive-pose) one, matching the bars themselves.
+            '''
             _span = _hi - _lo
             for gi, r in enumerate(rr):
                 _col = _CTRL_COLOUR if r.get("is_control") else _pal[gi % len(_pal)]
@@ -2381,13 +2418,17 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         for lbl, i in zip(ax.get_xticklabels(), range(len(terms))):
             lbl.set_color(cmap(i % 10))
             lbl.set_fontweight("bold")
-        # The descriptive notes live on the axis labels, not the legend, so the legend stays two rows.
-        # the per-rank combined panel drops the y-axis label (the trace panel below already carries the
-        # units); the standalone AllRanks overview keeps it as its only axis caption
+        '''
+        The descriptive notes live on the axis labels, not the legend, so the legend stays two rows.
+        the per-rank combined panel drops the y-axis label (the trace panel below already carries the
+        units); the standalone AllRanks overview keeps it as its only axis caption
+        '''
         ax.set_ylabel("" if _external_ax else "ΔG component (kcal/mol)  ·  negative favours binding")
-        # The omitted terms are still NAMED (a silently deleted term is a lie). In the stand-alone
-        # per-rank panel the note rides the shade-key legend's TITLE, so note + key share one box; in
-        # the combined overview (no bottom x-label between the two stacked panels) it rides the x-label.
+        '''
+        The omitted terms are still NAMED (a silently deleted term is a lie). In the stand-alone
+        per-rank panel the note rides the shade-key legend's TITLE, so note + key share one box; in
+        the combined overview (no bottom x-label between the two stacked panels) it rides the x-label.
+        '''
         _omit_note = ("omitted (|ΔG| < %.1f kcal/mol): %s"
                       % (_min_kcal, ", ".join(t.replace("_", " ") for t, _ in dropped))) if dropped else ""
         if not _external_ax:
@@ -2401,9 +2442,11 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         ax.grid(alpha=CFG.VIS_GRID_ALPHA * 0.5, linewidth=CFG.VIS_GRID_LINEWIDTH * 0.7,
                 axis="y", which="minor")
         ax.set_axisbelow(True)
-        # Single-case shade key merged with the omitted-terms note into ONE centred box on ONE row,
-        # pulled a little below the spine: the note rides an invisible handle so it sits inline with the
-        # two shade swatches rather than as a separate title line above them.
+        '''
+        Single-case shade key merged with the omitted-terms note into ONE centred box on ONE row,
+        pulled a little below the spine: the note rides an invisible handle so it sits inline with the
+        two shade swatches rather than as a separate title line above them.
+        '''
         _hdl_row = ([Patch(facecolor="none", edgecolor="none", label=_omit_note)] + hdl
                     if (_external_ax and _omit_note) else hdl)
         if _external_ax:
@@ -2477,11 +2520,11 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         fig, ax = plt.subplots(figsize=(13.5 if merged else 11, 6.6))
         width = 0.8 / len(rr)
 
-        """
+        '''
         The ceiling comes from the DATA - the tallest upper quartile across every candidate and
         residue - and is fixed BEFORE anything is drawn, since the containers and the bands are
         sized against it. Every candidate shares one ceiling, so the panels stay comparable.
-        """
+        '''
         _q3max = 0.0
         for _r in _ranks:
             _frx, _ = _reactive_frames(_r["nac"])
@@ -2493,12 +2536,12 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                         _q3max = max(_q3max, float(_v.quantile(.75)))
         _ytop = max(float(CFG.DEFLUOR_ENGAGE_Y_MIN_TOP), float(np.ceil(_q3max + 0.6)))
 
-        """
+        '''
         The criteria as reference bands, drawn behind everything. Each band is tagged with a LETTER
         in the margin OUTSIDE the axes - written inside, the tag lands on whichever bar happens to
         reach that height - and spelled out in the legend. Each letter takes its own band's colour,
         darkened to be legible.
-        """
+        '''
         prev = 0.0
         band_hdl = []
         _blend = ax.get_yaxis_transform()          # x in axes fraction, y in data units
@@ -2519,12 +2562,12 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         for gi, r in enumerate(rr):
             fr, crit = _reactive_frames(r["nac"])
             sub = r["nac"][r["nac"]["Frame"].isin(set(int(f) for f in fr))]
-            """
+            '''
             On a single-candidate panel the bar takes its ROLE's colour - the same colour as the
             container around it and the tick label beneath it, so the three read as one object.
             Merged, the colour must separate the CANDIDATES, since the role is already given by the
             container they share.
-            """
+            '''
             col = _CTRL_COLOUR if r.get("is_control") else _pal[gi % len(_pal)]
             bar_cols = ([_roles.get(role, col) for _, role, _, _ in _ENGAGE_ROLES]
                         if not merged else col)
@@ -2553,12 +2596,12 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
             for i, m in enumerate(meds):
                 if m != m:
                     continue
-                """
+                '''
                 Two different quantities, kept apart so they cannot be read as one: the MEDIAN
                 carries its unit and sits above the whisker cap (on the bar top a long whisker
                 crosses it), the OCCUPANCY sits inside the bar head, where the bar's own colour says
                 whose it is. The residue name holds the foot of the bar, so the head is free.
-                """
+                '''
                 _y = max(m, q3s[i] if q3s[i] == q3s[i] else m)
                 _c = _ink["dark"] if not merged else _darken(col, 0.55)
                 ax.text(i + off, min(_y + 0.30, _ytop - 1.4), f"{m:.1f} Å", rotation=90, ha="center",
@@ -2569,9 +2612,11 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                 ax.text(i + off, m - 0.13, f"{occs[i]:.0f}%", rotation=90, ha="center", va="top",
                         fontsize=_f_ann + 0.8, fontweight="normal", color=_on_bar, zorder=10)
 
-            # Every bar names the residue it measures, written up the inside of the bar: the residue
-            # behind a role is per-homolog (ASP110 here, ASP109 there), so it belongs on the bar and
-            # not on a tick shared between candidates.
+            '''
+            Every bar names the residue it measures, written up the inside of the bar: the residue
+            behind a role is per-homolog (ASP110 here, ASP109 there), so it belongs on the bar and
+            not on a tick shared between candidates.
+            '''
             mp = r.get("mapped", {})
             for i, (_, _, _, mcol) in enumerate(_ENGAGE_ROLES):
                 resn = mp.get(mcol, "")
@@ -2581,9 +2626,11 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                             fontsize=(_f_ann + 0.3 if merged else _f_ann + 0.5), fontweight="normal",
                             color=auto_label_colour(CFG, _bar_c), zorder=8)
 
-        # Master containers group the residues by CATALYTIC ROLE (colours from CFG). The outline is
-        # kept a hair inside the axis; flush to the limit it merges with the spine and reads as if
-        # the box had burst through it.
+        '''
+        Master containers group the residues by CATALYTIC ROLE (colours from CFG). The outline is
+        kept a hair inside the axis; flush to the limit it merges with the spine and reads as if
+        the box had burst through it.
+        '''
         _ylo, _yhi = 0.0, _ytop * 0.99
         start = 0
         for i in range(len(_ENGAGE_ROLES) + 1):
@@ -2663,20 +2710,24 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
                 return _d[col].iloc[0] if col in _d.columns and len(_d) else np.nan
             _fqp, _bar = _one("Frame_F_Charge_Product"), _one("QSite_Barrier_Ensemble_kcal")
             _cfp = _one("Frame_CF_Product_A")
-            # The Is_Defluorinating verdict (geometric C-F cleavage: product-end scissile C-F length
-            # >= CFG.QSITE_CF_CLEAVED_A) is written into the scan CSV, so the cross-job figure reads that
-            # verdict rather than re-deriving it and risking disagreement with the master ranking. The
-            # bare C-F-distance criterion is kept only as a fallback for a CSV predating the column.
+            '''
+            The Is_Defluorinating verdict (geometric C-F cleavage: product-end scissile C-F length
+            >= CFG.QSITE_CF_CLEAVED_A) is written into the scan CSV, so the cross-job figure reads that
+            verdict rather than re-deriving it and risking disagreement with the master ranking. The
+            bare C-F-distance criterion is kept only as a fallback for a CSV predating the column.
+            '''
             _isdef = _one("Is_Defluorinating")
             # Flag + label the 3R3U positive control from its job name, so the cross-job figure names it
             # 3R3U-FA and orders it LAST, exactly like the merged 06/07 and every other comparison.
             _jn = str(_one("Job_Name")) if ("Job_Name" in _cd.columns and pd.notna(_one("Job_Name"))) else ""
             _isc = _jn.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in _jn.upper()
             _ligd = _CTRL_LABEL if _isc else (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else "")
-            # SN2 attack angle for the right-hand read-off: the 100%-from-QM O-Cα-F angle at the best
-            # frame's attack (transition-state) point - the SAME value the 09 mechanism scene labels its
-            # arc with, so the two figures agree. Falls back to the MD reactive-frame mean when the scan
-            # geometry is unavailable (legacy runs).
+            '''
+            SN2 attack angle for the right-hand read-off: the 100%-from-QM O-Cα-F angle at the best
+            frame's attack (transition-state) point - the SAME value the 09 mechanism scene labels its
+            arc with, so the two figures agree. Falls back to the MD reactive-frame mean when the scan
+            geometry is unavailable (legacy runs).
+            '''
             _ag = _qsite_attack_geometry(_rd)
             _ang = float(_ag["angle"]) if _ag else np.nan
             if _ang != _ang:
@@ -2732,11 +2783,13 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
             frac -= np.round(frac)
             vecs  = frac @ b3
         except Exception as _e:
-            # Discard this frame rather than continue with uncorrected (non-PBC)
-            # vectors, which would corrupt the blockade metric near box edges. The
-            # NaN score never wins `score > best_score`, so the frame is dropped
-            # from QM/MM selection; if the whole box is malformed every frame is
-            # dropped and the rank skips gracefully (ideal_frame_idx stays -1).
+            '''
+            Discard this frame rather than continue with uncorrected (non-PBC)
+            vectors, which would corrupt the blockade metric near box edges. The
+            NaN score never wins `score > best_score`, so the frame is dropped
+            from QM/MM selection; if the whole box is malformed every frame is
+            dropped and the rank skips gracefully (ideal_frame_idx stays -1).
+            '''
             global _MIC_WARNED
             if not _MIC_WARNED:
                 console_info(f"    {ConsoleColours.WARNING}[!] Water-blockade MIC correction "
@@ -2767,7 +2820,7 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
             d = np.linalg.norm(get_mic_vector(site['pos'], sp, box))
             if d < best_d:
                 best_d = d; best_dg = site['dG']
-        """
+        '''
         The weight is a Boltzmann-like occupancy of the WaterMap site, so the exponent must be
         DIMENSIONLESS. exp(dG) with dG in kcal/mol is not: it implicitly divides by 1 kcal/mol rather than
         by RT, which at 300 K would mean an effective temperature near 503 K, and it silently rescales with
@@ -2775,7 +2828,7 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 
         dG/RT is dimensionless, and RT is the same RT the rest of the pipeline uses (CFG, 300 K). The
         exponent is clipped because a strongly stabilised site can otherwise overflow exp().
-        """
+        '''
         _rt_wm = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         _z_wm = float(np.clip(best_dg / _rt_wm, -60.0, 60.0))
         weight = (1.0 / (1.0 + np.exp(_z_wm)) * 2.0) if best_d < match_r else 1.0
@@ -2789,18 +2842,20 @@ def _blockade_vec(nuc_pos: np.ndarray, lig_c_pos: np.ndarray,
 # SECTION 7: QSITE AUTOMATION
 # =============================================================================
 
-# Solvation-droplet radius (Å) for the QSite .mae: only solvent within this
-# distance of the ligand is retained, trimming the full periodic box to a
-# tractable local MM region. Defined here because write_qsite_droplet() takes it
-# as a default argument, evaluated when the function is defined below.
+'''
+Solvation-droplet radius (Å) for the QSite .mae: only solvent within this
+distance of the ligand is retained, trimming the full periodic box to a
+tractable local MM region. Defined here because write_qsite_droplet() takes it
+as a default argument, evaluated when the function is defined below.
+'''
 _QSITE_DROPLET_RADIUS = float(CFG.QSITE_DROPLET_RADIUS)
 
 
-# -----------------------------------------------------------------------------
-# SECTION 7a: QM/MM INPUT PREPARATION & EXECUTION
+# #############################################################################
+# SUBSECTION 7a: QM/MM INPUT PREPARATION & EXECUTION
+# #############################################################################
 # Trims the periodic box to a solvation droplet, writes the QSite/Jaguar SN2
 # relaxed-scan .in, and launches the QM/MM job (idempotent per output folder).
-# -----------------------------------------------------------------------------
 def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
                         radius: float = _QSITE_DROPLET_RADIUS) -> str:
     """Write an uncompressed QSite .mae trimmed to a solvation droplet: the full
@@ -2848,7 +2903,7 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
                     _n_ion_cut += 1
         if _del:
             st.deleteAtoms(_del)
-        """
+        '''
         The droplet's BOUNDARY. Cutting the periodic box to a finite ball of water leaves a free
         surface - nothing holds the outermost molecules, and they relax into vacuum during the
         relaxed scan, distorting the electrostatics the QM region sits in.
@@ -2863,7 +2918,7 @@ def write_qsite_droplet(cms_model, path: Path, lig_resname: str,
 
         The protein is never frozen inside the free/buffer radii, so the catalytic machinery keeps
         every degree of freedom the chemistry needs.
-        """
+        '''
         _free_r = float(CFG.QSITE_FREE_RADIUS)
         _buf_r = float(CFG.QSITE_BUFFER_RADIUS)
         _n_free = _n_con = _n_frz = 0
@@ -2975,9 +3030,11 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     """
     inp_path = mae_path.parent / f"{mae_path.parent.name}.in"
 
-    # ── Read structure (needed for charge, ligand molid, and cut resolution) ──
-    # A truncated or empty .mae yields no structure: raise the reason rather than a bare
-    # StopIteration from inside a generator, and close the handle either way.
+    '''
+    ── Read structure (needed for charge, ligand molid, and cut resolution) ──
+    A truncated or empty .mae yields no structure: raise the reason rather than a bare
+    StopIteration from inside a generator, and close the handle either way.
+    '''
     with structure.StructureReader(str(mae_path)) as _r:
         st = next(iter(_r), None)
     if st is None:
@@ -2986,16 +3043,20 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         (m.number for m in st.molecule
          if any(a.pdbres.strip() == lig_resname for a in m.atom)), None)
     if lig_mol is None:
-        # The ligand IS the QM region's reactive core and its charge is always added to molchg; if it
-        # is not found, omitting it while still counting its charge gives Jaguar an electron-count
-        # mismatch that aborts the scan. Fail loudly instead.
+        '''
+        The ligand IS the QM region's reactive core and its charge is always added to molchg; if it
+        is not found, omitting it while still counting its charge gives Jaguar an electron-count
+        mismatch that aborts the scan. Fail loudly instead.
+        '''
         raise ValueError(f"QSite QM region: ligand '{lig_resname}' not found in {mae_path.name} - "
                          "cannot build a charge-consistent QM region.")
 
-    # Each QM/MM cut row must name the protein molecule id (QSite matches the
-    # residue within that molecule). Resolve it via the residue's backbone Cα,
-    # which also disambiguates the catalytic residue from any water that happens
-    # to share the same residue number. Returns (molid, chain) or None.
+    '''
+    Each QM/MM cut row must name the protein molecule id (QSite matches the
+    residue within that molecule). Resolve it via the residue's backbone Cα,
+    which also disambiguates the catalytic residue from any water that happens
+    to share the same residue number. Returns (molid, chain) or None.
+    '''
     def _resolve_cut(resnum):
         """
         Resolve a residue's QM/MM frozen-orbital boundary as a list of (QM atom, MM atom) bonds.
@@ -3044,10 +3105,12 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
 
         return (a.molecule_number, a.chain, [("CB", "CA")])
 
-    # ── Resolve every catalytic cut once → (resnum, molid, chain). The residue
-    #    identities (nuc/base/acid/stab) are alignment- and Smart-Lock-derived
-    #    upstream and passed in, never hardcoded, so the QM region adapts to each
-    #    homolog's own numbering. Reused for both the charge sum and the cut table.
+    '''
+    ── Resolve every catalytic cut once → (resnum, molid, chain). The residue
+       identities (nuc/base/acid/stab) are alignment- and Smart-Lock-derived
+       upstream and passed in, never hardcoded, so the QM region adapts to each
+       homolog's own numbering. Reused for both the charge sum and the cut table.
+    '''
     _resolved_cuts = []
     _seen = set()
     for rn in (nuc_num, base_num, acid_num, stab_f_num, *(cradle_nums or [])):
@@ -3058,11 +3121,13 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         if _r is not None:
             _resolved_cuts.append((rn, _r[0], _r[1], _r[2]))   # resnum, molid, chain, [(qm, mm), …]
 
-    # Cap the QM region size. The list is priority-ordered (nucleophile, base, acid,
-    # stab-F, then cradle), so truncating keeps the catalytic core and drops the
-    # furthest cradle residues. A very large QM region (e.g. 17 residues) inflates the
-    # electron count and makes a molchg / electron-parity mismatch likely - which
-    # Jaguar rejects with 'incorrect molecular charge' and then skips every scan point.
+    '''
+    Cap the QM region size. The list is priority-ordered (nucleophile, base, acid,
+    stab-F, then cradle), so truncating keeps the catalytic core and drops the
+    furthest cradle residues. A very large QM region (e.g. 17 residues) inflates the
+    electron count and makes a molchg / electron-parity mismatch likely - which
+    Jaguar rejects with 'incorrect molecular charge' and then skips every scan point.
+    '''
     _max_qm = int(getattr(CFG, "QSITE_MAX_QM_RESIDUES", 0))
     if _max_qm > 0 and len(_resolved_cuts) > _max_qm:
         _dropped = len(_resolved_cuts) - _max_qm
@@ -3071,19 +3136,21 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
                      f"(dropped {_dropped} furthest cradle residue(s)) to keep the "
                      f"charge/electron count tractable.")
 
-    # ── QM region net charge - derived from the structure, not assumed ─────
-    # QM atoms = full ligand + each catalytic residue's sidechain beyond the
-    # Cα–Cβ cut (CA/backbone remain MM). Instead of assuming protonation states
-    # (a fixed `lig − 1` would count only the nucleophile and presume a
-    # protonated acid and neutral His), sum the *actual* formal charges those
-    # atoms carry in the prepared structure. This keeps `molchg` correct for
-    # whatever PrepWizard assigned (deprotonated Asp −1, neutral His, protonated
-    # catalytic acid 0, HIP +1, …) and for any residue numbering, so QSite/Jaguar
-    # does not abort on a QM charge/electron-count mismatch.
-    # Include terminal backbone atoms (OXT + N-terminal H1/H2/H3): if a catalytic /
-    # QM residue sits at a chain terminus, OXT would otherwise be counted as a
-    # sidechain atom and add a spurious −1 to qm_charge, while the QM/MM cut at CB–CA
-    # leaves OXT in the MM region → a charge/electron-count mismatch that aborts QSite.
+    '''
+    ── QM region net charge - derived from the structure, not assumed ─────
+    QM atoms = full ligand + each catalytic residue's sidechain beyond the
+    Cα–Cβ cut (CA/backbone remain MM). Instead of assuming protonation states
+    (a fixed `lig − 1` would count only the nucleophile and presume a
+    protonated acid and neutral His), sum the *actual* formal charges those
+    atoms carry in the prepared structure. This keeps `molchg` correct for
+    whatever PrepWizard assigned (deprotonated Asp −1, neutral His, protonated
+    catalytic acid 0, HIP +1, …) and for any residue numbering, so QSite/Jaguar
+    does not abort on a QM charge/electron-count mismatch.
+    Include terminal backbone atoms (OXT + N-terminal H1/H2/H3): if a catalytic /
+    QM residue sits at a chain terminus, OXT would otherwise be counted as a
+    sidechain atom and add a spurious −1 to qm_charge, while the QM/MM cut at CB–CA
+    leaves OXT in the MM region → a charge/electron-count mismatch that aborts QSite.
+    '''
     _backbone = {'N', 'C', 'CA', 'O', 'H', 'HA', 'OXT', 'H1', 'H2', 'H3'}   # Smart-Lock convention (L429) + termini
 
     def _sidechain_formal_charge(molid, chain, resnum, cut_pairs):
@@ -3122,28 +3189,34 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
         _sidechain_formal_charge(molid, chain, rn, cut_pairs)
         for rn, molid, chain, cut_pairs in _resolved_cuts
     )
-    # Frozen-orbital QM/MM charge convention. molchg is the BARE formal charge of the QM atoms
-    # (ligand + side-chain formal charges). QSite's frozen-orbital driver then subtracts one electron
-    # per Cα-Cβ boundary cut itself, so the SCF net charge it runs is (molchg - n_frozen_cuts). Writing
-    # the already-subtracted value double-counts the cuts (the driver subtracts them a second time),
-    # over-reducing the QM region and producing a divergent, unphysical scan; the bare formal charge
-    # lets the driver apply the single, correct shift and reports (bare - cuts) as the run charge.
+    '''
+    Frozen-orbital QM/MM charge convention. molchg is the BARE formal charge of the QM atoms
+    (ligand + side-chain formal charges). QSite's frozen-orbital driver then subtracts one electron
+    per Cα-Cβ boundary cut itself, so the SCF net charge it runs is (molchg - n_frozen_cuts). Writing
+    the already-subtracted value double-counts the cuts (the driver subtracts them a second time),
+    over-reducing the QM region and producing a divergent, unphysical scan; the bare formal charge
+    lets the driver apply the single, correct shift and reports (bare - cuts) as the run charge.
+    '''
     qm_charge = int(round(lig_charge + _sidechain_charge))
 
-    # ── &qmregion QM/MM cut table ──────────────────────────────────────────
-    # One row per boundary bond: Cα–Cβ for a standard sidechain, two rows for a glycine
-    # (backbone N–Cα and C–Cα) or a proline (Cα–Cβ plus the ring-closing Cδ–N).
+    '''
+    ── &qmregion QM/MM cut table ──────────────────────────────────────────
+    One row per boundary bond: Cα–Cβ for a standard sidechain, two rows for a glycine
+    (backbone N–Cα and C–Cα) or a proline (Cα–Cβ plus the ring-closing Cδ–N).
+    '''
     _cuts = [
         f"  {molid:>5}  {chain:>4}  {rn:>6}  {_qm:>7}  {_mm:>7}"
         for rn, molid, chain, cut_pairs in _resolved_cuts
         for _qm, _mm in cut_pairs
     ]
 
-    # ── Coordinating catalytic waters → whole-molecule QM ──────────────────────
-    # First-shell waters within _QM_WATER_RADIUS of the reaction centre (scissile
-    # C, leaving F, nucleophile O) stabilise the departing fluoride; add the
-    # nearest few as full QM molecules so the leaving-group energy is not left to
-    # the MM force field. Self-contained on the structure's coordinates.
+    '''
+    ── Coordinating catalytic waters → whole-molecule QM ──────────────────────
+    First-shell waters within _QM_WATER_RADIUS of the reaction centre (scissile
+    C, leaving F, nucleophile O) stabilise the departing fluoride; add the
+    nearest few as full QM molecules so the leaving-group energy is not left to
+    the MM force field. Self-contained on the structure's coordinates.
+    '''
     _qm_water_mols = []
     try:
         _centres = []
@@ -3154,18 +3227,20 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
             if a.pdbres.strip() == lig_resname and (a.element or "").strip() == "F":
                 _centres.append(np.array(a.xyz))
         _water_res = {r.strip().upper() for r in CFG.SOLVENT_RESTYPES}
-        # WaterMap-guided selection. Among the first-shell candidate waters (those within
-        # _QM_WATER_RADIUS of the reaction centre) prefer the ones that sit on a thermodynamically
-        # STRUCTURAL WaterMap site (dG < 0: a tightly bound, F-stabilising water), not merely the
-        # geometrically nearest. A candidate whose O lands within QSITE_WM_WATER_MATCH_A of a WaterMap
-        # site gets its effective distance discounted by QSITE_WM_WATER_WEIGHT * max(0, -dG), so a
-        # stable site pulls that water forward in the ranking. With no WaterMap data the bonus is 0 and
-        # this is exactly the previous nearest-first geometry selection.
-        # The WaterMap sites live in the WaterMap reference frame; this droplet `st` is the selected
-        # MD frame, so the sites are first superimposed onto it (Cα-Kabsch, the same rigid transform
-        # the frame scorer uses) before any distance is measured - two unrelated coordinate frames make
-        # every site match noise. Any failure (no maegz, <3 shared Cα, or a poor fold fit above
-        # MD_FOLD_RMSD_MAX) drops the WaterMap bias and the selection reverts to nearest-first geometry.
+        '''
+        WaterMap-guided selection. Among the first-shell candidate waters (those within
+        _QM_WATER_RADIUS of the reaction centre) prefer the ones that sit on a thermodynamically
+        STRUCTURAL WaterMap site (dG < 0: a tightly bound, F-stabilising water), not merely the
+        geometrically nearest. A candidate whose O lands within QSITE_WM_WATER_MATCH_A of a WaterMap
+        site gets its effective distance discounted by QSITE_WM_WATER_WEIGHT * max(0, -dG), so a
+        stable site pulls that water forward in the ranking. With no WaterMap data the bonus is 0 and
+        this is exactly the previous nearest-first geometry selection.
+        The WaterMap sites live in the WaterMap reference frame; this droplet `st` is the selected
+        MD frame, so the sites are first superimposed onto it (Cα-Kabsch, the same rigid transform
+        the frame scorer uses) before any distance is measured - two unrelated coordinate frames make
+        every site match noise. Any failure (no maegz, <3 shared Cα, or a poor fold fit above
+        MD_FOLD_RMSD_MAX) drops the WaterMap bias and the selection reverts to nearest-first geometry.
+        '''
         _wm_arr = np.empty((0, 3)); _wm_dg = np.empty((0,))
         if wm_sites and wm_maegz:
             try:
@@ -3204,11 +3279,13 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
                     _qm_water_mols.append(_mol)
                 if len(_qm_water_mols) >= _QM_WATER_MAX:
                     break
-            # No distance fallback: a QM water must be a genuine first-shell water within
-            # _QM_WATER_RADIUS (CFG.QSITE_QM_WATER_RADIUS). The water-aware frame selection already
-            # guarantees the scanned frames carry such a water; a wider fallback would only add a
-            # far-off spectator (no H-bond to the leaving F), so 0 waters here is reported honestly as a
-            # genuinely dry reaction centre rather than papered over.
+            '''
+            No distance fallback: a QM water must be a genuine first-shell water within
+            _QM_WATER_RADIUS (CFG.QSITE_QM_WATER_RADIUS). The water-aware frame selection already
+            guarantees the scanned frames carry such a water; a wider fallback would only add a
+            far-off spectator (no H-bond to the leaving F), so 0 waters here is reported honestly as a
+            genuinely dry reaction centre rather than papered over.
+            '''
             if not _qm_water_mols:
                 console_info(f"    [i] No water within {_QM_WATER_RADIUS:.1f} A of the reaction centre - "
                              f"QM region carries no explicit water (genuinely dry frame).")
@@ -3223,13 +3300,15 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     _start = CFG.QSITE_SCAN_START
     _end   = CFG.QSITE_SCAN_START + CFG.QSITE_SCAN_STEP * (CFG.QSITE_SCAN_NSTEPS - 1)
 
-    # SCF + geometry robustness for the QM/MM relaxed scan. The diffuse 6-31+G** basis on a large
-    # QM region causes near-linear-dependence ("small singular value") and DIIS blow-ups that
-    # abort scan points (observed: ~half the points fatal). Use a non-diffuse basis for the
-    # scan geometry (diffuse adds little to a RELATIVE barrier), a level shift + raised SCF
-    # iteration cap to force SCF convergence, a GEOMETRY-step cap (maxitg) so a hard TS-region
-    # point whose constrained optimiser oscillates cannot spin forever, and nofail so one hard
-    # point is skipped rather than killing (or freezing) the whole scan.
+    '''
+    SCF + geometry robustness for the QM/MM relaxed scan. The diffuse 6-31+G** basis on a large
+    QM region causes near-linear-dependence ("small singular value") and DIIS blow-ups that
+    abort scan points (observed: ~half the points fatal). Use a non-diffuse basis for the
+    scan geometry (diffuse adds little to a RELATIVE barrier), a level shift + raised SCF
+    iteration cap to force SCF convergence, a GEOMETRY-step cap (maxitg) so a hard TS-region
+    point whose constrained optimiser oscillates cannot spin forever, and nofail so one hard
+    point is skipped rather than killing (or freezing) the whole scan.
+    '''
     _scan_basis = CFG.QSITE_SCAN_BASIS.replace("(d,p)", "**").replace("(d)", "*")
     _gen = [
         f"basis={_scan_basis}",
@@ -3261,7 +3340,7 @@ def generate_qsite_inputs(mae_path: Path, job_name: str,
     if CFG.QSITE_MULT != 1:
         _gen.append(f"multip={CFG.QSITE_MULT}")
 
-    """
+    '''
     &mmkey - the MM half of the QM/MM Hamiltonian.
 
     The classical region must not be scored on a different force field from the trajectory it came
@@ -3277,7 +3356,7 @@ CFG.QSITE_MM_FF is therefore EMPTY, so the &mmkey is empty and Impact falls back
     generation below the trajectory's OPLS4 - but it is the only MM force field QSite runs with these
     cuts. The QM region, where the bond breaks, is unaffected; the mismatch is in the classical
     environment around it.
-    """
+    '''
     _mmkey = f"&mmkey\n{CFG.QSITE_MM_FF}\n&\n" if getattr(CFG, "QSITE_MM_FF", "") else "&mmkey\n&\n"
     if getattr(CFG, "QSITE_MM_FF", ""):
         console_info(f"    [i] QSite &mmkey MM force field: {CFG.QSITE_MM_FF} - the closest QSite offers to "
@@ -3331,27 +3410,31 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
     cmd = [qsite_exe, "-WAIT", "-PARALLEL", str(_QSITE_PROCS), "-max_threads", str(_QSITE_THREADS),
            "-jobname", jobname, inp_path.name]
 
-    # Live progress: QM/MM relaxed scans run for many minutes per frame, during
-    # which a blocking call looks frozen. Launch non-blocking (still -WAIT, so the
-    # driver process stays alive until the job finishes) and emit a heartbeat every
-    # CFG.QSITE_PROGRESS_INTERVAL_SEC. Progress is read from the Jaguar log: count
-    # completed scan points against CFG.QSITE_SCAN_NSTEPS for a k/N bar, falling
-    # back to elapsed-time only when no markers are present yet.
+    '''
+    Live progress: QM/MM relaxed scans run for many minutes per frame, during
+    which a blocking call looks frozen. Launch non-blocking (still -WAIT, so the
+    driver process stays alive until the job finishes) and emit a heartbeat every
+    CFG.QSITE_PROGRESS_INTERVAL_SEC. Progress is read from the Jaguar log: count
+    completed scan points against CFG.QSITE_SCAN_NSTEPS for a k/N bar, falling
+    back to elapsed-time only when no markers are present yet.
+    '''
     _interval = max(5, int(getattr(CFG, "QSITE_PROGRESS_INTERVAL_SEC", 20)))
     _total    = max(1, int(getattr(CFG, "QSITE_SCAN_NSTEPS", 1)))
     _user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
     _log_path = qsite_dir / f"{jobname}.log"   # job-control log, named in the failure message below
 
     def _scan_done():
-        # QSite runs on the job server: the LIVE Jaguar .out sits in /tmp/<user>/jobs/<jobid>/<jobname>.out
-        # and is copied back to qsite_dir only when the job finishes, so reading the launch dir during the
-        # run sees nothing. Read the newest live copy (fall back to the launch dir) and count how many
-        # relaxed-scan POINTS have been reached: QSite echoes the active scan constraint ("  r = 3.5#")
-        # before every geometry-optimisation step, so the number of DISTINCT consecutive constraint
-        # values is the current scan point (1..QSITE_SCAN_NSTEPS) - the same dedup _extract_scan_coordinates
-        # uses. This must NOT count a "converged" / "Total Energy" line: QSite prints those once per SCF /
-        # optimisation iteration, hundreds per point, which would saturate the bar at N/N on the first point.
-        # The scan constraint lives in the .out, never the job-control .log.
+        '''
+        QSite runs on the job server: the LIVE Jaguar .out sits in /tmp/<user>/jobs/<jobid>/<jobname>.out
+        and is copied back to qsite_dir only when the job finishes, so reading the launch dir during the
+        run sees nothing. Read the newest live copy (fall back to the launch dir) and count how many
+        relaxed-scan POINTS have been reached: QSite echoes the active scan constraint ("  r = 3.5#")
+        before every geometry-optimisation step, so the number of DISTINCT consecutive constraint
+        values is the current scan point (1..QSITE_SCAN_NSTEPS) - the same dedup _extract_scan_coordinates
+        uses. This must NOT count a "converged" / "Total Energy" line: QSite prints those once per SCF /
+        optimisation iteration, hundreds per point, which would saturate the bar at N/N on the first point.
+        The scan constraint lives in the .out, never the job-control .log.
+        '''
         _cands = _glob.glob(f"/tmp/{_user}/jobs/*/{jobname}.out") if _user else []
         _cands.append(str(qsite_dir / f"{jobname}.out"))
         _cands = [p for p in _cands if os.path.isfile(p)]
@@ -3383,20 +3466,24 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
         time.sleep(_interval)
         _elapsed = time.time() - _t0
         _done = _scan_done()
-        # Report this scan into the shared registry and refresh ONE in-place line that covers every
-        # concurrent scan, grouped by rank (R1 F1 k/N F2 k/N ...). Emit only when THIS scan advances a
-        # point or every ~2 min as a keep-alive, so a slow first point never spams one line per job per
-        # interval. The \r line is written unconditionally: the driver's stdout is a pipe into the tee'd
-        # log rather than a tty, but \r still overwrites on the attached console, and the per-scan
-        # "finished in ... min" line below stays the durable, newline-terminated record.
+        r'''
+        Report this scan into the shared registry and refresh ONE in-place line that covers every
+        concurrent scan, grouped by rank (R1 F1 k/N F2 k/N ...). Emit only when THIS scan advances a
+        point or every ~2 min as a keep-alive, so a slow first point never spams one line per job per
+        interval. The \r line is written unconditionally: the driver's stdout is a pipe into the tee'd
+        log rather than a tty, but \r still overwrites on the attached console, and the per-scan
+        "finished in ... min" line below stays the durable, newline-terminated record.
+        '''
         if _done == _last_done and (time.time() - _last_emit) < 120:
             continue
         _last_done, _last_emit = _done, time.time()
         with _PROGRESS_LOCK:
             _QSITE_PROG[jobname] = (rank, _done, _total, _elapsed, "run")
-            # Every console write here is wrapped: a severed tee/console (BrokenPipeError) must not
-            # escape the poll loop, or it would skip the terminal-state set, job de-registration and
-            # block-close below and strand a "run" entry that never clears.
+            '''
+            Every console write here is wrapped: a severed tee/console (BrokenPipeError) must not
+            escape the poll loop, or it would skip the terminal-state set, job de-registration and
+            block-close below and strand a "run" entry that never clears.
+            '''
             try:
                 if not _QSITE_BANNER[0]:      # open the block once: blank line + launch table + rule
                     print(flush=True)
@@ -3435,10 +3522,12 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                          f"after {_elapsed / 60:.1f} min - check {_log_path.name}.{ConsoleColours.ENDC}")
     except Exception:
         pass
-    # Immediately re-render the shared heartbeat so this just-finished scan shows its green ✔ (or red
-    # ✘) and the scan count stays complete, instead of appearing to drop out until another still-running
-    # scan's throttled (<=120 s) poll happens to repaint the line. Only while other scans are still live;
-    # once none are running the block-close below renders the final line.
+    '''
+    Immediately re-render the shared heartbeat so this just-finished scan shows its green ✔ (or red
+    ✘) and the scan count stays complete, instead of appearing to drop out until another still-running
+    scan's throttled (<=120 s) poll happens to repaint the line. Only while other scans are still live;
+    once none are running the block-close below renders the final line.
+    '''
     with _PROGRESS_LOCK:
         if _QSITE_BANNER[0] and any(_v[4] == "run" for _v in _QSITE_PROG.values()):
             try:
@@ -3446,10 +3535,12 @@ def run_qsite(qsite_dir: Path, inp_path: Path, job_name: str, rank: int) -> bool
                 sys.stdout.flush()
             except Exception:
                 pass
-    # Self-check: surface the common QSite failure where the QM-region charge /
-    # electron count is inconsistent (Jaguar 'incorrect molecular charge', odd
-    # electrons) and it silently skips every scan point → an empty/NaN barrier.
-    # Report it loudly so it is never mistaken for a converged result.
+    '''
+    Self-check: surface the common QSite failure where the QM-region charge /
+    electron count is inconsistent (Jaguar 'incorrect molecular charge', odd
+    electrons) and it silently skips every scan point → an empty/NaN barrier.
+    Report it loudly so it is never mistaken for a converged result.
+    '''
     try:
         _reason = _qsite_scan_failure_reason(qsite_dir, jobname)
         if _reason:
@@ -3487,12 +3578,14 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
             return None
         _t = _o.read_text(errors="ignore")
 
-        # Impact-level abort: Impact dies during parameter assignment, BEFORE any SCF or
-        # scan point, so there is no "Skipping" line to catch further down - the failure is
-        # otherwise invisible and the QSite launcher still exits rc=0. The S-OPLS case is the
-        # one this pipeline meets: OPLS3e/OPLS4 (S-OPLS) is rejected on a frozen-orbital-cut
-        # QM region (QM bonded to MM, not H-capped), which is why CFG.QSITE_MM_FF selects
-        # OPLS_2005. Surface the exact Impact error so a dead job is never read as a barrier.
+        '''
+        Impact-level abort: Impact dies during parameter assignment, BEFORE any SCF or
+        scan point, so there is no "Skipping" line to catch further down - the failure is
+        otherwise invisible and the QSite launcher still exits rc=0. The S-OPLS case is the
+        one this pipeline meets: OPLS3e/OPLS4 (S-OPLS) is rejected on a frozen-orbital-cut
+        QM region (QM bonded to MM, not H-capped), which is why CFG.QSITE_MM_FF selects
+        OPLS_2005. Surface the exact Impact error so a dead job is never read as a barrier.
+        '''
         _die = re.search(r"%IMPACT-E \(die\):.*?\n(?:\s*%IMPACT-E:.*\n?)*", _t)
         if _die or "Impact exited with an error" in _t:
             _msg = re.sub(r"\s+", " ", _die.group(0)).strip() if _die else "Impact exited with an error"
@@ -3509,7 +3602,7 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
             return (f"QM-region charge/electron mismatch{_got} - {_skips} scan point(s) "
                     f"skipped. Reduce CFG.QSITE_MAX_QM_RESIDUES or check molchg/protonation.")
 
-        """
+        '''
         Charge-consistency check even when the SCF converges. The writer sets molchg to the bare formal
         charge of the QM atoms; QSite's frozen-orbital driver then subtracts one electron per Cα-Cβ cut,
         so the healthy run charge is (molchg - n_frozen_cuts). This check compares Jaguar's actual net
@@ -3517,7 +3610,7 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
         region / cut count is not what the writer assumed (a mis-resolved residue, an unexpected charged
         QM water, or an electron-parity problem) and the barrier would be for a charge state we did not
         intend. The ordinary -1-per-cut shift is expected, not flagged.
-        """
+        '''
         _inp = next((p for p in ([qsite_dir / f"{qsite_dir.name}.in"] + sorted(qsite_dir.glob("*.in")))
                      if p.exists()), None)
         _intxt = _inp.read_text(errors="ignore") if _inp else ""
@@ -3539,13 +3632,15 @@ def _qsite_scan_failure_reason(qsite_dir: Path, job_name: str) -> "str | None":
     return None
 
 
-# -----------------------------------------------------------------------------
-# SECTION 7b: QM/MM SCAN PARSING → BARRIER, REACTION PROFILE, C-F CLEAVAGE
-# Turns the Jaguar/QSite relaxed-scan .out into ΔE‡ / ΔE_rxn, the PES, the scissile C-F
-# bond length (the geometric cleavage criterion) and the corroborating departing-F charge.
-# Best-effort regex parsing (Jaguar output varies by version); every failure path returns
-# NaN/empty and is non-fatal.
-# -----------------------------------------------------------------------------
+# #############################################################################
+# SUBSECTION 7b: QM/MM SCAN PARSING → BARRIER, REACTION PROFILE, C-F CLEAVAGE
+# #############################################################################
+'''
+Turns the Jaguar/QSite relaxed-scan .out into ΔE‡ / ΔE_rxn, the PES, the scissile C-F
+bond length (the geometric cleavage criterion) and the corroborating departing-F charge.
+Best-effort regex parsing (Jaguar output varies by version); every failure path returns
+NaN/empty and is non-fatal.
+'''
 def _qsite_scan_segments(text: str) -> "list[str]":
     """Split the .out into ONE text segment per converged relaxed-scan point.
 
@@ -3559,12 +3654,14 @@ def _qsite_scan_segments(text: str) -> "list[str]":
     _segs, _prev = [], 0
     for _b in _bounds:
         _segs.append(text[_prev:_b]); _prev = _b
-    # The FINAL converged scan point carries NO closing banner: QSite emits 'end of geometry scan step'
-    # BETWEEN steps, not after the last one, so the tail after the last banner is that point's complete
-    # output (the product geometry), not an incomplete step. Keep it when it holds both a converged
-    # QM/MM total energy and the scanner's per-point summary; drop it only when genuinely incomplete
-    # (job stopped mid-optimisation). Without this the product endpoint - the most compressed, most
-    # ionised geometry - is silently discarded from every scan, truncating the PES, dErxn and verdict.
+    '''
+    The FINAL converged scan point carries NO closing banner: QSite emits 'end of geometry scan step'
+    BETWEEN steps, not after the last one, so the tail after the last banner is that point's complete
+    output (the product geometry), not an incomplete step. Keep it when it holds both a converged
+    QM/MM total energy and the scanner's per-point summary; drop it only when genuinely incomplete
+    (job stopped mid-optimisation). Without this the product endpoint - the most compressed, most
+    ionised geometry - is silently discarded from every scan, truncating the PES, dErxn and verdict.
+    '''
     _tail = text[_prev:]
     if re.search(r"Total Energy of the system\.*\s*-?\d[\d.]*(?:[eE][+-]?\d+)?\s*kcal", _tail, re.IGNORECASE) \
        and re.search(r"scan:\s*r\s*=\s*-?\d+(?:\.\d+)?\s+energy", _tail):
@@ -3669,10 +3766,12 @@ def _extract_fluoride_charge_series(text: str) -> "list[float]":
         _mulls = re.split(r"(?i)Atomic charges from Mulliken population analysis", _seg)[1:]
         if not _mulls:
             _blocks.append({}); continue
-        # The converged geometry's charges = the LAST Mulliken block in the point's segment. It is read
-        # to the 'sum of atomic charges' line (not a fixed character budget): a QM region of eight
-        # residues plus waters wraps the table over many label/charge row pairs, and a fixed cut can
-        # fall in the middle of it and silently drop the fluorine.
+        '''
+        The converged geometry's charges = the LAST Mulliken block in the point's segment. It is read
+        to the 'sum of atomic charges' line (not a fixed character budget): a QM region of eight
+        residues plus waters wraps the table over many label/charge row pairs, and a fixed cut can
+        fall in the middle of it and silently drop the fluorine.
+        '''
         _blk = _mulls[-1]
         _end = re.search(r"(?i)sum of atomic charges", _blk)
         _lines = _blk[:_end.start() if _end else len(_blk)].splitlines()
@@ -3729,10 +3828,12 @@ def _qsite_saddle_well(e) -> dict:
                 "react_val": (_e[0] if _n else np.nan), "barrier": np.nan, "derxn": np.nan}
     _i_prod = int(np.argmin(_e))
     _i_saddle = int(np.argmax(_e[:_i_prod + 1])) if _i_prod > 0 else 0
-    # A point is a product well only if a genuine interior saddle precedes it (energy rose then fell).
-    # When the deepest point is the first point, or the maximum before it is the first point (a mere
-    # reactant-side relaxation dip with no barrier before it), the scan is uphill toward the endpoint:
-    # the product is the most-compressed geometry sampled and the TS is the global maximum.
+    '''
+    A point is a product well only if a genuine interior saddle precedes it (energy rose then fell).
+    When the deepest point is the first point, or the maximum before it is the first point (a mere
+    reactant-side relaxation dip with no barrier before it), the scan is uphill toward the endpoint:
+    the product is the most-compressed geometry sampled and the TS is the global maximum.
+    '''
     if _i_prod == 0 or _i_saddle == 0:
         _i_prod = _n - 1
         _i_saddle = int(np.argmax(_e))
@@ -3935,11 +4036,10 @@ def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
                                    "CF_Reactant_A", "CF_Product_A", "cleaved")}
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# SECTION 7c: Trajectory-level figures: active-site dynamics, free-energy
-#            landscapes and the per-frame MM-GBSA trace
-# ────────────────────────────────────────────────────────────────────────────
-"""
+# #############################################################################
+# SUBSECTION 7c: Trajectory-level figures: active-site dynamics, free-energy landscapes and the per-frame MM-GBSA trace
+# #############################################################################
+'''
 Three per-rank figures drawn from the same per-frame table the dashboard uses, so a completed MD
 can be read without waiting for the QM/MM stage. Every distance series is paired with the ranked
 sheet's Mapped_* column, so residue identity AND position are resolved for the homolog actually
@@ -3949,7 +4049,7 @@ _ACTIVE_SITE_SERIES extends _ENGAGE_ROLES (the eight distances to the warhead ca
 catalytic-relay pairs and the tail-fluorine cradle distance. Triad_NB / Triad_BA are deliberately
 excluded: they are the same residue pairs as the DT relays under a min-heavy-atom convention, and
 plotting both would put two different values for one pair on a single axis.
-"""
+'''
 _ACTIVE_SITE_SERIES = [(c, short, m) for c, _grp, short, m in _ENGAGE_ROLES] + [
     ("DT_Nuc_Base_A",      "Nuc–Base",  ("Mapped_Nucleophile", "Mapped_Base")),
     ("DT_Base_Acid_A",     "Base–Acid", ("Mapped_Base", "Mapped_Acid")),
@@ -4267,9 +4367,11 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 _isad = min(max(int(profile.get("i_saddle", int(np.argmax(y)))), 0), len(y) - 1)
                 _iprod = min(max(int(profile.get("i_prod", len(y) - 1)), 0), len(y) - 1)
                 _faint = CFG.VIS_INK.get("silver", "#AEB7C2")
-                # scan energetics: the PES to the C-F cleavage point, then the repulsive-wall overshoot
-                # greyed and excluded. The barrier is the maximum along the driven Nu(O)···C coordinate,
-                # not a TS-verified activation energy (C-F is not a scan variable).
+                '''
+                scan energetics: the PES to the C-F cleavage point, then the repulsive-wall overshoot
+                greyed and excluded. The barrier is the maximum along the driven Nu(O)···C coordinate,
+                not a TS-verified activation energy (C-F is not a scan variable).
+                '''
                 axE.axhline(0.0, ls=":", lw=1.0, color=_C["edge"], alpha=0.55, zorder=1)
                 axE.plot(x[:_iprod + 1], y[:_iprod + 1], "-o", color=_C["pes"], lw=2.0, ms=4, zorder=4, label="QM/MM PES")
                 if _iprod < len(y) - 1:
@@ -4301,11 +4403,13 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 for _spn in ("left", "bottom", "top"):
                     axE.spines[_spn].set_visible(True)
                 axE.spines["right"].set_visible(False)   # axF owns the right spine
-                # ── top axis: the FULL CFG scan-point grid (1..NSTEPS) in its own colour with its own
-                # faint vertical grid, so it reads as a separate coordinate from the bottom Nu(O)···C
-                # distance. The distance→point map is exactly linear (CFG scan start/step), so every CFG
-                # point lands at its own coordinate whether or not it converged: the axis always shows the
-                # configured 1..NSTEPS, and a non-converged point is simply a tick with no PES marker. ──
+                '''
+                ── top axis: the FULL CFG scan-point grid (1..NSTEPS) in its own colour with its own
+                faint vertical grid, so it reads as a separate coordinate from the bottom Nu(O)···C
+                distance. The distance→point map is exactly linear (CFG scan start/step), so every CFG
+                point lands at its own coordinate whether or not it converged: the axis always shows the
+                configured 1..NSTEPS, and a non-converged point is simply a tick with no PES marker. ──
+                '''
                 _scanc = _C.get("scan_axis", _C["edge"])
                 _nsteps = int(CFG.QSITE_SCAN_NSTEPS)
                 _s0, _sstep = float(CFG.QSITE_SCAN_START), float(CFG.QSITE_SCAN_STEP)
@@ -4319,9 +4423,11 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 _axT.tick_params(axis="x", colors=_scanc, length=3)
                 _axT.spines["top"].set_color(_scanc)
                 axE.spines["top"].set_visible(False)       # the secondary axis owns the top border now
-                # Two colour-coded vertical grids so each x-axis reads as its own coordinate: the bottom
-                # Nu(O)···C distance grid in the distance-axis colour (label + ticks + grid all match) at
-                # the CFG tick spacing, and the top QM-scan-point grid in the scan-axis colour above it.
+                '''
+                Two colour-coded vertical grids so each x-axis reads as its own coordinate: the bottom
+                Nu(O)···C distance grid in the distance-axis colour (label + ticks + grid all match) at
+                the CFG tick spacing, and the top QM-scan-point grid in the scan-axis colour above it.
+                '''
                 _distc = _C.get("dist_axis", CFG.VIS_INK.get("dark", "#334155"))
                 _dtick = float(getattr(CFG, "QSITE_PROFILE_DIST_TICK_A", 0.20))
                 axE.xaxis.set_major_locator(MultipleLocator(_dtick))
@@ -4363,12 +4469,14 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                             _ye = _elo + (_t - _cflo) / (_cfhi - _cflo) * (_ehi - _elo)
                             axE.axhline(_ye, color=_cfc, lw=0.6, alpha=0.20, zorder=0)
                 axF.spines["right"].set_visible(True); axF.spines["top"].set_visible(True)
-                # ── header: a single-row legend, then a single row carrying the ligand+verdict badge and
-                # the numbers - the two stacked lines read like one compact block at the top-left ──
-                # ONE framed box on a single row holding the verdict, the numbers and the curve legend:
-                # the verdict (coloured by the C-F call) and the numbers ride blank handles so they sit as
-                # leading text entries inside the legend frame. ΔE‡ / ΔE_rxn are omitted here - already
-                # labelled on the TS and product points - so the top-right stays clear for those labels.
+                '''
+                ── header: a single-row legend, then a single row carrying the ligand+verdict badge and
+                the numbers - the two stacked lines read like one compact block at the top-left ──
+                ONE framed box on a single row holding the verdict, the numbers and the curve legend:
+                the verdict (coloured by the C-F call) and the numbers ride blank handles so they sit as
+                leading text entries inside the legend frame. ΔE‡ / ΔE_rxn are omitted here - already
+                labelled on the TS and product points - so the top-right stays clear for those labels.
+                '''
                 _acc = _C["product"] if _cleaved else _C["ts"]
                 _head = _qsite_verdict_label(ligand or str(job_name).split("_")[-1], _cleaved)
                 _detail = f"C-F {_cf_r:.2f} → {_cf_p:.2f} Å"   # reactant → cleavage-point scissile C-F length
@@ -4398,9 +4506,11 @@ def _qsite_frame_summary(prof: dict) -> "dict | None":
     cf = np.asarray(prof.get("cf_dist") or [], float)
     if len(y) < 2:
         return None
-    # energy_kcal is referenced to the reactant well, so the barrier is y at the transition state (the
-    # saddle before the product) and the reaction energy is y at the product; both landmark indices come
-    # from the parser (i_saddle / i_prod, via _qsite_landmarks - anchored to the C-F cleavage point).
+    '''
+    energy_kcal is referenced to the reactant well, so the barrier is y at the transition state (the
+    saddle before the product) and the reaction energy is y at the product; both landmark indices come
+    from the parser (i_saddle / i_prod, via _qsite_landmarks - anchored to the C-F cleavage point).
+    '''
     i_ts = min(max(int(prof.get("i_saddle", int(np.argmax(y)))), 0), len(y) - 1)
     i_pr = min(max(int(prof.get("i_prod", len(y) - 1)), 0), len(y) - 1)
     _fp = _qsite_last_finite_fq(fq)
@@ -4818,9 +4928,11 @@ def _qsite_attack_geometry(job_out_dir: Path) -> "dict | None":
             _v1 = _no["xyz"] - _ca["xyz"]; _v2 = _f["xyz"] - _ca["xyz"]
             _ang = math.degrees(math.acos(float(np.clip(np.dot(_v1, _v2) / ((np.linalg.norm(_v1) * np.linalg.norm(_v2)) + 1e-9), -1.0, 1.0))))
             _p.append(dict(dNuCa=_D(_no["xyz"], _ca["xyz"]), dCaF=_D(_ca["xyz"], _f["xyz"]), angle=_ang, fq=_f["mull"]))
-        # DEFLUORINATION point = the first scan CT where the departing-F Mulliken charge crosses the
-        # cleaved threshold (C-F ionises, F leaves); fall back to the max-energy (TS) CT, or the most
-        # elongated Cα-F, when nothing cleaves.
+        '''
+        DEFLUORINATION point = the first scan CT where the departing-F Mulliken charge crosses the
+        cleaved threshold (C-F ionises, F leaves); fall back to the max-energy (TS) CT, or the most
+        elongated Cα-F, when nothing cleaves.
+        '''
         _cl = [z for z in _p if z.get("dCaF") is not None and z["dCaF"] >= CFG.QSITE_CF_CLEAVED_A]
         _tc = None
         _csv = job_out_dir / "11_QSite_Scan_Data.csv"
@@ -4882,11 +4994,13 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
         _lig0 = [a for a in ct0 if a["resname"] == "LIG"]
         _Cs = [a for a in _lig0 if a["Z"] == 6]; _Fs = [a for a in _lig0 if a["Z"] == 9]
         _fnd = (lambda ct, ref: next(a for a in ct if a["idx"] == ref["idx"]))
-        # Identify the reacting atoms from the SCAN itself, tracked by atom idx across the CTs: the scissile
-        # carbon = the ligand C bearing the fluorine(s); the scissile F = the fluorine whose Cα-F bond
-        # elongates most (the one that actually leaves); the nucleophile O = the aspartate O that bonds to
-        # Cα by the product end (NOT merely the closest at the reactant, which can be a different
-        # carboxylate O that never approaches - the cause of a spuriously bent attack angle).
+        '''
+        Identify the reacting atoms from the SCAN itself, tracked by atom idx across the CTs: the scissile
+        carbon = the ligand C bearing the fluorine(s); the scissile F = the fluorine whose Cα-F bond
+        elongates most (the one that actually leaves); the nucleophile O = the aspartate O that bonds to
+        Cα by the product end (NOT merely the closest at the reactant, which can be a different
+        carboxylate O that never approaches - the cause of a spuriously bent attack angle).
+        '''
         Ca0 = min(_Cs, key=lambda c: min(D(c["xyz"], f["xyz"]) for f in _Fs))
         _caL = _fnd(cts[-1], Ca0)
         Fsc0 = max(_Fs, key=lambda f: D(_fnd(cts[-1], f)["xyz"], _caL["xyz"]) - D(f["xyz"], Ca0["xyz"]))
@@ -4911,9 +5025,11 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
         _tot = int(st.get("Total_Frames", len(nac))); _sims = float(st.get("Sim_Total_ns", 1000.0))
         frames = sorted([(row.Frame_Index / max(_tot, 1) * _sims, bool(row.Frame_Cleaved), float(row.Frame_Barrier_kcal))
                          for row in fr.itertuples()])
-        # departing-F charge reported by this scene = the BEST frame's product-end charge (the frame the
-        # scene draws), so the badge count, the table value and the scene 'F- departs' number all speak
-        # about the same frame and cannot disagree. The rank ensemble is carried by the ncl/n badge.
+        '''
+        departing-F charge reported by this scene = the BEST frame's product-end charge (the frame the
+        scene draws), so the badge count, the table value and the scene 'F- departs' number all speak
+        about the same frame and cannot disagree. The rank ensemble is carried by the ncl/n badge.
+        '''
         _bfr = (fr[fr["Is_Best_Frame"].astype(str).str.lower().isin(("true", "1"))]
                 if "Is_Best_Frame" in fr.columns else fr).head(1)
         _bf_fq = float((_bfr if len(_bfr) else fr)["Frame_F_Charge_Product"].iloc[0])
@@ -4921,11 +5037,13 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                    derxn=float(qs["QSite_dErxn_Ensemble_kcal"].iloc[0]),
                    ncl=int(fr["Frame_Cleaved"].sum()), n=len(fr), isdef=bool(qs["Is_Defluorinating"].iloc[0]),
                    fq=_bf_fq)
-        # The DEFLUORINATION point of the best frame = the first scan CT whose departing-F Mulliken charge
-        # crosses the cleaved threshold (the C-F bond ionises and F leaves - the moment the SN2 completes).
-        # The 100%-from-QM O-Cα-F angle and Nu(O)···Cα / Cα-F distances THERE (not an MD average, and not
-        # the early barrier bump) are what this scene reports. Falls back to the max-energy (TS) CT, matched
-        # by reaction coordinate, then to the most elongated Cα-F, when nothing cleaves.
+        '''
+        The DEFLUORINATION point of the best frame = the first scan CT whose departing-F Mulliken charge
+        crosses the cleaved threshold (the C-F bond ionises and F leaves - the moment the SN2 completes).
+        The 100%-from-QM O-Cα-F angle and Nu(O)···Cα / Cα-F distances THERE (not an MD average, and not
+        the early barrier bump) are what this scene reports. Falls back to the max-energy (TS) CT, matched
+        by reaction coordinate, then to the most elongated Cα-F, when nothing cleaves.
+        '''
         _cl = [p for p in path if p.get("dCaF") is not None and p["dCaF"] >= CFG.QSITE_CF_CLEAVED_A]
         _bfq = qs[qs["Is_Best_Frame"].astype(str).str.lower().isin(("true", "1"))] if "Is_Best_Frame" in qs.columns else qs
         _tsc = (float(_bfq.loc[_bfq["Energy_Rel_kcal"].idxmax(), "Coord_Nu_O_C_A"])
@@ -4954,10 +5072,12 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                      "Clamp1": ("ARG", _args[0] if _args else None, "Carboxylate clamp"),
                      "Clamp2": ("ARG", _args[1] if len(_args) > 1 else None, "Carboxylate clamp")}
 
-        # ---- SSOT residue identities: names + numbers from the ranked sheet's Mapped_* columns for
-        # THIS job (single source of truth), never the geometric guess above. The row is matched on job
-        # identity, else Scientific_Rank. The geometric pick survives only as a per-role fallback for a
-        # cell that is empty/GAP on this sheet (e.g. a figures-only resume that never wrote the map).
+        '''
+        ---- SSOT residue identities: names + numbers from the ranked sheet's Mapped_* columns for
+        THIS job (single source of truth), never the geometric guess above. The row is matched on job
+        identity, else Scientific_Rank. The geometric pick survives only as a per-role fallback for a
+        cell that is empty/GAP on this sheet (e.g. a figures-only resume that never wrote the map).
+        '''
         _rk_df = None
         try:
             _rk_df = _load_ranked_df(job_out_dir.parent)
@@ -5135,10 +5255,12 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                         ax.text(_m[0] + _pp[0], _m[1] + _pp[1], f"{g:.1f}->{nn:.1f} Å", color=col, fontsize=CFG.MECH_FONT_TINY, ha="center", va="center", zorder=7,
                                 bbox=dict(boxstyle="round,pad=0.05", fc="white", ec="none", alpha=.9))
 
-                # electron transfer (numbered, curved). The number rides ON the arc: matplotlib's
-                # arc3 apex is chord_mid + 0.5*rad*(dy,-dx) for (dx,dy)=end-start, so the marker sits
-                # there (a hair further out along the same bow), on the curved arrow rather than beside
-                # the flat chord.
+                '''
+                electron transfer (numbered, curved). The number rides ON the arc: matplotlib's
+                arc3 apex is chord_mid + 0.5*rad*(dy,-dx) for (dx,dy)=end-start, so the marker sits
+                there (a hair further out along the same bow), on the curved arrow rather than beside
+                the flat chord.
+                '''
                 def _arc_apex(_a, _b, _rad, _out=0.14):
                     _v = _b - _a; _n = np.array([_v[1], -_v[0]]); _L = np.linalg.norm(_n) + 1e-9
                     return (_a + _b) / 2 + 0.5 * _rad * _n + (_n / _L) * (_out * (1.0 if _rad >= 0 else -1.0))
@@ -5200,11 +5322,11 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                     allpts.append(wO)
 
                 _A = np.array(allpts); ax.set_xlim(_A[:, 0].min() - 1.0, _A[:, 0].max() + 1.25); ax.set_ylim(_A[:, 1].min() - 1.1, _A[:, 1].max() + 1.5)
-                """
+                '''
                 Resize the scene axes to hug its content: aspect-equal would otherwise pad the box and open
                 a dead band above the table. The graph butts right up against the scene (its y-axis label fills
                 the small gap) and the table docks just below.
-                """
+                '''
                 _xr = ax.get_xlim()[1] - ax.get_xlim()[0]; _yr = ax.get_ylim()[1] - ax.get_ylim()[0]
                 _hf = 0.545; _wf = min(0.55, _hf * _FH * _xr / (_FW * _yr)); _sb = 0.985 - _hf
                 ax.set_position([0.006, _sb, _wf, _hf])
@@ -5311,9 +5433,11 @@ def plot_defluorination_mechanism(out_path: Path, job_out_dir: Path, run_dir: Pa
                     if _idx < len(tables) - 1:                    # section separator between joined blocks
                         axt.plot([_x + _wt, _x + _wt], [_ytab - _Ht, _ytab], color=_tgrid, lw=1.2, zorder=6)
                     _x += _wt
-                # (table right edge = the outer rectangle's right edge; no extra line)
-                # a compact table box (its own natural aspect, no stretch), centred under the panels (mid-way
-                # between the scene's left edge and the graph's right edge, the figure centre after the tight crop)
+                '''
+                (table right edge = the outer rectangle's right edge; no extra line)
+                a compact table box (its own natural aspect, no stretch), centred under the panels (mid-way
+                between the scene's left edge and the graph's right edge, the figure centre after the tight crop)
+                '''
                 axt.set_xlim(_bx - 0.12, _bx + _BW + 0.12); axt.set_ylim(_ytab - _Ht - 0.10, _ytab + 0.06); axt.set_aspect("auto")
                 _tasp = (_BW + 0.24) / (_Ht + 0.16); _thf = 0.255; _twf = _thf * _tasp * _FH / _FW
                 _pcx = (0.006 + 0.86) / 2
@@ -5367,12 +5491,14 @@ def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: st
                 qf = qs.sort_values("Frame_Index")
                 _rws = list(qf.iterrows())
                 _xns = [f2ns(r["Frame_Index"]) for _, r in _rws]
-                # De-clutter the callouts: each sits a touch to the LEFT of its own line (a small baseline
-                # offset so the arrow is always a visible slant, never a zero-length stub hidden under the
-                # text), and when two would sit closer than the label is wide the later one is pushed right
-                # to hold a minimum gap. So a clustered set (R1's 15/39/117 ns) fans across the headroom
-                # without overlap, while a spread set (R2/R69) keeps its callouts just above the lines with
-                # a short slanted arrow each. If the row runs off the right edge it shifts left to stay in.
+                '''
+                De-clutter the callouts: each sits a touch to the LEFT of its own line (a small baseline
+                offset so the arrow is always a visible slant, never a zero-length stub hidden under the
+                text), and when two would sit closer than the label is wide the later one is pushed right
+                to hold a minimum gap. So a clustered set (R1's 15/39/117 ns) fans across the headroom
+                without overlap, while a spread set (R2/R69) keeps its callouts just above the lines with
+                a short slanted arrow each. If the row runs off the right edge it shifts left to stay in.
+                '''
                 _base = sims * 0.025; _gap = sims * 0.13
                 _lx = []
                 for _v in _xns:
@@ -5430,12 +5556,12 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
         _bar = [s.get("barrier", np.nan) for s in _sums]
         _der = [s.get("derxn", np.nan) for s in _sums]
         _ens = ensemble or {}; _qm = qmmeta or {}
-        """
+        '''
         A figures-only resume redraws from cached scans without recomputing the QM region, so it
         has no live qmmeta. Rewriting the CSV with null provenance would erase the QM-region record
         an earlier full pass already wrote, so the existing provenance is read back and reused rather
         than overwritten with None.
-        """
+        '''
         if not _qm and out_path.is_file():
             try:
                 _prev = pd.read_csv(out_path, nrows=1)
@@ -5516,9 +5642,11 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
         _ft, _fa = CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
         _cfthr = float(getattr(CFG, "QSITE_CF_CLEAVED_A", 1.8))
         def _cleave_idx(j):
-            # the geometric C-F cleavage point (first C-F past threshold), NOT the energy maximum: a
-            # monotone-downhill scan has its energy maximum at the reactant start, which would drop the
-            # marker onto the 3.5 Å reactant rather than where the bond actually breaks.
+            '''
+            the geometric C-F cleavage point (first C-F past threshold), NOT the energy maximum: a
+            monotone-downhill scan has its energy maximum at the reactant start, which would drop the
+            marker onto the 3.5 Å reactant rather than where the bond actually breaks.
+            '''
             _cfj = j.get("cf_dist") or []
             _ix = next((_i for _i, _v in enumerate(_cfj) if _v == _v and _v >= _cfthr), None)
             if _ix is not None:
@@ -5621,26 +5749,34 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
 # SECTION 8: CORE ANALYSIS ENGINE
 # =============================================================================
 
-# Number of threads used for parallel DTR frame pre-loading.
-# Each thread opens its own read_traj instance (thread-safe).
-# For HDD: keep at 2-4 (seek contention); for SSD: use cpu_count().
+'''
+Number of threads used for parallel DTR frame pre-loading.
+Each thread opens its own read_traj instance (thread-safe).
+For HDD: keep at 2-4 (seek contention); for SSD: use cpu_count().
+'''
 _N_PRELOAD_WORKERS = min(4, CFG.GLOBAL_MAX_WORKERS)
 
-# Solvent sphere radius (Å) around the nucleophile for water blockade.
-# Solvent that enters this radius in ANY sampled frame is tracked - reduces
-# per-frame work from ~10,000 solvent atoms to ~100-200 while covering the SN2
-# runway across the whole trajectory (not just frame 0).
+'''
+Solvent sphere radius (Å) around the nucleophile for water blockade.
+Solvent that enters this radius in ANY sampled frame is tracked - reduces
+per-frame work from ~10,000 solvent atoms to ~100-200 while covering the SN2
+runway across the whole trajectory (not just frame 0).
+'''
 _SOL_SPHERE_RADIUS = getattr(CFG, "SOLVENT_SPHERE_RADIUS", 20.0)
 
-# Number of evenly-spaced frames sampled to build the blockade solvent superset.
-# The frame-0-only sphere missed waters that diffuse into the runway later,
-# biasing the blockade metric low on long trajectories; the union over these
-# samples removes that bias while keeping a fixed pre-load set.
+'''
+Number of evenly-spaced frames sampled to build the blockade solvent superset.
+The frame-0-only sphere missed waters that diffuse into the runway later,
+biasing the blockade metric low on long trajectories; the union over these
+samples removes that bias while keeping a fixed pre-load set.
+'''
 _SOL_SPHERE_SAMPLE_FRAMES = max(1, int(CFG.SOLVENT_SPHERE_SAMPLE_FRAMES))
 
-# QSite execution settings. Initialised from CFG and overridden per-run by main()
-# from the CLI. Kept as module globals (CFG is a frozen dataclass and cannot be
-# mutated). Read-only inside the worker threads.
+'''
+QSite execution settings. Initialised from CFG and overridden per-run by main()
+from the CLI. Kept as module globals (CFG is a frozen dataclass and cannot be
+mutated). Read-only inside the worker threads.
+'''
 _QSITE_RUN = CFG.QSITE_RUN
 _QSITE_PROCS = CFG.QSITE_PROCS
 # OpenMP threads per Jaguar SCF (qsite -max_threads) and job-name suffix for an isolated parallel run;
@@ -5648,28 +5784,32 @@ _QSITE_PROCS = CFG.QSITE_PROCS
 _QSITE_THREADS = CFG.QSITE_PROCS
 _RUN_TAG = ""
 
-# QSite/Jaguar QM/MM engine (Impact `main1h`) is effectively SINGLE-THREADED for these small
-# frozen-cut QM regions - measured at ~100% of ONE core regardless of `-PARALLEL N`. Serialising
-# QSite therefore wasted cores-1 of the budget. Instead we run many QM/MM scans CONCURRENTLY, each
-# on its own core, bounded by this semaphore (set in main() to min(cores-2, RAM cap)). Per-job
-# procs is forced to 1 (the -PARALLEL flag does nothing here but spawn idle helpers). The prep that
-# mutates the shared cms_model stays sequential; only the independent Jaguar subprocesses run in
-# parallel. Total concurrent scans is capped by both this semaphore and the number of QM/MM jobs
-# actually available (ranks x QSITE_N_FRAMES).
+'''
+QSite/Jaguar QM/MM engine (Impact `main1h`) is effectively SINGLE-THREADED for these small
+frozen-cut QM regions - measured at ~100% of ONE core regardless of `-PARALLEL N`. Serialising
+QSite therefore wasted cores-1 of the budget. Instead we run many QM/MM scans CONCURRENTLY, each
+on its own core, bounded by this semaphore (set in main() to min(cores-2, RAM cap)). Per-job
+procs is forced to 1 (the -PARALLEL flag does nothing here but spawn idle helpers). The prep that
+mutates the shared cms_model stays sequential; only the independent Jaguar subprocesses run in
+parallel. Total concurrent scans is capped by both this semaphore and the number of QM/MM jobs
+actually available (ranks x QSITE_N_FRAMES).
+'''
 _FORCE_RECOMPUTE = False   # --force: recompute a rank even when its outputs exist
 # Records that THIS pipeline masked systemd-oomd, so a killed run is repaired on the next start.
 _OOMD_SENTINEL = Path.home() / ".cache" / "defluorx_step07_oomd_masked"
 _OOMD_RESTORE = None       # set by _mask_oomd_at_start; also called from the signal handlers
 _QSITE_SEM = threading.Semaphore(1)   # reassigned in main() to the concurrency cap
 
-# Orphan cleanup. `qsite -WAIT` submits to the Schrodinger job server (jobserverd), which spawns the
-# real QM/MM work (run_qsite -> run_jaguar_backend -> jexec -> scf) in ITS OWN session, not as children
-# of this script. Killing the driver - or Ctrl+C on this script - therefore leaves the scans running.
-# Track every live jobname; on interrupt/exit kill any process whose cmdline carries that jobname
-# (pkill -f: the jobname is unique per rank+ligand and appears on every server-side process), plus a
-# best-effort jobcontrol cancel. pkill is the lever that actually works - jobcontrol frequently cannot
-# message a job once its driver has died ("cannot send kill message"). Jobs that finish normally are
-# unregistered first, so a clean exit kills nothing.
+'''
+Orphan cleanup. `qsite -WAIT` submits to the Schrodinger job server (jobserverd), which spawns the
+real QM/MM work (run_qsite -> run_jaguar_backend -> jexec -> scf) in ITS OWN session, not as children
+of this script. Killing the driver - or Ctrl+C on this script - therefore leaves the scans running.
+Track every live jobname; on interrupt/exit kill any process whose cmdline carries that jobname
+(pkill -f: the jobname is unique per rank+ligand and appears on every server-side process), plus a
+best-effort jobcontrol cancel. pkill is the lever that actually works - jobcontrol frequently cannot
+message a job once its driver has died ("cannot send kill message"). Jobs that finish normally are
+unregistered first, so a clean exit kills nothing.
+'''
 _QSITE_ACTIVE_JOBS: "set[str]" = set()
 _QSITE_JOBS_LOCK = threading.Lock()
 
@@ -5726,9 +5866,11 @@ _QSITE_PROG: dict = {}
 # Whether the bracketed heartbeat block (gap + rule ... rule + gap) is currently open, so the opening
 # rule prints once when the first scan registers and the closing rule once when the last one drains.
 _QSITE_BANNER: list = [False]
-# Launched-scan rows buffered here (rank -> runjobs); the full bordered table is printed ONCE,
-# atomically, when the heartbeat block opens - so the four ranks' rows never interleave into a
-# broken table. Cleared together with the heartbeat registry when the block closes.
+'''
+Launched-scan rows buffered here (rank -> runjobs); the full bordered table is printed ONCE,
+atomically, when the heartbeat block opens - so the four ranks' rows never interleave into a
+broken table. Cleared together with the heartbeat registry when the block closes.
+'''
 _QSITE_LAUNCH_ROWS: dict = {}
 
 
@@ -5797,10 +5939,12 @@ def _qsite_status_line(prog: dict) -> str:
     _ranks = [f"{_G}R{_rk}{_E} " + " ".join(_t for _, _t in sorted(_by[_rk])) for _rk in sorted(_by)]
     return _sep.join([f"{_B}{_G}QSite {len(prog)} scans{_E}"] + _ranks + [f"{_G}⏱ {_max / 60:.0f}m{_E}"])
 
-# QM-region coordinating waters: solvent O within this radius (Å) of the
-# scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
-# as a whole molecule (F⁻ leaving-group stabilisation). Capped to keep the QM
-# electron count tractable.
+'''
+QM-region coordinating waters: solvent O within this radius (Å) of the
+scissile carbon / leaving fluorine / nucleophile oxygen enters the QM region
+as a whole molecule (F⁻ leaving-group stabilisation). Capped to keep the QM
+electron count tractable.
+'''
 _QM_WATER_RADIUS = float(CFG.QSITE_QM_WATER_RADIUS)
 _QM_WATER_MAX    = int(CFG.QSITE_QM_WATER_MAX)
 
@@ -5813,11 +5957,11 @@ def _eaf_at(series: np.ndarray, frame_t: float, t_start: float, eaf_dt: float) -
     return float(series[idx])
 
 
-# -----------------------------------------------------------------------------
-# SECTION 8a: NAC PERSISTENCE (continuous strict-NAC dwell → nanoseconds)
+# #############################################################################
+# SUBSECTION 8a: NAC PERSISTENCE (continuous strict-NAC dwell → nanoseconds)
+# #############################################################################
 # The real "time in position": longest/mean uninterrupted strict-NAC run, not the
 # frame-count fraction a flickering ligand can inflate.
-# -----------------------------------------------------------------------------
 def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
     """Continuous-residence statistics for a per-frame strict-NAC boolean series.
 
@@ -5846,11 +5990,11 @@ def _nac_dwell_stats(flags: "list[int]", ns_per_frame: float) -> dict:
     }
 
 
-# -----------------------------------------------------------------------------
-# SECTION 8b: PER-JOB TRAJECTORY ANALYSIS ENGINE
+# #############################################################################
+# SUBSECTION 8b: PER-JOB TRAJECTORY ANALYSIS ENGINE
+# #############################################################################
 # NAC geometry + Dream-Team tracking + WaterMap/EAF/MM-GBSA integration + QM/MM
 # frame selection, producing the per-rank 02_NAC_Data.csv, dashboards, and stats row.
-# -----------------------------------------------------------------------------
 def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
                              job_out_dir: Path, rank: int) -> None:
     """The per-rank figures that need only the frame table - drawn on a fresh run and on a resume.
@@ -5866,11 +6010,13 @@ def _draw_trajectory_figures(df_res, row, stats: dict, job_name: str,
         df_res, row, job_out_dir / "04_Active_Site_Dynamics.svg")
     generate_free_energy_landscapes(
         df_res, job_out_dir / "05_Free_Energy_Landscapes.svg")
-    # 06 (MM-GBSA overview = decomposition bars + ΔG_bind trace, merged into one figure) and 07
-    # (machinery engagement) for THIS rank, drawn now so both are readable the moment the rank lands;
-    # the trace's ΔG_bind data + the reactive-pose decomposition both ride the entry built inside
-    # _draw_reactive_pose_for_rank, so the MM-GBSA CSV is read once there. Merged cross-rank versions
-    # still come at the end.
+    '''
+    06 (MM-GBSA overview = decomposition bars + ΔG_bind trace, merged into one figure) and 07
+    (machinery engagement) for THIS rank, drawn now so both are readable the moment the rank lands;
+    the trace's ΔG_bind data + the reactive-pose decomposition both ride the entry built inside
+    _draw_reactive_pose_for_rank, so the MM-GBSA CSV is read once there. Merged cross-rank versions
+    still come at the end.
+    '''
     _draw_reactive_pose_for_rank(job_out_dir.parent, rank)
     print(f"  {ConsoleColours.OKGREEN}✔ [Rank {rank}] Trajectory figures done.{ConsoleColours.ENDC}", flush=True)
 
@@ -5922,10 +6068,12 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
         _b = _res.get("QSite_Barrier_kcal")
         if _b == _b:   # not NaN → a real interior-TS barrier was parsed
             _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
-        # Cleavage reads the scissile C-F length from the RAW parse so a still-climbing frame that
-        # nonetheless breaks the C-F bond is counted: the guarded parse withholds a barrier for such a
-        # frame, but the C-F distance is a geometric fact independent of the PES shape. The per-frame and
-        # rank figures draw from these same raw profiles.
+        '''
+        Cleavage reads the scissile C-F length from the RAW parse so a still-climbing frame that
+        nonetheless breaks the C-F bond is counted: the guarded parse withholds a barrier for such a
+        frame, but the C-F distance is a geometric fact independent of the PES shape. The per-frame and
+        rank figures draw from these same raw profiles.
+        '''
         _raw = _parse_qsite_pes_raw(_fold, job_name)
         _cfp = _raw.get("CF_Product_A", np.nan)
         if _cfp == _cfp:
@@ -5936,9 +6084,11 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
         if _k == 0:
             for _fk in ("F_Charge_Reactant", "F_Charge_Delta", "CF_Reactant_A"):
                 stats[_fk] = _raw.get(_fk, np.nan)
-    # Ensemble cleavage observable = MEDIAN product-end C-F length over the scored frames. The geometric
-    # distance is robust across the frame ensemble, so its median is the ensemble estimate of whether the
-    # C-F cleaves; the departing-F charge median is kept alongside as the corroborating read-out.
+    '''
+    Ensemble cleavage observable = MEDIAN product-end C-F length over the scored frames. The geometric
+    distance is robust across the frame ensemble, so its median is the ensemble estimate of whether the
+    C-F cleaves; the departing-F charge median is kept alongside as the corroborating read-out.
+    '''
     if _cf_products:
         stats["CF_Product_A"]          = float(np.median(_cf_products))
         stats["QSite_NFrames_Cleaved"] = int(sum(1 for _c in _cf_products
@@ -6012,9 +6162,11 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
                 _nac_scores = {int(_f): float(_c) for _f, _c in zip(_nd["Frame"], _nd["Consensus"])}
             except Exception:
                 _nac_scores = {}
-        # Raw per-frame PES (no TS guard) so EVERY sampled frame appears in the overview - a
-        # still-climbing frame that nonetheless cleaves the C-F (C-F length ≥ threshold) is the
-        # evidence the guarded verdict alone hides. The verdict/barrier stats above stay guarded.
+        '''
+        Raw per-frame PES (no TS guard) so EVERY sampled frame appears in the overview - a
+        still-climbing frame that nonetheless cleaves the C-F (C-F length ≥ threshold) is the
+        evidence the guarded verdict alone hides. The verdict/barrier stats above stay guarded.
+        '''
         _profs = []
         for _fold in folds:
             _pr = _parse_qsite_pes_raw(_fold, job_name)
@@ -6029,15 +6181,19 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             # Per-frame figure = that frame's own C-F cleavage verdict.
             plot_qsite_reaction_profile(_fold / "01_Reaction_Profile.svg", job_name, rank, _pr, ligand)
         if _profs:
-            # 08 = the QM/MM reaction figure: every sampled frame overlaid (best first) with the
-            # per-frame + ensemble table. The verdict is the rank fact (cleaved N/M), carried on the
-            # table header; n_attempted keeps the scored/attempted denominator honest on the figure.
+            '''
+            08 = the QM/MM reaction figure: every sampled frame overlaid (best first) with the
+            per-frame + ensemble table. The verdict is the rank fact (cleaved N/M), carried on the
+            table header; n_attempted keeps the scored/attempted denominator honest on the figure.
+            '''
             plot_qsite_ensemble_profiles(job_out_dir / "08_QSite_Reaction_Profile.svg", rank, _profs,
                                          job_name=job_name, ligand=ligand, n_attempted=n_attempted)
-            # The verdict is computed here from this job's own metrics (not read back from a stats key
-            # the master only fills later), so the per-frame scan CSV carries the SAME
-            # Is_Defluorinating / Defluor_Propensity the master ranking will report - both go through
-            # defluor_verdict / defluor_propensity, so the two rows cannot disagree.
+            '''
+            The verdict is computed here from this job's own metrics (not read back from a stats key
+            the master only fills later), so the per-frame scan CSV carries the SAME
+            Is_Defluorinating / Defluor_Propensity the master ranking will report - both go through
+            defluor_verdict / defluor_propensity, so the two rows cannot disagree.
+            '''
             _sv_pct = stats.get("Strict_Viability_Pct", 0.0)
             _v_flag, _ = defluor_verdict(_sv_pct, stats.get("NAC_Dwell_Max_ns", np.nan),
                                          stats.get("QSite_Barrier_kcal", np.nan),
@@ -6047,9 +6203,11 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             _ens = {"n_attempted": n_attempted, "is_defluor": _v_flag,
                     "propensity": defluor_propensity(max(0.0, float(_sv_pct or 0.0)) / 100.0,
                                                      stats.get("QSite_Barrier_kcal", np.nan))}
-            # A resume / figures-only pass arrives with no live qmmeta; re-derive the QM-region record
-            # (triad + cradle resnums, the two scan atom indices, net charge, scan range) from the best
-            # frame's existing QSite .in so the scan CSV's provenance columns are never left blank.
+            '''
+            A resume / figures-only pass arrives with no live qmmeta; re-derive the QM-region record
+            (triad + cradle resnums, the two scan atom indices, net charge, scan range) from the best
+            frame's existing QSite .in so the scan CSV's provenance columns are never left blank.
+            '''
             if not qmmeta and folds:
                 qmmeta = _read_qsite_qmregion(folds[0])
             write_qsite_scan_csv(job_out_dir / "11_QSite_Scan_Data.csv", rank, job_name,
@@ -6120,24 +6278,24 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
                 or sorted(job_folder.glob("*mmgbsa*.csv")))
         if _mmg:
             _mdf = pd.read_csv(_mmg[0])
-            """
+            '''
             Map trajectory frame → MM-GBSA row by the frame index Step 06 stamps on the CSV
             ('Frame'). Never by row POSITION: Prime scores every CFG.MMGBSA_STEP_SIZE-th frame,
             so row i is frame i·step, and positional lookup would silently attribute one frame's
             energy to another. Only a CSV with no Frame column (an old every-frame run) falls
             back to position, where row i genuinely is frame i.
-            """
+            '''
             _row_of_frame = None
             if "Frame" in _mdf.columns:
                 _fr_idx = pd.to_numeric(_mdf["Frame"], errors="coerce")
                 _row_of_frame = {int(f): i for i, f in enumerate(_fr_idx) if f == f}
             elif len(_mdf) < len(results):
-                """
+                '''
                 No Frame column AND fewer rows than trajectory frames ⇒ the CSV was strided but
                 never stamped. Row i is NOT frame i, so positional lookup would attribute the
                 wrong frame's energy. Refuse it: a missing number beats a confidently wrong one.
                 Re-run Step 06 (it stamps the frame index) to recover this metric.
-                """
+                '''
                 console_info(f"    [!] MM-GBSA CSV has {len(_mdf)} rows for {len(results)} frames "
                              f"and no 'Frame' column - it was strided but not frame-stamped. "
                              f"Skipping NAC-conditioned MM-GBSA rather than mis-aligning frames; "
@@ -6176,15 +6334,19 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
                 stats["MMGBSA_dG_NAC_Mean_kcal"]    = round(_nac, 2) if _nac == _nac else np.nan
                 stats["MMGBSA_dG_NAC_SD_kcal"]      = round(_sd_nac, 2) if _sd_nac == _sd_nac else np.nan
                 stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
-                # Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
-                # MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
-                # reading any central Step-06 summary file.
+                '''
+                Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
+                MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
+                reading any central Step-06 summary file.
+                '''
                 _dg_all = pd.to_numeric(_mdf[_dgc], errors="coerce").dropna()
                 if len(_dg_all):
                     _rt_mg = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
-                    # Log-sum-exp ("Boltzmann") ensemble mean, IDENTICAL to 06 `_boltzmann_mean_dg`, so the
-                    # MMGBSA_dG_Boltzmann_kcal column carries the same quantity in the Step-06 summary CSV and
-                    # this master ranking:  <dG> = -RT ln( (1/N) Σ exp(-dGi/RT) ), max-shifted for stability.
+                    '''
+                    Log-sum-exp ("Boltzmann") ensemble mean, IDENTICAL to 06 `_boltzmann_mean_dg`, so the
+                    MMGBSA_dG_Boltzmann_kcal column carries the same quantity in the Step-06 summary CSV and
+                    this master ranking:  <dG> = -RT ln( (1/N) Σ exp(-dGi/RT) ), max-shifted for stability.
+                    '''
                     _xs = -_dg_all.to_numpy() / _rt_mg
                     _m  = float(_xs.max())
                     _lse = _m + float(np.log(np.sum(np.exp(_xs - _m))))
@@ -6216,9 +6378,11 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
                            "Lipo": r"lipo", "Packing": r"packing",
                            "SolvGB": r"solv.?gb|gb\b|solvation", "SelfCont": r"self.?cont"}
             for _name, _pat in _components.items():
-                # Require a dG_Bind DELTA column (not the absolute Complex/Receptor/
-                # Ligand energies, which are thousands of kcal/mol and would swamp the
-                # decomposition). e.g. r_psp_MMGBSA_dG_Bind_Coulomb, not *_Complex_Coulomb.
+                '''
+                Require a dG_Bind DELTA column (not the absolute Complex/Receptor/
+                Ligand energies, which are thousands of kcal/mol and would swamp the
+                decomposition). e.g. r_psp_MMGBSA_dG_Bind_Coulomb, not *_Complex_Coulomb.
+                '''
                 _hit = [c for c in _mdf.columns
                         if re.search(r"dg.?bind", c, re.I) and re.search(_pat, c, re.I)
                         and not re.search(r"complex|receptor|ligand", c, re.I)]
@@ -6258,12 +6422,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         console_info(f"    {ConsoleColours.FAIL}[!] Job folder missing for Rank {rank} in {_md_root}{ConsoleColours.ENDC}")
         return None
 
-    # ── Select the ranked row by the case this MD job ACTUALLY contains ─────────
-    # The MD folders are whichever candidates had MD-ready trajectories, so the
-    # folder's R-number need not equal its Scientific_Rank. Match the ranked row
-    # on the model identity embedded in the -out.cms; fall back to
-    # Scientific_Rank == rank only when the identity cannot be read, and warn on
-    # any disagreement so a mis-mapped case is never analysed silently.
+    '''
+    ── Select the ranked row by the case this MD job ACTUALLY contains ─────────
+    The MD folders are whichever candidates had MD-ready trajectories, so the
+    folder's R-number need not equal its Scientific_Rank. Match the ranked row
+    on the model identity embedded in the -out.cms; fall back to
+    Scientific_Rank == rank only when the identity cannot be read, and warn on
+    any disagreement so a mis-mapped case is never analysed silently.
+    '''
     _cms_id = identity_from_cms(job_folder, df_ranked)
     row = None
     if _cms_id is not None:
@@ -6293,7 +6459,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     job_out_dir.mkdir(parents=True, exist_ok=True)
     console_info(f"Processing Rank {rank} [Stride={stride}]: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}")
 
-    """
+    '''
     Resume. Streaming a 100,000-frame trajectory is the expensive part of this step and its full
     result is already on disk - the per-frame table and the statistics JSON - so a rank whose frame
     pass AND QM/MM scans have completed is not recomputed. Figures are cheap (seconds) and are always
@@ -6301,7 +6467,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     deliberately strict: it requires the QM/MM folders to hold parsed output (or QSite to be off), so
     a rank whose scans never ran still takes the full path, which is what produces the frame
     candidates those scans need. --force ignores all of this and recomputes.
-    """
+    '''
     _csv_done   = job_out_dir / "02_NAC_Data.csv"
     _stats_done = job_out_dir / "01_MD_Stats.json"
     if not _FORCE_RECOMPUTE and _csv_done.is_file() and _stats_done.is_file():
@@ -6334,7 +6500,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     # ── Load trajectory ────────────────────────────────────────────────────────
     # First try flat lookup (single-stage jobs: *-out.cms and *_trj at folder root).
-    """
+    '''
     The flat globs are ordered by SEGMENT NUMBER because cms_path is taken as _cms_flat[-1] - the final
     stage of the run. Filesystem order is arbitrary on Linux, so an unsorted flat glob would hand '[-1]'
     whichever segment the directory happened to list last and call it the final one.
@@ -6345,7 +6511,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     Brownie/NVT/NPT relax as if it were production, with no root .ene so every relax frame counts as
     post-equilibration. Step 06 now refuses that on the build side; 07 mirrors it - a missing flat
     {job}_trj means the MD did not finish, so skip the rank.
-    """
+    '''
     def _seg_key(p: Path, suffix: str) -> int:
         _m = re.search(r'_(\d+)' + re.escape(suffix), p.name)
         return int(_m.group(1)) if _m else 0
@@ -6398,11 +6564,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             wm_csv_path = _csv_hits[0]
     wm_csv_data = load_watermap_csv(wm_csv_path)
 
-    # ── Desmond EAF: ligand dynamics (surface area + radius of gyration) ──────
-    # Requires systemd-oomd to be masked before running (prevents OOM kill near end):
-    #   sudo systemctl stop systemd-oomd && sudo systemctl mask systemd-oomd.socket
-    # After job completes, restore with:
-    #   sudo systemctl unmask systemd-oomd.socket && sudo systemctl start systemd-oomd
+    '''
+    ── Desmond EAF: ligand dynamics (surface area + radius of gyration) ──────
+    Requires systemd-oomd to be masked before running (prevents OOM kill near end):
+      sudo systemctl stop systemd-oomd && sudo systemctl mask systemd-oomd.socket
+    After job completes, restore with:
+      sudo systemctl unmask systemd-oomd.socket && sudo systemctl start systemd-oomd
+    '''
     eaf_path = find_eaf_file(job_folder)
     eaf_msa  = load_eaf_scalar_series(eaf_path, "Molecular_Surface_Area")
     eaf_rg   = load_eaf_scalar_series(eaf_path, "Rad_Gyration")
@@ -6410,9 +6578,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     n_tr     = len(tr)
     _has_time = hasattr(tr[0], 'time') and hasattr(tr[-1], 'time')
     if not _has_time:
-        # Without frame timestamps the fallback below is a frame INDEX, not picoseconds - the
-        # equilibration cut and the NAC dwell would then be in frames, not ns. Desmond trajectories
-        # always carry .time, so this is a loud warning rather than a silent unit switch.
+        '''
+        Without frame timestamps the fallback below is a frame INDEX, not picoseconds - the
+        equilibration cut and the NAC dwell would then be in frames, not ns. Desmond trajectories
+        always carry .time, so this is a loud warning rather than a silent unit switch.
+        '''
         console_info("    [!] Trajectory frames carry no .time - equilibration/dwell fall back to FRAME "
                      "indices (not ps); check the trajectory if these times look wrong.")
     t_start  = tr[0].time  if _has_time else 0.0
@@ -6448,9 +6618,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     # Fluoride-cradle residue numbers (TRP/TYR/HIS donors) → QM region cuts.
     cradle_nums = sorted({cms_model.atom[i].resnum for i in (idx_cradle or [])})
 
-    # ── Mapping sanity check: Nuc–Base distance in frame 0 ─────────────────────
-    # PrepWizard residue renumbering can silently mis-map the triad; catch it here
-    # before any per-frame analysis runs.
+    '''
+    ── Mapping sanity check: Nuc–Base distance in frame 0 ─────────────────────
+    PrepWizard residue renumbering can silently mis-map the triad; catch it here
+    before any per-frame analysis runs.
+    '''
     if idx_nuc and idx_base:
         # frame.pos() indexes by gid, so convert the atom-ids (else the sanity check reads wrong coords).
         nuc_pos_frame0  = np.mean([_f0.pos(g) for g in topo.aids2gids(cms_model, idx_nuc)],  axis=0)
@@ -6466,9 +6638,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             )
             return None
 
-    # ── 8-Residue Dream Team index extraction ──────────────────────────────────
-    # Smart-Lock resnums serve as fallbacks when the alignment map lacks an entry,
-    # ensuring Nuc/Base/Acid Dream Team columns are populated even for distant homologs.
+    '''
+    ── 8-Residue Dream Team index extraction ──────────────────────────────────
+    Smart-Lock resnums serve as fallbacks when the alignment map lacks an entry,
+    ensuring Nuc/Base/Acid Dream Team columns are populated even for distant homologs.
+    '''
     _sl_fallback = {'Nuc': nuc_num, 'Base': base_num, 'Acid': acid_num}
     dream_mapped = {
         role: (_v if (_v := aln_dict.get(ref_num)) is not None else _sl_fallback.get(role))
@@ -6479,7 +6653,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     n_mapped   = sum(1 for v in dt_indices.values() if v)
     console_info(f"    {ConsoleColours.OKGREEN}✔ {n_mapped}/{len(DREAM_TEAM_REF)} Dream Team residues mapped.{ConsoleColours.ENDC}")
 
-    """
+    '''
     QSite QM-region residues are mapped from the ranked sheet's explicit Mapped_*
     columns for THIS job, every time. Each homolog's catalytic positions differ
     substantially from the FAcD control (the sheet stores that alignment), so the
@@ -6489,7 +6663,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     leaving the departing F under-stabilised. Resolution order per role:
     Mapped_* column → parsed Full_Sequence_Alignment_Map (dream_mapped) →
     Smart-Lock geometry. cradle = Mapped_Stabiliser_W + Mapped_Stabiliser_Y.
-    """
+    '''
     _qm_nuc  = mapped_resnum(row, 'Mapped_Nucleophile')  or dream_mapped.get('Nuc')    or nuc_num
     _qm_base = mapped_resnum(row, 'Mapped_Base')         or dream_mapped.get('Base')   or base_num
     _qm_acid = mapped_resnum(row, 'Mapped_Acid')         or dream_mapped.get('Acid')   or acid_num
@@ -6502,17 +6676,21 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     if not _qm_cradle:    # fall back to alignment map, then the geometric scan
         _qm_cradle = sorted({dream_mapped[r] for r in ('Stab_W', 'Stab_Y') if dream_mapped.get(r)}) \
                      or cradle_nums
-    # The per-job mapped residues (_qm_*) are the authoritative QM-region set passed
-    # to QSite below; the geometry-derived nuc/base/acid (nuc_num/base_num/acid_num)
-    # stay in force for the per-frame distance analysis and are left untouched.
+    '''
+    The per-job mapped residues (_qm_*) are the authoritative QM-region set passed
+    to QSite below; the geometry-derived nuc/base/acid (nuc_num/base_num/acid_num)
+    stay in force for the per-frame distance analysis and are left untouched.
+    '''
     console_info(f"    [QSite] QM region mapped from ranked sheet - "
                  f"Nuc {_qm_nuc}, Base {_qm_base}, Acid {_qm_acid}, StabH {_qm_stab}, "
                  f"cradle {_qm_cradle}")
 
-    # ── Per-frame NAC nucleophile: the CSV-mapped catalytic aspartate's carboxylate oxygens ─────────
-    # Step 06 measures the near-attack geometry from the MAPPED nucleophile's Oδ/Oε atoms; 07 uses the
-    # SAME atoms here so the two stages report identical NAC. Only when the mapped residue exposes no
-    # OD/OE (a non-Asp/Glu nucleophile, or a mis-map) does it fall back to the Smart-Lock oxygens.
+    '''
+    ── Per-frame NAC nucleophile: the CSV-mapped catalytic aspartate's carboxylate oxygens ─────────
+    Step 06 measures the near-attack geometry from the MAPPED nucleophile's Oδ/Oε atoms; 07 uses the
+    SAME atoms here so the two stages report identical NAC. Only when the mapped residue exposes no
+    OD/OE (a non-Asp/Glu nucleophile, or a mis-map) does it fall back to the Smart-Lock oxygens.
+    '''
     _nac_od = [a.index for a in cms_model.atom
                if int(a.resnum) == _qm_nuc and a.pdbname.strip() in ("OD1", "OD2", "OE1", "OE2")]
     if _nac_od:
@@ -6523,13 +6701,15 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         console_info(f"    [NAC] mapped nucleophile {_qm_nuc} exposes no OD/OE - "
                      f"using Smart-Lock oxygens for the per-frame NAC.")
 
-    # ── QSite-only resume ───────────────────────────────────────────────────────
-    # A rank whose frame pass already finished (02_NAC_Data.csv + 01_MD_Stats.json + 00_Ideal_Final.maegz
-    # present) but whose QM/MM folder was removed re-runs ONLY QSite: the top pre-organised frames
-    # are re-picked from the cached per-frame table (Consensus is that frame's selection score) and
-    # their droplets re-extracted from just those frames, skipping the multi-hour frame stream. The
-    # QM-region atoms are the mapped aspartate carboxylate O and the reactive ligand C. Any failure
-    # falls through to the full trajectory pass.
+    '''
+    ── QSite-only resume ───────────────────────────────────────────────────────
+    A rank whose frame pass already finished (02_NAC_Data.csv + 01_MD_Stats.json + 00_Ideal_Final.maegz
+    present) but whose QM/MM folder was removed re-runs ONLY QSite: the top pre-organised frames
+    are re-picked from the cached per-frame table (Consensus is that frame's selection score) and
+    their droplets re-extracted from just those frames, skipping the multi-hour frame stream. The
+    QM-region atoms are the mapped aspartate carboxylate O and the reactive ligand C. Any failure
+    falls through to the full trajectory pass.
+    '''
     _qonly = (not _FORCE_RECOMPUTE and _QSITE_RUN
               and (job_out_dir / "02_NAC_Data.csv").is_file()
               and (job_out_dir / "01_MD_Stats.json").is_file()
@@ -6607,7 +6787,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _sol_asl       = " OR ".join(f"res.ptype {r}" for r in _safe_restypes)
     sol_indices    = list(cms_model.select_atom(f"({_sol_asl}) AND a.el O"))
 
-    """
+    '''
     Counter-ion capping of the reactive centre.
 
     A PFAS carboxylate pairs strongly with Na⁺, and the FAcD active site is an anion trap: the Asp
@@ -6620,24 +6800,26 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     angle can both look ideal - so they must be FLAGGED, not silently averaged into the NAC statistics.
     A frame is capped when a cation sits within CFG.CATION_CAP_DIST of either the nucleophile Oδ or a
     ligand carboxylate oxygen (inner-sphere coordination; Na⁺–O carboxylate contact is ~2.4 Å).
-    """
+    '''
     cation_indices = list(cms_model.select_atom("a.el Na OR a.el K OR a.el Mg OR a.el Ca"))
     try:
         lig_head_o = list(cms_model.select_atom(f'(res.ptype "{lig_resname}") AND a.el O'))
     except Exception:
         lig_head_o = []
 
-    # ===============================================================================
+    # =============================================================================
     # Trajectory pre-loading: batch-read all strided frames into RAM
     # Replaces per-frame frame.pos() calls with fast numpy array indexing.
-    # ===============================================================================
+    # =============================================================================
     _t_pre = time.time()
 
-    # 1. Filter solvent to a sphere around the active site (95%+ reduction).
-    #    UNION across evenly-spaced sampled frames (centred on the nucleophile in
-    #    each) rather than freezing the sphere at frame 0, so any water that ever
-    #    obstructs the SN2 runway is tracked - the frozen sphere biased the
-    #    blockade metric low on long trajectories.
+    '''
+    1. Filter solvent to a sphere around the active site (95%+ reduction).
+       UNION across evenly-spaced sampled frames (centred on the nucleophile in
+       each) rather than freezing the sphere at frame 0, so any water that ever
+       obstructs the SN2 runway is tracked - the frozen sphere biased the
+       blockade metric low on long trajectories.
+    '''
     if idx_nuc and sol_indices:
         _n_fr       = len(tr)
         _sample_idx = (np.unique(np.linspace(0, _n_fr - 1,
@@ -6657,9 +6839,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     else:
         _sol_use = []
 
-    # 2. Walden substituents for all warhead carbons (needed for dihedral).
-    # For SN2 TS flattening, the 3 non-leaving substituents on the sp3 carbon
-    # become coplanar. We must include all bonded atoms (including H and F).
+    '''
+    2. Walden substituents for all warhead carbons (needed for dihedral).
+    For SN2 TS flattening, the 3 non-leaving substituents on the sp3 carbon
+    become coplanar. We must include all bonded atoms (including H and F).
+    '''
     _walden_subs = sorted(set(
         b.atom2.index for c_idx in warhead_c
         for b in cms_model.atom[c_idx].bond
@@ -6673,14 +6857,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         [a for idxs in dt_indices.values() for a in idxs] +
         _sol_use + list(cation_indices) + list(lig_head_o)
     )
-    """
+    '''
     The Cα atoms are preloaded ALONGSIDE the reaction-centre atoms, because the WaterMap sites are
     static coordinates in the WaterMap input's frame while the MD protein diffuses and tumbles
     (measured here: the Cα centroid moves 30-45 Å over 1 µs). Every frame is therefore superimposed
     onto that reference before a site distance is taken; the sites are moved WITH the protein, so
     the distances stay in the frame's own coordinate system and the minimum-image convention
     remains valid.
-    """
+    '''
     _wm_ref_ca = load_watermap_reference_ca(wm_maegz) if wm_sites else {}
     _ca_atoms  = ([a.index for a in cms_model.atom
                    if a.pdbname.strip() == "CA" and int(a.resnum) in _wm_ref_ca]
@@ -6688,10 +6872,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _preload_set = list(_preload_set) + _ca_atoms
     _preload_atoms = sorted(set(_preload_set))
     _a2l           = {a: i for i, a in enumerate(_preload_atoms)}   # atom_idx → local
-    # frame.pos() indexes by trajectory GID, not by CMS atom-id, and the two differ (0- vs 1-based plus
-    # any virtual-site offset). Passing atom-ids reads each coordinate off the wrong atom, so every
-    # per-frame distance/angle must gather positions by gid. aids2gids preserves order, so _p[_a2l[aid]]
-    # stays the position of that aid.
+    '''
+    frame.pos() indexes by trajectory GID, not by CMS atom-id, and the two differ (0- vs 1-based plus
+    any virtual-site offset). Passing atom-ids reads each coordinate off the wrong atom, so every
+    per-frame distance/angle must gather positions by gid. aids2gids preserves order, so _p[_a2l[aid]]
+    stays the position of that aid.
+    '''
     _preload_list  = topo.aids2gids(cms_model, list(_preload_atoms))  # aids -> trajectory gids for frame.pos()
     _n_pre         = len(_preload_atoms)
 
@@ -6727,9 +6913,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                                     for b in cms_model.atom[c].bond)]
                   for c in warhead_c}
 
-    # 5. Chunked frame streaming - load / analyse / free _CHUNK_SIZE frames at a time.
-    #    Peak RAM is O(_CHUNK_SIZE × _n_pre × 3 × 8 bytes) regardless of trajectory
-    #    length; stride=1 over 100 k frames is safe within 64 GB.
+    '''
+    5. Chunked frame streaming - load / analyse / free _CHUNK_SIZE frames at a time.
+       Peak RAM is O(_CHUNK_SIZE × _n_pre × 3 × 8 bytes) regardless of trajectory
+       length; stride=1 over 100 k frames is safe within 64 GB.
+    '''
     _CHUNK_SIZE  = 5_000           # ~60 MB per chunk at 500 atoms
     _stride_list = list(range(0, len(tr), stride))
     _nf          = len(_stride_list)
@@ -6742,13 +6930,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         f"setup {time.time()-_t_pre:.1f}s"
     )
 
-    """
+    '''
     NPT equilibration is verified BEFORE any frame is treated as a sample. Frames recorded before
     the box settled are still written to the per-frame CSV (flagged Post_Equilibration = 0) but are
     excluded from the NAC counters, the dwell statistics and the QM/MM frame pool: an equilibrium
     average taken over a relaxing system is not an equilibrium average, and a still-shrinking box
     produces perfectly well-formed NAC numbers that mean nothing.
-    """
+    '''
     _equil = check_md_equilibration(job_folder, job_folder.name)
     _equil_t_ps = float(_equil.get("MD_Equil_Time_ps") or 0.0)
     if not np.isfinite(_equil_t_ps):
@@ -6807,16 +6995,18 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     n_cation_capped = 0      # frames with a counter-ion coordinating the nucleophile or the ligand head
     _wm_radius = CFG.WATERMAP_SITE_RADIUS
 
-    # ===============================================================================
+    # =============================================================================
     # Per-frame analysis loop (chunked streaming - _CHUNK_SIZE frames at a time)
-    # ===============================================================================
+    # =============================================================================
     # Live progress cadence: ~100 updates across the trajectory (never every frame).
     _prog_step = max(1, _nf // 100)
     _t_prog = time.time()
     for _fi, f_idx, _p, box, frame_t in _iter_frames():
-        # Live per-rank frame counter - one refreshing "Processing: Rank_N: k/total (pct%, fr/s, ETA)"
-        # line. In place (\r) on a terminal (the lock keeps parallel ranks from interleaving); an
-        # appended line off-tty so the redirected log stays readable.
+        r'''
+        Live per-rank frame counter - one refreshing "Processing: Rank_N: k/total (pct%, fr/s, ETA)"
+        line. In place (\r) on a terminal (the lock keeps parallel ranks from interleaving); an
+        appended line off-tty so the redirected log stays readable.
+        '''
         if (_fi % _prog_step == 0) or (_fi + 1 == _nf):
             _pct_fr = int(100 * (_fi + 1) / _nf) if _nf else 100
             _el_fr = time.time() - _t_prog
@@ -6833,12 +7023,12 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 else:
                     print(_msg_fr, flush=True)
 
-        """
+        '''
         Frames recorded before the box equilibrated are not samples of the equilibrium ensemble, so
         they are excluded from every counter below and from the QM/MM frame pool. They are still
         written to the per-frame CSV with Post_Equilibration = 0, so the exclusion is visible rather
         than silent.
-        """
+        '''
         post_equil = bool(float(frame_t) >= _equil_t_ps)
         if not post_equil:
             n_pre_equil += 1
@@ -6848,7 +7038,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         _pos_c_f   = _p[_li_c]    if _li_c     else np.empty((0, 3))
         _pos_f_f   = _p[_li_f]    if _li_f     else np.empty((0, 3))
 
-        """
+        '''
         ── Which oxygen attacks which carbon (Step-06-matched) ────────────────────────────────────
         FAcD's nucleophile is the CSV-mapped catalytic aspartate; _nac_od holds its Oδ/Oε carboxylate
         oxygens. The attacking oxygen is the one making the CLOSEST approach to a scissile α-carbon, and
@@ -6856,7 +7046,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         geometry is self-consistent (never one oxygen lending its reach and its partner its trajectory).
         This is the exact method Step 06 uses, so 06 and 07 measure the same NAC. `min_nuc_dist` (closest
         approach over both oxygens) equals `nac_nuc_dist` here and is what pocket residency reads.
-        """
+        '''
         if _pos_nuc_f.size and _pos_c_f.size:
             _nc_d = _mic_dists_2d(_pos_nuc_f, _pos_c_f, box)     # [n_O, n_C]: mapped Oδ/Oε to warhead carbons
             min_nuc_dist = float(_nc_d.min())                   # closest approach over both oxygens
@@ -6872,12 +7062,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if post_equil and min_nuc_dist <= POCKET_RESIDENCY_DIST:
             n_pocket += 1
 
-        # ── O-C-F backside attack angle: raw max over the scissile carbon's fluorines ─────────────
-        # The leaving fluoride is the α-carbon F most anti-periplanar to the attacking O->C axis (largest
-        # O-C-F angle) THIS frame; on a rotating CF2/CF3 that identity changes frame to frame, so it is
-        # chosen per frame, not fixed. The angle is the OBSERVED geometry - no Šidák multiplicity deflation
-        # (that is a screening/prediction correction for Step 02's single pose, never a measured MD angle),
-        # so 07 reports the same raw backside angle as Step 06.
+        '''
+        ── O-C-F backside attack angle: raw max over the scissile carbon's fluorines ─────────────
+        The leaving fluoride is the α-carbon F most anti-periplanar to the attacking O->C axis (largest
+        O-C-F angle) THIS frame; on a rotating CF2/CF3 that identity changes frame to frame, so it is
+        chosen per frame, not fixed. The angle is the OBSERVED geometry - no Šidák multiplicity deflation
+        (that is a screening/prediction correction for Step 02's single pose, never a measured MD angle),
+        so 07 reports the same raw backside angle as Step 06.
+        '''
         max_ang = 0.0; best_f_idx = None
         if best_nuc_idx is not None and best_ca_idx is not None:
             _li_c_best  = _a2l[best_ca_idx]
@@ -6916,9 +7108,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if post_equil and triad_ok and min_nuc_dist <= POCKET_RESIDENCY_DIST:
             n_triad += 1
 
-        # ── Counter-ion capping of the reactive centre ────────────────────────
-        # A Na⁺ coordinating the nucleophile Oδ or the ligand carboxylate screens the charge the
-        # SN2 depends on, while leaving the NAC distance and angle looking perfectly productive.
+        '''
+        ── Counter-ion capping of the reactive centre ────────────────────────
+        A Na⁺ coordinating the nucleophile Oδ or the ligand carboxylate screens the charge the
+        SN2 depends on, while leaving the NAC distance and angle looking perfectly productive.
+        '''
         cat_nuc_d = cat_lig_d = np.inf
         if _li_cat:
             _pos_cat = _p[_li_cat]
@@ -6954,24 +7148,24 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         frame_msa = _eaf_at(eaf_msa, frame_t, t_start, eaf_dt)
         frame_rg  = _eaf_at(eaf_rg,  frame_t, t_start, eaf_dt)
 
-        """
+        '''
         The WaterMap sites are carried into THIS frame before any distance is measured: the frame's
         Cα atoms are superimposed on the reference the sites were computed in, and the same rigid
         transform is applied to the site coordinates. Without it the comparison is between two
         unrelated coordinate frames - the protein has diffused tens of ångströms - and every site
         match is noise.
-        """
+        '''
         _wm_frame = wm_sites
         _fold_rmsd = np.nan
         if len(_wm_pos_ref):
             _R, _t, _fold_rmsd = kabsch_transform(_ref_ca_xyz, unwrap_ca_trace(_p[_li_ca], box))
             if _fold_rmsd > float(CFG.MD_FOLD_RMSD_MAX):
-                """
+                '''
                 The fold in this frame does not superimpose on the WaterMap reference. Carrying the
                 hydration sites through a transform fitted to a mismatched fold places them at
                 arbitrary positions, and every site-based blockade term computed from them is noise.
                 The frame keeps its geometry-only metrics; its WaterMap contribution is withheld.
-                """
+                '''
                 _wm_frame = []
                 n_fold_reject += 1
             else:
@@ -7013,13 +7207,15 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 if d < _wm_radius:
                     wm_score += (_wm_radius - d) * site['dG']
 
-        # ── Composite frame score (QM/MM frame selection only) ────────────────
-        # NOTE: This score is intentionally linear and unbounded - it is used
-        # exclusively to rank MD frames for QSite input selection, NOT for
-        # comparison with the Step 02 sigmoid-based ranking (which is bounded
-        # 0–1 over structures). The two scores are mathematically incompatible
-        # and must not be cross-compared. The Walden 1.1× bonus is a geometric
-        # heuristic (TS D₃ₕ pre-organisation), not an energy contribution.
+        '''
+        ── Composite frame score (QM/MM frame selection only) ────────────────
+        NOTE: This score is intentionally linear and unbounded - it is used
+        exclusively to rank MD frames for QSite input selection, NOT for
+        comparison with the Step 02 sigmoid-based ranking (which is bounded
+        0–1 over structures). The two scores are mathematically incompatible
+        and must not be cross-compared. The Walden 1.1× bonus is a geometric
+        heuristic (TS D₃ₕ pre-organisation), not an energy contribution.
+        '''
         _productive = (np.clip(THRESHOLD_RELAXED_NAC_DIST - nac_nuc_dist, 0, None) * _SCORE_W_DIST
                        + np.clip(max_ang - THRESHOLD_RELAXED_NAC_ANGLE, 0, None) * _SCORE_W_ANGLE)
         _penalty    = blockades * _SCORE_W_BLOCK + max(0.0, -wm_score) * _SCORE_W_WM
@@ -7030,7 +7226,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if post_equil and triad_ok and nac_nuc_dist <= THRESHOLD_STRICT_NAC_DIST and max_ang >= THRESHOLD_STRICT_NAC_ANGLE:
             n_strict += 1
         if cation_capped or not post_equil:
-            """
+            '''
             Disqualified as a QM/MM starting structure.
 
             A cation-capped frame would hand the QM region a Na⁺ screening the very nucleophile it is
@@ -7039,12 +7235,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             the equilibrium ensemble. Both are still reported, flagged, and (for capping) still
             contribute geometry to the NAC statistics; neither can be the structure a barrier is
             measured on.
-            """
+            '''
             _productive = 0.0
         if _productive > 0.0:
-            # Candidate pool for multi-frame QM/MM: every pre-organised NAC frame,
-            # ranked by score. The top CFG.QSITE_N_FRAMES give an ensemble barrier
-            # (min/mean/σ) rather than a single best-frame lower bound.
+            '''
+            Candidate pool for multi-frame QM/MM: every pre-organised NAC frame,
+            ranked by score. The top CFG.QSITE_N_FRAMES give an ensemble barrier
+            (min/mean/σ) rather than a single best-frame lower bound.
+            '''
             _qm_candidates.append((score, f_idx, best_nuc_idx, best_ca_idx))
         if score > best_score and _productive > 0.0:
             # Single most pre-organised (highest-score) NAC frame - kept as the
@@ -7099,20 +7297,20 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             "EAF_RG":           _r3(frame_rg),
         })
 
-    # ===============================================================================
+    # =============================================================================
     # Post-loop statistics
-    # ===============================================================================
-    """
+    # =============================================================================
+    '''
     Every average below is taken over the SAMPLED frames - those recorded after the box equilibrated.
     The pre-equilibration frames stay in the per-frame CSV (flagged) but must not enter an equilibrium
     average, and they must not sit in a percentage denominator either: counting them would deflate
     every occupancy by the length of the relaxation phase.
-    """
+    '''
     sampled = [r for r in results if r.get('Post_Equilibration', 1) == 1]
     total = len(sampled)
     total_frames_read = len(results)
 
-    """
+    '''
     THE BOX CAN SETTLE WHILE THE PROTEIN DOES NOT.
 
     check_md_equilibration() reads the .ene stream, so it sees the box volume and the temperature and
@@ -7124,13 +7322,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     structural half of the verdict is taken here, where those frames exist: over the sampled window the
     mean Ca RMSD must be within CFG.MD_EQUIL_CA_RMSD_MAX_A. Equilibration is thermodynamic AND
     structural, and a run that fails either one is not equilibrated.
-    """
+    '''
     _ca_vals = [r["Fold_RMSD_A"] for r in sampled
                 if r.get("Fold_RMSD_A") is not None and r["Fold_RMSD_A"] == r["Fold_RMSD_A"]]
     _ca_mean = float(np.mean(_ca_vals)) if _ca_vals else float("nan")
     _ca_ok = bool(np.isfinite(_ca_mean) and _ca_mean <= float(CFG.MD_EQUIL_CA_RMSD_MAX_A))
 
-    """
+    '''
     AN UNVERIFIABLE GATE IS NOT A PASSED GATE.
 
     A test written `if MD_Equilibrated and _ca_vals and not _ca_ok` fails open: when _ca_vals is EMPTY -
@@ -7143,7 +7341,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     already this function's contract for 'could not determine' - it is what it returns on a parse failure
     - so every consumer that guards on `is True` treats it as not-equilibrated, and nothing silently
     inherits a pass it never earned.
-    """
+    '''
     if _equil.get("MD_Equilibrated") is True:
         if not _ca_vals:
             console_info(f"    [!] {job_name}: box and thermostat settled, but the backbone could NOT be "
@@ -7157,9 +7355,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
             _equil["MD_Equilibrated"] = False
     _equil["MD_Equil_CA_RMSD_A"] = round(_ca_mean, 3) if np.isfinite(_ca_mean) else np.nan
 
-    # Viability denominators use n_pocket (bound frames), not total frames.
-    # Catalytic_Viability_Pct = fraction of BOUND frames that are catalytically
-    # competent - the meaningful metric for a pre-reactive ensemble.
+    '''
+    Viability denominators use n_pocket (bound frames), not total frames.
+    Catalytic_Viability_Pct = fraction of BOUND frames that are catalytically
+    competent - the meaningful metric for a pre-reactive ensemble.
+    '''
     bound_rows = [r for r in sampled if r.get('Pocket_Bound', 0) == 1]
 
     def _mean_col(col: str, rows=None) -> float:
@@ -7249,19 +7449,23 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         if k in row: stats[k] = row[k]
 
 
-    # ── NAC-conditioned MM-GBSA: total ΔG, energy-component decomposition, and
-    #    catalytic-machinery engagement, all restricted to the strict-NAC frames ──
-    # Shows WHERE the binding energy comes from in the reactive pose (Coulomb =
-    # electrostatic pre-organisation for the SN2, Covalent = ligand strain toward
-    # the TS, etc.) and whether the nucleophile + fluoride cradle are geometrically
-    # engaged. Best-effort: the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned
-    # to trajectory frames; component columns are matched by name.
+    '''
+    ── NAC-conditioned MM-GBSA: total ΔG, energy-component decomposition, and
+       catalytic-machinery engagement, all restricted to the strict-NAC frames ──
+    Shows WHERE the binding energy comes from in the reactive pose (Coulomb =
+    electrostatic pre-organisation for the SN2, Covalent = ligand strain toward
+    the TS, etc.) and whether the nucleophile + fluoride cradle are geometrically
+    engaged. Best-effort: the per-frame Prime MM-GBSA CSV (Step 06) is row-aligned
+    to trajectory frames; component columns are matched by name.
+    '''
     _nac_fr = [r["Frame"] for r in results if r.get("NAC_Strict_Pass", 0)]
     _aggregate_mmgbsa_stats(job_folder, results, _nac_fr, stats)
 
-    # Catalytic-machinery engagement: mean distance of the nucleophile + fluoride
-    # cradle + clamps to the warhead carbon over the strict-NAC frames (did the
-    # machinery actually close in during the reactive windows?).
+    '''
+    Catalytic-machinery engagement: mean distance of the nucleophile + fluoride
+    cradle + clamps to the warhead carbon over the strict-NAC frames (did the
+    machinery actually close in during the reactive windows?).
+    '''
     _dt_nac = {}
     _dt_cols = {"Nuc (Asp)": "DT_Nuc_LigC_A", "Base": "DT_Base_LigC_A",
                 "Acid": "DT_Acid_LigC_A", "Clamp1": "DT_Clamp1_LigC_A",
@@ -7281,14 +7485,14 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         df_res['EAF_MSA_Smooth'] = df_res['EAF_MSA'].rolling(window=int(CFG.MD_EAF_SMOOTH_WINDOW), min_periods=1).mean()
     _utils_mod.atomic_write_csv(df_res, job_out_dir / "02_NAC_Data.csv")
 
-    """
+    '''
     The per-job statistics, written beside the per-frame table. Everything the dashboard prints and
     the master ranking carries - pocket retention, viability, triad integrity, NAC dwell, WaterMap
     terms, the Dream-Team distances - is computed once, in the frame loop, and persisted here so it
     survives outside memory: the master CSV is written only at the END of the whole run, so without
     this cache a figure could not be redrawn, nor a number checked, without re-reading a
     100,000-frame trajectory. NumPy scalars are cast so the file is plain JSON.
-    """
+    '''
     def _plain(v):
         if isinstance(v, (np.integer,)):
             return int(v)
@@ -7305,9 +7509,11 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     _draw_trajectory_figures(df_res, row, stats, job_name, job_out_dir, rank)
 
     if ideal_frame_idx != -1:
-        # Top-N pre-organised NAC frames for QM/MM: the ensemble barrier (min/mean/σ)
-        # over several reactive frames is defensible where a single best-frame value
-        # is only a lower bound. Frames are the highest-scoring distinct NAC frames.
+        '''
+        Top-N pre-organised NAC frames for QM/MM: the ensemble barrier (min/mean/σ)
+        over several reactive frames is defensible where a single best-frame value
+        is only a lower bound. Frames are the highest-scoring distinct NAC frames.
+        '''
         _n_qm = max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1)))
         _seen, _ranked_c = set(), []
         for _cand in sorted(_qm_candidates, key=lambda t: t[0], reverse=True):
@@ -7315,11 +7521,13 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
                 continue
             _seen.add(_cand[1]); _ranked_c.append(_cand)
         _sel = _ranked_c[:_n_qm]
-        # Water-aware re-rank within the top pre-organised pool: prefer frames whose reaction centre
-        # carries a first-shell water (>=1 solvent O within CFG.QSITE_QM_WATER_RADIUS, the gate QSite's
-        # QM-water picker uses), so a dewetted-but-well-aligned outlier does not win and the leaving
-        # fluoride keeps a real cradle water. Degrades to the pure-Consensus order on any error / a
-        # genuinely dry pocket. Reads frame coordinates only (no cms mutation - the prep loop below owns that).
+        '''
+        Water-aware re-rank within the top pre-organised pool: prefer frames whose reaction centre
+        carries a first-shell water (>=1 solvent O within CFG.QSITE_QM_WATER_RADIUS, the gate QSite's
+        QM-water picker uses), so a dewetted-but-well-aligned outlier does not win and the leaving
+        fluoride keeps a real cradle water. Degrades to the pure-Consensus order on any error / a
+        genuinely dry pocket. Reads frame coordinates only (no cms mutation - the prep loop below owns that).
+        '''
         try:
             _centre = list(_nac_od) + list(warhead_c) + list(lig_f)
             _poolc = _ranked_c[:max(_n_qm * 5, 15)]
@@ -7528,11 +7736,13 @@ def main():
     # Optional sudo up front so the run is fully unattended (systemd-oomd masked for the QSite phase).
     _atexit.register(_mask_oomd_at_start())
 
-    # Kill orphaned QSite job-server scans when THIS process dies. atexit covers a normal exit /
-    # unhandled exception; the signal handlers cover Ctrl+C (SIGINT) and `kill` (SIGTERM), which do
-    # not run atexit on their own. Only jobs still mid-run are registered, so a clean finish is a
-    # no-op. A detached run (screen still alive, python still running) never triggers this - correct:
-    # the jobs die only when the python that owns them dies, not when a terminal detaches.
+    '''
+    Kill orphaned QSite job-server scans when THIS process dies. atexit covers a normal exit /
+    unhandled exception; the signal handlers cover Ctrl+C (SIGINT) and `kill` (SIGTERM), which do
+    not run atexit on their own. Only jobs still mid-run are registered, so a clean finish is a
+    no-op. A detached run (screen still alive, python still running) never triggers this - correct:
+    the jobs die only when the python that owns them dies, not when a terminal detaches.
+    '''
     _atexit.register(_kill_all_qsite_jobs)
     def _sig_cleanup(_signum, _frame):
         _kill_all_qsite_jobs()
@@ -7552,11 +7762,13 @@ def main():
     work_dir = _resolve_work_dir(raw_dir)
 
 
-    # Auto-detect all available MD rank indices - scan MD, WaterMaps, and
-    # 7_QMMM_Defluorination so that every rank already processed is included.
-    # Always scan the ranks that actually exist on disk - the MD cohort is SPARSE (whole-library
-    # Scientific_Rank, e.g. {1, 2, 8}), so `--ranks N` must not mean the literal 1..N (that silently
-    # skips R_8 when N=3). It means the N lowest-numbered ranks that were actually run.
+    '''
+    Auto-detect all available MD rank indices - scan MD, WaterMaps, and
+    7_QMMM_Defluorination so that every rank already processed is included.
+    Always scan the ranks that actually exist on disk - the MD cohort is SPARSE (whole-library
+    Scientific_Rank, e.g. {1, 2, 8}), so `--ranks N` must not mean the literal 1..N (that silently
+    skips R_8 when N=3). It means the N lowest-numbered ranks that were actually run.
+    '''
     _auto_rank_list: list[int] = []
     _found_ranks: set[int] = set()
     for _scan_root in [
@@ -7577,11 +7789,13 @@ def main():
     else:
         _auto_rank_list = _avail[:args.ranks] if _avail else list(range(1, args.ranks + 1))
 
-    # QSite parallelism, co-derived from the CPU budget now the concurrent-scan count is known.
-    # Each Jaguar scan runs OpenMP-threaded (qsite -max_threads); the budget (cores - reserve) is split
-    # across the concurrent scans so idle cores accelerate each SCF, capped at the point where Jaguar's
-    # OpenMP scaling saturates (CFG.QSITE_MAX_THREADS). Concurrency is then bounded so threads x scans
-    # never oversubscribe the budget. When --qsite-threads is given it overrides the auto split.
+    '''
+    QSite parallelism, co-derived from the CPU budget now the concurrent-scan count is known.
+    Each Jaguar scan runs OpenMP-threaded (qsite -max_threads); the budget (cores - reserve) is split
+    across the concurrent scans so idle cores accelerate each SCF, capped at the point where Jaguar's
+    OpenMP scaling saturates (CFG.QSITE_MAX_THREADS). Concurrency is then bounded so threads x scans
+    never oversubscribe the budget. When --qsite-threads is given it overrides the auto split.
+    '''
     _budget = max(1, (os.cpu_count() or 4) - int(getattr(CFG, "PREP_CPU_RESERVE", 2)))
     _n_scans = max(1, len(_auto_rank_list) * max(1, int(getattr(CFG, "QSITE_N_FRAMES", 1))))
     _thr_cap = max(1, int(getattr(CFG, "QSITE_MAX_THREADS", 8)))
@@ -7839,9 +8053,11 @@ def main():
         console_title("Finalising Global MD Rankings")
 
         df_master = pd.DataFrame(master_stats)
-        # Stable (mergesort) sort with a deterministic secondary key so equal viability
-        # values yield a reproducible Dynamic_Rank across runs (default quicksort is
-        # unstable and would shuffle ties non-deterministically).
+        '''
+        Stable (mergesort) sort with a deterministic secondary key so equal viability
+        values yield a reproducible Dynamic_Rank across runs (default quicksort is
+        unstable and would shuffle ties non-deterministically).
+        '''
         _tiebreak = next((c for c in ("Scientific_Rank", "Job", "Job_Name", "Label",
                                       "Protein", "Ligand") if c in df_master.columns), None)
         _sort_cols = ["Catalytic_Viability_Pct"] + ([_tiebreak] if _tiebreak else [])
@@ -7850,12 +8066,14 @@ def main():
                                           kind="mergesort").reset_index(drop=True)
         df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
 
-        # Prime MM-GBSA ΔG_bind (whole-trajectory Boltzmann/mean/median/min/max/std + the
-        # NAC-conditioned means) is aggregated per rank from each rank's own job-dir CSV, alongside
-        # SID, in the per-rank analysis above (MMGBSA_dG_* in stats). The master already carries those
-        # columns, so no central Step-06 summary file is read here.
+        '''
+        Prime MM-GBSA ΔG_bind (whole-trajectory Boltzmann/mean/median/min/max/std + the
+        NAC-conditioned means) is aggregated per rank from each rank's own job-dir CSV, alongside
+        SID, in the per-rank analysis above (MMGBSA_dG_* in stats). The master already carries those
+        columns, so no central Step-06 summary file is read here.
+        '''
 
-        """
+        '''
         ── Defluorination verdict + propensity ───────────────────────────────────────────────────────
 
             Defluor_Propensity = P(strict-NAC) · exp(−ΔE‡ / RT)
@@ -7880,7 +8098,7 @@ def main():
         report as N/N cleaved). A C-F length that could not be measured yields "C-F distance pending" -
         the claim is withheld, never converted into a false positive. The NAC dwell and the 1-D-scan
         energetics ride alongside as reported context, not gates (see defluor_verdict).
-        """
+        '''
         _RT = float(CFG.GAS_CONSTANT_KCAL) * float(CFG.MMGBSA_TEMPERATURE_K)
         def _p_strict(r) -> float:
             return max(0.0, float(r.get("Strict_Viability_Pct", 0.0) or 0.0)) / 100.0

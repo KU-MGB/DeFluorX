@@ -263,9 +263,9 @@ Scientific References:
 # =============================================================================
 from __future__ import annotations
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.1: Standard Library Imports
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import argparse
 import gc
 import hashlib
@@ -301,22 +301,20 @@ warnings.filterwarnings("ignore")
 from typing import Any, Dict, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.2: Hardware Resource Management
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 try:
     import psutil
-    # -------------------------------------------------------------------------------
-    # Sub-Step 1.2.1: Dynamic Thread Allocation
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 1.2.1: Dynamic Thread Allocation --
     # Calculates available CPU cores; reserves 2 for OS/desktop stability.
     TOTAL_CORES = psutil.cpu_count(logical=True)
     TARGET_CORES = max(1, TOTAL_CORES - 2)
 
-    """
+    '''
     Reduces the process scheduling priority so the pipeline yields CPU time to the operating system
     and interactive applications, preventing desktop freezes under sustained computational loads.
-    """
+    '''
     try:
         p = psutil.Process(os.getpid())
         if sys.platform != "win32":
@@ -324,12 +322,12 @@ try:
     except Exception:
         pass
 
-    """
+    '''
     Enforces single-threaded BLAS/MKL execution per worker process.
     When running numerous parallel workers, unconstrained BLAS thread pools cause severe
     CPU over-subscription (where context-switching overhead dominates computational time).
     Pinning each worker to one thread yields near-linear scaling with the worker count.
-    """
+    '''
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -339,9 +337,9 @@ except Exception:
     # Fallback configuration if the psutil library is unavailable
     TARGET_CORES = 1
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.3: Scientific Stack
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 import numpy as np
 import pandas as pd
 import yaml
@@ -350,9 +348,9 @@ from scipy.spatial import cKDTree
 import matplotlib
 matplotlib.use("Agg")
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 1.4: Bioinformatics & Chemistry
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 from Bio import SeqIO, Align
 from Bio.Align import substitution_matrices
 import gemmi
@@ -361,16 +359,14 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdDetermineBonds
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
 
-# -------------------------------------------------------------------------------
-# Sub-Step 1.4.1: Torch Threading Configuration
-# -------------------------------------------------------------------------------
+#  -- Sub-step 1.4.1: Torch Threading Configuration --
 try:
     import torch
     if torch is not None:
-        """
+        '''
         Restricts PyTorch intra-op parallelism to one thread per worker process,
         ensuring consistency with the BLAS/MKL thread limits established above.
-        """
+        '''
         torch.set_num_threads(1)
 except Exception:
     torch = None
@@ -413,17 +409,17 @@ calculate_angle = _utils_mod.calculate_angle
 # SECTION 2: PHYSICAL CONSTANTS & PARAMETERS (MAESTRO STANDARDS)
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.1: Path & Model Configuration
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 BOLTZ_BIN      = CFG.BOLTZ_EXECUTABLE
 BOLTZ_MODEL    = CFG.BOLTZ_MODEL_VERSION
 BOLTZ_CACHE    = Path(os.path.expanduser(CFG.BOLTZ_CACHE_DIR))   # CFG-driven; defaults to ~/.cache/boltz
 OUTPUT_FORMAT  = CFG.BOLTZ_OUTPUT_FORMAT
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.2: Execution Settings
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 RECYCLING_STEPS           = CFG.BOLTZ_RECYCLING_STEPS
 DIFFUSION_SAMPLES_DEFAULT = CFG.BOLTZ_DIFFUSION_SAMPLES
 RETRY_ON_FAIL             = CFG.BOLTZ_RETRY_MAX
@@ -431,9 +427,9 @@ RETRY_SLEEP               = CFG.BOLTZ_RETRY_SLEEP
 PREDICT_TIMEOUT_S         = CFG.BOLTZ_PREDICT_TIMEOUT_S
 MAX_PROTEINS_PER_BATCH    = CFG.BOLTZ_MAX_PROTEINS_PER_BATCH
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.3: Scoring Weights
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # These weights govern the calculation of the custom "Binding Probability" score.
 W_IPTM          = CFG.BOLTZ_W_IPTM
 W_CROSS_PAE     = CFG.BOLTZ_W_CROSS_PAE
@@ -441,19 +437,18 @@ W_PLDDT         = CFG.BOLTZ_W_PLDDT
 W_INTERACTIONS  = CFG.BOLTZ_W_INTERACTIONS
 W_CONF          = CFG.BOLTZ_W_CONF
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.4: Interaction Thresholds (Ångströms & Degrees)
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 Interaction cutoffs reproduce the Schrödinger Maestro default criteria, defined
 once in CFG §3 (single source of truth) and applied here by this script's own
 geometry engine - no $SCHRODINGER binary is called. Boltz-2 mmCIF carries no
 explicit hydrogens, so H-bonds use the heavy-atom donor–acceptor (D···A) proxy
 (CFG.THRESHOLD_HB_DIST_MAX); H···A + angle gates (CFG §3.1) apply only to the
 explicit-H figure pipeline (Step 05). See CFG reference list for citations.
-"""
-# Sub-Step 2.4.1: Bond Distances
-# -------------------------------------------------------------------------------
+'''
+#  -- Sub-step 2.4.1: Bond Distances --
 HBOND_MAX_DIST_DA        = CFG.THRESHOLD_HB_DIST_MAX   # heavy-atom D···A proxy (no explicit H in Boltz CIF)
 HBOND_MIN_DIST_DA        = CFG.THRESHOLD_HB_DIST_MIN   # below this a D···A pair is a clash, not an H-bond
 SALT_BRIDGE_MAX_DIST     = CFG.THRESHOLD_SALT_BRIDGE
@@ -461,9 +456,7 @@ HYDROPHOBIC_MAX_DIST     = CFG.THRESHOLD_HYDROPHOBIC_MAX
 HALOGEN_MAX_DIST         = CFG.HALOGEN_BOND_DIST_MAX
 METAL_COORD_MAX_DIST     = CFG.METAL_COORD_DIST_MAX
 
-# -------------------------------------------------------------------------------
-# Sub-Step 2.4.2: Pi-Interaction Geometry (Strict constraints)
-# -------------------------------------------------------------------------------
+#  -- Sub-step 2.4.2: Pi-Interaction Geometry (Strict constraints) --
 PI_STACK_FACE_MAX_DIST   = CFG.PI_STACK_FACE_DIST_MAX
 PI_STACK_FACE_MAX_ANGLE  = CFG.PI_STACK_FACE_ANGLE_MAX
 PI_STACK_EDGE_MAX_DIST   = CFG.PI_STACK_EDGE_DIST_MAX
@@ -473,9 +466,9 @@ PI_CATION_MAX_ANGLE      = CFG.PI_CATION_ANGLE_MAX
 
 COORD_MATCH_MAX_DIST     = CFG.COORD_MATCH_DIST_MAX
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.5: Residue & Atom Definitions
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 CATALYTIC_DIST_CUTOFF    = CFG.CATALYTIC_DIST_CUTOFF
 
 # Sets of amino acids grouped by their chemical properties (CFG §2.10 - single source).
@@ -488,12 +481,12 @@ METALS       = CFG.METALS
 # groups, so they are excluded from salt-bridge assignment (see classify_pair).
 _BACKBONE_ATOMS = {"N", "CA", "C", "O", "OXT"}
 
-"""
+'''
 Protonation-variant → canonical residue name normalisation (CFG §2.9).
 Force-field engines rename residues to encode protonation state; this
 function collapses them back to canonical 3-letter codes for all class
 matching, structure filtering, and residue-class lookups.
-"""
+'''
 _PROTONATION_MAP = getattr(CFG, "PROTONATION_MAP", {})
 
 def _canonical_resname(resname: str) -> str:
@@ -514,21 +507,23 @@ POLAR_SIDECHAIN_ATOMS = CFG.POLAR_SIDECHAIN_ATOMS
 # single source of truth in CFG (includes FF variants HID/HIE/HIP… so they are recognised).
 RESIDUE_CLASS_GROUPS = CFG.RESIDUE_CLASS_GROUPS
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.6: The Geometric Reference Data (PDB 3R3U)
-# -------------------------------------------------------------------------------
-"""
+# -----------------------------------------------------------------------------
+'''
 The canonical sequence for DeHa4_[Delftia_acidovorans_D4B].
 This serves as a structural map. As target proteins vary in their numbering,
 each is aligned to this canonical sequence to precisely map the positions of
 key catalytic residues (such as Asp110, Asp134, His280).
 Source: Farajollahi et al. (2024) - see header Scientific References §4 (position cross-validated, establishing HIS277 rather than HIS288 in DEHA4 sequences).
-"""
+'''
 DEHA4_CONTROL_SEQ = CFG.DEHA4_CONTROL_SEQ
-# Active-site mapping aligns every query against the RPA1163 3R3U crystal - the real
-# fluoroacetate-dehalogenase structure - not the DeHa4 functional control. DeHa4 and 3R3U
-# give identical catalytic residue picks, so the mapped residues are unchanged; the alignment
-# reference is the 3R3U crystal (REF_ACTIVE_SITE_MAP 'id' indexes RPA1163_3R3U_SEQ).
+'''
+Active-site mapping aligns every query against the RPA1163 3R3U crystal - the real
+fluoroacetate-dehalogenase structure - not the DeHa4 functional control. DeHa4 and 3R3U
+give identical catalytic residue picks, so the mapped residues are unchanged; the alignment
+reference is the 3R3U crystal (REF_ACTIVE_SITE_MAP 'id' indexes RPA1163_3R3U_SEQ).
+'''
 REF_SEQUENCE_STR = CFG.RPA1163_3R3U_SEQ
 
 # Fluoroacetate SMILES used for reference construction operations.
@@ -537,17 +532,17 @@ REF_LIGAND_SMILES = CFG.FLUOROACETATE_SMILES
 # The three fluoroacetate control substrates used for DEHA4 and 3R3U calibration runs.
 CTRL_LIGANDS = CFG.CTRL_LIGANDS
 
-"""
+'''
 Structural mapping based on PDB 3R3U (Rhodopseudomonas palustris FAcD,
 wild-type, 1.60 Å; carries Ni²⁺/Cl⁻ ions, no substrate bound),
 adapted from Farajollahi et al. (2024; see header §4) and matched against DEHA4 sequences.
-"""
+'''
 REF_ACTIVE_SITE_MAP  = CFG.REF_ACTIVE_SITE_MAP
 CATALYTIC_TRIAD_KEYS = CFG.CATALYTIC_TRIAD_KEYS
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.7: Output Formatting Configuration
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Mapping dictionary to convert internal variable names into user-friendly CSV column headers.
 COLUMN_RENAMING_MAP = {
     "protein": CFG.COL_PROT,
@@ -582,9 +577,9 @@ COLUMNS_TO_DROP = [
     "active_site_mapping", "scientific_meaning", "constraint_check"
 ]
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.8: Default Metrics Template
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 DEFAULT_METRICS = {
     "status": "Unknown",
     "elapsed_seconds": 0.0,
@@ -645,9 +640,9 @@ DEFAULT_METRICS = {
 for k in REF_ACTIVE_SITE_MAP:
     DEFAULT_METRICS[f"dist_{k}"] = CFG.SENTINEL_UNDEFINED
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 2.9: Global State Variables
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 # ConsoleColours sourced from 00_02_Project_Utils (single canonical definition).
 ConsoleColours  = _utils_mod.ConsoleColours
@@ -752,9 +747,9 @@ def remove_stale_protein_jobs(prod_dir: Path, protein_id: str):
 # SECTION 4: REFERENCE & SELF-HEALING SYSTEM (DATA RECOVERY)
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.1: Geometric Truth Initialisation
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def setup_reference_data(target_dir: Path):
     """
     Initialises reference data inside the input folder: checks for the reference PDB
@@ -821,9 +816,9 @@ def extract_3r3u_sequence(pdb_path: Path) -> Optional[str]:
     return None
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.2: MSA Algorithms
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def validate_a3m_file(a3m_path: Path) -> bool:
     """
     Validates the A3M MSA file to detect corruption. Returns True if the file structure is sound.
@@ -862,9 +857,9 @@ def validate_a3m_file(a3m_path: Path) -> bool:
         logger.debug(f"A3M file validation error encountered for {a3m_path}: {e}")
         return False
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.3: Direct MSA Retrieval Operations
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> bool:
     """
     Fetches the MSA directly from the ColabFold REST API. This circumvents the Boltz model loading sequence,
@@ -948,10 +943,10 @@ def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> boo
             return False
 
         # --- Step 4: Extract and merge constituent .a3m files ---
-        """
+        '''
         The ColabFold tarball contains uniref.a3m and bfd.mgnify30.metaeuk30.smag30.a3m files.
         Merging both files yields maximum MSA coverage parameters.
-        """
+        '''
         a3m_parts = []
         with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tf:
             for member in tf.getmembers():
@@ -964,10 +959,12 @@ def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> boo
             logger.debug(f"[MSA-direct] No compatible .a3m files found within tarball for {pid}")
             return False
 
-        # Concatenate the constituent MSAs with exactly one separating newline. Each part is
-        # trailing-newline-stripped first so joining cannot inject a blank line between them -
-        # a blank line reads as EOF to a3m parsers and would silently truncate the MSA depth.
-        # Null bytes from the underlying structural tools are removed.
+        '''
+        Concatenate the constituent MSAs with exactly one separating newline. Each part is
+        trailing-newline-stripped first so joining cannot inject a blank line between them -
+        a blank line reads as EOF to a3m parsers and would silently truncate the MSA depth.
+        Null bytes from the underlying structural tools are removed.
+        '''
         a3m_content = (b"\n".join(p.rstrip(b"\r\n") for p in a3m_parts) + b"\n").replace(b"\x00", b"")
 
         # --- Step 5: Execute atomic write and metadata creation ---
@@ -997,9 +994,9 @@ def fetch_msa_direct(pid: str, seq: str, a3m_path: Path, meta_path: Path) -> boo
         return False
 
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 4.4: Stale YAML and Run Folder Cleanup
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
     """Deletes YAML files and active run folders not referenced by the input dataset."""
     yaml_count, run_count = 0, 0
@@ -1036,9 +1033,9 @@ def purge_orphans(prod_dir: Path, active_job_names: set) -> int:
 # SECTION 5: BIOINFORMATICS (ALIGNMENT & SUPERIMPOSITION)
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.1: Caching Framework
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def load_cached_alignments(csv_path: Path):
     """Loads already-calculated alignments into memory and ensures data types are strictly preserved."""
     if csv_path.exists():
@@ -1179,17 +1176,15 @@ def save_alignment_cache_final(csv_path: Path):
                  f"Alignment_Stats.csv written ({len(rows):,} rows) → {csv_path}")
     console_separator()
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 5.2: Alignment Logic Engine
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Optional[Path] = None, stats_csv: Optional[Path] = None) -> Tuple[Dict[str, int], Dict[str, Any], Dict[str, str], str]:
     """
     Performs a global sequence alignment between the canonical reference sequence
     and the target sequence to mathematically pinpoint dynamic active site indices.
     """
-    # -------------------------------------------------------------------------------
-    # Sub-Step 5.2.1: Define Transliteration Maps
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 5.2.1: Define Transliteration Maps --
     AA_1_TO_3 = {
         "A":"ALA", "R":"ARG", "N":"ASN", "D":"ASP", "C":"CYS", "Q":"GLN", "E":"GLU",
         "G":"GLY", "H":"HIS", "I":"ILE", "L":"LEU", "K":"LYS", "M":"MET", "F":"PHE",
@@ -1197,9 +1192,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         "Z":"GLX", "X":"UNK", "-": "GAP"
     }
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 5.2.2: Configure Alignment Parameters
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 5.2.2: Configure Alignment Parameters --
     aligner = Align.PairwiseAligner()
     aligner.mode = "global"
     aligner.open_gap_score   = CFG.ALIGN_OPEN_GAP_SCORE
@@ -1211,9 +1204,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
 
     target_seq = str(target_seq)
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 5.2.3: Execute Alignment Algorithm
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 5.2.3: Execute Alignment Algorithm --
     alignments = aligner.align(REF_SEQUENCE_STR, target_seq)
     if not alignments:
         return {}, {"error": "No viable alignment mapping identified", CFG.COL_ID_PCT: 0.0}, {}, "NA"
@@ -1225,9 +1216,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         with open(out_aln_path, "w") as f: f.write(format(aln))
         GLOBAL_STATS["total_alignments_generated"] += 1
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 5.2.4: Extract Statistics & Map Coordinate Frames
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 5.2.4: Extract Statistics & Map Coordinate Frames --
 
     '''
     Sequence identity over ALIGNED (gap-free) columns - positions where both sequences
@@ -1273,13 +1262,11 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
                 entry = f"{ref_aa_3}{ref_cursor}:GAP"
             full_mapping_parts.append(entry)
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 5.2.5: Resolve Catalytic Triad Positions
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 5.2.5: Resolve Catalytic Triad Positions --
     final_idx_map = {}
     final_resname_map = {}
 
-    """
+    '''
     Class-aware ±window resolver (CFG §2.7). Every catalytic residue is mapped
     the same dynamic way as the nucleophile: take the directly aligned target
     position; if it is missing (gap/indel) or carries the wrong chemical class
@@ -1287,19 +1274,19 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     of the role's EXPECTED class and map to the nearest such match. This makes
     ASP110/ASP134/HIS280 and the cradle/stabilisers tolerant of small numbering
     shifts and conservative mutations, instead of returning MISSING/999.
-    """
+    '''
     _WIN = int(getattr(CFG, "RESIDUE_SEARCH_WINDOW", 5))
     _ROLE_CLASS = getattr(CFG, "ROLE_EXPECTED_RESIDUES", {})
-    """
+    '''
     Ambiguous / non-standard residues (X→UNK, B, Z, J, O, U) carry no defined
     sidechain identity or geometry.
-    """
+    '''
     _AMBIG_AA = getattr(CFG, "PREP_AMBIGUOUS_AA", set("BXZJOU"))
-    """
+    '''
     When an ambiguous residue sits inside the base ±window, reach a little
     further so a genuine catalytic residue just beyond the ambiguous gap is
     not missed (base window unchanged when the window is clean).
-    """
+    '''
     _AMBIG_EXT = int(getattr(CFG, "RESIDUE_SEARCH_AMBIG_EXTENSION", 2))
 
     def _aa3_at(tpos):
@@ -1325,10 +1312,10 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         if not expected:
             _d = direct if direct not in exclude else None
             return _d, ("direct_noclass" if _d is not None else "none"), 0  # no class constraint → keep direct
-        """
+        '''
         Anchor the window: the direct position if it exists, else the nearest
         ref position within the window that did align to a target index.
-        """
+        '''
         anchor = direct
         if anchor is None:
             for k in range(1, _WIN + 1):
@@ -1339,7 +1326,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         if anchor is None:
             _d = direct if direct not in exclude else None
             return _d, ("direct_fallback" if _d is not None else "none"), 0
-        """
+        '''
         Nearest-in-sequence residue of the expected class within ±window.
         If an ambiguous/non-standard residue falls inside the base window,
         extend the reach by _AMBIG_EXT so a real residue just past the gap is
@@ -1347,7 +1334,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         resolution method ('direct'/'window'/'window_gap') and the residue offset
         from the directly-aligned column are returned for the nucleophile-rescue
         audit (CFG §5.4): a wide rescue can latch onto a non-catalytic Asp.
-        """
+        '''
         _win_eff = _WIN
         if any(_is_ambig(anchor + s) for s in range(-_WIN, _WIN + 1)):
             _win_eff = _WIN + _AMBIG_EXT
@@ -1361,7 +1348,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         _d = direct if direct not in exclude else None
         return _d, ("direct_fallback" if _d is not None else "none"), 0   # no class match → keep direct (may be None)
 
-    """
+    '''
     Safe fallback - after the (window-extended) search, if the resolved
     position is still ambiguous/non-standard, drop it. Such a residue is parsed
     downstream as a non-protein "ligand" atom, producing spurious 0.0 Å
@@ -1369,7 +1356,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     sequences above an ambiguity fraction, so a lone X survives - it must be
     screened out here so the triad fails honestly (MISSING) rather than on a
     phantom residue.
-    """
+    '''
     _used_idx = set()   # target indices already claimed by a catalytic role (distinct-residue guard)
     _resolution_audit = {}   # role → (method, residue-offset) for the §5.4 rescue audit
     for name, info in REF_ACTIVE_SITE_MAP.items():
@@ -1386,11 +1373,11 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
         else:
             final_resname_map[name] = "MISSING"
 
-    """
+    '''
     Nucleophile alignment-rescue audit (CFG §5.4): record how the catalytic Asp was
     resolved (direct hit / windowed rescue) and how far the rescue travelled, so a
     far-fetched rescued Asp can be flagged and barred from the elite tier downstream.
-    """
+    '''
     _nuc_m, _nuc_off = _resolution_audit.get("Nuc", ("none", 0))
     stats["nuc_resolution"]    = _nuc_m if _nuc_off == 0 else f"{_nuc_m}+{_nuc_off}"
     stats["nuc_rescue_offset"] = int(_nuc_off)
@@ -1437,9 +1424,9 @@ def format_full_role_map(resname_map: Dict[str, str]) -> Dict[str, str]:
 # SECTION 6: CHEMINFORMATICS & PHYSICS ENGINE
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 6.1: Spatial Mathematical Utilities
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Distance and angle helpers are imported from the central ProjectUtils module.
 
 def get_plane_normal(atoms):
@@ -1463,9 +1450,9 @@ def load_structure_safe(path: Path):
         if logger: logger.debug(f"Failed to load standard physical structure at {path}: {e}")
         return None
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 6.2: RDKit Core Integration
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def rdkit_mol_from_smiles_with_3d(smiles: str) -> Chem.Mol:
     """
     Constructs a three-dimensional RDKit molecule from a SMILES string.
@@ -1709,9 +1696,9 @@ def map_mmcif_to_rdkit(mmcif_atoms, rdkit_mol):
             best_key, best_pairs = key, pairs
     return {names[i]: int(j) for i, j in best_pairs}
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 6.3: Interaction Classification Engine
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _ligand_ionisable(rd_atom) -> Optional[str]:
     """
     Classify a ligand atom as 'anion'- or 'cation'-capable for salt-bridge
@@ -1764,9 +1751,7 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
     pel = p_atom["element"]
     lel = l_atom["element"]
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 6.3.1: Evaluator Block
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 6.3.1: Evaluator Block --
     # 1. Hydrogen Bonds (D-A distance only; D-H-A angle requires explicit H atoms not present in Boltz-2 CIF)
     if pel in {"N", "O"} and lel in {"N", "O"}:
         if HBOND_MIN_DIST_DA <= d <= HBOND_MAX_DIST_DA: types.append("hydrogen_bond")
@@ -1774,12 +1759,12 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
     # 2. Hydrophobic Bonds
     if pel=="C" and lel=="C" and d <= HYDROPHOBIC_MAX_DIST: types.append("hydrophobic")
 
-    """
+    '''
     3. Salt Bridges (opposite-charge groups within SALT_BRIDGE_MAX_DIST).
     Ligand ionisability is resolved by functional group, not by the SMILES
     protonation state (see _ligand_ionisable), so neutral-form carboxylates
     still register while ethers/amides do not.
-    """
+    '''
     if d <= SALT_BRIDGE_MAX_DIST:
         rd_atom = None
         idx = mm_to_rd.get(l_atom["atom_name"])
@@ -1792,11 +1777,13 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
         # are classified, not just the bare canonical codes (consistent with the rest of the engine).
         _pres = _canonical_resname(p_atom["resname"])
 
-        # The formal charge sits on specific sidechain atoms, not the whole residue: the
-        # cationic nitrogen (Arg NH1/NH2/NE, Lys NZ, His ND1/NE2) or the carboxylate oxygen
-        # (Asp OD1/OD2, Glu OE1/OE2). Gate on the protein atom's element AND exclude backbone
-        # N/O, so a residue's backbone and sidechain carbons within SALT_BRIDGE_MAX_DIST no
-        # longer each register a spurious salt bridge (interaction-density inflation).
+        '''
+        The formal charge sits on specific sidechain atoms, not the whole residue: the
+        cationic nitrogen (Arg NH1/NH2/NE, Lys NZ, His ND1/NE2) or the carboxylate oxygen
+        (Asp OD1/OD2, Glu OE1/OE2). Gate on the protein atom's element AND exclude backbone
+        N/O, so a residue's backbone and sidechain carbons within SALT_BRIDGE_MAX_DIST no
+        longer each register a spurious salt bridge (interaction-density inflation).
+        '''
         _pname = p_atom.get("atom_name", "")
         _is_backbone = _pname in _BACKBONE_ATOMS
 
@@ -1810,19 +1797,21 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
 
         if is_salt_bridge:
             types.append("salt_bridge")
-            # A salt bridge IS a charged hydrogen bond - count it once, as the salt bridge,
-            # not also as a generic H-bond (the same O···N contact otherwise inflated both
-            # count_salt_bridge and count_hydrogen_bond → num_interactions double-counted).
+            '''
+            A salt bridge IS a charged hydrogen bond - count it once, as the salt bridge,
+            not also as a generic H-bond (the same O···N contact otherwise inflated both
+            count_salt_bridge and count_hydrogen_bond → num_interactions double-counted).
+            '''
             if "hydrogen_bond" in types:
                 types.remove("hydrogen_bond")
 
     # 4. Halogen Contact Analysis & Specific Fluorous Metrics
-    """
+    '''
     Aliphatic C–F is not a halogen-bond donor (CFG §3.6): only the polarisable
     heavy halogens (Cl/Br/I) form genuine σ-hole halogen bonds, so halogen_contact
     is reserved for those. Ligand fluorine is scored solely through the dedicated
     fluorous metrics below - never double-counted as a halogen bond.
-    """
+    '''
     if lel.upper() in {"CL", "BR", "I"} and d <= HALOGEN_MAX_DIST:
         types.append("halogen_contact")
 
@@ -1841,9 +1830,9 @@ def classify_pair(p_atom, l_atom, d, rdkit_mol, mm_to_rd):
 
     return types
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 6.4: mmCIF Parsers
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def load_atoms_from_structure(cif_path):
     """Efficiently parses the predicted three-dimensional CIF structure into discrete atoms using Gemmi."""
     doc = gemmi.cif.read_file(str(cif_path))
@@ -1863,17 +1852,15 @@ def load_atoms_from_structure(cif_path):
                     else: prot.append(d)
     return prot, lig
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 6.5: Advanced Geometrics
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def analyse_pi_interactions(prot_atoms, lig_atoms, rdkit_mol, mm_map, counts):
     """
     Rigorously evaluates Pi-stacking (face-to-face and edge-to-face) and Pi-cation interactions
     using derived normal vectors.
     """
-    # -------------------------------------------------------------------------------
-    # Sub-Step 6.5.1: Identify Biological Rings
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 6.5.1: Identify Biological Rings --
     prot_rings = []
     res_map = defaultdict(list)
     for a in prot_atoms: res_map[(a["chain"], a["resseq"])].append(a)
@@ -1886,9 +1873,7 @@ def analyse_pi_interactions(prot_atoms, lig_atoms, rdkit_mol, mm_map, counts):
                 cent, norm = get_plane_normal(ring_atoms)
                 if cent is not None: prot_rings.append({"centroid": cent, "normal": norm})
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 6.5.2: Identify Chemical Rings
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 6.5.2: Identify Chemical Rings --
     lig_rings = []
     if rdkit_mol:
         ri = rdkit_mol.GetRingInfo()
@@ -1905,9 +1890,7 @@ def analyse_pi_interactions(prot_atoms, lig_atoms, rdkit_mol, mm_map, counts):
                 cent, norm = get_plane_normal(cif_ring_atoms)
                 if cent is not None: lig_rings.append({"centroid": cent, "normal": norm})
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 6.5.3: Spatial Interference Verification Checks
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 6.5.3: Spatial Interference Verification Checks --
     for p_ring in prot_rings:
         p_c, p_n = p_ring["centroid"], p_ring["normal"]
 
@@ -1942,9 +1925,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
     for bias-free density normalisation calculations.
     """
     try:
-        # -------------------------------------------------------------------------------
-        # Sub-Step 6.5.4: Execute Primary Loaders & Mappers
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 6.5.4: Execute Primary Loaders & Mappers --
         prot, lig = load_atoms_from_structure(cif_path)
         rd_mol = rdkit_mol_from_smiles_with_3d(smiles) if smiles else None
         mm_map = map_mmcif_to_rdkit(lig, rd_mol)
@@ -1957,9 +1938,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
         # Structural safeguards implemented for single-atom ions (e.g. F-, Cl-)
         if lig_heavy_atoms == 0: lig_heavy_atoms = 1
 
-        # -------------------------------------------------------------------------------
-        # Sub-Step 6.5.5: Residue Demographics Census
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 6.5.5: Residue Demographics Census --
         census = {"Total_Residues": 0, "Total_Polar_Residues": 0,
                   "Total_NonPolar_Residues": 0, "Total_Pos_Residues": 0,
                   "Total_Neg_Residues": 0, "Total_Aromatic_Residues": 0}
@@ -1985,9 +1964,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
         total_f_atoms = len([a for a in lig if a["element"] == "F"])
         interacting_f_set = set()
 
-        # -------------------------------------------------------------------------------
-        # Sub-Step 6.5.6: Optimised cKDTree Interaction Evaluation Loop
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 6.5.6: Optimised cKDTree Interaction Evaluation Loop --
         if prot and lig:
             prot_coords = [[p["x"], p["y"], p["z"]] for p in prot]
             lig_coords  = [[l["x"], l["y"], l["z"]] for l in lig]
@@ -2004,9 +1981,11 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
                     d = distance(p_pos, l_pos)
                     labels = classify_pair(pa, la, d, rd_mol, mm_map)
                     if labels:
-                        # Count at most one salt bridge per cationic/anionic residue: a single
-                        # Arg/Lys/His (up to 3 sidechain N) opposite a carboxylate (2 O) otherwise
-                        # registers up to 6 pairwise salt bridges for one ionic contact.
+                        '''
+                        Count at most one salt bridge per cationic/anionic residue: a single
+                        Arg/Lys/His (up to 3 sidechain N) opposite a carboxylate (2 O) otherwise
+                        registers up to 6 pairwise salt bridges for one ionic contact.
+                        '''
                         if "salt_bridge" in labels:
                             _rk = (pa.get("chain"), pa.get("resseq"))
                             if _rk in _salt_seen:
@@ -2023,9 +2002,7 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
                             "interaction_types": ";".join(labels)
                         })
 
-        # -------------------------------------------------------------------------------
-        # Sub-Step 6.5.7: Invoke Macro-Structure Physics Evaluation
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 6.5.7: Invoke Macro-Structure Physics Evaluation --
         analyse_pi_interactions(prot, lig, rd_mol, mm_map, counts)
         if rows: pd.DataFrame(rows).to_csv(output_csv, index=False)
         avg = sum(dists)/len(dists) if dists else 0.0
@@ -2050,9 +2027,9 @@ def generate_detailed_interactions(cif_path, smiles, output_csv: Path) -> Dict[s
 # SECTION 7: GEOMETRIC ANALYSIS (CATALYSIS) & CALIBRATION
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 7.1: Reference Data Handling (Calibration Logic)
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def perform_control_calibration(control_cif: Path, ref_pdb: Path,
                                 model_label: str = "DeHa4 Control",
                                 target_seq: Optional[str] = None,
@@ -2326,10 +2303,10 @@ def print_control_calibration_consolidated(deha4_data: list, r3u_data: list) -> 
     console_info(f"  {sep_eq}\n")
 
     # ── Trust Scores ─────────────────────────────────────────────────────────────
-    """
+    '''
     Trust score = Cα RMSD (Å) between Boltz-2 prediction and 3R3U crystal structure.
     Lower = better alignment. <2.0 Å = High Confidence, 2–3 Å = Moderate, >3 Å = Low.
-    """
+    '''
     _ts_col = 16
     _ts_sep = "─" * (14 + 3 * (_ts_col + 2) + 5 + 3 * (_ts_col + 2))
     console_info("  Structural Trust Score  (Cα RMSD vs 3R3U crystal; <2.0 Å = high confidence)")
@@ -2449,9 +2426,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
         "Carboxylate_Clamp": False
     }
     try:
-        # -------------------------------------------------------------------------------
-        # Sub-Step 7.1.1: Execute Loading and Superimposition Routines
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 7.1.1: Execute Loading and Superimposition Routines --
         st_con = load_structure_safe(control_cif)
         st_tar = load_structure_safe(target_cif)
 
@@ -2469,11 +2444,13 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
             except Exception:
                 sup_select = gemmi.SupSelect.All
 
-            # Active-site RMSD (Criterion B) must be measured after a LOCAL superposition on the
-            # catalytic Cα only. A global whole-chain fit lets divergent-domain motion in a distant
-            # homologue rotate the active site off-register and inflate the RMSD. When the tier's
-            # mapped target residues are known, superpose on those catalytic Cα pairs; otherwise
-            # fall back to the whole-chain Cα fit.
+            '''
+            Active-site RMSD (Criterion B) must be measured after a LOCAL superposition on the
+            catalytic Cα only. A global whole-chain fit lets divergent-domain motion in a distant
+            homologue rotate the active site off-register and inflate the RMSD. When the tier's
+            mapped target residues are known, superpose on those catalytic Cα pairs; otherwise
+            fall back to the whole-chain Cα fit.
+            '''
             _ref_ca, _mov_ca = [], []
             if target_map and hasattr(gemmi, "superpose_positions"):
                 for _key, _rid in control_map.items():
@@ -2512,9 +2489,7 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                         p = sup.transform.apply(atom.pos)
                         atom.pos = gemmi.Position(p.x, p.y, p.z)
 
-            # -------------------------------------------------------------------------------
-            # Sub-Step 7.1.2: Extract Active-Site Conservation Data (superposition vs crystal)
-            # -------------------------------------------------------------------------------
+            #  -- Sub-step 7.1.2: Extract Active-Site Conservation Data (superposition vs crystal) --
             rmsd_sq_sum = 0.0
             count = 0
             hits = 0
@@ -2540,9 +2515,11 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                 min_d = 99.0
                 mapped_res = None
 
-                # Criterion-B unification: when the tier's mapped target residue is known,
-                # measure THAT residue - the same atom the tier scored - not the nearest Cα.
-                # Falls back to the nearest-Cα search if the role was unmapped/absent.
+                '''
+                Criterion-B unification: when the tier's mapped target residue is known,
+                measure THAT residue - the same atom the tier scored - not the nearest Cα.
+                Falls back to the nearest-Cα search if the role was unmapped/absent.
+                '''
                 _tgt_idx = target_map.get(key) if target_map else None
                 if _tgt_idx is not None:
                     for res in tar_chain:
@@ -2587,14 +2564,14 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
                          if res_name == "ASP" or res_name == "GLU": hits += 1
 
             # ── Mutation-tolerant cradle detection (geometric fallback) ──────────
-            """
+            '''
             The canonical check above requires an AROMATIC residue at the exact
             aligned cradle position. Where a homolog has a gap/substitution there
             (so the alignment misses it), search the superimposed target for ANY
             aromatic sidechain within CFG.MECH_CRADLE_RADIUS of the ligand's
             leaving halogen - the same dynamic principle used for the nucleophile.
             The rigid superposition preserves intra-target distances.
-            """
+            '''
             if not has_halide_cradle:
                 _lig_halogens, _arom_pos = [], []
                 for _ch in st_tar[0]:
@@ -2622,9 +2599,9 @@ def analyse_candidate_structure(target_cif: Path, control_cif: Path, control_map
         if logger: logger.debug(f"Candidate Analysis Failure detected: {e}")
     return result
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 7.2: Catalyst Distance Evaluation Helpers
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def generate_rich_justification(tier: str, meaning: str, constraint: str, aligned_ok: bool, identity: float) -> str:
     """Generates a detailed justification string to objectively explain algorithmic decisions within the final report."""
     if not aligned_ok:
@@ -2648,13 +2625,13 @@ def _derive_burgi_dunitz(nuc_np, centres, neigh_fn, sym_fn, pos_fn):
         _cC = pos_fn(_ctr)
         if _cC is None:
             continue
-        """
+        '''
         The Bürgi-Dunitz trajectory is defined against the CARBONYL oxygen. Taking whichever oxygen
         the neighbour list happens to yield first can return the single-bonded one on an ester or a
         carboxylate, which points the reference vector at the wrong lone pair. The carbonyl is the
         oxygen with the SHORTEST C–O distance (C=O ~1.21 Å against C–O ~1.31 Å), which is a
         geometric fact of the frame and needs no bond-order perception.
-        """
+        '''
         _os = [(pos_fn(n), np.linalg.norm(np.asarray(pos_fn(n)) - np.asarray(_cC)))
                for n in neigh_fn(_ctr) if sym_fn(n) == "O" and pos_fn(n) is not None]
         _cO = min(_os, key=lambda t: t[1])[0] if _os else None
@@ -2723,19 +2700,19 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
 
     if not valid_cx_pairs: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
-    """
+    '''
     Restrict the attack carbon to the catalytically productive set when supplied
     (CFG §5.3: the α-carbon adjacent to the ligand carboxylate). This keeps the
     angle and distance tied to the position FAcD defluorinates. When the preferred
     carbons carry no fluorine there is no productive α-defluorination → no SN2.
-    """
+    '''
     if preferred_c_names:
         _restricted = [(c, x) for (c, x) in valid_cx_pairs if c.name in preferred_c_names]
         if not _restricted:
             return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
         valid_cx_pairs = _restricted
 
-    """
+    '''
     Choose the attacking oxygen and the warhead carbon by the REACTION, not by proximity.
 
     FAcD's nucleophile is the aspartate carboxylate: it attacks the α-carbon and displaces the
@@ -2749,7 +2726,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     The pair is therefore scored by the backside O–C–F angle it produces, with the scissile fluorine
     resolved for each candidate carbon exactly as below (cradle-coupled where the cradle is known).
     Distance breaks ties, so among equally-aligned pairs the closest still wins.
-    """
+    '''
     def _scissile_for(_c, _o):
         """The leaving fluorine for this carbon: the cradle-facing α-F, else the most
         anti-periplanar one to this oxygen."""
@@ -2762,7 +2739,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                        + (x.pos.z - _cc0[2])**2)
         return max(_fs, key=lambda x: calculate_angle(_o.pos, _c.pos, x.pos))
 
-    """
+    '''
     The attacking oxygen is the one that best satisfies BOTH near-attack conditions AT ONCE - a short
     approach and a linear trajectory - because an SN2 needs them on the SAME atom. Neither condition
     alone identifies it:
@@ -2777,7 +2754,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     distance sigmoid about NAC_DIST_STRICT and the angle sigmoid about NAC_ANGLE_STRICT. Their product
     is maximised, so an oxygen must be both close and aligned to win, and a pose is credited with the
     geometry a nucleophile could actually react through.
-    """
+    '''
     best_O, best_C = None, None
     _best_key = None
     for o in asp_oxygens:
@@ -2795,7 +2772,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
 
     if not best_O or not best_C: return 0.0, CFG.SENTINEL_UNDEFINED, 0, None, None, None
 
-    """
+    '''
     Select the scissile (leaving) fluorine among those bonded to the chosen best_C.
     Cradle-coupled definition (preferred): the departing F⁻ is the one stabilised by the
     fluoride cradle (His155/Trp156/Tyr219; Chan et al. 2011), so the leaving F is the
@@ -2803,7 +2780,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     physical SN2 leaving group and removes the best-of-N angle inflation that a plain
     max-over-fluorines selection introduces for CF2/CF3 carbons. When the cradle is not
     resolved, fall back to the most anti-periplanar F (max Nu-C-F angle).
-    """
+    '''
     _alpha_fs = [x for c, x in valid_cx_pairs if c == best_C]
     best_X = None
     if cradle_coords:
@@ -2828,7 +2805,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     try:
         vec_cx  = np.array([best_X.pos.x - best_C.pos.x, best_X.pos.y - best_C.pos.y, best_X.pos.z - best_C.pos.z])
         vec_cnu = np.array([best_O.pos.x - best_C.pos.x, best_O.pos.y - best_C.pos.y, best_O.pos.z - best_C.pos.z])
-        """
+        '''
         Deviation from the BACKSIDE attack ray, not from the C–X line.
 
         The perpendicular distance to the C–X line alone cannot tell a backside attack (180°, the
@@ -2837,7 +2814,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
         ray that leaves C directly OPPOSITE the leaving group makes the two distinguishable - a
         front-side nucleophile projects onto the wrong half-line, its nearest point on the ray is C
         itself, and its deviation is its full distance from the carbon.
-        """
+        '''
         _u = vec_cx / (np.linalg.norm(vec_cx) + 1e-6)
         _t = float(np.dot(vec_cnu, _u))          # < 0 = backside (opposite the leaving group)
         if _t < 0.0:
@@ -2854,7 +2831,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
                 teflon_clashes += 1
 
     # ── Auxiliary (NON-GATING) reference geometries - see utils docstrings ─────
-    """
+    '''
     Bürgi–Dunitz: ideally the substrate carbonyl (–COO⁻) carbon. Where the head
       group is not a carboxylate (sulfonate –SO₃⁻, phosphonate, alcohol) that
       carbon does not exist, so the angle is taken on the head-group electrophilic
@@ -2868,7 +2845,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     atoms; mapped atoms use exact structure coordinates, hydrogens use the
     transformed template coordinates. Both metrics thus return a real value for
     every substrate class.
-    """
+    '''
     # Count the equivalent C–F leaving-group vectors on the chosen scissile carbon
     # (multiplicity correction for the competence angle term, CFG §5.5).
     n_scissile_f = sum(1 for c, x in valid_cx_pairs if c == best_C)
@@ -2937,7 +2914,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
         except Exception:
             beta_f_count = 0
 
-    """
+    '''
     The attacking oxygen travels with the angle it produced. The nucleophile approach distance
     must be measured to THIS oxygen: reporting the minimum over both Oδ while taking the angle
     from the other one describes a nucleophile that does not exist - one oxygen supplying the
@@ -2947,7 +2924,7 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
     multiplicity correction (CFG §5.2d): the inflation it removes lives in the POSE - a CF3 carbon
     has three chances to present some fluorine anti-periplanar - so it is the bond COUNT that
     matters, not which of them the cradle later identifies as leaving.
-    """
+    '''
     aux = {"burgi_dunitz_angle": CFG.SENTINEL_UNDEFINED, "flippin_lodge_offset": CFG.SENTINEL_UNDEFINED,
            "n_scissile_f": n_scissile_f, "beta_f_count": beta_f_count,
            "attack_o_atom": best_O}
@@ -3016,13 +2993,13 @@ def calculate_sn2_metrics(asp_atoms, lig_atoms, rd_mol=None, mm_map=None, prefer
             logger.debug(f"Flippin-Lodge offset (RDKit path) failed: {_e}")
 
     # ── Structure-only fallback (no RDKit needed) ─────────────────────────────
-    """
+    '''
     The block above needs an intact RDKit template + atom mapping; on small or
     poorly-mapped ligands (e.g. TFA) it can leave the aux geometries at 999.
     Recompute them directly from the structure ligand atoms so both metrics are
     defined whenever the geometry physically exists. Covalent neighbours are
     detected by distance (≤ CFG.BOND_DIST_MAX). Only fills values still at 999.
-    """
+    '''
     try:
         if aux.get("burgi_dunitz_angle", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX or aux.get("flippin_lodge_offset", CFG.SENTINEL_UNDEFINED) >= CFG.SENTINEL_VALID_MAX:
             _bmax = float(getattr(CFG, "BOND_DIST_MAX", 1.9))
@@ -3138,9 +3115,11 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
             if len(P) < 2: return 0.0
             return float(pdist(P).max())
         def _vdw_volume(P, els, spacing=0.6):
-            # True molecular volume: union of atomic Bondi vdW spheres on a voxel grid. The
-            # convex hull of atom CENTRES collapses to ~0 for a small/planar molecule (e.g.
-            # fluoroacetate), so vdW spheres are required for a physical ligand volume.
+            '''
+            True molecular volume: union of atomic Bondi vdW spheres on a voxel grid. The
+            convex hull of atom CENTRES collapses to ~0 for a small/planar molecule (e.g.
+            fluoroacetate), so vdW spheres are required for a physical ligand volume.
+            '''
             if len(P) == 0: return 0.0
             r = np.array([CFG.VDW_RADII.get(e, CFG.VDW_RADIUS_DEFAULT) for e in els], float)  # SSOT: CFG.VDW_RADII
             lo = (P - r[:, None]).min(0); hi = (P + r[:, None]).max(0)
@@ -3161,7 +3140,7 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
         occ = lv / pv if pv > 0 else 0.0
         fr  = (lext / 2.0) / pr if pr > 0 else 0.0
 
-        """
+        '''
         (A) CAVITY CONTAINMENT - the protein-aware fit that gates.
 
         Buriedness by ray casting: from each ligand heavy atom, CFG.BURIAL_RAYS directions are
@@ -3173,11 +3152,13 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
         Ray casting is used rather than a hull or a neighbour count because it answers the
         question directly - is there protein in the way, in every direction - and it degrades
         gracefully at the pocket mouth, where a hull test flips discontinuously.
-        """
-        # contain_cav starts at 0.0 (worst containment): the ray-cast below overwrites it with the
-        # real measurement whenever it can run. If it cannot (no protein atoms to cast against, no
-        # ligand heavy atoms), the value stays failed rather than defaulting to perfect containment -
-        # an unmeasured pose must never read as ideally buried and skip the tier-gate penalty.
+        '''
+        '''
+        contain_cav starts at 0.0 (worst containment): the ray-cast below overwrites it with the
+        real measurement whenever it can run. If it cannot (no protein atoms to cast against, no
+        ligand heavy atoms), the value stays failed rather than defaulting to perfect containment -
+        an unmeasured pose must never read as ideally buried and skip the tier-gate penalty.
+        '''
         contain_cav, contain_s8, reach = 0.0, 1.0, 0.0
         if len(lpts) >= 1:
             # ligand_reach - head-to-tail span from the carboxylate carbon (the head held by the
@@ -3226,12 +3207,12 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
                 contain_cav = float((_burial >= float(CFG.BURIAL_MIN)).mean())
                 out["ligand_buriedness_mean"] = round(float(_burial.mean()), 3)
 
-            """
+            '''
             (B) ACTIVE-SITE CONTAINMENT - engagement with the eight catalytic residues.
             Fraction of ligand heavy atoms within CFG.SITE8_SHELL_A of any heavy atom of the
             mapped constellation. Says how much of the molecule is inside the reactive machinery,
             which is a mechanistic statement - not a cavity measurement and not a size penalty.
-            """
+            '''
             if len(pkt):
                 _dmin = np.sqrt(((lpts[:, None, :] - pkt[None, :, :]) ** 2).sum(-1)).min(axis=1)
                 contain_s8 = float((_dmin <= float(CFG.SITE8_SHELL_A)).mean())
@@ -3244,10 +3225,12 @@ def compute_pocket_fit(site_atoms_obj: Dict[str, list], lig_atoms_obj: list,
                    pocket_containment_site8=round(contain_s8, 3),
                    ligand_reach=round(reach, 2))
     except Exception as _e:
-        # pocket_containment_cavity feeds the tier gate. A measurement that could not be taken must
-        # NOT read as perfect containment (the initial 1.0 in `out`) - that silently promotes an
-        # unmeasured pose. Fail it to 0.0 (worst containment → full penalty, kept out of the elite
-        # tier) and log loudly so the incomplete record is visible, not swallowed at DEBUG.
+        '''
+        pocket_containment_cavity feeds the tier gate. A measurement that could not be taken must
+        NOT read as perfect containment (the initial 1.0 in `out`) - that silently promotes an
+        unmeasured pose. Fail it to 0.0 (worst containment → full penalty, kept out of the elite
+        tier) and log loudly so the incomplete record is visible, not swallowed at DEBUG.
+        '''
         out["pocket_containment_cavity"] = 0.0
         logger.warning(f"Pocket-fit metrics failed ({_e}); pocket_containment_cavity set to 0.0 "
                        "(unmeasured - not promoted).")
@@ -3263,9 +3246,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
     results.update({"sn2_attack_angle": 0.0, "sn2_trajectory_dev": CFG.SENTINEL_UNDEFINED})
 
     try:
-        # -------------------------------------------------------------------------------
-        # Sub-Step 7.2.1: Formal Load of Positional Coordinate Data
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 7.2.1: Formal Load of Positional Coordinate Data --
         _, mmcif_lig = load_atoms_from_structure(cif_path)
         rd_mol = rdkit_mol_from_smiles_with_3d(smiles_str) if smiles_str else None
         mm_map = map_mmcif_to_rdkit(mmcif_lig, rd_mol) if rd_mol else {}
@@ -3280,10 +3261,10 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         for model in st:
             for chain in model:
                 for res in chain:
-                    """
+                    '''
                     Protonation-aware protein/ligand classification:
                     accept both canonical and force-field variant names.
-                    """
+                    '''
                     _is_protein = (res.name in STANDARD_AA
                                    or _canonical_resname(res.name) in STANDARD_AA)
                     if not _is_protein and res.name != "HOH":
@@ -3306,7 +3287,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                                     site_atoms_obj[name].append(atom)
 
         # ── Spatial-gate validation (CFG §2.8) ──────────────────────────────
-        """
+        '''
         Reject any resolved triad residue whose nearest atom sits farther than
         RESOLVER_SPATIAL_CUTOFF from the NEAREST LIGAND ATOM. Such residues are
         sequence-proximal but spatially remote (e.g. ASP on a distant loop) and
@@ -3315,23 +3296,25 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         robust to ligand size: a centroid-based test would wrongly reject a
         genuine catalytic residue at the reactive head of a long-chain PFAS,
         whose centroid lies far down the chain.
-        """
+        '''
         _spatial_cutoff = float(getattr(CFG, "RESOLVER_SPATIAL_CUTOFF", 10.0))
         if lig_coords:
-            # Spatial sanity applies to ALL EIGHT catalytic roles: the clamp arginines and
-            # His/Trp/Tyr cradle gate elite eligibility, so a sequence-proximal but spatially
-            # remote mapping must be rejected for them too - not just the triad.
+            '''
+            Spatial sanity applies to ALL EIGHT catalytic roles: the clamp arginines and
+            His/Trp/Tyr cradle gate elite eligibility, so a sequence-proximal but spatially
+            remote mapping must be rejected for them too - not just the triad.
+            '''
             _gate_keys = set(getattr(CFG, "CATALYTIC_TRIAD_KEYS", ["Nuc", "Base", "Acid"])) | {
                 "Carb1", "Carb2", "Stab_H", "Stab_W", "Stab_Y"}
             for _tk in list(_gate_keys):
                 if _tk in site_atoms and site_atoms[_tk]:
                     _min_d = min(a.dist(la) for a in site_atoms[_tk] for la in lig_coords)
                     if _min_d > _spatial_cutoff:
-                        """
+                        '''
                         Residue is real but spatially remote from the substrate -
                         not the catalytic residue; report MISSING so the tier
                         fails honestly rather than on a spurious far-residue distance.
-                        """
+                        '''
                         site_atoms.pop(_tk, None)
                         site_atoms_obj.pop(_tk, None)
                         results[f"dist_{_tk}"] = CFG.SENTINEL_UNDEFINED
@@ -3347,9 +3330,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                     })
                     return results
 
-        # -------------------------------------------------------------------------------
-        # Sub-Step 7.2.2: Triangulate Valid Catalytic Trajectories
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 7.2.2: Triangulate Valid Catalytic Trajectories --
         dists = {}
         for key_res in REF_ACTIVE_SITE_MAP.keys():
             min_d = CFG.SENTINEL_UNDEFINED
@@ -3361,7 +3342,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             dists[key_res] = min_d
             results[f"dist_{key_res}"] = round(min_d, 2)
 
-        """
+        '''
         Fluoride-cradle distances use only the H-bond-DONOR sidechain atoms (Chan 2011 -
         His155 Nδ/Nε, Trp156 Nε1, Tyr219 OH form three H-bonds to the leaving F⁻), via the
         POLAR_SIDECHAIN_ATOMS table. The generic loop above takes the nearest atom of ANY
@@ -3373,12 +3354,14 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         ±window resolver maps Stab_W/Y to AROMATIC and Stab_H to AROMATIC|POSITIVE, and the
         elite tier additionally gates on cradle role-identity, so a stray polar residue cannot
         earn elite stabilisation credit on its donor alone.
-        """
-        # The fluoride cradle stabilises the DEPARTING F⁻, so measure the donor→ligand
-        # distance to the ligand fluorine atoms only, not to every heavy atom. Otherwise a
-        # donor sitting near the carboxylate head earns Halide_Stabilisation without ever
-        # contacting the leaving fluorine. Fall back to all ligand atoms for a non-fluorinated
-        # ligand so the metric never silently drops to 999 for those.
+        '''
+        '''
+        The fluoride cradle stabilises the DEPARTING F⁻, so measure the donor→ligand
+        distance to the ligand fluorine atoms only, not to every heavy atom. Otherwise a
+        donor sitting near the carboxylate head earns Halide_Stabilisation without ever
+        contacting the leaving fluorine. Fall back to all ligand atoms for a non-fluorinated
+        ligand so the metric never silently drops to 999 for those.
+        '''
         _lig_f_pos = [a.pos for a in lig_atoms_obj if a.element.name == "F"] or lig_coords
         for _sk in ("Stab_H", "Stab_W", "Stab_Y"):
             _res3 = _canonical_resname(site_resname.get(_sk, ""))
@@ -3389,11 +3372,13 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                 dists[_sk] = _dd
                 results[f"dist_{_sk}"] = round(_dd, 2)
 
-        # Catalytic-triad relay distances are between the functional sidechain atoms
-        # (Asp Oδ, His Nδ/Nε, Asp/Glu Oδ/Oε) - NOT the backbone. Measuring over all residue
-        # atoms lets a misfolded triad pass the strict relay gate on an incidental backbone
-        # CA···CA contact. Restrict to the functional atoms, with a fallback to all atoms of
-        # the residue when none match (non-standard naming / altloc) so it never regresses.
+        '''
+        Catalytic-triad relay distances are between the functional sidechain atoms
+        (Asp Oδ, His Nδ/Nε, Asp/Glu Oδ/Oε) - NOT the backbone. Measuring over all residue
+        atoms lets a misfolded triad pass the strict relay gate on an incidental backbone
+        CA···CA contact. Restrict to the functional atoms, with a fallback to all atoms of
+        the residue when none match (non-standard naming / altloc) so it never regresses.
+        '''
         _TRIAD_FUNC = {
             "Nuc":  {"OD1", "OD2"},
             "Base": {"ND1", "NE2"},
@@ -3420,14 +3405,14 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["dist_base_acid_internal"] = round(dist_base_acid, 2)
 
 
-        """
+        '''
         Reactive-centre identification (CFG §5.3). The catalytically productive attack
         carbon is the α-carbon bonded to the ligand carboxylate; the clamp engages the
         carboxylate oxygens. Both are resolved from the RDKit topology and mapped to
         structure-frame atom names so the SN2 geometry and the clamp gate key on the
         mechanistically correct atoms. A non-carboxylate head (sulfonate, ether) yields
         no α-carbon / carboxylate oxygens and therefore cannot anchor for α-attack.
-        """
+        '''
         alpha_c_names, carboxylate_o_names = set(), set()
         head_is_carboxylate = False
         if rd_mol and mm_map:
@@ -3448,9 +3433,11 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["head_is_carboxylate"] = 1.0 if head_is_carboxylate else 0.0
 
         _preferred = alpha_c_names if (CFG.SCISSILE_REQUIRE_ALPHA and alpha_c_names) else None
-        # Cradle atoms (Trp156/Tyr219/His155 sidechains) → couple the leaving-F selection
-        # to the fluoride cradle so the scissile F is the departing one (Chan 2011), not the
-        # best-of-N most-anti fluorine. Empty when the cradle is unresolved → max-angle fallback.
+        '''
+        Cradle atoms (Trp156/Tyr219/His155 sidechains) → couple the leaving-F selection
+        to the fluoride cradle so the scissile F is the departing one (Chan 2011), not the
+        best-of-N most-anti fluorine. Empty when the cradle is unresolved → max-angle fallback.
+        '''
         _cradle_coords = [(_a.pos.x, _a.pos.y, _a.pos.z)
                           for _ck in ("Stab_W", "Stab_Y", "Stab_H")
                           for _a in site_atoms_obj.get(_ck, [])
@@ -3469,7 +3456,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         scissile_is_alpha = bool(best_c_atom is not None and best_c_atom.name in alpha_c_names)
         results["scissile_is_alpha"] = 1.0 if scissile_is_alpha else 0.0
 
-        """
+        '''
         Nucleophile reach is measured attacking Asp-Oδ → SN2 attack carbon (the reactive centre),
         not Asp → nearest ligand atom, so a stray fluorine cannot satisfy the gate.
 
@@ -3477,7 +3464,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         Measuring the distance to one oxygen and the angle to the other describes a chimeric
         nucleophile and lets a pose clear the NAC distance gate on an oxygen that is not attacking.
         The minimum over both Oδ is retained as a separate diagnostic column.
-        """
+        '''
         _asp_ox = [a for a in site_atoms_obj.get("Nuc", []) if a.name in ("OD1", "OD2")] or site_atoms_obj.get("Nuc", [])
         _attack_o = _aux.get("attack_o_atom")
         if best_c_atom is not None and _attack_o is not None:
@@ -3496,7 +3483,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         target_stabilise_centre = target_x_pos
         if not target_stabilise_centre and lig_coords: target_stabilise_centre = lig_coords[0]
 
-        """
+        '''
         Mutation-tolerant stabiliser distances: when the alignment-mapped
         canonical residue is absent (dist == 999), report the nearest
         functionally-equivalent sidechain to the leaving group instead (same
@@ -3505,7 +3492,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         keys; an H-bond donor / cationic group for the His155 fluoride stabiliser
         - PHE excluded there (no polar donor to F⁻), matching CFG ROLE_EXPECTED_
         RESIDUES['Fluorine_Stabiliser'].
-        """
+        '''
         if target_stabilise_centre:
             _stab_classes = {
                 "dist_Stab_W": RESIDUE_CLASS_GROUPS["AROMATIC"],
@@ -3517,9 +3504,11 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                     _best = CFG.SENTINEL_UNDEFINED
                     for p_at in all_prot_atoms:
                         _canon_st = _canonical_resname(p_at["resname"])
-                        # Only the residue's H-bond-DONOR atoms count (POLAR_SIDECHAIN_ATOMS):
-                        # a ring/backbone carbon near the halogen is not fluoride stabilisation.
-                        # PHE carries no donor → empty set → correctly excluded.
+                        '''
+                        Only the residue's H-bond-DONOR atoms count (POLAR_SIDECHAIN_ATOMS):
+                        a ring/backbone carbon near the halogen is not fluoride stabilisation.
+                        PHE carries no donor → empty set → correctly excluded.
+                        '''
                         _donor_fb = POLAR_SIDECHAIN_ATOMS.get(_canon_st, set())
                         if (_canon_st in _cls or p_at["resname"] in _cls) and p_at["atom_name"] in _donor_fb:
                             _d = p_at["pos"].dist(target_stabilise_centre)
@@ -3528,27 +3517,27 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                         results[_sk] = round(_best, 2)
             d_trp, d_tyr = results.get("dist_Stab_W", CFG.SENTINEL_UNDEFINED), results.get("dist_Stab_Y", CFG.SENTINEL_UNDEFINED)
 
-        """
+        '''
         Fluoride stabilisation requires the documented cradle - an aromatic π-system
         (Trp/Tyr) or the His fluoride stabiliser - within MECH_STAB_RADIUS of the leaving
         halogen. A generic polar sidechain (Ser/Thr/Asn …) does NOT count: in a packed
         pocket some polar atom is always nearby, which would make the flag fire for every
         pose and carry no signal.
-        """
+        '''
         d_his = results.get("dist_Stab_H", CFG.SENTINEL_UNDEFINED)
         stabilised = (d_trp <= CFG.MECH_STAB_RADIUS
                       or d_tyr <= CFG.MECH_STAB_RADIUS
                       or d_his <= CFG.MECH_STAB_RADIUS)
         results["halide_stabilisation_score"] = 1.0 if stabilised else 0.0
 
-        """
+        '''
         Carboxylate clamp engagement (CFG §5.3): the ligand carboxylate oxygens must
         salt-bridge the clamp arginines (guanidinium N within CLAMP_SALT_BRIDGE_DIST).
         One engaged arm earns mechanistic-score credit (clamp_ok); the elite tier
         requires BOTH distinct arginines (ligand_clamp_engaged), the bidentate anchoring
         that holds a 2-haloalkanoate for α-attack. A non-carboxylate head cannot satisfy
         either, so it is barred from clamp credit.
-        """
+        '''
         '''
         Clamp salt-bridge donor atoms: Arg guanidinium (NH1/NH2/NE) AND Lys ammonium (NZ),
         so an engineered carboxylate clamp that substitutes Arg→Lys is still recognised as
@@ -3567,20 +3556,20 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         _o1 = _clamp_arm_oxygens("Carb1")
         _o2 = _clamp_arm_oxygens("Carb2")
         _arm1, _arm2 = bool(_o1), bool(_o2)
-        """
+        '''
         The two arms must also be two DIFFERENT residues. The alignment can map Carb1 and Carb2 onto
         the same arginine, and that single residue reaching both carboxylate oxygens would otherwise
         report a full bidentate clamp - one guanidinium chelating the head is not the two-point
         anchoring the mechanism requires. The elite tier already refuses a duplicated mapping
         (elite_identity_ok), but carboxylate_clamp_integrity is reported for every pose and must not
         claim a clamp that does not exist.
-        """
+        '''
         _clamp_residues_distinct = (
             mapped_sites.get("Carb1") is not None
             and mapped_sites.get("Carb2") is not None
             and mapped_sites.get("Carb1") != mapped_sites.get("Carb2")
         )
-        """
+        '''
         Bidentate credit requires the two arms to hold DIFFERENT carboxylate oxygens. Two
         arginines converging on the same oxygen is a monodentate collapse: the head group is
         pinched at one point and free to rotate, which is not the two-point anchoring that holds
@@ -3589,7 +3578,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         The test is whether the arms can be assigned to distinct oxygens at all, not whether they
         already contact disjoint sets: with two arms that holds exactly when each arm engages at
         least one oxygen and the two arms reach at least two oxygens between them.
-        """
+        '''
         _bidentate_oxygens = bool(_o1 and _o2 and len(_o1 | _o2) >= 2)
         clamp_ok = bool(head_is_carboxylate and (_arm1 or _arm2))
         ligand_clamp_engaged = bool(head_is_carboxylate and _arm1 and _arm2
@@ -3605,13 +3594,15 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         soft_score = (s_nuc * CFG.SOFT_W_NUC) + (s_ang * CFG.SOFT_W_ANG) + (s_int * CFG.SOFT_W_INT)
         results["soft_catalytic_score"] = round(soft_score, 3)
 
-        # ---- SN2 dead-end consensus check (A: scissile C–F BDE | B: backside sterics) ----
-        # Computed BEFORE the mechanistic score so the dead-end verdict folds into it.
-        # BOTH indicators key on the mapped SN2 ATTACK CARBON (nearest the nucleophile),
-        # NOT every CF3 in the ligand: a long PFCA docks carboxylate-in-clamp and presents
-        # an α-CF2 here (2 F → passes), while its distal hydrophobic CF3 never faces Asp.
-        # Only a CF3 reactive carbon (e.g. TFA) triggers the consensus.
-        # A - fluorines bonded to the attack carbon → scissile C–F BDE class.
+        '''
+        ---- SN2 dead-end consensus check (A: scissile C–F BDE | B: backside sterics) ----
+        Computed BEFORE the mechanistic score so the dead-end verdict folds into it.
+        BOTH indicators key on the mapped SN2 ATTACK CARBON (nearest the nucleophile),
+        NOT every CF3 in the ligand: a long PFCA docks carboxylate-in-clamp and presents
+        an α-CF2 here (2 F → passes), while its distal hydrophobic CF3 never faces Asp.
+        Only a CF3 reactive carbon (e.g. TFA) triggers the consensus.
+        A - fluorines bonded to the attack carbon → scissile C–F BDE class.
+        '''
         terminal_f_count = 0
         _tf_mapped = False
         if rd_mol and mm_map and best_c_atom:
@@ -3633,7 +3624,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         '''
         if not _tf_mapped:
             terminal_f_count = int(_aux.get("n_scissile_f", 0))
-        """
+        '''
         CHEMISTRY THAT COULD NOT BE EVALUATED IS NOT CHEMISTRY THAT PASSED.
 
         Falling back to 0.0 here does not mean "unknown" - it means a C-F bond with ZERO dissociation
@@ -3643,7 +3634,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         The BDE table is keyed on 1, 2 or 3 fluorines. Anything else means the scissile centre was not
         resolved, and that is recorded as such (_chem_unknown) rather than silently forgiven.
-        """
+        '''
         _chem_unknown = terminal_f_count not in CFG.SCISSILE_CF_BDE
         scissile_cf_bde = float(CFG.SCISSILE_CF_BDE.get(terminal_f_count, CFG.SENTINEL_UNDEFINED))
 
@@ -3658,17 +3649,21 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         if _map_frac < CFG.LIGAND_MAP_MIN_FRACTION:
             _chem_unknown = True
 
-        # B - backside steric occlusion: vdW bulk of heavy halogen substituents on the
-        # attack carbon lying on the nucleophile-approach hemisphere (anti to leaving F).
-        # The leaving F sits opposite the approach axis (dot < 0) and is auto-excluded.
-        # A skipped computation is not a measurement of zero. Fluoroacetate genuinely HAS zero backside
-        # occlusion; a complex whose RDKit mapping failed has an UNKNOWN one, and the two must not be
-        # written the same way. The flag below separates them.
+        '''
+        B - backside steric occlusion: vdW bulk of heavy halogen substituents on the
+        attack carbon lying on the nucleophile-approach hemisphere (anti to leaving F).
+        The leaving F sits opposite the approach axis (dot < 0) and is auto-excluded.
+        A skipped computation is not a measurement of zero. Fluoroacetate genuinely HAS zero backside
+        occlusion; a complex whose RDKit mapping failed has an UNKNOWN one, and the two must not be
+        written the same way. The flag below separates them.
+        '''
         backside_occlusion = 0.0
-        # The attack carbon must be present IN the map, not merely somewhere in a non-empty map:
-        # mm_map.get(best_c_atom.name) is None means this very centre was not resolved, so its
-        # backside is UNKNOWN, not zero. Fold that into the measured flag or occlusion silently
-        # reads 0.0 (= the best case for an inverted metric) while chem_verified stays 1.
+        '''
+        The attack carbon must be present IN the map, not merely somewhere in a non-empty map:
+        mm_map.get(best_c_atom.name) is None means this very centre was not resolved, so its
+        backside is UNKNOWN, not zero. Fold that into the measured flag or occlusion silently
+        reads 0.0 (= the best case for an inverted metric) while chem_verified stays 1.
+        '''
         _c_idx = mm_map.get(best_c_atom.name) if (best_c_atom is not None and mm_map) else None
         _occl_measured = bool(best_c_atom is not None and target_x_pos is not None
                               and rd_mol and mm_map and _c_idx is not None)
@@ -3702,7 +3697,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         beta_f_count = int(_aux.get("beta_f_count", 0))
         results["beta_f_count"] = beta_f_count
         n_scissile_f = int(_aux.get("n_scissile_f", 1))
-        """
+        '''
         Angle multiplicity for the Šidák correction (CFG §5.2d) = the number of equivalent C–F bonds
         on the scissile carbon. The inflation being corrected lives in the POSE: an α-CF3 has three
         chances to present some fluorine anti-periplanar to the nucleophile, a mono-fluoro substrate
@@ -3713,12 +3708,12 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         have to show to be as improbable as this pose. Without it, TFA out-angles fluoroacetate on the
         DeHa4 control in all five diffusion samples and takes a higher tier on the one enzyme known
         not to turn it over.
-        """
+        '''
         n_angle_choices = max(1, n_scissile_f)
         results["angle_multiplicity"] = int(n_angle_choices)
         angle_effective = CFG.sn2_effective_angle(angle, n_angle_choices)
         results["sn2_attack_angle_effective"] = round(angle_effective, 1)
-        """
+        '''
         WHERE C–F BOND STRENGTH ENTERS, STATED HONESTLY.
 
         Competence and ranking do NOT keep the raw geometry:
@@ -3734,12 +3729,12 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         The three are not a double-count: the first decides whether the chemistry is feasible at all, the
         second whether it is elite, the third how it ranks among its peers. Step-07 QM/MM remains the
         final reactivity arbiter - none of these is a substitute for a barrier.
-        """
+        '''
         results["feasibility_factor"] = round(CFG.feasibility_factor(scissile_cf_bde, beta_f_count), 3)
         sn2_dead_end = (scissile_cf_bde > CFG.SCISSILE_CF_BDE_MAX
                         and backside_occlusion > CFG.SN2_BACKSIDE_OCCL_MAX)
 
-        """
+        '''
         MECHANISTIC SCORE  (holistic 0–1)
         Computed via CFG.mechanistic_score() - the single source of truth (§5.1). It sums
         five binary anchor checks (nucleophile reach, Nuc–Base and Base–Acid relay distances,
@@ -3748,8 +3743,8 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         the reported mechanistic_score use it). The tier gate instead uses
         mechanistic_score_effective = this minus the graded chemistry and containment
         penalties (computed after the pocket-fit block). All weights live in CFG.
-        """
-        """
+        '''
+        '''
         THE MULTIPLICITY CORRECTION IS CHARGED ONCE, AND BOTH GATES SEE THE SAME CORRECTED ANGLE.
 
         The correction must not be applied twice to one tier decision. `angle_effective` already converts the
@@ -3762,7 +3757,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         The correction is right; charging it twice is not. It is computed once, and the already-corrected
         angle is what both gates score - so the penalty is real, applied once, and the two gates cannot
         silently compound it.
-        """
+        '''
         mech_score = CFG.mechanistic_score(
             d_nuc, dist_nuc_base, dist_base_acid,
             clamp_ok, stabilised, angle_effective, steric_clashes,
@@ -3771,12 +3766,12 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         )
         results[CFG.COL_MECH_S] = round(mech_score, 2)
 
-        """
+        '''
         Gated continuous competence score (CFG §5.5) - the Scientific-ranking key. Every
         independent catalytic axis enters once, under hard chemistry gates (α-attack +
         carboxylate, not a dead-end); a non-productive pose scores 0. Computed via the CFG
         single source so the formula is never re-implemented inline.
-        """
+        '''
         competence = CFG.competence_score(
             scissile_is_alpha, head_is_carboxylate,
             angle, d_nuc, results["carboxylate_clamp_integrity"],
@@ -3787,7 +3782,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         )
         results["competence_score"] = competence
 
-        """
+        '''
         Tier assignment is driven by the variant's measured active-site geometry toward
         the docked ligand (nucleophile reach, SN2 angle, triad distances, clamp and
         halide-pocket engagement) together with the presence and identity of the
@@ -3798,7 +3793,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         on the mapped attack carbon, so only a CF3 reactive carbon (e.g. TFA) is flagged;
         a long PFCA presents an α-CF2 and passes. Final chemical feasibility is confirmed
         at the Step-07 QM/MM + MD/WaterMap stage.
-        """
+        '''
 
         '''
         BACKBONE-CLASH METRIC (size-fair; graded, not a size veto)
@@ -3840,33 +3835,37 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             results["competence_score"] = round(
                 max(0.0, results.get("competence_score", 0.0) - CFG.MAINCHAIN_CLASH_PENALTY * clash_count), 3)
 
-        # Enzyme vs ligand steric complementarity (§5.2c). pocket_containment_cavity (protein
-        # ray-cast buriedness) feeds the feasibility-weighted tier score below;
-        # pocket_containment_site8 (engagement with the eight catalytic residues) and the hull
-        # volume/occupancy fields are reported diagnostics. The full protein is required: a
-        # containment measured on ligand coordinates alone cannot tell a narrow pocket from a wide one.
+        '''
+        Enzyme vs ligand steric complementarity (§5.2c). pocket_containment_cavity (protein
+        ray-cast buriedness) feeds the feasibility-weighted tier score below;
+        pocket_containment_site8 (engagement with the eight catalytic residues) and the hull
+        volume/occupancy fields are reported diagnostics. The full protein is required: a
+        containment measured on ligand coordinates alone cannot tell a narrow pocket from a wide one.
+        '''
         results.update(compute_pocket_fit(site_atoms_obj, lig_atoms_obj, all_prot_atoms))
 
-        # Feasibility-weighted mechanistic score (tier-gate key). Two graded penalties are
-        # subtracted from the geometric mech_score: (A) chemistry - scissile C–F BDE and
-        # backside occlusion beyond the dead-end cutoffs (down-ranks the SN2 dead-end TFA to
-        # ~Tier_2B), plus a per-β-fluorine term (the perfluoro tail inductively strengthens the
-        # α-C–F, so a perfluoro CF2 α-carbon like PFBA is down-ranked past a haloacetate CF2
-        # like DFA; FA/DFA/TFA have β_F=0 and are untouched); (B) containment - the ligand
-        # spilling out of the small FAcD pocket (down-ranks long-chain PFAS). All engage only
-        # past a threshold, so FA/DFA/short substrates are unpenalised, and all are per-pose
-        # geometry, so a genuine strong-binding/wide-pocket variant can still surface a harder
-        # substrate. Competence and the reported mechanistic_score stay on the raw geometry;
-        # only the tier gates use the effective value. FAcD small-substrate scope + PFAS
-        # recalcitrance: Wackett 2022; Chan 2011.
-        """
+        '''
+        Feasibility-weighted mechanistic score (tier-gate key). Two graded penalties are
+        subtracted from the geometric mech_score: (A) chemistry - scissile C–F BDE and
+        backside occlusion beyond the dead-end cutoffs (down-ranks the SN2 dead-end TFA to
+        ~Tier_2B), plus a per-β-fluorine term (the perfluoro tail inductively strengthens the
+        α-C–F, so a perfluoro CF2 α-carbon like PFBA is down-ranked past a haloacetate CF2
+        like DFA; FA/DFA/TFA have β_F=0 and are untouched); (B) containment - the ligand
+        spilling out of the small FAcD pocket (down-ranks long-chain PFAS). All engage only
+        past a threshold, so FA/DFA/short substrates are unpenalised, and all are per-pose
+        geometry, so a genuine strong-binding/wide-pocket variant can still surface a harder
+        substrate. Competence and the reported mechanistic_score stay on the raw geometry;
+        only the tier gates use the effective value. FAcD small-substrate scope + PFAS
+        recalcitrance: Wackett 2022; Chan 2011.
+        '''
+        '''
         Only the backside-occlusion term fades toward a near-ideal SN2 angle (§5.2b): occlusion is
         a steric obstruction of the attack trajectory, and a pose that reaches 180° has cleared it.
         The C–F bond dissociation energy does NOT fade - the strength of the bond being broken is a
         property of the bond, not of the angle of approach, so a near-linear attack on a strong C–F
         keeps its full penalty. β-fluorination and containment stay flat for the same reason.
-        """
-        """
+        '''
+        '''
         UNKNOWN CHEMISTRY IS BARRED FROM ELITE, NOT ANNIHILATED.
 
         A penalty is invented from a non-measurement in neither term: a sentinel BDE (scissile centre
@@ -3879,7 +3878,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         BDE with it would silently drop the penalty on, e.g., an α-CF3 whose count came from the
         map-independent fallback). _chem_unknown still bars the complex from the elite tier (below), and
         it is flagged, so a human sees exactly which complexes were never chemically verified.
-        """
+        '''
         if scissile_cf_bde >= CFG.SENTINEL_UNDEFINED:
             _bde_pen  = 0.0            # BDE unresolved (sentinel) - do not invent a penalty
         else:
@@ -3888,10 +3887,12 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             _occl_pen = 0.0            # backside occlusion never measured
         else:
             _occl_pen = CFG.CHEM_PEN_W_OCCL * max(0.0, backside_occlusion - CFG.SN2_BACKSIDE_OCCL_MAX)
-        # Fade on the SAME angle the tier ladder and mech_score gate on - the Šidák-deflated
-        # angle_effective, not the raw best-of-N angle. Using the raw angle would waive the occlusion
-        # penalty on precisely the inflated trajectory the multiplicity correction removes, so an α-CF3
-        # presenting one fluorine anti-periplanar by chance would escape its backside-crowding penalty.
+        '''
+        Fade on the SAME angle the tier ladder and mech_score gate on - the Šidák-deflated
+        angle_effective, not the raw best-of-N angle. Using the raw angle would waive the occlusion
+        penalty on precisely the inflated trajectory the multiplicity correction removes, so an α-CF3
+        presenting one fluorine anti-periplanar by chance would escape its backside-crowding penalty.
+        '''
         _ang_scale = min(1.0, max(0.0, (CFG.CHEM_PEN_ANGLE_NONE - angle_effective)
                                        / (CFG.CHEM_PEN_ANGLE_NONE - CFG.CHEM_PEN_ANGLE_FULL)))
         _chem_pen = _bde_pen + _occl_pen * _ang_scale + CFG.CHEM_PEN_W_BETA * int(beta_f_count)
@@ -3906,7 +3907,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["mechanistic_score_effective"] = round(mech_effective, 2)
         mech_score = mech_effective   # tier ladder + elite gate gate on the feasibility-weighted score
 
-        """
+        '''
         Catalytic-identity gates. Geometry alone (good SN2 angle + close nucleophile)
         is NOT sufficient: a functional FAcD must present the correct catalytic
         residues. Uses the alignment-mapped residue names captured above.
@@ -3915,7 +3916,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
           B - elite (Tier_1A) additionally requires the carboxylate clamp present as
               TWO DISTINCT arginines and an intact halide pocket (aromatic cradle +
               fluoride stabiliser of the documented class).
-        """
+        '''
         _exp_id = CFG.ROLE_EXPECTED_RESIDUES
         def _role_id_ok(_site_key, _role):
             return _canonical_resname(site_resname.get(_site_key, "")) in _exp_id.get(_role, set())
@@ -3930,17 +3931,19 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                              and _role_id_ok("Stab_Y", "Fluoride_Cradle")
                              and _role_id_ok("Stab_H", "Fluorine_Stabiliser"))
 
-        """
+        '''
         Active-site integrity (Chan et al. 2011, JACS 133:7461): fraction of the eight
         catalytic residues - Asp nucleophile, His base, Asp acid, the two clamp arginines
         and the His/Trp/Tyr fluoride cradle - mapped to the correct residue type. This is
         the mechanistic measure of whether the catalytic machinery is present, and replaces
         global sequence identity as the conservation signal: a distant homolog with all eight
         residues conserved scores 1.0 regardless of overall identity.
-        """
-        # The two clamp arginines must be DISTINCT residues; without the exclusivity guard a
-        # single Arg mapped to both Carb1 and Carb2 would be counted twice, inflating the
-        # conservation score to 8/8 when only seven residues are present.
+        '''
+        '''
+        The two clamp arginines must be DISTINCT residues; without the exclusivity guard a
+        single Arg mapped to both Carb1 and Carb2 would be counted twice, inflating the
+        conservation score to 8/8 when only seven residues are present.
+        '''
         _role_checks = [
             _role_id_ok("Nuc", "Nucleophile"), _role_id_ok("Base", "Base_Catalyst"),
             _role_id_ok("Acid", "Acid_Catalyst"), _role_id_ok("Carb1", "Carboxylate_Clamp"),
@@ -3962,7 +3965,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
                      for a in site_atoms_obj.get(_rk, [])]
         results["active_site_plddt"] = round(sum(_as_bvals) / len(_as_bvals), 2) if _as_bvals else 0.0
 
-        """
+        '''
         Productive-attack gate (CFG §5.3): a degrader must present the α-carbon (adjacent
         to the substrate carboxylate) as the SN2 attack carbon. Sulfonate/ether heads and
         mid-chain CF2 attacks are not productive defluorination and cannot earn a degrader
@@ -3971,23 +3974,23 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         (Chan et al. 2011 - His155/Trp156/Tyr219 form three H-bonds to F⁻; residue identity
         alone is insufficient, the pocket must reach the departing halide), and the nucleophile
         resolved without a wide alignment rescue (§5.4).
-        """
+        '''
         productive_attack = scissile_is_alpha
-        """
+        '''
         Elite bond-strength ceiling (§8.5). The attack angle is a property of the approach; the
         C–F dissociation energy is a property of the bond. A near-linear trajectory onto a C–F
         above TIER_ELITE_BDE_MAX does not make that bond cleavable, so such a pose is barred from
         the elite tier no matter how ideal its geometry - it falls to Tier_1B and stays a
         discovery lead for Step-07 QM/MM to adjudicate.
-        """
+        '''
         bde_elite_ok = scissile_cf_bde <= CFG.TIER_ELITE_BDE_MAX
-        """
+        '''
         `not _chem_unknown` is a requirement of the ELITE tier, not of every tier. Tier_1A is the claim
         that this complex is a lead worth a week of GPU time - and that claim cannot rest on chemistry
         that was never evaluated. A complex whose scissile centre could not be resolved keeps whatever
         rank its geometry earns, but it cannot be promoted to the top on the strength of penalties that
         were skipped rather than passed.
-        """
+        '''
         elite_ready = (elite_identity_ok and ligand_clamp_engaged and stabilised
                        and bde_elite_ok
                        and not _chem_unknown
@@ -3995,9 +3998,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         tier, is_degrader, meaning, constraint = CFG.TIER_DECOY, False, "No significant documented interactions.", "Fail"
 
-        # -------------------------------------------------------------------------------
-        # Sub-Step 7.2.3: ULTRA-STRICT FAcD HIERARCHY LOGIC
-        # -------------------------------------------------------------------------------
+        #  -- Sub-step 7.2.3: ULTRA-STRICT FAcD HIERARCHY LOGIC --
 
         if tail_clash_ratio >= CFG.TAIL_CLASH_RATIO and clash_count >= CFG.CLASH_MIN_FLOOR:
             tier, meaning, is_degrader = CFG.TIER_DECOY, (
@@ -4074,7 +4075,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             meaning = "Failed Analysis: Positional distance or established angle physically violates FAcD catalytic structural requirements."
             is_degrader = False
 
-        """
+        '''
         SN2 dead-end flag (scissile_cf_bde, sn2_backside_occlusion, sn2_dead_end) is a
         diagnostic; the tier demotion of a CF3-α ligand such as TFA is carried by the graded
         chemistry penalty folded into mechanistic_score_effective above (BDE + occlusion beyond
@@ -4084,13 +4085,13 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         Walden trajectory (≥ CHEM_PEN_ANGLE_NONE) has the penalty waived and surfaces to Tier_1A
         as a discovery lead. This encodes that DeHa4 does not turn over TFA (Wackett 2022) without
         precluding an undiscovered variant that can. Step-07 QM/MM remains the final arbiter.
-        """
+        '''
         results["sn2_dead_end"] = 1 if sn2_dead_end else 0
 
-        """
+        '''
         Derive constraint_check from the assigned tier - Tier_1/Tier_2 tiers pass,
         Good is a partial pass (in pocket but wrong orientation), Poor/None fail.
-        """
+        '''
         if is_degrader:
             constraint = "Pass"
         elif tier == CFG.TIER_ORDER[4]:
@@ -4106,23 +4107,23 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         })
         return results
     except Exception as e:
-        """
+        '''
         A pose that fails to score is not a pose that scored zero. The tier is set to "Error" and the
         exception is LOGGED WITH ITS TRACEBACK, because this handler is the last thing standing
         between a broken call signature and a full run of 58,056 complexes that all silently read
         tier="Error", mechanistic_score=0.00 and default pocket containment - a result that looks
         like data and is not. Anything that reaches here is a bug in the scorer, not a property of
         the complex, and it must be visible in the log the moment it happens.
-        """
+        '''
         logger.error(f"check_catalytic_geometry FAILED for {getattr(cif_path, 'name', cif_path)}: "
                      f"{type(e).__name__}: {e}", exc_info=True)
         results.update({"catalytic_dist_A": CFG.SENTINEL_UNDEFINED, "error": f"{type(e).__name__}: {e}",
                         CFG.COL_TIER: "Error"})
         return results
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 7.3: Parallelised Model Analysis & Ranking Framework
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def analyse_model_task(args: Tuple[Path, Dict[str, int], Path, str, str, int]) -> Tuple[str, Dict, float]:
     """Global worker routine functionally decoupled for robust serialisation capabilities across CPU threads."""
     cif_p, sites, json_p, m_name, smiles_str, nuc_rescue_offset = args
@@ -4185,9 +4186,9 @@ def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smile
 # SECTION 8: METRICS & GPU MANAGEMENT
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 8.1: Metric Computation
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def compute_cross_interface_pae(pae_path: Path, prot_len: int, lig_len: int) -> float:
     """Calculates the Predicted Aligned Error (PAE), focusing specifically on the protein-ligand interface."""
     try:
@@ -4210,10 +4211,12 @@ def load_extra_boltz_metrics(br_dir: Path, model_name: str, prot_len: int, lig_l
         if conf_files:
             d = json.loads(conf_files[0].read_text())
             out.update({k: d.get(k) for k in ["iptm", "confidence_score", "ptm", "ligand_iptm", "protein_iptm"]})
-        # sorted(): glob/rglob return entries in filesystem order, which is arbitrary and differs
-        # between machines and filesystems. Taking [0] of an unsorted match makes the value that ends
-        # up in the CSV depend on the disk, not on the data - the same run on another box can pick a
-        # different model's pLDDT. Sorting makes the choice deterministic and reproducible.
+        '''
+        sorted(): glob/rglob return entries in filesystem order, which is arbitrary and differs
+        between machines and filesystems. Taking [0] of an unsorted match makes the value that ends
+        up in the CSV depend on the disk, not on the data - the same run on another box can pick a
+        different model's pLDDT. Sorting makes the choice deterministic and reproducible.
+        '''
         plddt_files = sorted(br_dir.rglob(f"plddt_*{model_name}.npz"))
         if plddt_files:
             with np.load(str(plddt_files[0])) as data:
@@ -4224,9 +4227,9 @@ def load_extra_boltz_metrics(br_dir: Path, model_name: str, prot_len: int, lig_l
     except Exception: pass
     return out
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 8.2: Hardware Probing Tools
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def query_gpu_memory():
     """A resilient system query that safely falls back to CPU memory context if nvidia-smi hangs or crashes."""
     try:
@@ -4255,9 +4258,9 @@ def cpu_usage_summary():
 # SECTION 9: JOB PROCESSING LOGIC (CORE WORKER)
 # =============================================================================
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 9.1: Status Validation Operations
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def check_job_status(job_dir: Path) -> bool:
     """Verifies the finality of a job by checking for a complete and uncorrupted summary JSON file."""
     if not job_dir.exists(): return False
@@ -4268,9 +4271,9 @@ def check_job_status(job_dir: Path) -> bool:
         except Exception: pass
     return False
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 9.2: SMILES Self-Healing Utility Architecture
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def heal_smiles_in_files(job_dir: Path, yaml_path: Path, new_smiles: str, lig_id: str):
     """
     A self-healing function that logically updates existing YAML and CIF files with the newly
@@ -4306,9 +4309,9 @@ def heal_smiles_in_files(job_dir: Path, yaml_path: Path, new_smiles: str, lig_id
             except Exception:
                 pass
 
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Step 9.3: Core Worker Engine Infrastructure
-# -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 
 def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_elapsed: float, aln_dir: Path,
@@ -4331,10 +4334,10 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     best_complex_dir = job_dir / "Best_Complex"
     if best_complex_dir.exists():
         shutil.rmtree(best_complex_dir, ignore_errors=True)
-    """
+    '''
     Retry mkdir - shutil.rmtree uses ignore_errors so the dir may briefly
     still exist on a slow fs; exist_ok=True absorbs any EEXIST race.
-    """
+    '''
     for _attempt in range(3):
         try:
             best_complex_dir.mkdir(parents=True, exist_ok=True)
@@ -4379,11 +4382,11 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     br_dir = next((p for p in sorted(job_dir.iterdir()) if p.is_dir() and p.name.startswith("boltz_results_")), None)
     prediction_exists = False
     if br_dir and (br_dir / "predictions").exists():
-        """
+        '''
         A prediction is only considered complete when at least one confidence_*.json
         exists alongside the CIF - Boltz writes these only after a model fully finishes.
         A directory with CIFs but no confidence JSONs is a killed/partial run.
-        """
+        '''
         has_confidence = any(br_dir.rglob("confidence_*.json"))
         if has_confidence:
             prediction_exists = True
@@ -4407,9 +4410,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
     gpu_idx = -1
     start_time = time.time()
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 9.3.1: Invoke AI Inference Model Engine (GPU)
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 9.3.1: Invoke AI Inference Model Engine (GPU) --
     if prediction_exists:
         run_gpu = False
         if logger: logger.debug(f"[SKIP] {name} - pre-existing prediction found, proceeding to analytics.")
@@ -4432,18 +4433,22 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
         # in a shared /tmp/triton_cache.
         env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
-        # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
-        # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
-        # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+        '''
+        conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
+        Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
+        GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+        '''
         env["OMP_NUM_THREADS"] = "1"
         env["MKL_NUM_THREADS"] = "1"
         env["OPENBLAS_NUM_THREADS"] = "1"
 
-        # --seed: Boltz seeds nothing by default, so an unseeded run returns a different pose for the
-        # same complex every time (measured on the DeHa4 control: 145.5° → 132.4° between two runs of
-        # identical code). A tier that moves when nothing moved is not reproducible, and it breaks the
-        # control read-out the pipeline calibrates itself against. The full diffusion ensemble is
-        # still sampled; the seed only fixes where it starts.
+        '''
+        --seed: Boltz seeds nothing by default, so an unseeded run returns a different pose for the
+        same complex every time (measured on the DeHa4 control: 145.5° → 132.4° between two runs of
+        identical code). A tier that moves when nothing moved is not reproducible, and it breaks the
+        control read-out the pipeline calibrates itself against. The full diffusion ensemble is
+        still sampled; the seed only fixes where it starts.
+        '''
         cmd = [
             BOLTZ_BIN, "predict", str(job["yaml"]), "--out_dir", str(job_dir),
             "--cache", str(BOLTZ_CACHE), "--model", BOLTZ_MODEL,
@@ -4482,9 +4487,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
     br_dir = next((p for p in sorted(job_dir.iterdir()) if p.is_dir() and p.name.startswith("boltz_results_")), None)
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 9.3.2: Execution Physics & Structural Topology Engine (CPU)
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 9.3.2: Execution Physics & Structural Topology Engine (CPU) --
     data.update(aln_inject)
     if run_gpu or repair_cpu:
         # Compute the (cheap) alignment for every job, but persist the .txt + stats row
@@ -4523,7 +4526,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 geom = check_catalytic_geometry(cifs[0], mapped, job.get("smiles", ""), _nuc_off)
                 data.update(geom)
 
-        """
+        '''
         Top-tier confidence guard (CFG §8). The catalytic machinery itself is already enforced
         by the tier ladder - Tier_1A requires all eight residues mapped to the correct type
         (triad_identity_ok + elite_identity_ok) at catalytic distances with the fluoride cradle
@@ -4541,7 +4544,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
         it actually trusts. A Tier_1A hit below ELITE_AS_PLDDT_MIN is demoted ONE notch to Tier_1B
         (still elite geometry, still reviewed); the geometric tier is preserved in its own column.
         The global score is retained as the fallback when the local value is unavailable.
-        """
+        '''
         data["geometric_tier"] = data.get(CFG.COL_TIER, CFG.TIER_DECOY)
         if data.get(CFG.COL_TIER) == CFG.TIER_ORDER[0]:
             _as_plddt = float(data.get("active_site_plddt", 0.0) or 0.0)
@@ -4608,9 +4611,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             data["avg_distance_A"] = res_inter.get("avg_dist", 0.0)
             data["counts"] = counts
 
-            # -------------------------------------------------------------------------------
-            # Sub-Step 9.3.3: Advanced Thermodynamic Scoring (Bias-Free)
-            # -------------------------------------------------------------------------------
+            #  -- Sub-step 9.3.3: Advanced Thermodynamic Scoring (Bias-Free) --
             num_int = res_inter.get("num_interactions", 0)
             lig_heavy_atoms = max(1, res_inter.get("ligand_heavy_atoms", 1))
 
@@ -4677,9 +4678,9 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             )
             data["Justification"] = f"{base_justification} | Tier: {tier} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
-            # -------------------------------------------------------------------------------
+            # -----------------------------------------------------------------------------
             # SUPERIMPOSITION & LIKELIHOOD SCORING ARCHITECTURE
-            # -------------------------------------------------------------------------------
+            # -----------------------------------------------------------------------------
             data["hydrophobic_desolvation_ratio"] = 0.0   # default; overwritten below if control_cif available
             data["active_site_contact_flag"]    = 0.0   # default; set below when contact density exceeds the flag threshold
             data["catalytic_constellation_score"] = 0.0   # Criterion B default; overwritten below if control_cif available
@@ -4694,14 +4695,14 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 if rmsd >= 99.0: geo_fit = 0.0
                 else: geo_fit = 100.0 / (1.0 + rmsd)
 
-                """
+                '''
                 Active-site conservation is led by the catalytic machinery, not by global
                 identity. Weighting: 60% active-site integrity (fraction of the eight
                 catalytic residues correctly mapped, Chan 2011), 30% active-site geometric
                 fit to the control (RMSD-derived), 10% global identity (retained only as a
                 light corroborating signal). A distant homolog with an intact, well-placed
                 active site therefore scores high regardless of overall sequence identity.
-                """
+                '''
                 _integrity_pct = 100.0 * float(data.get("active_site_integrity", 0.0))
                 likelihood = ((CFG.CONSERV_W_INTEGRITY * _integrity_pct)
                               + (CFG.CONSERV_W_GEO * geo_fit)
@@ -4712,7 +4713,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 if desolvation_ratio > CFG.SCORE_DESOLVATION_THRESHOLD:
                     likelihood += (CFG.SCORE_DESOLVATION_BONUS_FACTOR * desolvation_ratio)
 
-                """
+                '''
                 Active-site conservation measures sequence homology + active-site
                 geometry only. It is deliberately decoupled from the product-
                 inhibition heuristic: the inhibition penalty is recorded as its
@@ -4720,8 +4721,8 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 subtracted here - otherwise a high interaction density could zero
                 out the conservation score of a genuinely well-conserved active
                 site (e.g. distant homologs with low identity but valid geometry).
-                """
-                """
+                '''
+                '''
                 active_site_contact_flag - a REPORTED contact-richness descriptor
                 that never gates the tier or the ranking. interaction_density is
                 normalised per ligand heavy atom, so a small, tightly-bound substrate
@@ -4729,7 +4730,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 NOT a product-inhibition measure. Product inhibition (glycolate/F⁻
                 retention slowing turnover) is quantified downstream by Step-06 Prime
                 MM-GBSA ΔG_bind.
-                """
+                '''
                 if interaction_density > CFG.SCORE_INHIBITION_DENSITY_THRESHOLD:
                     data["active_site_contact_flag"] = round(
                         CFG.SCORE_INHIBITION_PENALTY_FACTOR
@@ -4739,24 +4740,26 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
 
                 data[CFG.COL_LIKE_S] = round(max(0, min(100, likelihood)), 2)
 
-                # ----------------------------------------------------------------------
-                # Criterion B - precise catalytic constellation.
-                # Active_Site_RMSD is the all-EIGHT catalytic-residue constellation RMSD onto
-                # the 3R3U crystal (Cα superposition). B = 1/(1+RMSD) is high only when the
-                # eight residues are geometrically ASSEMBLED like the crystal - not merely
-                # present and correctly typed (that is active_site_integrity, Criterion A).
-                # ----------------------------------------------------------------------
+                '''
+                ----------------------------------------------------------------------
+                Criterion B - precise catalytic constellation.
+                Active_Site_RMSD is the all-EIGHT catalytic-residue constellation RMSD onto
+                the 3R3U crystal (Cα superposition). B = 1/(1+RMSD) is high only when the
+                eight residues are geometrically ASSEMBLED like the crystal - not merely
+                present and correctly typed (that is active_site_integrity, Criterion A).
+                ----------------------------------------------------------------------
+                '''
                 _as_rmsd = float(data.get("Active_Site_RMSD", CFG.SENTINEL_UNDEFINED))
                 _B = 0.0 if _as_rmsd >= 99.0 else round(1.0 / (1.0 + _as_rmsd), 3)
                 data["catalytic_constellation_score"] = _B
-                """
+                '''
                 B CAPS the tier - downgrade only, never promotes (the SN2 trajectory stays the
                 positive catalytic signal). The highest tier whose B-floor the pose meets is the
                 ceiling; the tier is moved to the lower of (current, ceiling) on the ladder. B
                 below every degrader floor → TIER_CONSTELLATION_FLOOR_TIER (B>0) or Tier_5_Decoy
                 (B==0, constellation unmeasurable), and is_degrader is cleared. geometric_tier
                 (captured pre-demotion) preserves the raw geometric call for audit.
-                """
+                '''
                 _cfloors = CFG.TIER_CONSTELLATION_MIN
                 _order   = CFG.TIER_ORDER
                 _cur_t   = data.get(CFG.COL_TIER, CFG.TIER_DECOY)
@@ -4765,9 +4768,11 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     _ceiling = CFG.TIER_CONSTELLATION_FLOOR_TIER if _B > 0 else CFG.TIER_DECOY
                 if (_cur_t in _order and _ceiling in _order
                         and _order.index(_ceiling) > _order.index(_cur_t)):
-                    # TIER_CONSTELLATION_MIN only defines floors for Tier_1A/1B/2A/2B, so a Tier_3 row
-                    # would read "B < 0" (the .get default). Report against the lowest defined floor -
-                    # the effective bar the row fell under - when _cur_t has no explicit floor.
+                    '''
+                    TIER_CONSTELLATION_MIN only defines floors for Tier_1A/1B/2A/2B, so a Tier_3 row
+                    would read "B < 0" (the .get default). Report against the lowest defined floor -
+                    the effective bar the row fell under - when _cur_t has no explicit floor.
+                    '''
                     _disp_floor = _cfloors.get(_cur_t, min(_cfloors.values()) if _cfloors else 0.0)
                     _tag = f"low_constellation(B={_B:g}<{_disp_floor:g})"
                     data[CFG.COL_TIER] = _ceiling
@@ -4805,7 +4810,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                 data["r3u_Carboxylate_Clamp"]             = False
                 data["r3u_ActiveSite_Conservation_Score"]     = 0.0
 
-            """
+            '''
             Coupled elite-machinery cap (downgrade-only). A Tier_1A pose must have either
             complete machinery + open backside (mech ≥ MECH_ELITE_HI) OR near-complete
             machinery (mech ≥ MECH_ELITE_LO) redeemed by a crystal-exact constellation
@@ -4813,7 +4818,7 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             This lets a slightly backside-occluded native substrate (α-CF3 TFA, mech ~0.85)
             hold elite only through its single most crystal-perfect pose, not every pose,
             without any substrate-class label. geometric_tier keeps the raw call.
-            """
+            '''
             if data.get(CFG.COL_TIER) == CFG.TIER_ORDER[0]:
                 _mech_e = float(data.get("mechanistic_score_effective",
                                         data.get(CFG.COL_MECH_S, 0.0)) or 0.0)
@@ -4835,9 +4840,11 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     _etag = f"incomplete_machinery({'; '.join(_fail)})"
                     _eprev = data.get("elite_demotion", "none")
                     data["elite_demotion"] = _etag if _eprev in ("", "none") else f"{_eprev}+{_etag}"
-                    # Regenerate the verdict so a row demoted here does not still ship the Tier_1A
-                    # "Elite-Grade …" meaning and "| Tier: Tier_1A" Justification (the constellation and
-                    # pLDDT demotions already do this; this branch does the same).
+                    '''
+                    Regenerate the verdict so a row demoted here does not still ship the Tier_1A
+                    "Elite-Grade …" meaning and "| Tier: Tier_1A" Justification (the constellation and
+                    pLDDT demotions already do this; this branch does the same).
+                    '''
                     _meaning = (f"Elite machinery incomplete ({'; '.join(_fail)}); the near-ideal SN2 pose "
                                 f"is not backed by complete catalytic machinery or a crystal-exact "
                                 f"constellation - demoted to {_demoted_to}.")
@@ -4849,12 +4856,14 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                         identity=data.get(CFG.COL_ID_PCT, 0.0)
                     ) + f" | Tier: {_demoted_to} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
-            # Final competence-feasibility floor (re-applied after the caps). The geometry-elite tiers
-            # (1A/1B) gate on geometry only, and both caps above demote on constellation / machinery -
-            # none re-checks feasibility. So a geometry-perfect but low-feasibility pose (e.g. a high-BDE
-            # TFA) can be capped INTO 2A/2B while its competence_score sits below that tier's floor, which
-            # the FORWARD 2A/2B gate would have rejected. Re-apply the same CFG floor (TIER_COMP_MIN) here
-            # so the demotion path obeys it too: drop such a row to Tier_3 (not a degrader).
+            '''
+            Final competence-feasibility floor (re-applied after the caps). The geometry-elite tiers
+            (1A/1B) gate on geometry only, and both caps above demote on constellation / machinery -
+            none re-checks feasibility. So a geometry-perfect but low-feasibility pose (e.g. a high-BDE
+            TFA) can be capped INTO 2A/2B while its competence_score sits below that tier's floor, which
+            the FORWARD 2A/2B gate would have rejected. Re-apply the same CFG floor (TIER_COMP_MIN) here
+            so the demotion path obeys it too: drop such a row to Tier_3 (not a degrader).
+            '''
             _fin_t = data.get(CFG.COL_TIER)
             _fin_cmin = CFG.TIER_COMP_MIN.get(_fin_t)
             if _fin_cmin is not None and float(data.get("competence_score", 0.0) or 0.0) < _fin_cmin:
@@ -4876,14 +4885,14 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
                     identity=data.get(CFG.COL_ID_PCT, 0.0)
                 ) + f" | Tier: {CFG.TIER_ORDER[4]} | ID: {data.get(CFG.COL_ID_PCT, 0)}%"
 
-            """
+            '''
             The tier ladder is size-agnostic: ligand_max_extent is computed and
             reported but does not gate the tier, so a long-chain PFAS variant that
             reaches elite near-attack geometry earns Tier_1A on merit. Chemical
             recalcitrance enters only the within-tier ranking via the feasibility
             factor; Step-07 QM/MM is the final arbiter. CFG.TIER_1A_MAX_LIGAND_EXTENT
             defines the controls-only validation subset for reporting.
-            """
+            '''
 
             summary_path.write_text(json.dumps(data, indent=2))
 
@@ -4904,17 +4913,13 @@ def process_single_job(job: Dict, prod_dir: Path, diffusion_samples: int, prev_e
             if torch is not None: torch.cuda.empty_cache()
             gc.collect()
 
-            # -------------------------------------------------------------------------------
-            # Sub-Step 9.3.4: Terminate Processing Sequence Successfully
-            # -------------------------------------------------------------------------------
+            #  -- Sub-step 9.3.4: Terminate Processing Sequence Successfully --
             return data, gpu_idx
         else:
             if run_gpu: console_info(f"Job sequence {name} Failed: No CIF data generated natively.")
             return None, gpu_idx
 
-    # -------------------------------------------------------------------------------
-    # Sub-Step 9.3.5: Return Valid Data For Already-Completed Jobs
-    # -------------------------------------------------------------------------------
+    #  -- Sub-step 9.3.5: Return Valid Data For Already-Completed Jobs --
     if CFG.COL_ID_PCT not in data or data.get(CFG.COL_ID_PCT, 0) == 0:
         _persist_aln = job["protein"] not in _PERSISTED_PROTEINS
         mapped, aln_stats, resname_map, map_all_str = map_active_site_residues(
@@ -5119,10 +5124,12 @@ def append_rows_to_csv(rows: list, csv_path: Path):
             df_new.drop_duplicates(subset=["job_name"], keep="last", inplace=True)
             # Sort by folder name so rows are ordered protein-first then ligand.
             df_new = df_new.sort_values("job_name", kind="mergesort").reset_index(drop=True)
-            # Control provenance on the master (same derivation as the ranked stage, §18): a job name
-            # beginning with the reserved zero index (CONTROL_JOB_PREFIX) is a control; carry its
-            # reference and known-answer verdict so figures/downstream filter controls without
-            # re-parsing job names.
+            '''
+            Control provenance on the master (same derivation as the ranked stage, §18): a job name
+            beginning with the reserved zero index (CONTROL_JOB_PREFIX) is a control; carry its
+            reference and known-answer verdict so figures/downstream filter controls without
+            re-parsing job names.
+            '''
             _jn = df_new["job_name"].astype(str)
             df_new["is_control"] = _jn.str.startswith(str(CFG.CONTROL_JOB_PREFIX))
             df_new["Control_Ref"] = np.select(
@@ -5171,9 +5178,11 @@ def analysis_worker_loop(q, prod_dir, diff_samples, aln_dir, ctrl_cif, ctrl_map,
                     res["ligand_smiles_stale"] = int(job.get("smiles_stale", 0))
                     local_rows.append(flatten_job_result(res))
                     if len(local_rows) >= 10:
-                        # clear in finally so a transient append/IO error cannot leave the
-                        # buffer un-flushed and grow it without bound (worker OOM). The flushed
-                        # rows are recoverable on resume from the per-job summaries.
+                        '''
+                        clear in finally so a transient append/IO error cannot leave the
+                        buffer un-flushed and grow it without bound (worker OOM). The flushed
+                        rows are recoverable on resume from the per-job summaries.
+                        '''
                         try:
                             append_rows_to_csv(local_rows, csv_path)
                         finally:
@@ -5261,7 +5270,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
     module-global and console_info carries the progress reporting.
     """
     # Scientific Ranking Matrix CSV Generation (MECHANISM-FIRST) - helper for main() Step 10.
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     console_info("Executing the compilation of the strictly mechanistic Scientific Ranking CSV...")
     rank_csv_path = None
     rank_columns_count = 0
@@ -5279,7 +5288,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             tier_map = CFG.TIER_SORT_WEIGHT
             df_rank["tier_val"] = df_rank[CFG.COL_TIER].map(tier_map).fillna(0)
 
-            """
+            '''
             Mechanism-first ranking. The degrader tier (hard chemistry gates + the Criterion-B
             constellation cap) is the primary key. Within a tier candidates are ordered by the
             gated continuous competence_score (CFG §5.5 - angle, nucleophile distance, carboxylate
@@ -5295,7 +5304,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             against the same ligand - surfacing the strongest FAcD variant per ligand independent
             of cross-ligand geometric bias. mechanistic_score and soft_catalytic_score are shown
             for reference but not sorted on. mergesort keeps the order stable and reproducible.
-            """
+            '''
             df_rank = df_rank.sort_values(
                 by=["tier_val", "competence_score", "catalytic_constellation_score", CFG.COL_LIKE_S, "model_degrader_consensus"],
                 ascending=[False, False, False, False, False],
@@ -5390,9 +5399,11 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 console_info(f"    Gate: {_gate_desc}")
             except Exception:
                 print(reporter_md, flush=True)
-            # Per-pick provenance table: show WHICH complexes were flagged (ligand,
-            # tier, rank, protein, job) so the shortlist is auditable, styled to match
-            # the rest of the console output.
+            '''
+            Per-pick provenance table: show WHICH complexes were flagged (ligand,
+            tier, rank, protein, job) so the shortlist is auditable, styled to match
+            the rest of the console output.
+            '''
             try:
                 _prot_col = next((c for c in (CFG.COL_PROT, "protein", "Protein")
                                   if c in df_rank.columns), None)
@@ -5448,7 +5459,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             df_rank["Classification_Basis"] = (
                 "geometric_NAC_pose_quality; kinetic_feasibility_deferred_to_QMMM_Step07")
 
-            """
+            '''
             Control read-out + VALIDATION. The ranking is geometry-driven and applies NO
             substrate-class penalty, so where the proven substrates (FA/DFA) and the SN2 dead-end
             (TFA) land is itself a result. The assertion is anchored to the 3R3U REFERENCE enzyme,
@@ -5458,7 +5469,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             the decoy TFA does NOT reach an elite tier (Tier_1A/1B). A violation of that direction
             means the tier is mis-calibrated and is raised as a prominent WARNING and recorded rather
             than shipped silently. Non-fatal (results are still written); the operator decides.
-            """
+            '''
             control_validation = "PASS"
             try:
                 _lc = next((c for c in (CFG.COL_LIG, "ligand") if c in df_rank.columns), None)
@@ -5475,11 +5486,13 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                     console_info(f"Control read-out - top-tier ({CFG.TIER_TOP}) ligands: {_top_set} | "
                                  f"FA best Scientific_Rank: {_fa_best} | TFA mean reported feasibility: {_tfa_feas:.3f}")
 
-                    # Assertion anchored to the 3R3U reference enzyme (is_control & Control_Ref=="3R3U"),
-                    # not the candidate panel. Direction that MUST hold on the real WT FAcD: the native
-                    # substrates FA/DFA each register as a degrader, and the TFA decoy does NOT reach an
-                    # elite tier. Each control matched by anchored fullmatch so "Fluoroacetate" does not
-                    # also capture "Difluoroacetate" (substring).
+                    '''
+                    Assertion anchored to the 3R3U reference enzyme (is_control & Control_Ref=="3R3U"),
+                    not the candidate panel. Direction that MUST hold on the real WT FAcD: the native
+                    substrates FA/DFA each register as a degrader, and the TFA decoy does NOT reach an
+                    elite tier. Each control matched by anchored fullmatch so "Fluoroacetate" does not
+                    also capture "Difluoroacetate" (substring).
+                    '''
                     _elite = {CFG.TIER_TOP, CFG.TIER_ORDER[1]}   # Tier_1A, Tier_1B
                     _ctrl3 = (df_rank[df_rank["is_control"] & (df_rank["Control_Ref"] == "3R3U")]
                               if {"is_control", "Control_Ref"} <= set(df_rank.columns) else df_rank.iloc[0:0])
@@ -5521,14 +5534,14 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
                 cols_to_drop.append("ligand_iptm")
             df_rank = df_rank.drop(columns=[c for c in cols_to_drop if c in df_rank.columns])
 
-            """
+            '''
             Final no-gaps guarantee: the published ranked CSV must contain no
             empty cells. Fill any residual NaN with type-appropriate values -
             numeric columns → 0.0, everything else → "N/A" text. This is a
             safety net over the upstream per-field defaults so that no future
             column (or resume edge case) can leave a blank cell.
-            """
-            """
+            '''
+            '''
             0.0 IS NOT A NEUTRAL FILLER. For an INVERTED metric it is the OPTIMUM, so filling a missing
             value with it does not mark the cell empty - it marks the complex PERFECT.
 
@@ -5541,7 +5554,7 @@ def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
             pipeline already uses for 'not measurable', and which every gate and every figure filters out.
             Columns where 0.0 genuinely IS the worst case (an angle, a score, a confidence, a count) keep
             the zero fill, because there the fill and the meaning agree.
-            """
+            '''
             for _col in df_rank.columns:
                 if not df_rank[_col].isna().any():
                     continue
@@ -5564,9 +5577,9 @@ def main():
     # Collapse stacked separator rules: a caller prints a rule, a helper prints its own,
     # and the log grows triple bars with nothing between them.
     _utils_mod.install_console_rule_filter()
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.1: Command Line Argument Parsing Sequence
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     parser = argparse.ArgumentParser()
     parser.add_argument("--fasta", help="Designated Input FASTA file")
     parser.add_argument("--smi", help="Designated Input SMILES file")
@@ -5592,9 +5605,9 @@ def main():
         )
         console_info(f"  Run Name : {run_folder_name}")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.2: Project Path System Configuration Architecture
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     root = Path.cwd()
     if args.resume:
         run_root = root / run_folder_name
@@ -5766,18 +5779,18 @@ def main():
         console_info(f"  │  {_k:<{_ck}}│  {str(_v):>{_cv}}  │")
     console_info(f"  └{'─'*(_ck+2)}┴{'─'*(_cv+4)}┘")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.3: System Reference Data Initialisation
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     ref_pdb_path = setup_reference_data(D_IN)
 
     console_info("  Loading alignment cache...")
     load_cached_alignments(D_ALN / CFG.FILE_ALIGNMENT_STATS)
     console_separator()
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.4: Construct Initial Task Matrix & Pre-Processing Evaluation
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     tasks = []
     task_count = 0
     # job_stem -> the SMILES its finished CIF was actually predicted from, when that differs from the
@@ -5824,7 +5837,7 @@ def main():
                         yaml_needs_write = False
                     else:
                         if is_completed:
-                            """
+                            '''
                             THE FINISHED PREDICTION CORRESPONDS TO THE MOLECULE IT WAS PREDICTED FROM. IT MUST BE
                             ANALYSED AS THAT SAME MOLECULE.
 
@@ -5840,7 +5853,7 @@ def main():
                             So the analysis uses the SMILES the structure was actually built from, and the
                             row is FLAGGED (ligand_smiles_stale) so the divergence is visible in the output
                             rather than buried in a resume log.
-                            """
+                            '''
                             console_info(f"[Resume] {y_name}: input SMILES/sequence has changed since this "
                                          f"prediction was made. The finished structure is KEPT and will be "
                                          f"analysed against the SMILES it was PREDICTED FROM; the row is "
@@ -5916,11 +5929,11 @@ def main():
             active_job_stems.add(f"0000000_{_sq + _n_ctrl_ligs}_3R3U_Control_{_ctl_lig}")
         removed_folders_count = purge_orphans(PROD, active_job_stems)
 
-        """
+        '''
         Wipe per-job analysis outputs so re-analysis runs fresh on resume.
         GPU predictions (boltz_results_*/) are preserved - only analysis
         artifacts are removed so changed parameters take full effect.
-        """
+        '''
         _wipe_dirs = [d for d in sorted(D_RUNS.iterdir()) if d.is_dir() and d.name[0].isdigit()]
         _wiped = [0]
 
@@ -5958,13 +5971,13 @@ def main():
     console_separator()
     console_info("")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.5: Control Job Execution & Calibration
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     DEHA4 (input enzyme) vs 3R3U (crystal reference) × 3 fluoroacetate control substrates.
     Fluoroacetate map drives all 58k pipeline comparisons.
-    """
+    '''
     _n_ctrl_total = len(CTRL_LIGANDS) * 2  # DeHa4 × 3 + 3R3U × 3
     _ctrl_idx     = [0]
     console_separator()
@@ -6052,10 +6065,10 @@ def main():
             control_cif = _cifs[0]
             control_map = ctrl_maps.get("26_Fluoroacetate", {})
 
-    # -------------------------------------------------------------------------------
-    # Step 10.5a-post: Retroactive active-site re-analysis for DeHa4 control jobs
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    # Step 10.5a: post: Retroactive active-site re-analysis for DeHa4 control jobs
+    # -----------------------------------------------------------------------------
+    '''
     DeHa4 controls are processed without a control_cif/control_map (those do not
     yet exist when DeHa4 runs). Once ref_pdb_path (3R3U crystal) is available,
     each DeHa4 control CIF is superimposed on the crystal reference to fill in its
@@ -6065,7 +6078,7 @@ def main():
 
     crystal_map: residue numbers in the 3R3U crystal PDB (pdb_id from
     REF_ACTIVE_SITE_MAP), used as anchor positions inside analyse_candidate_structure.
-    """
+    '''
     _crystal_map = {k: v["pdb_id"] for k, v in REF_ACTIVE_SITE_MAP.items()}
     for _lig_name, _lig_smiles in CTRL_LIGANDS:
         _ctrl_cif = ctrl_cifs.get(_lig_name)
@@ -6086,14 +6099,14 @@ def main():
             except Exception as _recalc_err:
                 console_info(f"  [Warning] DeHa4 control re-analysis failed for {_lig_name}: {_recalc_err}")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.5b: 3R3U Crystal Reference Jobs (Experimental Positive Control)
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     Run 3R3U against all three fluoroacetate control substrates.
     Per-ligand calibration (RMSD + active-site mapping) for each.
     Fluoroacetate (26) provides r3u_boltz_cif / r3u_control_map for 58 k pipeline.
-    """
+    '''
     r3u_result_data:   Optional[dict]      = None
     r3u_control_map:   Dict[str, int]      = {}
     r3u_control_maps:  Dict[str, dict]     = {}
@@ -6237,11 +6250,11 @@ def main():
             console_info(f"  {'─'*_tot}")
 
         # --- Ligand selectivity ranking ---
-        """
+        '''
         Rank by: (1) Degrader Tier, (2) Mechanistic Score, (3) SN2 angle proximity to 180°.
         Tier hierarchy dynamically loaded.
         SN2 reactions require a nucleophilic attack angle close to 180° (back-side attack).
-        """
+        '''
         _TIER_RANK = CFG.TIER_RANK
         _w = 118
         console_info(f"\n  ┌{'─'*_w}┐")
@@ -6255,9 +6268,11 @@ def main():
             if idx > 0:
                 console_info(f"  ├{'─'*_w}┤")
             console_info(f"  │  {_prot_s:<{_w-2}}│")
-            # Same sort key as the whole-library Scientific_Rank (generate_scientific_ranking_csv):
-            # tier → competence → constellation → active-site conservation → model consensus.
-            # Controls and the 58,050 library jobs are ranked by identical parameters.
+            '''
+            Same sort key as the whole-library Scientific_Rank (generate_scientific_ranking_csv):
+            tier → competence → constellation → active-site conservation → model consensus.
+            Controls and the 58,050 library jobs are ranked by identical parameters.
+            '''
             ranked = sorted(
                 [(ln, _res_dict.get(ln, {})) for ln, _ in CTRL_LIGANDS],
                 key=lambda x: (
@@ -6296,15 +6311,15 @@ def main():
         console_info("  [Warning] Could not extract sequence from 3R3U PDB - skipping reference jobs.")
     console_separator()
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.6: System Workload Audit
-    # -------------------------------------------------------------------------------
-    """
+    # -----------------------------------------------------------------------------
+    '''
     A "completed" job has both: (a) a Boltz-2 CIF prediction on disk AND
     (b) a fully written _summary.json with status="Success".
     On --resume with wipe, summaries are cleared so completed_jobs = 0 even
     if GPU predictions exist - those jobs re-run CPU analysis only (not GPU).
-    """
+    '''
     console_info("Auditing job completion status...")
     completed_jobs = 0
     pending_jobs = 0
@@ -6342,20 +6357,20 @@ def main():
         completed_jobs = sum(results)
         pending_jobs   = _n_tasks - completed_jobs
 
-    """
+    '''
     MSA cache is only relevant to jobs that still need a GPU prediction; the actual MSA
     fetch is lazy (background_downloader, per protein, during the GPU phase). On a resume
     where every job already has a prediction on disk there is no GPU work, so validating
     the .a3m of all pending proteins (one disk read each) is pure overhead - skip it. A
     cheap folder-count estimate decides: predictions already on disk vs full GPU needed.
-    """
-    """
+    '''
+    '''
     MSA validation is deferred to the per-job GPU scan (Step 10.7). Which jobs truly
     need a GPU prediction is only established there; the MSA fetch (background_downloader)
     self-validates each .a3m before downloading. Reading every pending protein's .a3m
     here - before any GPU need is known - is pure overhead, so it is skipped. The real
     MSA-ready count is computed over the actual GPU proteins just before the GPU phase.
-    """
+    '''
     console_info(f" -> {completed_jobs:,} complete, {pending_jobs:,} pending. MSA cache validation deferred to the GPU-job scan.")
     msa_ready = 0
 
@@ -6368,10 +6383,10 @@ def main():
     console_info(f"  │ {'Total jobs scheduled':<{_w1-2}} │ {len(tasks):>{_w2-2},} │")
     console_info(f"  │ {'  Completed (Boltz-2 prediction + CPU analysis)':<{_w1-2}} │ {completed_jobs:>{_w2-2},} │")
     if resumed:
-        """
+        '''
         On resume: GPU predictions on disk but summary JSONs wiped for re-analysis.
         Distinguish jobs with existing prediction dirs from those needing full GPU run.
-        """
+        '''
         _dirs_with_pred = max(0, min(initial_folders_count - 6, pending_jobs))  # subtract 6 control dirs
         _need_gpu       = max(0, pending_jobs - _dirs_with_pred)
         console_info(f"  │ {'  Pending - GPU prediction on disk, CPU re-analysis queued':<{_w1-2}} │ {_dirs_with_pred:>{_w2-2},} │")
@@ -6407,9 +6422,9 @@ def main():
         sys.stdout.flush()
 
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.7: Master CSV Rebuild + GPU Hardware Batch Prediction Phase
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
 
     # --- Upfront bulk CSV rebuild from all completed summary JSONs ---
     console_separator()
@@ -6425,11 +6440,11 @@ def main():
         _rebuild_elapsed = time.time() - _rebuild_t0
         console_info(f" -> Master CSV rebuilt: {_rebuilt_rows:,} rows in {_rebuild_elapsed:.1f}s  →  {CSV_PATH.name}")
 
-    """
+    '''
     Rebuild the run-level best-complex mirror from all completed job summaries.
     This ensures 0\2_Best_Complexes_CIFs/<tier>/ is always consistent on every
     resume, even if previous runs were interrupted mid-copy or tiers changed.
-    """
+    '''
     console_info("Rebuilding 2_Best_Complexes_CIFs mirror from completed job summaries...")
     _mirror_t0 = time.time()
     _mirror_cifs = rebuild_best_complexes_mirror(D_RUNS, run_root)
@@ -6463,9 +6478,11 @@ def main():
             # Per-worker Triton cache so parallel Boltz subprocesses cannot collide on lockfiles
             # in a shared /tmp/triton_cache.
             env["TRITON_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / f"triton_cache_{os.getpid()}_{uuid.uuid4().hex[:8]}")
-            # conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
-            # Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
-            # GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+            '''
+            conda env PFAS manages CUDA/nvidia libraries via LD_LIBRARY_PATH.
+            Pin BLAS/OMP threads to 1 per subprocess: N parallel workers each spawning
+            GLOBAL_MAX_WORKERS threads oversubscribes the CPU (N² thread thrashing).
+            '''
             env["OMP_NUM_THREADS"] = "1"
             env["MKL_NUM_THREADS"] = "1"
             env["OPENBLAS_NUM_THREADS"] = "1"
@@ -6514,20 +6531,20 @@ def main():
 
             if pre_predicted_count > 0:
                 if pending_by_protein:
-                    """
+                    '''
                     Mixed mode: GPU-only jobs also present - route pre-predicted jobs
                     through the background single-worker queue so analysis runs
                     concurrently with ongoing GPU prediction.
-                    """
+                    '''
                     for _pj in _pre_pred_jobs:
                         gpu_queue_for_analysis.put(_pj)
                     console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions - re-routing to Analysis Queue...")
                 else:
-                    """
+                    '''
                     All jobs are pre-existing - skip the single-worker queue entirely.
                     Step 10.8's full parallel pool will handle analysis at maximum
                     concurrency (TARGET_CORES workers). No blocking wait.
-                    """
+                    '''
                     console_info(f" -> {pre_predicted_count:,} jobs have pre-existing GPU predictions.")
                     console_info(f" -> Routing to parallel analysis pool ({TARGET_CORES} workers) - skipping single-worker queue.")
             if _gpu_only_jobs:
@@ -6603,11 +6620,13 @@ def main():
                                 a3ms = sorted(job_msa_dir.rglob("*.a3m"))
                                 if a3ms and a3ms[0].stat().st_size > 500:
                                     if validate_a3m_file(a3ms[0]):
-                                        # Atomic publish: copy to a temp file in the same
-                                        # directory, then rename. The main thread polls
-                                        # a3m_path concurrently; a mid-copy read could
-                                        # otherwise pass the size/header check on a
-                                        # truncated file and predict on a partial MSA.
+                                        '''
+                                        Atomic publish: copy to a temp file in the same
+                                        directory, then rename. The main thread polls
+                                        a3m_path concurrently; a mid-copy read could
+                                        otherwise pass the size/header check on a
+                                        truncated file and predict on a partial MSA.
+                                        '''
                                         _tmp_a3m = a3m_path.with_suffix(a3m_path.suffix + ".tmp")
                                         shutil.copy2(a3ms[0], _tmp_a3m)
                                         _tmp_a3m.replace(a3m_path)
@@ -6628,9 +6647,11 @@ def main():
                                         break
                             time.sleep(5)
 
-                        # Ensure the fallback Boltz subprocess is not left running once the
-                        # polling loop exits via any path (corrupted A3M, 900 s timeout, or
-                        # completion without an early terminate).
+                        '''
+                        Ensure the fallback Boltz subprocess is not left running once the
+                        polling loop exits via any path (corrupted A3M, 900 s timeout, or
+                        completion without an early terminate).
+                        '''
                         if proc.poll() is None:
                             proc.terminate()
                             try:
@@ -6826,9 +6847,11 @@ def main():
                                         _stem = _pred_dir.name
                                         if not _pred_dir.is_dir() or _stem in _moved_stems or _stem not in job_map:
                                             continue
-                                        # Require the confidence JSON too: Boltz writes it after the
-                                        # structure, so its presence marks a complete prediction and
-                                        # prevents moving a still-being-written .cif (truncation race).
+                                        '''
+                                        Require the confidence JSON too: Boltz writes it after the
+                                        structure, so its presence marks a complete prediction and
+                                        prevents moving a still-being-written .cif (truncation race).
+                                        '''
                                         if not any(_pred_dir.glob("*.cif")) or not any(_pred_dir.glob("confidence_*.json")):
                                             continue  # not finished yet
                                         _job = job_map[_stem]
@@ -6991,12 +7014,12 @@ def main():
                     except subprocess.CalledProcessError as e:
                         stderr_text = e.stderr or ""
 
-                        """
+                        '''
                         Surgical repair: if a single job caused a FileNotFoundError,
                         wait 5 s for the filesystem to settle, then isolate just that job
                         to the individual queue and retry the rest of the batch without
                         counting this as a failed attempt.
-                        """
+                        '''
                         if not _surgical_repair_done and "FileNotFoundError" in stderr_text:
                             _m = re.search(r"/predictions/([^/\s]+)/pre_affinity_", stderr_text)
                             if _m:
@@ -7052,15 +7075,17 @@ def main():
                 print()
 
     finally:
-        # Always signal the analysis worker to stop and wait for it to flush - on the normal path AND
-        # on any exception raised in the GPU phase above - so the worker process is never orphaned and
-        # the run cannot deadlock on a pool that never received STOP.
+        '''
+        Always signal the analysis worker to stop and wait for it to flush - on the normal path AND
+        on any exception raised in the GPU phase above - so the worker process is never orphaned and
+        the run cannot deadlock on a pool that never received STOP.
+        '''
         gpu_queue_for_analysis.put("STOP")
         analysis_pool.shutdown(wait=True)
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.8: CPU Worker Master Execution Loop
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     master_rows = []
     total_tasks = len(tasks)
 
@@ -7082,11 +7107,11 @@ def main():
         if job_name in already_done_jobs:
             continue
         prev_time = prev_elapsed_map.get(job_name, 0.0)
-        """
+        '''
         Pass gpu_queue=None: Step 10.8 only handles pre-existing predictions (run_gpu=False).
         Passing a Manager proxy would cause all forked workers to simultaneously reconnect
         to the Manager RPC server → deadlock. None is safe here.
-        """
+        '''
         exec_args.append((job, PROD, args.diffusion_samples, prev_time, D_ALN, control_cif, control_map, DEHA4_CONTROL_SEQ, None, r3u_boltz_cif, r3u_control_map))
 
     total_tasks = len(exec_args)
@@ -7158,9 +7183,9 @@ def main():
         except Exception as _ws_err:
             console_info(f"  [Warning] Could not fully remove _Temp_Workspace: {_ws_err}")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.9: Final Data Merging and Refinement (CSV Formatting)
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     print()
     console_separator()
     console_info(f"Collecting {len(master_rows):,} analysed result(s) and writing Master CSV...")
@@ -7194,21 +7219,23 @@ def main():
                 elif "score" in c or "iptm" in c or "plddt" in c or "density" in c or "angle" in c or "rmsd" in c: fill_dict[c] = 0.0
                 elif "count" in c or "Total_" in c: fill_dict[c] = 0
                 else: fill_dict[c] = "NA"
-            """
+            '''
             Field-specific overrides - must be set after the generic loop.
             Numeric aux geometries must get a NUMERIC sentinel, never the "NA"
             string: pandas re-parses "NA" as NaN on the next read, which would
             re-open the gap in the downstream ranked CSV. CFG.SENTINEL_UNDEFINED marks "undefined"
             (consistent with the CFG.SENTINEL_VALID_MAX guard in the SN2 analysis).
-            """
+            '''
             fill_dict["flippin_lodge_offset"]        = CFG.SENTINEL_UNDEFINED
             fill_dict["burgi_dunitz_angle"]          = CFG.SENTINEL_UNDEFINED
             fill_dict["residues_within_6A"]          = "0"
             fill_dict["hydrophobic_desolvation_ratio"] = 0.0
             fill_dict["active_site_contact_flag"]    = 0.0
-            # Keep elite_demotion a pure-string column ("none" sentinel, never empty/NaN):
-            # an empty string round-trips through CSV as NaN, mixing float+str on re-read and
-            # triggering pandas DtypeWarning. error rows missing the key are filled here too.
+            '''
+            Keep elite_demotion a pure-string column ("none" sentinel, never empty/NaN):
+            an empty string round-trips through CSV as NaN, mixing float+str on re-read and
+            triggering pandas DtypeWarning. error rows missing the key are filled here too.
+            '''
             fill_dict["elite_demotion"]                = "none"
             fill_dict["r3u_Active_Site_RMSD"]              = 99.0
             fill_dict["r3u_Halide_Stabilisation"]          = False
@@ -7232,12 +7259,12 @@ def main():
             if "job_index" in df.columns:
                 df = df.sort_values("job_index", kind="mergesort").reset_index(drop=True)
 
-            """
+            '''
             Vectorised alignment grade assignment via pd.cut.
             Derives Alignment_Score_Pct from identity_pct, then maps to
             letter grades A–I using CFG-defined bins - replaces per-job
             if-elif logic that would otherwise execute 58k+ times.
-            """
+            '''
             if CFG.COL_ID_PCT in df.columns:
                 df["Alignment_Score_Pct"] = (
                     pd.to_numeric(df[CFG.COL_ID_PCT], errors="coerce")
@@ -7252,11 +7279,13 @@ def main():
                     include_lowest=True   # close first interval to [0,20] so 0.0 → 'I', not NaN/"nan"
                 ).astype(str)
 
-            # Control provenance on the finalised master superset (same derivation as the ranked
-            # stage, §18). append_rows_to_csv adds these during the checkpoint pass, but on --resume
-            # the master is rebuilt from per-job summaries (which do not carry them), so they are
-            # re-derived here from job_name on the final frame - otherwise the master ships without
-            # is_control / Control_Ref / Expected_Verdict.
+            '''
+            Control provenance on the finalised master superset (same derivation as the ranked
+            stage, §18). append_rows_to_csv adds these during the checkpoint pass, but on --resume
+            the master is rebuilt from per-job summaries (which do not carry them), so they are
+            re-derived here from job_name on the final frame - otherwise the master ships without
+            is_control / Control_Ref / Expected_Verdict.
+            '''
             if "job_name" in df.columns:
                 _jn_m = df["job_name"].astype(str)
                 df["is_control"] = _jn_m.str.startswith(str(CFG.CONTROL_JOB_PREFIX))
@@ -7274,16 +7303,16 @@ def main():
         except Exception as e: console_info(f" Warning generated during systematic CSV formatting execution logic: {e}")
     console_info("Final structured CSV format written flawlessly.")
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     rank_csv_path, rank_columns_count = generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now)
 
     save_alignment_cache_final(D_ALN / CFG.FILE_ALIGNMENT_STATS)
 
     console_separator()
 
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # Step 10.10: Final Report and Output Terminal UI
-    # -------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     console_separator()
     console_info(f"\nSequential Analytical Pipeline entirely Completed. Associated Files are formally verified inside: {PROD.resolve()}")
     console_separator()
@@ -7318,11 +7347,11 @@ def main():
     if CSV_PATH.exists(): df_final = pd.read_csv(CSV_PATH, low_memory=False)
     else: df_final = pd.DataFrame()
 
-    """
+    '''
     Use Alignment_Grade column (written by pd.cut in Step 10.9)
     when available; fall back to utility logic for backwards
     compatibility with CSVs produced before this change was applied.
-    """
+    '''
     if not df_final.empty and CFG.COL_ALN_G in df_final.columns:
         _grade_counts = df_final[CFG.COL_ALN_G].value_counts()
         grade_A = int(_grade_counts.get("A", 0))
@@ -7372,14 +7401,14 @@ def main():
         console_info(f"  └{'─'*(_jw+2)}┴{'─'*12}┘")
 
         _tier_order = CFG.TIER_ORDER
-        """
+        '''
         Separate the reference control structures (DeHa4 / 3R3U Boltz-2 predictions,
         flagged by a Protein_Name ending in "_Control") from the screened library.
         Per-tier figures report the library count (dynamic) plus, where present, how
         many controls fell in that tier as a "+NC" suffix. The grand total therefore
         reads as <library total> + <control total> rather than silently merging the
         controls into the screened population.
-        """
+        '''
         if CFG.COL_PROT in df_final.columns:
             _is_ctrl = df_final[CFG.COL_PROT].astype(str).str.endswith("_Control")
         else:
