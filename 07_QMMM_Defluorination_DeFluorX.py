@@ -428,7 +428,7 @@ POCKET_RESIDENCY_DIST       = CFG.POCKET_RESIDENCY_DIST  # 8.0 Å - pocket-bound
 # Step 1.2: Catalytic triad integrity thresholds (MD-calibrated)
 # -----------------------------------------------------------------------------
 # Crystal thresholds (4.5 Å NB / 7.0 Å BA) + 2.0 Å thermal-fluctuation buffer
-# for 300 K Desmond simulations; see CFG §6 for derivation.
+# for 300 K Desmond simulations; see CFG §5 for derivation.
 THRESHOLD_TRIAD_NB          = CFG.THRESHOLD_TRIAD_NB_MD   # 6.5 Å - Nuc–Base (crystal = 4.5 Å)
 THRESHOLD_TRIAD_BA          = CFG.THRESHOLD_TRIAD_BA_MD   # 9.0 Å - Base–Acid (crystal = 7.0 Å)
 

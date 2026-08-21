@@ -1087,7 +1087,7 @@ def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
     reporter.log("  ✔ Saved: 01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv")
 
     reporter.log(f"Hidden Gems (Rescue Target) : {len(gems)}")
-    reporter.log(f"Decoys (Potential Artifacts): {len(df[df['Conflict_Category'] == 'Decoy'])}")
+    reporter.log(f"Decoys (Potential Artefacts): {len(df[df['Conflict_Category'] == 'Decoy'])}")
 
     return df
 

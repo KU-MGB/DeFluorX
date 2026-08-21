@@ -5932,7 +5932,7 @@ def main():
         '''
         Wipe per-job analysis outputs so re-analysis runs fresh on resume.
         GPU predictions (boltz_results_*/) are preserved - only analysis
-        artifacts are removed so changed parameters take full effect.
+        artefacts are removed so changed parameters take full effect.
         '''
         _wipe_dirs = [d for d in sorted(D_RUNS.iterdir()) if d.is_dir() and d.name[0].isdigit()]
         _wiped = [0]

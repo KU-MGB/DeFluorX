@@ -302,7 +302,7 @@ class CFG:
 
     Derivation from the RCSB SEQRES (GHMPDLADL…VRFFSAAPGS, 306 aa). Two fragments are REMOVED:
       • leading  "GH" - an N-terminal His-tag cloning remnant (crystal PDB residues −1 and 0);
-      • trailing "GS" - a C-terminal cloning artifact (unresolved in the crystal, beyond Pro302).
+      • trailing "GS" - a C-terminal cloning artefact (unresolved in the crystal, beyond Pro302).
     Neither is part of the enzyme and neither is present in the query homologs, so removing them does
     not move any catalytic residue in the alignment (verified: mapped residues identical with or
     without them). What it buys: the reference then has no tag offset and no numbering gaps, so the
