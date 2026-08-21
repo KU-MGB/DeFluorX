@@ -96,7 +96,7 @@
 <text x="795.87109375" y="520.0" font-size="9.2" fill="#9a3412">PyMOL / PLIP contact figures</text>
 <text x="795.87109375" y="532.5" font-size="9.2" fill="#9a3412">pose-drift + 8-residue machinery figures</text>
 <text x="795.87109375" y="545.0" font-size="9.2" fill="#9a3412">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,211</text>
+<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,215</text>
 <line x1="182.4" y1="302.5" x2="182.4" y2="306.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="327.8" y1="310.5" x2="369.8" y2="310.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="637.3" y1="312.2" x2="659.3" y2="312.2" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>

@@ -1669,9 +1669,13 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
 
     fig, ax = plt.subplots(figsize=(8.6, 4.8))
     _cols = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"]]
+    _bar_cols = [_cols[min(i, 2)] for i in range(len(d))]
     _b = ax.barh(d["ligand"], d["q_alpha"],
-                 color=[_cols[min(i, 2)] for i in range(len(d))],
+                 color=_bar_cols,
                  edgecolor=CFG.VIS_INK["dark"], linewidth=0.8, height=0.55, zorder=3)
+    # Tint each ligand tick label to its own bar colour so the FA/DFA/TFA axis reads with the bars.
+    for _tick, _tc in zip(ax.get_yticklabels(), _bar_cols):
+        _tick.set_color(_tc)
     for _r, _v, _nf in zip(_b, d["q_alpha"], d["n_F"]):
         _lx = _v + 0.006 if _v >= 0 else 0.006          # keep negative-bar labels inside the plot
         ax.text(_lx, _r.get_y() + _r.get_height() / 2, f"{_v:+.3f}   ({_nf} F)",
