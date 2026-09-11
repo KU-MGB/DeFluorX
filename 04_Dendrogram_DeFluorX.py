@@ -21,7 +21,7 @@ build an MSA (MAFFT / Clustal-Ω) and a maximum-likelihood or Bayesian tree
 tier classification produced here.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 August 2026 <─────────────────────────────────────────────────────────
+Date   : 11 September 2026 <───────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 04_Dendrogram_DeFluorX.py

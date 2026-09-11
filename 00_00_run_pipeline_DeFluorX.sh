@@ -2,7 +2,7 @@
 # =============================================================================
 # DeFluorX Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-# Date   : 20 August 2026
+# Date   : 11 September 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_DeFluorX.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]

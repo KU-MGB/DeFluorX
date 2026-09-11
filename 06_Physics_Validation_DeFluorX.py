@@ -45,7 +45,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) - in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 August 2026 <─────────────────────────────────────────────────────────
+Date   : 11 September 2026 <───────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_DeFluorX.py [Boltz-2_Run_Directory] [options]

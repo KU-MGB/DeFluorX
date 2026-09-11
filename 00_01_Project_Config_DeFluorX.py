@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 August 2026 <────────────────────────────────────────────────────────
+Date   : 11 September 2026 <──────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_DeFluorX.py
@@ -916,7 +916,7 @@ class CFG:
     # -----------------------------------------------------------------------------
     '''
     Continuous penalties subtracted from the geometric mechanistic_score to form the
-    feasibility-weighted score that gates the degrader tier (competence/ranking keep the
+    penalty-adjusted score that gates the degrader tier (competence/ranking keep the
     raw geometry). Both engage only past a chemistry/steric threshold, so genuine
     substrates are unpenalised and the demotion is graded, never a hard class veto.
 
@@ -1429,7 +1429,8 @@ class CFG:
     '''
     Per-tier minimum raw SN2 attack angle. These ARE hard tier gates at the elite and
     functional-top rungs: the ladder tests angle_effective >= this value at Tier_1A (170°),
-    Tier_1B (165°) and Tier_2A (155°). Tier_2B carries NO raw-angle gate, so a bent-but-feasible
+    Tier_1B (165°) and Tier_2A (155°). Tier_2B carries NO angle gate at all; this entry is used
+    for plotting zones and by INHIBITOR_ANGLE_MAX, not by the ladder, so a bent-but-feasible
     substrate (e.g. difluoroacetate, ~108°) is retained at 2B rather than cliffed below a
     straight-posed decoy. The angle ALSO enters the mechanistic score continuously (graded angle
     term), so it penalises a bent pose there too; the true attack-angle dynamics are resolved in
@@ -1472,10 +1473,10 @@ class CFG:
     anchor is missing) while the control tiers are reproduced.
     '''
     TIER_MECH_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 0.85,   # elite mech floor; further refined by the coupled machinery gate below. Tier_1A also hard-gates the raw SN2 angle (>= TIER_ANGLE_MIN['Tier_1A']) and the elite BDE ceiling; the mech score additionally carries the graded angle + chemistry penalty
+        "Tier_1A": 0.85,   # elite mech floor; further refined by the coupled machinery gate below. Tier_1A also hard-gates the Šidák-corrected EFFECTIVE SN2 angle (angle_effective >= TIER_ANGLE_MIN['Tier_1A']) and the elite BDE ceiling; the mech score additionally carries the graded angle + chemistry penalty
         "Tier_1B": 0.85,   # complete anchors + high mechanistic competence
-        "Tier_2A": 0.70,   # functional geometry floor (mech). 2A ALSO hard-gates the raw angle (TIER_ANGLE_MIN['Tier_2A']) and the competence floor below
-        "Tier_2B": 0.55,   # marginal degrader floor (mech). 2B has NO raw-angle gate (keeps a bent-but-feasible substrate such as DFA) but does apply the competence floor below
+        "Tier_2A": 0.70,   # functional geometry floor (mech). 2A ALSO hard-gates the effective angle (angle_effective >= TIER_ANGLE_MIN['Tier_2A']) and the competence floor below
+        "Tier_2B": 0.55,   # marginal degrader floor (mech). 2B has NO angle gate of any kind (keeps a bent-but-feasible substrate such as DFA) but does apply the competence floor below
     })
 
     # -----------------------------------------------------------------------------
@@ -1489,7 +1490,7 @@ class CFG:
     read 0.872 / 0.758 / 0.316 and the ENTIRE trifluoroacetate family caps at ≈0.35.
     Applying a competence floor to Tier_2A / Tier_2B therefore drops a high-BDE decoy
     (TFA-like) out of the degrader band while retaining a genuine substrate. Combined with
-    the 2A raw-angle gate (which drops a bent pose such as DFA from 2A to 2B), the three
+    the 2A effective-angle gate (which drops a bent pose such as DFA from 2A to 2B), the three
     references separate cleanly FA → 2A, DFA → 2B, TFA → Tier_3. Applied to every complex,
     not just the controls - it is a general substrate-feasibility gate.
     '''
@@ -1581,7 +1582,7 @@ class CFG:
     constellation, B ≳ 0.62) while downgrading only a genuinely mis-assembled active site.
     '''
     TIER_CONSTELLATION_MIN: dict = field(default_factory=lambda: {
-        "Tier_1A": 0.55,   # RMSD ≲ 0.8 Å - eight-residue constellation floor at crystal-grade agreement; the coupled elite-machinery gate + pocket-fit cap do the elite separation, so this floor is deliberately permissive (any pose with B ≳ 0.66 clears it)
+        "Tier_1A": 0.55,   # RMSD ≲ 0.8 Å - eight-residue constellation floor at crystal-grade agreement; the coupled elite-machinery gate does the elite separation, so this floor is deliberately permissive (any pose with B ≳ 0.66 clears it)
         "Tier_1B": 0.45,   # RMSD ≲ 1.2 Å
         "Tier_2A": 0.35,   # RMSD ≲ 1.9 Å
         "Tier_2B": 0.25,   # RMSD ≲ 3.0 Å
@@ -1595,7 +1596,7 @@ class CFG:
     it is barred from Tier_1A (downgraded one notch, never below - discovery-open
     in the lower degrader tiers). Controls FA/DFA/TFA ≈ 3.5 Å; short PFCAs ≥ 5.7 Å.
     '''
-    TIER_1A_MAX_LIGAND_EXTENT: float = 5.0   # Å - threshold defining the controls-only validation subset (ligands ≤ this, ≈2-carbon haloacetate controls ~3.5 Å; long-chain PFAS exceed it). The tier ladder itself is size-agnostic.
+    TIER_1A_MAX_LIGAND_EXTENT: float = 5.0   # Å - threshold defining the controls-only validation subset (ligands ≤ this, ≈2-carbon haloacetate controls ~3.5 Å; long-chain PFAS exceed it). The tier ladder itself is size-agnostic. NOTE: not read by any code path as of this release; retained as the documented definition of the controls-only validation subset; the ladder applies no ligand-extent cap.
 
     # -----------------------------------------------------------------------------
     # Step 8.4c: Substrate / inhibitor classification (Figs 19, 25)

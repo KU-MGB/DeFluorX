@@ -14,7 +14,7 @@ re-run, not the ligand/protein list. Only the canonical directory layout and
 job-naming scheme are supported.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 August 2026 <────────────────────────────────────────────────────────
+Date   : 11 September 2026 <──────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 02_Production_DeFluorX.py
@@ -77,7 +77,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
     The tier ladder gates on two orthogonal chemistry axes so the 3R3U references (FA/DFA/TFA)
     separate into three distinct tiers:
       • the raw SN2 attack angle is hard-gated at the elite tiers (Tier_1A ≥170°, Tier_1B ≥165°)
-        and at Tier_2A (≥155°); Tier_2B carries no raw-angle gate (it keeps a bent-but-feasible
+        and at Tier_2A (≥155°); Tier_2B carries no angle gate (it keeps a bent-but-feasible
         substrate such as difluoroacetate, ~108°, whose static pose fails the 2A angle floor);
       • substrate feasibility (competence_score, which folds the graded C–F BDE) is floored at
         Tier_2A (≥0.50) and Tier_2B (≥0.40); the trifluoroacetate family caps at competence ≈0.35,
@@ -87,7 +87,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
 
     1. Tier_1A (Elite Catalysis - High Priority for MD)
        • Mechanistic Score >= 0.85 (ladder floor; angle + chemistry folded into the score. Elite tier further refined by the coupled machinery gate: mech >= 0.90 OR mech >= 0.85 with a crystal-exact catalytic constellation.)
-       • SN2 attack angle:     >= 170 deg (raw angle_effective; elite near-ideal backside gate)
+       • SN2 attack angle:     >= 170 deg (angle_effective; elite near-ideal backside gate)
        • (Active Site Conservation is reported downstream for ranking; it is NOT a tier gate.)
        • Nucleophile (Asp110): <= 3.0 A (ligand α-carbon → Asp-Oδ; tight pre-reactive ground-state gate)
        • Nuc–Base relay:       <= 3.5 A (INTERNAL triad Asp110-Oδ → His280, dist_nuc_base - not a ligand contact)
@@ -96,14 +96,14 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
 
     2. Tier_1B (High Functional)
        • Mechanistic Score >= 0.85
-       • SN2 attack angle:     >= 165 deg (raw angle_effective)
+       • SN2 attack angle:     >= 165 deg (angle_effective)
        • Nucleophile (Asp110): <= 3.2 A
        • Base/Acid:            <= 4.0 A / 5.0 A
        • Stabilisation:        REQUIRED
 
     3. Tier_2A (Functional Geometry)
        • Mechanistic Score >= 0.70
-       • SN2 attack angle:     >= 155 deg (raw angle_effective; drops a bent pose such as DFA to 2B)
+       • SN2 attack angle:     >= 155 deg (angle_effective; drops a bent pose such as DFA to 2B)
        • Substrate feasibility (competence_score): >= 0.50 (drops a high-BDE decoy such as TFA to Tier_3)
        • Nucleophile (Asp110): <= 3.2 A
        • Base/Acid:            <= 5.0 A / 6.0 A
@@ -113,7 +113,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
        • Mechanistic Score >= 0.55
        • Substrate feasibility (competence_score): >= 0.40 (clears the whole TFA family into Tier_3)
        • Nucleophile (Asp110): <= 3.8 A
-       • No raw-angle gate (keeps a bent-but-feasible substrate such as DFA)
+       • No angle gate (keeps a bent-but-feasible substrate such as DFA)
 
     5. Tier_3 (Non-Catalytic Binding)
        • Nucleophile (Asp110): <= 4.2 A
@@ -634,7 +634,7 @@ DEFAULT_METRICS = {
     "ligand_reach": 0.0,                    # Å; farthest ligand atom from the carboxylate anchor (molecular reach out of the pocket)
     "chem_penalty": 0.0,                    # graded BDE+occlusion penalty subtracted from mech for the tier gate
     "containment_penalty": 0.0,             # graded pocket-fit penalty subtracted from mech for the tier gate
-    "mechanistic_score_effective": 0.0,     # feasibility-weighted mech (raw geometry − chem − containment); tier-gate key
+    "mechanistic_score_effective": 0.0,     # penalty-adjusted mech (raw geometry − chem − containment, floored at 0); tier-gate key. NOT multiplied by feasibility_factor - that applies to competence_score only
 }
 # Initialises all specific residue distances to an arbitrary maximum (CFG.SENTINEL_UNDEFINED).
 for k in REF_ACTIVE_SITE_MAP:
@@ -3837,7 +3837,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         '''
         Enzyme vs ligand steric complementarity (§5.2c). pocket_containment_cavity (protein
-        ray-cast buriedness) feeds the feasibility-weighted tier score below;
+        ray-cast buriedness) feeds the penalty-adjusted tier score below;
         pocket_containment_site8 (engagement with the eight catalytic residues) and the hull
         volume/occupancy fields are reported diagnostics. The full protein is required: a
         containment measured on ligand coordinates alone cannot tell a narrow pocket from a wide one.
@@ -3845,7 +3845,9 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results.update(compute_pocket_fit(site_atoms_obj, lig_atoms_obj, all_prot_atoms))
 
         '''
-        Feasibility-weighted mechanistic score (tier-gate key). Two graded penalties are
+        Penalty-adjusted mechanistic score (tier-gate key). The chemical-feasibility factor is
+        NOT applied here; it scales competence_score only (§5.5). "Graded chemistry penalty" and
+        "feasibility factor" are two different mechanisms and must not be conflated. Two graded penalties are
         subtracted from the geometric mech_score: (A) chemistry - scissile C–F BDE and
         backside occlusion beyond the dead-end cutoffs (down-ranks the SN2 dead-end TFA to
         ~Tier_2B), plus a per-β-fluorine term (the perfluoro tail inductively strengthens the
@@ -3905,7 +3907,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         results["chem_verified"]             = 0 if _chem_unknown else 1
         results["containment_penalty"]       = round(_cont_pen, 3)
         results["mechanistic_score_effective"] = round(mech_effective, 2)
-        mech_score = mech_effective   # tier ladder + elite gate gate on the feasibility-weighted score
+        mech_score = mech_effective   # tier ladder + elite gate key on the penalty-adjusted score
 
         '''
         Catalytic-identity gates. Geometry alone (good SN2 angle + close nucleophile)
@@ -4138,8 +4140,10 @@ def analyse_model_task(args: Tuple[Path, Dict[str, int], Path, str, str, int]) -
 def select_best_degrader_model(br_dir: Path, mapped_sites: Dict[str, int], smiles_str: str = "", nuc_rescue_offset: int = 0) -> Tuple[str, Dict]:
     """
     Selects the representative pose across the Boltz diffusion samples tier-first: the highest
-    degrader tier reached by any model, then the highest competence_score within that tier
-    (confidence as the final tie-break). This keeps selection consistent with the tier-primary
+    degrader tier reached by any model, then the largest RAW SN2 attack angle rounded to 0.1 deg,
+    then the highest competence_score, with Boltz confidence as the final tie-break. Note the angle
+    used here is the raw angle, not angle_effective: the tier ladder gates on the effective angle,
+    while pose selection ranks on the raw one. This keeps selection consistent with the tier-primary
     Scientific ranking - the reported pose is the candidate's best catalytic shot, scored on the
     full criteria (CFG §5.5) within that tier. The best geometry found is always reported; a
     favourable frame is never discarded. Reproducibility is captured separately by
@@ -5020,7 +5024,7 @@ CSV_COLUMN_ORDER = [
     "active_site_volume", "active_site_radius",
     "ligand_volume", "ligand_radius_gyration", "ligand_max_extent",
     "pocket_occupancy", "fit_ratio", "ligand_fits",
-    # --- Feasibility-weighted mechanistic score (tier-gate key) ---
+    # --- Penalty-adjusted mechanistic score (tier-gate key) ---
     "mechanistic_score_effective", "chem_penalty", "containment_penalty",
     # --- Distance statistics ---
     "min_distance_A", "max_distance_A", "avg_distance_A",
@@ -6304,7 +6308,7 @@ def main():
                 )
                 console_info(f"  │{row_content:<{_w}}│")
         console_info(f"  └{'─'*_w}┘")
-        console_info(f"  {'Mech = holistic 0–1 geometry score: anchors (nucleophile reach + relay distances + clamp + halide stabilisation) + graded SN2 angle. Tier gates on the feasibility-weighted mech (− graded BDE/occlusion − pocket-containment penalties).':^{_w+4}}")
+        console_info(f"  {'Mech = holistic 0–1 geometry score: anchors (nucleophile reach + relay distances + clamp + halide stabilisation) + graded SN2 angle. Tier gates on the penalty-adjusted mech (− graded BDE/occlusion − pocket-containment penalties).':^{_w+4}}")
         console_info(f"  {f'A = scissile C–F bond-dissociation energy (kcal/mol; >{CFG.SCISSILE_CF_BDE_MAX:.0f} too strong); B = backside steric occlusion (Σ vdW Å; >{CFG.SN2_BACKSIDE_OCCL_MAX:.1f} blocked). Both → non-degradable CF3 attack carbon.':^{_w+4}}")
         console_info(f"  {'─'*_tot}\n")
     else:

@@ -26,7 +26,7 @@ It combines four evidence streams into the master ranking + figures:
 All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 20 August 2026 <────────────────────────────────────────────────────────
+Date   : 11 September 2026 <──────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_QMMM_Defluorination_DeFluorX.py
