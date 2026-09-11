@@ -6066,12 +6066,15 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
     for _k, _fold in enumerate(folds):
         _res = parse_qsite_barrier(_fold, job_name)
         _b = _res.get("QSite_Barrier_kcal")
-        if _b == _b:   # not NaN → a real interior-TS barrier was parsed
+        if _b == _b:   # not NaN → a barrier was parsed (the interior-TS flag is NOT applied here)
             _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
         '''
         Cleavage reads the scissile C-F length from the RAW parse so a still-climbing frame that
-        nonetheless breaks the C-F bond is counted: the guarded parse withholds a barrier for such a
-        frame, but the C-F distance is a geometric fact independent of the PES shape. The per-frame and
+        nonetheless breaks the C-F bond is counted independently of the PES shape, the C-F distance
+        being a geometric fact. Note the parse withholds a barrier only when it exceeds
+        QSITE_BARRIER_MAX_KCAL; a frame whose saddle sits at the first scanned point returns a
+        barrier of 0.0 rather than NaN, so barrier_in_window is not what filters this list. The
+        per-frame and
         rank figures draw from these same raw profiles.
         '''
         _raw = _parse_qsite_pes_raw(_fold, job_name)
