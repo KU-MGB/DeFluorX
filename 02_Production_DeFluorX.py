@@ -4018,10 +4018,10 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
 
         # Tier ladder - two orthogonal chemistry axes gate the band, so the 3R3U references
         # (FA/DFA/TFA) separate into THREE distinct tiers instead of collapsing together:
-        #   • Raw SN2 angle (angle_effective, multiplicity-corrected, CFG §5.2d) is hard-gated at
+        #   • Effective SN2 angle (angle_effective, multiplicity-corrected, CFG §5.2d) is hard-gated at
         #     Tier_1A / Tier_1B (≥170 / ≥165) AND at Tier_2A (≥155). The elite gate keeps Tier_1A at
         #     ~10–15 near-ideal poses; the 2A gate drops a statically-bent pose - e.g. difluoroacetate
-        #     (predicted attack angle ~108°) - from 2A down to Tier_2B, which has NO raw-angle gate
+        #     (predicted attack angle ~108°) - from 2A down to Tier_2B, which has NO angle gate at all
         #     and so retains the bent-but-feasible substrate.
         #   • Substrate feasibility (competence_score, feasibility-weighted, folds the graded C–F BDE)
         #     is floored at Tier_2A / Tier_2B (≥0.50 / ≥0.40). The whole trifluoroacetate family caps
@@ -4046,7 +4046,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
             tier, meaning, is_degrader = CFG.TIER_ORDER[1], "Crystal-Grade Analysis: Ideal ground-state contact sequence with a connected catalytic relay (elite anchor integrity NOT asserted - Tier_1A only).", True
 
         # Tier_2A  (TIER_ORDER[2]) - functional geometry AND substrate feasibility. Nucleophile in
-        # tight contact, connected relay, mech_score above the 2A floor, the raw SN2 angle above the
+        # tight contact, connected relay, mech_score above the 2A floor, the effective SN2 angle above the
         # 2A angle floor (drops a bent pose such as DFA to 2B), and competence_score (the feasibility-
         # weighted axis) above the 2A competence floor (drops a high-BDE decoy such as TFA to Tier_3).
         elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[2]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[2]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[2]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[2]] and angle_effective >= CFG.TIER_ANGLE_MIN[CFG.TIER_ORDER[2]] and results["competence_score"] >= CFG.TIER_COMP_MIN[CFG.TIER_ORDER[2]]:
@@ -4056,7 +4056,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         # a still-connected proton relay (Nuc–Base / Base–Acid within the loose Tier_2B ceilings), a
         # minimum mechanistic competence (mech_score ≥ the 2B floor) AND a minimum substrate
         # feasibility (competence_score ≥ the 2B competence floor, which clears the whole TFA family
-        # into Tier_3). NO raw-angle gate here - a bent-but-feasible substrate such as DFA (whose
+        # into Tier_3). NO angle gate here - a bent-but-feasible substrate such as DFA (whose
         # static pose fails the 2A angle floor) is retained at 2B. The relay + mech + feasibility
         # floors prevent a catalytically dead or decoy pose from being labelled a marginal degrader.
         elif productive_attack and d_nuc <= CFG.TIER_NUC_DIST[CFG.TIER_ORDER[3]] and mech_score >= CFG.TIER_MECH_MIN[CFG.TIER_ORDER[3]] and dist_nuc_base <= CFG.TIER_NB_MAX[CFG.TIER_ORDER[3]] and dist_base_acid <= CFG.TIER_BA_MAX[CFG.TIER_ORDER[3]] and results["competence_score"] >= CFG.TIER_COMP_MIN[CFG.TIER_ORDER[3]]:
