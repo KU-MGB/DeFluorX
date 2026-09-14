@@ -76,7 +76,7 @@
 <text x="72" y="520.0" font-size="9.2" fill="#1e40af">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="72" y="532.5" font-size="9.2" fill="#1e40af">departing-F Mulliken charge → cleavage check</text>
 <text x="72" y="545.0" font-size="9.2" fill="#1e40af">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,220</text>
+<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,223</text>
 <g filter="url(#ds)"><rect x="392.5859375" y="449.5" width="307.3" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="408.5859375" y="467.5" font-size="10.4" font-weight="800" fill="#1e40af">06_Physics_Validation_DeFluorX.py</text>
 <text x="408.5859375" y="482.5" font-size="9.2" fill="#1e40af">explicit-solvent physics for each MD-selected complex</text>

@@ -4033,7 +4033,7 @@ def parse_qsite_barrier(qsite_dir: Path, job_name: str) -> dict:
     _p = parse_qsite_profile(qsite_dir, job_name)
     return {k: _p.get(k) for k in ("QSite_Barrier_kcal", "QSite_dErxn_kcal", "QSite_NScan",
                                    "F_Charge_Reactant", "F_Charge_Product", "F_Charge_Delta",
-                                   "CF_Reactant_A", "CF_Product_A", "cleaved")}
+                                   "CF_Reactant_A", "CF_Product_A", "cleaved", "barrier_in_window")}
 
 
 # #############################################################################
@@ -6066,14 +6066,17 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
     for _k, _fold in enumerate(folds):
         _res = parse_qsite_barrier(_fold, job_name)
         _b = _res.get("QSite_Barrier_kcal")
-        if _b == _b:   # not NaN → a barrier was parsed (the interior-TS flag is NOT applied here)
+        if _b == _b and bool(_res.get("barrier_in_window")):   # barrier parsed AND an interior TS resolved - a saddle at scan-point 0 returns 0.0, not NaN
             _barriers.append(_b); _derxns.append(_res["QSite_dErxn_kcal"])
         '''
         Cleavage reads the scissile C-F length from the RAW parse so a still-climbing frame that
         nonetheless breaks the C-F bond is counted independently of the PES shape, the C-F distance
-        being a geometric fact. Note the parse withholds a barrier only when it exceeds
-        QSITE_BARRIER_MAX_KCAL; a frame whose saddle sits at the first scanned point returns a
-        barrier of 0.0 rather than NaN, so barrier_in_window is not what filters this list. The
+        being a geometric fact. The barrier list is filtered on two conditions: the parse withholds a
+        barrier when it exceeds QSITE_BARRIER_MAX_KCAL, and a frame whose saddle sits at the first
+        scanned point resolved no interior transition state and is excluded here. Without the second
+        test such a frame enters as a barrier of 0.0 rather than NaN, becomes the minimum, takes
+        weight exp(0) = 1, and dominates both the rate-weighted barrier and the reaction energy that
+        shares its weights. The
         per-frame and
         rank figures draw from these same raw profiles.
         '''
