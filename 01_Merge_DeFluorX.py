@@ -444,9 +444,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
              edgecolor="black", linewidth=0.8, label="Final Retained")
 
     ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(bar_labels, fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax1.set_yticklabels(bar_labels, fontsize=CFG.VIS_FONT_AXIS_LABEL)
     ax1.invert_yaxis()
-    ax1.set_xlabel("Number of Sequences", fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
+    ax1.set_xlabel("Number of Sequences", fontsize=CFG.VIS_FONT_TICK)
     # No Title for density
 
     # --- Smart Annotation Logic ---
@@ -484,7 +484,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax1.grid(axis="y", visible=False)
     ax1.grid(axis="x", linestyle="--", alpha=0.3)
 
-    ax1.legend(loc="upper right", frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
+    ax1.legend(loc="upper center", ncol=2, frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
 
     # -----------------------------------------------------------------------------
     # Step 5.4: Subplot 2 - Length Heterogeneity (Violin Plot)
@@ -507,8 +507,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                     medianprops=dict(color="black", linewidth=1.5))
 
     ax2.set_xticks([0, 1])
-    ax2.set_xticklabels(["Master", "Secondary"], fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
-    ax2.set_ylabel("Length (AA)", fontweight="bold", fontsize=CFG.VIS_FONT_TICK)
+    ax2.set_xticklabels(["Master", "Secondary"], fontsize=CFG.VIS_FONT_TICK)
+    ax2.set_ylabel("Length (AA)", fontsize=CFG.VIS_FONT_TICK)
 
     for i, tick in enumerate(ax2.get_xticklabels()):
         tick.set_color(data_map[i]["colour"])
@@ -519,8 +519,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     # -----------------------------------------------------------------------------
     # Step 5.5: Subplot 3 - Consolidated Architecture (KDE Plot)
     # -----------------------------------------------------------------------------
-    ax3.set_xlabel("Sequence Length (Residues)", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
-    ax3.set_ylabel("Density", fontweight="bold", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax3.set_xlabel("Sequence Length (Residues)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax3.set_ylabel("Density", fontsize=CFG.VIS_FONT_AXIS_LABEL)
 
     if len(all_lengths) > 5:
         min_x, max_x = min(all_lengths), max(all_lengths)
@@ -571,7 +571,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
             except Exception as e:
                 logger.debug(f"Skipped KDE plot for combined data due to math error: {e}")
 
-        ax3.legend(loc="upper right", bbox_to_anchor=(0.82, 1.0), frameon=False, fontsize=CFG.VIS_FONT_AXIS_LABEL)
+        ax3.legend(loc="upper left", bbox_to_anchor=(0.02, 1.0), frameon=False, fontsize=CFG.VIS_FONT_AXIS_LABEL)
     else:
         ax3.text(0.5, 0.5, "Insufficient data for Density Plot", ha="center", transform=ax3.transAxes)
 
