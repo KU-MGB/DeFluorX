@@ -2330,27 +2330,27 @@ class CFG:
     SCORE_PCA_NEUTRAL: float       = 50.0   # the neutral PCA score assigned when PCA cannot run
                                             # (mid-scale of 0-100 - never a silent zero)
     VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
-    VIS_FONT_LARGE: float       = 15.5   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
-    VIS_FONT_AXIS_LABEL: float  = 12.5   # x/y axis labels - plain weight
-    VIS_FONT_TICK: float        = 10.5   # tick labels
-    VIS_FONT_TICK_COMPACT: float = 9.5   # tick labels on a crowded axis (many categories/rotated labels)
-    VIS_FONT_TICK_DENSE: float  = 8.5    # tick labels on a very dense axis (per-complex rows, colourbars)
-    VIS_FONT_LEGEND: float      = 9.5    # legend entries (one size for every figure, every step)
-    VIS_FONT_LEGEND_TITLE: float = 10.0  # legend title (one size everywhere; slightly above the entries)
-    VIS_FONT_ANNOT: float       = 9.0    # in-figure annotations (values on/inside bars)
+    VIS_FONT_LARGE: float       = 24.8   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
+    VIS_FONT_AXIS_LABEL: float  = 20.0   # x/y axis labels - plain weight
+    VIS_FONT_TICK: float        = 16.8   # tick labels
+    VIS_FONT_TICK_COMPACT: float = 15.2   # tick labels on a crowded axis (many categories/rotated labels)
+    VIS_FONT_TICK_DENSE: float  = 13.6    # tick labels on a very dense axis (per-complex rows, colourbars)
+    VIS_FONT_LEGEND: float      = 15.2    # legend entries (one size for every figure, every step)
+    VIS_FONT_LEGEND_TITLE: float = 16.0  # legend title (one size everywhere; slightly above the entries)
+    VIS_FONT_ANNOT: float       = 14.4    # in-figure annotations (values on/inside bars)
     '''
     Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
     than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,
     nothing hardcoded). Ordered largest -> smallest; scale the ladder to grow/shrink the whole scene.
     '''
-    MECH_FONT_ATOM_XL: float    = 13.0   # the departing fluoride glyph (emphasised)
-    MECH_FONT_ATOM: float       = 11.5   # substrate element glyphs (C/O/F) + verdict badge
-    MECH_FONT_LABEL: float      = 10.5   # emphasised atom label
-    MECH_FONT_TBL_HEAD: float   = 9.4    # QM/MM summary-table column headers (bottom scene table)
-    MECH_FONT_TBL_CELL: float   = 8.8    # QM/MM summary-table label + value cells
-    MECH_FONT_DISC: float       = 8.7    # residue-disc code/number, electron ①② markers, reaction-coord graph labels
-    MECH_FONT_SMALL: float      = 7.7    # interacting-atom names, graph ticks / x-label, scene legend rows
-    MECH_FONT_TINY: float       = 6.7    # distance / angle read-off labels, cleavage-threshold marker
+    MECH_FONT_ATOM_XL: float    = 20.8   # the departing fluoride glyph (emphasised)
+    MECH_FONT_ATOM: float       = 18.4   # substrate element glyphs (C/O/F) + verdict badge
+    MECH_FONT_LABEL: float      = 16.8   # emphasised atom label
+    MECH_FONT_TBL_HEAD: float   = 15.0    # QM/MM summary-table column headers (bottom scene table)
+    MECH_FONT_TBL_CELL: float   = 14.1    # QM/MM summary-table label + value cells
+    MECH_FONT_DISC: float       = 13.9    # residue-disc code/number, electron ①② markers, reaction-coord graph labels
+    MECH_FONT_SMALL: float      = 12.3    # interacting-atom names, graph ticks / x-label, scene legend rows
+    MECH_FONT_TINY: float       = 10.7    # distance / angle read-off labels, cleavage-threshold marker
     VIS_TEXT_MAX_LUM: float     = 0.42   # a bar/line colour reused as TEXT is darkened to at most this relative luminance so a light hue (yellow, sky, amber) stays legible on white
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
