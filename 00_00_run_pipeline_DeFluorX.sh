@@ -59,6 +59,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ── Schrödinger auto-detection (version-agnostic) ─────────────────────────────
+# Follow whatever Schrödinger release is installed under /opt/schrodinger* (e.g. an
+# upgrade from 2026-1 to 2026-3) with no env edit: if SCHRODINGER is unset or its jsc
+# is missing, pick the newest /opt/schrodinger* that carries jsc and export it (+ PATH)
+# so every downstream step (05-07) inherits the same, valid Schrödinger.
+if [[ -z "${SCHRODINGER:-}" || ! -x "${SCHRODINGER}/jsc" ]]; then
+    _sch_found="$(ls -d /opt/schrodinger* 2>/dev/null | sort -V | tail -1 || true)"
+    if [[ -n "${_sch_found}" && -x "${_sch_found}/jsc" ]]; then
+        export SCHRODINGER="${_sch_found}"
+        case ":${PATH}:" in *":${SCHRODINGER}:"*) ;; *) export PATH="${SCHRODINGER}:${PATH}" ;; esac
+    fi
+    unset _sch_found
+fi
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 DRY_RUN=0
@@ -563,7 +577,7 @@ fi   # end conda activation (bypassed when PFAS already active)
 # jsc. Names are the pipeline's own tools (desmond*/watermap*/mmgbsa*); this fires only on interrupt.
 _cancel_schrodinger_jobs() {
     local jsc="${SCHRODINGER:-/opt/schrodinger}/jsc"
-    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null)"
+    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null || true)"
     [[ -n "$jsc" && -x "$jsc" ]] || return 0
     local ids
     ids=$("$jsc" list -j 2>/dev/null | awk '$2 ~ /desmond|watermap|mmgbsa/ {print $1}')
@@ -581,7 +595,7 @@ _cancel_schrodinger_jobs() {
 # jobs are active.
 _ensure_jobserver() {
     local jsc="${SCHRODINGER:-/opt/schrodinger}/jsc"
-    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null)"
+    [[ -x "$jsc" ]] || jsc="$(command -v jsc 2>/dev/null || true)"
     if [[ -z "$jsc" || ! -x "$jsc" ]]; then
         _tee "  ${_C_YELLOW}[jobserver] jsc not found - Steps 05-07 will fail to submit jobs.${_C_RESET}"
         return 0

@@ -11,7 +11,7 @@
 <text x="570.0" y="42" font-size="11.5" font-weight="800" fill="#4c1d95" text-anchor="middle">00_00_run_pipeline_DeFluorX.sh   ·   Orchestrator (bash)</text>
 <text x="570.0" y="59.5" font-size="9.3" fill="#5b21b6" text-anchor="middle">runs 00_03 → 01 → 02 → … → 07 in sequence · resume-safe · systemd-oomd guard</text>
 <text x="570.0" y="73.2" font-size="9.3" fill="#5b21b6" text-anchor="middle">starts the Schrödinger job server before 05 · Ctrl-C cancels jobs</text>
-<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~784</text>
+<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~798</text>
 <rect x="148.2" y="104" width="843.6" height="97.5" rx="14" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="570.0" y="193.5" font-size="11.5" font-weight="800" fill="#0f766e" text-anchor="middle" letter-spacing="0.3">Foundation - imported by every step</text>
 <g filter="url(#ds)"><rect x="164.1953125" y="118" width="275.1" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
