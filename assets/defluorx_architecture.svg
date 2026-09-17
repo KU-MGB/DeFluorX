@@ -18,12 +18,12 @@
 <text x="180.1953125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_01_Project_Config_DeFluorX.py</text>
 <text x="180.1953125" y="151.0" font-size="9.2" fill="#0f766e">single source of truth - thresholds, weights, paths</text>
 <text x="180.1953125" y="163.5" font-size="9.2" fill="#0f766e">tiers · geometry cutoffs · restraint · gates</text>
-<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,585</text>
+<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,589</text>
 <g filter="url(#ds)"><rect x="467.328125" y="118" width="259.7" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="483.328125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_02_Project_Utils_DeFluorX.py</text>
 <text x="483.328125" y="151.0" font-size="9.2" fill="#0f766e">console &amp; logging · atomic CSV / JSON</text>
 <text x="483.328125" y="163.5" font-size="9.2" fill="#0f766e">geometry · Kabsch · figure-style SSOT</text>
-<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,264</text>
+<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,265</text>
 <g filter="url(#ds)"><rect x="755.0078125" y="118" width="220.8" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="771.0078125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_03_Environment_DeFluorX.py</text>
 <text x="771.0078125" y="151.0" font-size="9.2" fill="#0f766e">Conda env → PFAS.yml +</text>

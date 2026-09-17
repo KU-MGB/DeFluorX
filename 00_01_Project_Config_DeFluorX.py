@@ -2296,6 +2296,10 @@ class CFG:
     VIS_IMG_HEIGHT: int  = 2400   # px  export height
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
+    VIS_SVG_FONTTYPE: str = "none"  # "none" keeps every label as a real, editable <text> element (so
+                                    # a merged panel can be right-clicked -> Convert to Shape in PowerPoint
+                                    # and its font size changed); "path" outlines text (self-contained but
+                                    # not text-editable). Applies to every SVG save via apply_figure_style.
     VIS_FIGURE_FORMAT: str = "svg"  # SSOT figure format for EVERY matplotlib save across 00-07:
                                     # "svg" (vector) | "pdf" | "tiff"/"tif" | "png" | "jpg". One edit
                                     # here re-targets all plots (apply_figure_style patches savefig to

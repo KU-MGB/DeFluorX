@@ -1,0 +1,102 @@
+════════════════════════════════════════════════════════════════════════════════
+  DeFluorX Pipeline Run
+  Started : 2026-09-15 14:21:25
+  Env     : PFAS
+  Python  : Python 3.10.19
+  Mode    : RESUME
+  Run ID  : Boltz-2_Run_20260309T085406Z_DeFluorX
+  Log     : /mnt/wdpassport/02_DeFluorX/02_Data/Boltz-2_Run_20260309T085406Z_DeFluorX/0_DeFluorX_Pipeline_Logs/00_Pipeline_20260915_142124.log
+════════════════════════════════════════════════════════════════════════════════
+
+  Monitor: tail -f /mnt/wdpassport/02_DeFluorX/02_Data/Boltz-2_Run_20260309T085406Z_DeFluorX/0_DeFluorX_Pipeline_Logs/00_Pipeline_20260915_142124.log
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NEXT STEP : 00a  Environment check
+  CMD  : python 00_03_Environment_DeFluorX.py
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+  ▶  00_03_Environment_DeFluorX.py  │  DeFluorX Pipeline
+  Conda Environment Export & Installation Manager
+  Started : 2026-09-15 14:21:25
+════════════════════════════════════════════════════════════════════════════════
+
+Verifying installed pipeline packages:
+  ✔ Python           : 3.10.19
+  ✔ boltz            : 2.2.1
+  ✔ colabfold        : Available
+  ✔ MDAnalysis       : 2.9.0
+  ✔ rdkit            : 2026.03.3
+  ✔ gemmi            : 0.6.5
+  ✔ torch (CUDA)     : 2.11.0+cu130 - CUDA available
+  ✔ PyMOL            : Available
+  ✔ PLIP             : Available
+
+════════════════════════════════════════════════════════════════════════════════
+  ✔  00_03_Environment_DeFluorX.py  -  Pipeline Phase Complete  │  Total Elapsed: 1s
+════════════════════════════════════════════════════════════════════════════════
+
+  [PASS] 00a  Environment check  (2s)
+
+════════════════════════════════════════════════════════════════════════════════
+  NEXT STEP : 01  Merge sequences
+  CMD  : python 01_Merge_DeFluorX.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+  ▶  01_Merge_DeFluorX.py  │  DeFluorX Pipeline
+  FASTA Deduplication & Merge  ·  Length Filtering  ·  Sequence Standardisation
+  Started : 2026-09-15 14:21:28
+════════════════════════════════════════════════════════════════════════════════
+
+  Master    : A_Labelled_15-Seq.fasta
+  Secondary : B_Downloaded-Blast_Uniprot_NCBI.fasta  (Len: 250–360 aa)
+  Output    : C_INP_Merged_for_Boltz-2.fasta
+
+... Processing Master file: A_Labelled_15-Seq.fasta
+
+... Processing Secondary file: B_Downloaded-Blast_Uniprot_NCBI.fasta
+
+Generating Visual Report...
+════════════════════════════════════════════════════════════════════════════════
+FINAL REPORT
+════════════════════════════════════════════════════════════════════════════════
+
+[File 1: Master]
+  Input Sequences       : 15
+  Dropped (Quality)     : 0
+  Dropped (Duplicate)   : 0
+  RETAINED              : 15
+
+[File 2: Secondary]
+  Input Sequences       : 3275
+  Dropped (Quality)     : 0
+  Dropped (Length)      : 115
+  Dropped (Duplicate)   : 1025
+  RETAINED              : 2135
+
+[FINAL DATASET]
+  Total Sequences       : 2150
+  Unique Sequences      : 2150
+  Length Range          : 194 - 360  (master length-exempt)
+  Mean Length           : 297.77
+
+Files Saved:
+  1. FASTA : /mnt/wdpassport/02_DeFluorX/02_Data/C_INP_Merged_for_Boltz-2.fasta
+  2. LOG   : /mnt/wdpassport/02_DeFluorX/02_Data/00_Merge.log
+  3. PLOTS : /mnt/wdpassport/02_DeFluorX/02_Data/C_INP_Merged_for_Boltz-2.svg
+--------------------------------------------------------------------------------
+✔ All Files Saved Successfully
+────────────────────────────────────────────────────────────────────────────────
+
+════════════════════════════════════════════════════════════════════════════════
+  ✔  01_Merge_DeFluorX.py  -  Pipeline Phase Complete  │  Total Elapsed: 5s
+════════════════════════════════════════════════════════════════════════════════
+
+  [PASS] 01  Merge sequences  (6s)
+
+════════════════════════════════════════════════════════════════════════════════
+  NEXT STEP : 02  Production (Boltz-2 scoring - resume)
+  CMD  : python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z_DeFluorX
+════════════════════════════════════════════════════════════════════════════════

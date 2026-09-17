@@ -410,6 +410,7 @@ def apply_figure_style(cfg) -> None:
         "grid.linewidth": cfg.VIS_GRID_LINEWIDTH,
         "savefig.dpi": cfg.VIS_FIGURE_DPI,
         "savefig.bbox": "tight",
+        "svg.fonttype": getattr(cfg, "VIS_SVG_FONTTYPE", "none"),   # keep labels as editable <text> in SVG
     })
 
     '''
