@@ -488,3 +488,4 @@ dependencies:
       - xxhash==3.6.0
       - yarl==1.23.0
       - zipp==3.23.1
+# DeFluorX conda environment (Python 3.10).
