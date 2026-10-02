@@ -21,3 +21,4 @@ query           237 LSMPLLVLWGEEG-WHRCFDPLREWQLVADDVRGRPLACGHYIAEEAPDALLDAALPFLL
 target          299 AAP 302
                 300 .|. 303
 query           296 QAG 299
+

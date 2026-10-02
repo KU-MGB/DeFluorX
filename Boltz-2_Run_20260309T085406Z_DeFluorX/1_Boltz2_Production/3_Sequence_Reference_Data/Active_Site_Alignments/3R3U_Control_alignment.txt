@@ -21,3 +21,4 @@ query           240 KIPVPMLALWGASGIAQSAATPLDVWRKWASDVQGAPIESGHFLPEEAPDQTAEALVRFF
 target          298 SAAP 302
                 300 |||| 304
 query           300 SAAP 304
+

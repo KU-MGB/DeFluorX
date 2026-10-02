@@ -21,3 +21,4 @@ query           240 TIPMLTLWGNAGVAQAAATPLETWKQWATKVDGMPVDSGHFLTEENPDVTAKALREFFSA
 target          300 AP 302
                 300 -- 302
 query           300 -- 300
+

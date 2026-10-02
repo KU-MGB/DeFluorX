@@ -10,3 +10,4 @@ sequences:
 - ligand:
     id: L
     smiles: O=C(O)C(F)(F)F
+

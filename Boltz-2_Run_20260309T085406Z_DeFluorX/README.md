@@ -69,3 +69,4 @@ Empty folders are held in version control by `.gitkeep` placeholders.
 
 The complete pipeline resides in the repository root and runs in sequence from
 `00_00_run_pipeline_DeFluorX.sh` through `07_QMMM_Defluorination_DeFluorX.py`.
+

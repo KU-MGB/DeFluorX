@@ -21,3 +21,4 @@ query           237 TLACPTLILTGDGYLDCSHESPLAAWQRTFAPKGRSAEIVSGHFLAEENSSATLDALLGF
 target          297 FSAAP 302
                 300 ..|-- 305
 query           297 LKA-- 300
+

@@ -21,3 +21,4 @@ query           239 TAPLLVLWGGRGLG-GGGSPLDIWRQWAGNVQGQPLQGGHFLPEENPEATLEAVLAFL--
 target          300 AP 302
                 300 -- 302
 query           296 -- 296
+
