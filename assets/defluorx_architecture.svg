@@ -76,7 +76,7 @@
 <text x="72" y="520.0" font-size="9.2" fill="#1e40af">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="72" y="532.5" font-size="9.2" fill="#1e40af">departing-F Mulliken charge → cleavage check</text>
 <text x="72" y="545.0" font-size="9.2" fill="#1e40af">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,223</text>
+<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,234</text>
 <g filter="url(#ds)"><rect x="392.5859375" y="449.5" width="307.3" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="408.5859375" y="467.5" font-size="10.4" font-weight="800" fill="#1e40af">06_Physics_Validation_DeFluorX.py</text>
 <text x="408.5859375" y="482.5" font-size="9.2" fill="#1e40af">explicit-solvent physics for each MD-selected complex</text>
@@ -85,7 +85,7 @@
 <text x="408.5859375" y="520.0" font-size="9.2" fill="#1e40af">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="408.5859375" y="532.5" font-size="9.2" fill="#1e40af">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="408.5859375" y="545.0" font-size="9.2" fill="#1e40af">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,097</text>
+<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,108</text>
 <rect x="763.9" y="419.5" width="323.7" height="149.5" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="925.7" y="438.5" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 3 - Selection &amp; Prep</text>
 <g filter="url(#ds)"><rect x="779.87109375" y="449.5" width="291.7" height="105.5" rx="10" fill="#fed7aa" stroke="#fb923c" stroke-width="1.5"/></g>
@@ -96,7 +96,7 @@
 <text x="795.87109375" y="520.0" font-size="9.2" fill="#9a3412">PyMOL / PLIP contact figures</text>
 <text x="795.87109375" y="532.5" font-size="9.2" fill="#9a3412">pose-drift + 8-residue machinery figures</text>
 <text x="795.87109375" y="545.0" font-size="9.2" fill="#9a3412">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,215</text>
+<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,227</text>
 <line x1="182.4" y1="302.5" x2="182.4" y2="306.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="327.8" y1="310.5" x2="369.8" y2="310.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="637.3" y1="312.2" x2="659.3" y2="312.2" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>

@@ -26,7 +26,7 @@ It combines four evidence streams into the master ranking + figures:
 All thresholds, gate cut-offs, and figure colours come from CFG (SSOT).
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 11 September 2026 <──────────────────────────────────────────────────────
+Date   : 09 October 2026 <───────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 07_QMMM_Defluorination_DeFluorX.py
@@ -244,7 +244,7 @@ import os
 =============================================================================
 SCHRÖDINGER BOOTSTRAP
 =============================================================================
-Auto-sets SCHRODINGER=/opt/schrodinger if the env var is absent.
+Auto-sets SCHRODINGER to the newest /opt/schrodinger* install if the env var is absent.
 When invoked with plain `python`, re-invokes transparently via
 $SCHRODINGER/run so the Schrödinger Python interpreter is used.
 Both forms are equivalent:
@@ -253,8 +253,19 @@ Both forms are equivalent:
 '''
 import subprocess as _sp
 
+def _latest_schrodinger() -> str:
+    """Newest /opt/schrodinger* install carrying the `run` binary, so an upgrade is followed without
+    an env edit. Falls back to the bare path only when nothing matches."""
+    import glob as _glob, re as _re
+    _cands = [d for d in _glob.glob("/opt/schrodinger*") if os.path.isdir(d)]
+    _vkey = lambda p: [int(x) if x.isdigit() else x for x in _re.split(r"(\d+)", p)]
+    for d in sorted(_cands, key=_vkey, reverse=True):
+        if os.path.exists(os.path.join(d, "run")):
+            return d
+    return "/opt/schrodinger"
+
 if "SCHRODINGER" not in os.environ:
-    os.environ["SCHRODINGER"] = "/opt/schrodinger"
+    os.environ["SCHRODINGER"] = _latest_schrodinger()
 
 try:
     from schrodinger.application.desmond.packages import traj, topo

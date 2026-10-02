@@ -12,7 +12,7 @@ Restricting both phases to the ~10 MD-ready complexes keeps this step cheap
 instead of converting/preparing the entire predicted library.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 11 September 2026 <──────────────────────────────────────────────────────
+Date   : 09 October 2026 <───────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Script        : 05_TopN_and_PDB_Preparation_DeFluorX.py
@@ -197,8 +197,20 @@ SEPARATOR                    = "-" * 80
 Ensure SCHRODINGER is set in the process environment so child processes
 (PrepWizard subprocess calls) inherit it without requiring a prior `export`.
 '''
+def _latest_schrodinger() -> str:
+    """Newest /opt/schrodinger* install that carries the `run` binary, so the pipeline follows a
+    Schrodinger version upgrade (e.g. 2026-3 -> 2026-4) without an env edit. Falls back to the bare
+    path only when nothing matches."""
+    import glob as _glob, re as _re
+    _cands = [d for d in _glob.glob("/opt/schrodinger*") if os.path.isdir(d)]
+    _vkey = lambda p: [int(x) if x.isdigit() else x for x in _re.split(r"(\d+)", p)]
+    for d in sorted(_cands, key=_vkey, reverse=True):
+        if os.path.exists(os.path.join(d, "run")):
+            return d
+    return "/opt/schrodinger"
+
 if "SCHRODINGER" not in os.environ:
-    os.environ["SCHRODINGER"] = "/opt/schrodinger"
+    os.environ["SCHRODINGER"] = _latest_schrodinger()
 
 SCHRODINGER_PATH = Path(os.environ["SCHRODINGER"])
 PREPWIZARD_BIN   = SCHRODINGER_PATH / "utilities" / "prepwizard"

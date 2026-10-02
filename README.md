@@ -6,6 +6,8 @@
 
 <img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
+<sub>📦 **Supplementary data** (supplementary sheets, high-resolution figures, input FASTAs and representative structures) are archived at Zenodo - <a href="https://doi.org/10.5281/zenodo.21263818">https://doi.org/10.5281/zenodo.21263818</a> (currently a private deposit; released publicly on publication).</sub>
+
 </div>
 
 ---
@@ -20,7 +22,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-45169-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-45203-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -185,7 +187,7 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 
 ---
 
-## 🔄 Pipeline architecture (45,169 lines)
+## 🔄 Pipeline architecture (45,203 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination)" width="100%">
@@ -1922,7 +1924,7 @@ University of Copenhagen, Denmark
 
 <br>
 
-<img src="https://komarev.com/ghpvc/?username=KU-MGB-DeFluorX&label=Repository+Views&color=22C55E&style=flat"/> &nbsp; <sub>Last updated: 11 September 2026</sub>
+<img src="https://komarev.com/ghpvc/?username=KU-MGB-DeFluorX&label=Repository+Views&color=22C55E&style=flat"/> &nbsp; <sub>Last updated: 09 October 2026</sub>
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 

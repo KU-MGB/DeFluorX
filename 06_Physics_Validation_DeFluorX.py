@@ -45,7 +45,7 @@ may be launched either as `$SCHRODINGER/run 06_...py` or as a plain `python 06_.
 (project conda env) - in the latter case it transparently re-execs under $SCHRODINGER/run.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 11 September 2026 <───────────────────────────────────────────────────────
+Date   : 09 October 2026 <────────────────────────────────────────────────────────
 ===============================================================================
 Usage:
   python 06_Physics_Validation_DeFluorX.py [Boltz-2_Run_Directory] [options]
@@ -150,10 +150,21 @@ Re-exec under $SCHRODINGER/run when Schrödinger's Python is not the interpreter
 WaterMap/MD stage bodies import `schrodinger` in-process, so the script must run under
 $SCHRODINGER/run; this lets it also be launched as a plain `python 06_...py` (project conda env).
 '''
+def _latest_schrodinger() -> str:
+    """Newest /opt/schrodinger* install carrying the `run` binary, so an upgrade is followed without
+    an env edit. Falls back to the bare path only when nothing matches."""
+    import glob as _glob, re as _re
+    _cands = [d for d in _glob.glob("/opt/schrodinger*") if os.path.isdir(d)]
+    _vkey = lambda p: [int(x) if x.isdigit() else x for x in _re.split(r"(\d+)", p)]
+    for d in sorted(_cands, key=_vkey, reverse=True):
+        if os.path.exists(os.path.join(d, "run")):
+            return d
+    return "/opt/schrodinger"
+
 try:
     import schrodinger  # noqa: F401
 except ModuleNotFoundError:
-    _schro = os.environ.get("SCHRODINGER", "/opt/schrodinger")
+    _schro = os.environ.get("SCHRODINGER") or _latest_schrodinger()
     os.execv(f"{_schro}/run", [f"{_schro}/run", "python3", os.path.abspath(__file__), *sys.argv[1:]])
 
 import numpy as np
@@ -206,8 +217,8 @@ apply_figure_style = _utils_mod.apply_figure_style
 auto_label_colour = _utils_mod.auto_label_colour
 apply_figure_style(CFG)   # one typography definition for every figure the pipeline draws
 
-# Auto-set SCHRODINGER if the env var is absent (Step 07 QM/MM uses the same default).
-os.environ.setdefault("SCHRODINGER", "/opt/schrodinger")
+# Auto-set SCHRODINGER if the env var is absent (newest /opt/schrodinger*; Step 07 uses the same resolver).
+os.environ.setdefault("SCHRODINGER", _latest_schrodinger())
 SCHRODINGER = os.environ["SCHRODINGER"]
 SCHROD_RUN = os.path.join(SCHRODINGER, "run")
 
