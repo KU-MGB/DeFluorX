@@ -26,13 +26,13 @@ Date   : 09 October 2026 <──────────────────
   Writes        : <Run>/1_Boltz2_Production/  (Boltz-2 CIF outputs)
                   <Run>/2_Best_Complexes_CIFs/ (top-model CIF selection)
                   <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Primary_*.csv
   Upstream      : 01_Merge_DeFluorX.py → writes the merged FASTA consumed here
   Downstream    : 03_Validation_Figures_DeFluorX.py → reads ranked CSV
                   04_Dendrogram_DeFluorX.py → reads 1_Input_Data roster
                   05_TopN_and_PDB_Preparation_DeFluorX.py → reads ranked CSV + Best_Complexes_CIFs
                   06_Physics_Validation_DeFluorX.py → reads ranked CSV
-                  07_QMMM_Defluorination_DeFluorX.py → reads ranked + master CSV
+                  07_QMMM_Defluorination_DeFluorX.py → reads ranked + primary CSV
 ───────────────────────────────────────────────────────────────────────────────
 
 ── The Critic's Corner: Known Limitations & Failure Points ──────────────────
@@ -131,7 +131,7 @@ derived from the 1.60 A Crystal Structure (3R3U) and pristine SN2 reaction mecha
      config and may drift; the CFG dicts are the single source of truth.)
 
 -------------------------------------------------------------------------------
-RANKING LOGIC (sorting the ranked CSV, CFG.RANKED_CSV_STEM; the Master CSV is sorted by job_name):
+RANKING LOGIC (sorting the ranked CSV, CFG.RANKED_CSV_STEM; the Primary CSV is sorted by job_name):
 The final ranked CSV is mechanism-first - it prioritises catalytic mechanism over
 generic binding affinity. Sort keys, in strict order (generate_scientific_ranking_csv):
 
@@ -670,9 +670,9 @@ GLOBAL_STATS = {
 
 def setup_logging(log_file_path: Path) -> Path:
     global logger
-    logger = _utils_mod.setup_logging(log_file_path, logger_name="boltz_master")
+    logger = _utils_mod.setup_logging(log_file_path, logger_name="boltz_primary")
     logger.info("=== New execution cycle initialised ===")
-    logger.info(f"Master log location: {log_file_path}")
+    logger.info(f"Primary log location: {log_file_path}")
     return log_file_path
 
 def console_info(msg: str) -> None:
@@ -1098,7 +1098,7 @@ def save_alignment_cache_final(csv_path: Path):
     The active-site alignment is identical across a protein's 27 ligand jobs and is
     recorded in every job's summary.json. The in-loop persist appends one row per
     protein for live feedback, but on a resume the analysis pool skips jobs already
-    written to the Master CSV, so those proteins never re-enter the persist path and
+    written to the Primary CSV, so those proteins never re-enter the persist path and
     their rows would be absent from a wiped alignment directory. Reconstructing the
     file from the summaries guarantees exactly one row per unique protein regardless
     of which jobs ran this session.
@@ -1394,7 +1394,7 @@ def map_active_site_residues(protein_id: str, target_seq: str, out_aln_path: Opt
     return final_idx_map, stats, final_resname_map, full_map_str
 
 def format_control_mappings(resname_map: Dict[str, str], full_map_str: str) -> Tuple[str, str]:
-    """Helper tool for parsing standard string formatting for the master CSV report mapping strings."""
+    """Helper tool for parsing standard string formatting for the primary CSV report mapping strings."""
     triad_str_parts = []
     for key in sorted(CATALYTIC_TRIAD_KEYS):
         ref_label = key
@@ -3805,7 +3805,7 @@ def check_catalytic_geometry(cif_path: Path, mapped_sites: Dict[str, int], smile
         gated by a minimum absolute count (CLASH_MIN_FLOOR), so a non-physical pose is
         caught by the proportion of the ligand interpenetrating the backbone - not a flat
         count that biases against long PFAS. Both clash_count and the ratio are still
-        reported in the master CSV (mainchain_clash_count / mainchain_clash_ratio).
+        reported in the primary CSV (mainchain_clash_count / mainchain_clash_ratio).
         '''
         tail_clash_ratio = 0.0
         clash_count = 0
@@ -4959,7 +4959,7 @@ def flatten_job_result(res: dict) -> dict:
         for k, v in res["active_site_details"].items(): flat[k] = v
     return flat
 
-# Canonical human-readable column order for the master CSV output.
+# Canonical human-readable column order for the primary CSV output.
 CSV_COLUMN_ORDER = [
     # --- Identifiers ---
     "job_index", "job_name", "protein", "ligand",
@@ -5113,7 +5113,7 @@ def rebuild_best_complexes_mirror(runs_dir: Path, run_root: Path) -> int:
 
 
 def append_rows_to_csv(rows: list, csv_path: Path):
-    """Appends a list of result rows to the master CSV, deduplicates, sorts by job_name,
+    """Appends a list of result rows to the primary CSV, deduplicates, sorts by job_name,
     assigns a plain sequential job_index (0-based row counter), and reorders columns
     into the canonical human-readable CSV_COLUMN_ORDER."""
     try:
@@ -5129,7 +5129,7 @@ def append_rows_to_csv(rows: list, csv_path: Path):
             # Sort by folder name so rows are ordered protein-first then ligand.
             df_new = df_new.sort_values("job_name", kind="mergesort").reset_index(drop=True)
             '''
-            Control provenance on the master (same derivation as the ranked stage, §18): a job name
+            Control provenance on the primary (same derivation as the ranked stage, §18): a job name
             beginning with the reserved zero index (CONTROL_JOB_PREFIX) is a control; carry its
             reference and known-answer verdict so figures/downstream filter controls without
             re-parsing job names.
@@ -5268,7 +5268,7 @@ def rebuild_csv_from_summaries(runs_dir: Path, csv_path: Path) -> int:
 # =============================================================================
 
 def generate_scientific_ranking_csv(CSV_PATH, PROD, ts_now):
-    """Build the mechanism-first Scientific Ranking CSV from the master CSV:
+    """Build the mechanism-first Scientific Ranking CSV from the primary CSV:
     tier-first sort, MD-ready selection, positive-control validation, no-gaps
     fill. Returns (rank_csv_path, rank_columns_count); `logger` is the
     module-global and console_info carries the progress reporting.
@@ -5644,12 +5644,12 @@ def main():
 
     ts_now = datetime.now().strftime("%Y%m%d_%H%M%S")
     LOG_PATH = PROD / "00_Boltz2_Production.log"
-    CSV_PATH = PROD / f"{CFG.MASTER_CSV_STEM}_{ts_now}.csv"   # name from CFG SSOT
+    CSV_PATH = PROD / f"{CFG.PRIMARY_CSV_STEM}_{ts_now}.csv"   # name from CFG SSOT
     setup_logging(LOG_PATH)
 
     prev_elapsed_map = {}
     if resumed:
-        existing_csvs = sorted(list(PROD.glob("*_Master*.csv")))
+        existing_csvs = sorted(list(PROD.glob("*_Primary*.csv")))
         if existing_csvs:
             try:
                 df_old = pd.read_csv(existing_csvs[-1], dtype={"job_index": str}, low_memory=False)
@@ -5963,12 +5963,12 @@ def main():
         console_info(f" -> Wiped analysis outputs for {_wiped[0]:,} job directories.")
 
         '''
-        Delete stale master CSVs only - they are rebuilt fresh from the re-analysis.
+        Delete stale primary CSVs only - they are rebuilt fresh from the re-analysis.
         Ranked CSVs are timestamped RESULT files and are NEVER deleted here: each
         resume writes a new timestamped ranked CSV and downstream steps pick the
         newest by mtime, so prior results are preserved as history.
         '''
-        for _old_csv in sorted(PROD.glob("*_Master*.csv")):
+        for _old_csv in sorted(PROD.glob("*_Primary*.csv")):
             try: _old_csv.unlink()
             except Exception: pass
 
@@ -6195,7 +6195,7 @@ def main():
                 if r3u_result_data and r3u_result_data.get("status") == "Success":
                     pass  # reported in consolidated calibration summary below
                 if not r3u_boltz_cif:
-                    console_info("System Warning: 3R3U Fluoroacetate CIF not found - r3u scoring columns will be absent from Master CSV.")
+                    console_info("System Warning: 3R3U Fluoroacetate CIF not found - r3u scoring columns will be absent from Primary CSV.")
                     sys.exit(1)
 
         # Print consolidated calibration summary (RMSD + active-site mapping tables)
@@ -6427,13 +6427,13 @@ def main():
 
 
     # -----------------------------------------------------------------------------
-    # Step 10.7: Master CSV Rebuild + GPU Hardware Batch Prediction Phase
+    # Step 10.7: Primary CSV Rebuild + GPU Hardware Batch Prediction Phase
     # -----------------------------------------------------------------------------
 
     # --- Upfront bulk CSV rebuild from all completed summary JSONs ---
     console_separator()
-    console_info("Rebuilding Master CSV from completed per-job summary.json files...")
-    console_info("  (Reads each finished job's summary.json and re-aggregates them into the Master CSV; the Best-Complex CIF mirror is rebuilt in the next step.)")
+    console_info("Rebuilding Primary CSV from completed per-job summary.json files...")
+    console_info("  (Reads each finished job's summary.json and re-aggregates them into the Primary CSV; the Best-Complex CIF mirror is rebuilt in the next step.)")
     _rebuild_t0 = time.time()
     _rebuilt_rows = 0
     if completed_jobs == 0 and not resumed:
@@ -6442,7 +6442,7 @@ def main():
     else:
         _rebuilt_rows = rebuild_csv_from_summaries(D_RUNS, CSV_PATH)
         _rebuild_elapsed = time.time() - _rebuild_t0
-        console_info(f" -> Master CSV rebuilt: {_rebuilt_rows:,} rows in {_rebuild_elapsed:.1f}s  →  {CSV_PATH.name}")
+        console_info(f" -> Primary CSV rebuilt: {_rebuilt_rows:,} rows in {_rebuild_elapsed:.1f}s  →  {CSV_PATH.name}")
 
     '''
     Rebuild the run-level best-complex mirror from all completed job summaries.
@@ -7088,9 +7088,9 @@ def main():
         analysis_pool.shutdown(wait=True)
 
     # -----------------------------------------------------------------------------
-    # Step 10.8: CPU Worker Master Execution Loop
+    # Step 10.8: CPU Worker Primary Execution Loop
     # -----------------------------------------------------------------------------
-    master_rows = []
+    primary_rows = []
     total_tasks = len(tasks)
 
     # Load job names already written to CSV by the GPU-phase background worker
@@ -7167,7 +7167,7 @@ def main():
             if res and isinstance(res, dict) and res.get("status") == "Success":
                 if used_gpu != -1: GLOBAL_STATS["jobs_run_gpu"] += 1
                 else: GLOBAL_STATS["jobs_repaired_cpu"] += 1
-                master_rows.append(flatten_job_result(res))
+                primary_rows.append(flatten_job_result(res))
 
             if res and isinstance(res, dict) and "error" in res:
                 if logger and "traceback" in res:
@@ -7192,17 +7192,17 @@ def main():
     # -----------------------------------------------------------------------------
     print()
     console_separator()
-    console_info(f"Collecting {len(master_rows):,} analysed result(s) and writing Master CSV...")
+    console_info(f"Collecting {len(primary_rows):,} analysed result(s) and writing Primary CSV...")
     df_columns_count = 0
-    if master_rows or (CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0):
+    if primary_rows or (CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0):
         try:
-            if master_rows:
-                df_temp = pd.DataFrame(master_rows)
+            if primary_rows:
+                df_temp = pd.DataFrame(primary_rows)
                 if CSV_PATH.exists() and os.path.getsize(CSV_PATH) > 0:
                     df_existing = pd.read_csv(CSV_PATH, low_memory=False)
                     df_temp = pd.concat([df_existing, df_temp], ignore_index=True)
                 atomic_to_csv(df_temp, CSV_PATH, index=False)
-                master_rows.clear()
+                primary_rows.clear()
 
             df = pd.read_csv(CSV_PATH, low_memory=False)
 
@@ -7284,10 +7284,10 @@ def main():
                 ).astype(str)
 
             '''
-            Control provenance on the finalised master superset (same derivation as the ranked
+            Control provenance on the finalised primary superset (same derivation as the ranked
             stage, §18). append_rows_to_csv adds these during the checkpoint pass, but on --resume
-            the master is rebuilt from per-job summaries (which do not carry them), so they are
-            re-derived here from job_name on the final frame - otherwise the master ships without
+            the primary is rebuilt from per-job summaries (which do not carry them), so they are
+            re-derived here from job_name on the final frame - otherwise the primary ships without
             is_control / Control_Ref / Expected_Verdict.
             '''
             if "job_name" in df.columns:
@@ -7339,7 +7339,7 @@ def main():
     console_info("Sequence Reference Data (MSA + Alignments):".ljust(45) + f" |      {D_SEQ.resolve()}")
     console_info(f"  ├─ MSA Sequences: {len(list(D_COLABFOLD.glob('*.a3m')))}" .ljust(45) + f" |      {D_COLABFOLD.resolve()}")
     console_info(f"  └─ Alignments: {str_aln}".ljust(45) + f" |      {D_ALN.resolve()}")
-    console_info(f"DeFluorX Master CSV:   {str_mc}".ljust(45) + f" |      {CSV_PATH.resolve()}")
+    console_info(f"DeFluorX Primary CSV:   {str_mc}".ljust(45) + f" |      {CSV_PATH.resolve()}")
     if rank_csv_path:
         console_info(f"DeFluorX Ranked CSV:   {str_rc}".ljust(45) + f" |      {rank_csv_path.resolve()}")
     _mir = run_root / "2_Best_Complexes_CIFs"

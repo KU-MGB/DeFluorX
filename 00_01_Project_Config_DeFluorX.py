@@ -57,7 +57,7 @@ Section map (prefix → section):
     GPU_*          §14    GPU batch watchdog timeout
     PREPWIZARD_*   §15    Schrödinger PrepWizard invocation parameters
     PREP_*         §15    PDB preparation chain & residue classification
-    COL_*          §16    Master-CSV column-name registry
+    COL_*          §16    Primary-CSV column-name registry
     MMGBSA_*       §17    Prime MM-GBSA binding free-energy parameters
     MD_*           §18    MD-ready cohort selection (gates Steps 05-07)
     GLOB_*         §16    SSOT file-naming glob patterns (Step 16.5)
@@ -167,7 +167,7 @@ class CFG:
     GPU_*          §14    GPU batch watchdog timeout
     PREPWIZARD_*   §15    Schrödinger PrepWizard invocation parameters
     PREP_*         §15    PDB preparation chain & residue classification
-    COL_*          §16    Master-CSV column-name registry
+    COL_*          §16    Primary-CSV column-name registry
     MMGBSA_*       §17    Prime MM-GBSA binding free-energy parameters
     MD_*           §18    MD-ready cohort selection (gates Steps 05-07)
     GLOB_*         §16    SSOT file-naming glob patterns (Step 16.5)
@@ -1104,7 +1104,7 @@ class CFG:
     sequence alignment, then - if that column is a gap/substitution - scans nearby target
     positions for an Asp. Because Asp is common, a wide rescue can latch onto a
     NON-catalytic Asp. The resolution method and offset are recorded per residue
-    (master-CSV column 'nuc_resolution') for QC, and the elite tier requires the
+    (primary-CSV column 'nuc_resolution') for QC, and the elite tier requires the
     nucleophile to be a direct alignment hit or a TIGHT rescue (offset ≤
     NUC_RESCUE_MAX_OFFSET_ELITE) so a far-fetched rescued Asp cannot seed a Tier_1A call.
     The intra-protein Nuc–Base distance gate rejects a spatially remote rescue; this is an
@@ -1119,7 +1119,7 @@ class CFG:
     model_degrader_consensus is the fraction of a candidate's Boltz diffusion samples that
     independently reach a degrader tier. The representative pose is the best-tier model
     (see select_best_degrader_model). The consensus fraction is REPORTED per candidate
-    (master-CSV column 'model_degrader_consensus' and the Ranking_Score_Calc string) and is
+    (primary-CSV column 'model_degrader_consensus' and the Ranking_Score_Calc string) and is
     used as the FINAL Scientific_Rank tiebreaker - applied only after tier, competence and
     active-site conservation, so it breaks ties between geometrically equal poses (a
     reproducible pose above a single-frame fluke) without ever crossing a tier or competence
@@ -1732,7 +1732,7 @@ class CFG:
     })
 
     # -----------------------------------------------------------------------------
-    # Step 8.9b: PFAS chain-length bin colours (Fig 25b master bars)
+    # Step 8.9b: PFAS chain-length bin colours (Fig 25b primary bars)
     # -----------------------------------------------------------------------------
     PFAS_SIZE_BIN_COLOUR: list = field(default_factory=lambda:
         ["#6A51A3", "#2171B5", "#238B45", "#D94801", "#A50F15"])
@@ -2578,12 +2578,12 @@ class CFG:
         "F": "#1D8348", "S": "#D4AC0D", "other": "#717D7E",
     })
     '''
-    Step-01 merge QC figure (sequence length / identity distributions). Master = the seed set, Secondary
+    Step-01 merge QC figure (sequence length / identity distributions). Primary = the seed set, Secondary
     = the expanded BLAST set, Total = the combined line/labels; grey_fill and box_edge are the KDE fill
     and the stats-box edge.
     '''
     MERGE_QC_COLOUR: dict = field(default_factory=lambda: {
-        "Master":    "#2181B9",
+        "Primary":   "#2181B9",
         "Secondary": "#F1590D",
         "Total":     "#333333",
         "Bg":        "#FFFFFF",
@@ -3096,7 +3096,7 @@ class CFG:
     # Step 16.1: CSV Column Names
     # -----------------------------------------------------------------------------
     '''
-    Registry for all master CSV columns to prevent hardcoding string keys.
+    Registry for all primary CSV columns to prevent hardcoding string keys.
     Controls are emitted by 02 with a reserved zero job index, so a job name beginning with this
     prefix IS a control. Kept here because several steps test for it and a literal "0000000" in
     three scripts is three places to get it wrong.
@@ -3218,9 +3218,9 @@ class CFG:
     matching GLOB_* (derived below in __post_init__). The number prefixes the production folder order.
     '''
     RANKED_CSV_STEM:    str = "6_Boltz2_DeFluorX_Ranked"        # 02 writes → 03/05/06/07 read (the ranked sheet)
-    MASTER_CSV_STEM:    str = "5_Boltz2_DeFluorX_Master"        # 02 writes → all-jobs superset (not tier-ranked)
+    PRIMARY_CSV_STEM:    str = "5_Boltz2_DeFluorX_Primary"        # 02 writes → all-jobs superset (not tier-ranked)
     GLOB_RANKED_CSV:    str = ""                             # derived: f"{RANKED_CSV_STEM}_*.csv"
-    GLOB_MASTER_CSV:    str = ""                             # derived: f"{MASTER_CSV_STEM}_*.csv"
+    GLOB_PRIMARY_CSV:    str = ""                             # derived: f"{PRIMARY_CSV_STEM}_*.csv"
     SUFFIX_RAW_PDB:     str = "_RAW.pdb"                      # 05 internal (pre-prep structure)
     SUFFIX_PLIP_LOG:    str = "_PLIP.log"                     # 05 internal (interaction run log)
     SUFFIX_SID_EAF:     str = "_SID-out.eaf"                  # Desmond SID → 06 reads
@@ -3228,7 +3228,7 @@ class CFG:
     SUFFIX_CMS_OUT:     str = "-out.cms"                      # Desmond → 06/07 read
     FILE_ALIGNMENT_STATS:  str = "Alignment_Stats.csv"           # 02 writes → 03 reads
     FILE_MMGBSA_SUMMARY:   str = "00_MMGBSA_Summary.csv"         # 06 writes (its own combined figures); 07 aggregates per-rank
-    FILE_VALIDATED_MASTER: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source - 02's ranked CSV is authoritative.
+    FILE_VALIDATED_PRIMARY: str = "03_Figure_Enriched_Dataset.csv" # 03 writes (figure/PCA/UMAP/Pareto columns) → 04 reads. NOT a rank source - 02's ranked CSV is authoritative.
 
     # =============================================================================
     # SECTION 17: PRIME MM-GBSA  (Step 06 - end-state binding free energy)
@@ -3583,7 +3583,7 @@ class CFG:
         '''
         Derived file-name globs - the ONLY place they are built, from the STEM single-source-of-truth
         above (object.__setattr__ because the dataclass is frozen). Bump the number/base in RANKED_CSV_STEM
-        / MASTER_CSV_STEM and every producer (02) and consumer (03/05/06/07) tracks it with no other edit.
+        / PRIMARY_CSV_STEM and every producer (02) and consumer (03/05/06/07) tracks it with no other edit.
         '''
         object.__setattr__(self, "GLOB_RANKED_CSV", f"{self.RANKED_CSV_STEM}_*.csv")
-        object.__setattr__(self, "GLOB_MASTER_CSV", f"{self.MASTER_CSV_STEM}_*.csv")
+        object.__setattr__(self, "GLOB_PRIMARY_CSV", f"{self.PRIMARY_CSV_STEM}_*.csv")

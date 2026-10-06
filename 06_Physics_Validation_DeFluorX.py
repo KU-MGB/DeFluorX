@@ -1753,7 +1753,7 @@ def run_mmgbsa_sharded(job_dir: Path, job_name: str, rank: str, cms_file: Path,
 
 
 def _await_mmgbsa_jobserver(job_prefix: str, poll: int = 30, max_wait: int = 172800) -> None:
-    """Block until no active job-server job whose name contains `job_prefix` remains (master + subjobs).
+    """Block until no active job-server job whose name contains `job_prefix` remains (primary + subjobs).
 
     Belt-and-braces after the thermal_mmgbsa driver returns: it should already have waited, but if a
     Schrödinger build submits the Prime batch to jobserverd and returns early, this keeps the caller

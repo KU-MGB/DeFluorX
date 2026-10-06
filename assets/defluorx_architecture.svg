@@ -39,7 +39,7 @@
 <text x="72" y="327.5" font-size="10.4" font-weight="800" fill="#065f46">01_Merge_DeFluorX.py</text>
 <text x="72" y="342.5" font-size="9.2" fill="#047857">merge multi-source FASTA → non-redundant set</text>
 <text x="72" y="355.0" font-size="9.2" fill="#047857">dedup + QC → merged FASTA</text>
-<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~709</text>
+<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~713</text>
 <rect x="372.8" y="229.5" width="776.9" height="162.0" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="761.2" y="248.5" font-size="11.5" font-weight="800" fill="#be185d" text-anchor="middle" letter-spacing="0.3">Phase 2 - High-Throughput Screening</text>
 <g filter="url(#ds)"><rect x="388.76953125" y="259.5" width="245.6" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
@@ -49,7 +49,7 @@
 <text x="404.76953125" y="317.5" font-size="9.2" fill="#9d174d">NAC / SN2 geometry at the α-carbon</text>
 <text x="404.76953125" y="330.0" font-size="9.2" fill="#9d174d">6-tier ladder · elite-angle + floor</text>
 <text x="404.76953125" y="342.5" font-size="9.2" fill="#9d174d">controls FA→2A · DFA→2B · TFA→3</text>
-<text x="404.76953125" y="355.0" font-size="9.2" fill="#9d174d">→ ranked + master CSV · best CIFs</text>
+<text x="404.76953125" y="355.0" font-size="9.2" fill="#9d174d">→ ranked + primary CSV · best CIFs</text>
 <text x="623.3" y="355.0" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~7,470</text>
 <g filter="url(#ds)"><rect x="662.34375" y="259.5" width="239.3" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="678.34375" y="277.5" font-size="10.4" font-weight="800" fill="#9d174d">03_Validation_Figures_DeFluorX.py</text>

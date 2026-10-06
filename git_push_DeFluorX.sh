@@ -169,7 +169,7 @@ full_msg="[$timestamp] $c_type: $msg"
 # ==========================================
 # 6. Branch Protection & Push
 # ==========================================
-if [ "$current_branch" == "main" ] || [ "$current_branch" == "master" ]; then
+if [ "$current_branch" == "main" ] || [ "$current_branch" == "primary" ]; then
     echo -e "\n${YELLOW}You are pushing directly to '${current_branch}'.${NC}"
     read -p "Continue? (y/n): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then

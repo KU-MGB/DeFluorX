@@ -671,7 +671,7 @@ fi
 
 run_step "01  Merge sequences" \
     python 01_Merge_DeFluorX.py \
-        --master    A_Labelled_15-Seq.fasta \
+        --primary    A_Labelled_15-Seq.fasta \
         --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
         --output    "${_FRESH_FASTA}"
 

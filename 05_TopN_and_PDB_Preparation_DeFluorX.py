@@ -243,9 +243,9 @@ def setup_logging(prep_base_dir: Path) -> Path:
     """Initialises the preparation log via the shared utility."""
     global logger
     prep_base_dir.mkdir(parents=True, exist_ok=True)
-    master_log = prep_base_dir / "00_TopN_and_Preparation.log"
-    logger = _utils_mod.setup_logging(master_log, logger_name="pdb_prep", mode="w", timestamp=True)
-    return master_log
+    primary_log = prep_base_dir / "00_TopN_and_Preparation.log"
+    logger = _utils_mod.setup_logging(primary_log, logger_name="pdb_prep", mode="w", timestamp=True)
+    return primary_log
 
 def console_title(msg: str) -> None:
     _utils_mod.console_title(msg, logger)
@@ -306,9 +306,9 @@ def collect_best_cifs(best_cifs_dir: Path) -> list:
     return [(jn, path) for jn, (path, _) in sorted(latest_cifs.items())]
 
 def load_rank_map(prod_dir: Path) -> dict:
-    """Loads the master CSV to annotate PDB headers with a score/rank.
+    """Loads the primary CSV to annotate PDB headers with a score/rank.
     Prefers the DeFluorX Ranked CSV (6_Boltz2_DeFluorX_Ranked_*), then any ranked CSV,
-    then falls back to any master CSV.
+    then falls back to any primary CSV.
     Uses Scientific_Rank if present, otherwise Boltz_Model_Confidence (rounded to 4dp).
     """
     rank_csvs = sorted(prod_dir.glob(CFG.GLOB_RANKED_CSV))

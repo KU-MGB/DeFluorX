@@ -7,7 +7,7 @@ DeFluorX Pipeline  |  Step 07  |  MD + QM/MM Defluorination Engine
 Terminal computational step: turns the Desmond MD trajectories into a concrete,
 ranked verdict on whether each candidate DEFLUORINATES - not merely binds.
 
-It combines four evidence streams into the master ranking + figures:
+It combines four evidence streams into the primary ranking + figures:
   1. Kinetic pre-organisation - near-attack-conformation (NAC) geometry, the
      8-residue Dream Team catalytic machinery, WaterMap hydration, Desmond EAF
      ligand dynamics, and the CONTINUOUS strict-NAC dwell time (ns).
@@ -40,7 +40,7 @@ Date   : 09 October 2026 <──────────────────
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N.csv  (Step-06 WaterMap export)
                   <Run>/6_Physics_Validation/03_WaterMaps/watermap_R_N/*_wm.maegz
                   <Run>/1_Boltz2_Production/6_Boltz2_DeFluorX_Ranked_*.csv
-                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Master_*.csv
+                  <Run>/1_Boltz2_Production/5_Boltz2_DeFluorX_Primary_*.csv
   Writes        : <Run>/7_QMMM_Defluorination/Rank_N/
                     - 02_NAC_Data.csv                 (per-frame geometry + DT)
                     - 01_MD_Stats.json                (per-rank statistics cache; drives the resume path)
@@ -55,7 +55,7 @@ Date   : 09 October 2026 <──────────────────
                     - 09_Reaction_Mechanism.svg    (integrated SN2 defluorination scene from the QM scan geometry: RDKit substrate with the scissile F shown bonded + departed, numbered electron-flow arrows, all 8 machinery residues by role with their real interacting atom and QM H-bond / MD global->NAC distances, the fluoride-stabilising water, a structural reaction-coordinate graph (C-F length + departing-F charge) and the QM/MM / geometry / WaterMap value tables)
                     - 10_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
                     - 11_QSite_Scan_Data.csv       (long-format raw PES + scissile C-F length + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
-                  <Run>/7_QMMM_Defluorination/01_Master_Ranking.csv
+                  <Run>/7_QMMM_Defluorination/01_Primary_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn scan features,
                      scissile C-F cleavage length + departing-F charge,
                      NAC-conditioned MM-GBSA + component decomposition, and
@@ -78,7 +78,7 @@ Date   : 09 October 2026 <──────────────────
                                                     produces the MD trajectories, WaterMap CSVs,
                                                     *_SID-out.eaf + Prime MM-GBSA summary consumed here
                   05_TopN_and_PDB_Preparation_DeFluorX.py → provides ranked structures & IDs
-                  02_Production_DeFluorX.py         → master CSV with alignment maps
+                  02_Production_DeFluorX.py         → primary CSV with alignment maps
   Downstream    : None (terminal step; QSite .inp feeds Schrödinger QSite/Jaguar)
 
   Run behaviour : Resume by default. A rank whose per-frame table (02_NAC_Data.csv), statistics
@@ -140,7 +140,7 @@ Arguments:
                       Default: 280  (FAcD canonical His280, 3R3U numbering)
     --acid   RESNUM   Fallback catalytic acid residue number.
                       Default: 134  (FAcD canonical Asp134)
-    --csv    PATH     Path to 02_Production_DeFluorX.py master CSV for triad mapping and
+    --csv    PATH     Path to 02_Production_DeFluorX.py primary CSV for triad mapping and
                       alignment map. Auto-detected from sibling Boltz-2_Run_*
                       directories if omitted.
 
@@ -148,9 +148,9 @@ Arguments:
   1. Performance striding: configurable frame-sampling interval.
   2. 8-Residue Dream Team tracking: per-frame distances for all catalytic
      machinery (Nuc, Clamp1, Clamp2, Acid, StabH, StabW, StabY, Base),
-     mapped from 02_Production_DeFluorX.py master CSV alignment map.
+     mapped from 02_Production_DeFluorX.py primary CSV alignment map.
   3. WaterMap CSV integration: Maestro-exported thermodynamic statistics
-     (dG, dH, -TdS, occupancy, H-bond counts) added to master CSV.
+     (dG, dH, -TdS, occupancy, H-bond counts) added to primary CSV.
   4. WaterMap spatial scoring: per-frame dG-weighted water blockade using
      site coordinates from *_wm.maegz.
   5. Desmond EAF integration: ligand surface area (MSA) and radius of
@@ -163,7 +163,7 @@ Arguments:
      into ΔE‡ (min/mean/σ) and ΔE_rxn.
   9. 3D Smart-Lock: geometry-biased triad & fluorine-cradle detection.
  10. Rich progress bars and colour-coded PASS/FAIL NAC reporting.
- 11. Master aggregation: 01_Master_Ranking.csv.
+ 11. Primary aggregation: 01_Primary_Ranking.csv.
  12. NAC persistence: longest/mean continuous strict-NAC dwell converted to ns
      (real "time in position", not a frame-count fraction).
  13. NAC-conditioned MM-GBSA: ΔG_bind over the strict-NAC frames vs the global
@@ -181,7 +181,7 @@ Arguments:
      scene → 09_Reaction_Mechanism; the MD-time / QM/MM-sampling link → 10_MD_QSite_Timeline.
  15. Defluorination verdict: Is_Defluorinating gate + Defluor_Propensity
      ( P(strict-NAC)·exp(−ΔE‡/RT) ) - the concrete turnover claim, not affinity.
- 16. Defluorination landscape figure (05_Defluorination_Landscape, master dir): persistence × QM/MM barrier × binding.
+ 16. Defluorination landscape figure (05_Defluorination_Landscape, primary dir): persistence × QM/MM barrier × binding.
 ───────────────────────────────────────────────────────────────────────────────
 
 Scientific references
@@ -457,7 +457,7 @@ _SCORE_W_WM                 = CFG.SCORE_WATERMAP_WEIGHT #  10.0 - per kcal mol�
 # -----------------------------------------------------------------------------
 # Step 1.4: 8-Residue Dream Team reference mapping (PDB 3R3U / DEHA4)
 # -----------------------------------------------------------------------------
-# Reference residue numbers in canonical FAcD; alignment map from master CSV
+# Reference residue numbers in canonical FAcD; alignment map from primary CSV
 # translates these to enzyme-specific sequential numbers per job.
 DREAM_TEAM_REF = CFG.DREAM_TEAM_REFS
 
@@ -1395,7 +1395,7 @@ def format_job_label_short(job_name: str, rank: int) -> str:
 
 
 def load_triad_mapping(csv_path: Path) -> dict:
-    """Loads catalytic triad residue numbers and static metrics from master CSV."""
+    """Loads catalytic triad residue numbers and static metrics from primary CSV."""
     if not csv_path or not csv_path.exists():
         return {}
     mapping = {}
@@ -1608,14 +1608,14 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         )
 
 
-def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame) -> None:
+def generate_global_comparative_dashboard(out_dir: Path, df_primary: pd.DataFrame) -> None:
     """3-panel: violin (dist), violin (angle), scatter landscape with catalytic zones."""
     sns.set_theme(style="whitegrid", context="paper")
     apply_figure_style(CFG)
     _C = CFG.DEFLUOR_FIG_COLOUR
 
     all_data = []
-    for _, row in df_master.iloc[::-1].iterrows():
+    for _, row in df_primary.iloc[::-1].iterrows():
         csv_path = out_dir / f"Rank_{row['Scientific_Rank']}" / "02_NAC_Data.csv"
         if csv_path and csv_path.exists():
             df_job = pd.read_csv(csv_path)
@@ -1628,7 +1628,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     combined_df   = pd.concat(all_data, ignore_index=True)
     
     # Consistent colour map based on ascending Scientific_Rank
-    sorted_df = df_master.sort_values('Scientific_Rank', ascending=True)
+    sorted_df = df_primary.sort_values('Scientific_Rank', ascending=True)
     sorted_labels = [format_job_label_short(row['Job_Name'], row['Scientific_Rank']) for _, row in sorted_df.iterrows()]
     # Shared rank palette (candidates green/amber/vermillion/... by rank, the 3R3U-FA control distinct) -
     # the same scheme as 06 01_Physics_Build_Solvation_QC and every other 06/07 rank figure.
@@ -1739,7 +1739,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_master: pd.DataFrame
     console_info(f"    Comparative Dashboard Saved : {deflx_fig_name(out_path.resolve())}")
 
 
-def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFrame) -> None:
+def generate_comparative_residue_engagement(out_dir: Path, df_primary: pd.DataFrame) -> None:
     """
     One comparative view of catalytic-machinery engagement across every SN2 case.
 
@@ -1758,12 +1758,12 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
         ("Cradle\n(Trp)",        "DT_StabW_NAC_Mean_A"),
         ("Cradle\n(Tyr)",        "DT_StabY_NAC_Mean_A"),
     ]
-    _cols  = [(lbl, col) for lbl, col in _roles if col in df_master.columns]
-    if not _cols or df_master.empty:
+    _cols  = [(lbl, col) for lbl, col in _roles if col in df_primary.columns]
+    if not _cols or df_primary.empty:
         console_info("    [!] Comparative residue engagement skipped - no DT_*_NAC_Mean_A columns.")
         return
 
-    _sorted = df_master.sort_values("Scientific_Rank", ascending=True)
+    _sorted = df_primary.sort_values("Scientific_Rank", ascending=True)
     _labels = [format_job_label_short(r["Job_Name"], r["Scientific_Rank"]) for _, r in _sorted.iterrows()]
     _matrix = _sorted[[c for _, c in _cols]].apply(pd.to_numeric, errors="coerce")
     _matrix.index   = _labels
@@ -1805,8 +1805,8 @@ def generate_comparative_residue_engagement(out_dir: Path, df_master: pd.DataFra
     console_info(f"    Comparative Residue Engagement Saved : {deflx_fig_name(out_path.resolve())}")
 
 
-def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None:
-    """Catalytic viability summary bar chart: parallel nested bars inside a master track.
+def generate_viability_bar_chart(out_dir: Path, df_primary: pd.DataFrame) -> None:
+    """Catalytic viability summary bar chart: parallel nested bars inside a primary track.
 
     Sub-bars show percentage of total simulation time:
       - Pocket Retention (faint opacity of candidate colour)
@@ -1820,7 +1820,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
     sns.set_theme(style="whitegrid", context="paper")
     apply_figure_style(CFG)
 
-    df_plot = df_master.sort_values('Scientific_Rank', ascending=True).copy()
+    df_plot = df_primary.sort_values('Scientific_Rank', ascending=True).copy()
 
     # Shared rank palette (candidates green/amber/vermillion/... by rank, the 3R3U-FA control distinct) -
     # the same scheme as 06 01_Physics_Build_Solvation_QC and every other 06/07 rank figure.
@@ -1857,7 +1857,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
         relaxed_total = viab_r * pocket / 100.0
         strict_total  = viab_s * pocket / 100.0
 
-        # Background master container representing 100% of simulation
+        # Background primary container representing 100% of simulation
         bg_face = to_rgba(rank_color, alpha=0.05)
         bg_edge = to_rgba(rank_color, alpha=0.60)
         ax.barh(y, 100.0, height=bar_h, color=bg_face, edgecolor=bg_edge, linewidth=1.2, zorder=1)
@@ -1989,7 +1989,7 @@ def generate_viability_bar_chart(out_dir: Path, df_master: pd.DataFrame) -> None
 # SUBSECTION 5b: DEFLUORINATION FIGURES (verdict landscape + reactive-state decomp)
 # #############################################################################
 # Colours/thresholds from CFG.DEFLUOR_FIG_COLOUR / DEFLUOR_ENGAGE_* (SSOT).
-def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) -> None:
+def generate_defluorination_landscape(out_dir: Path, df_primary: pd.DataFrame) -> None:
     """The whole-story figure, as a per-candidate multi-metric panel. Each decisive metric (strict-NAC
     viability, NAC dwell, QM/MM barrier ΔE‡, reaction energy ΔE_rxn, C-F cleavage, MM-GBSA binding,
     defluorination propensity) is a small horizontal-bar sub-plot comparing every candidate, coloured by
@@ -1997,7 +1997,7 @@ def generate_defluorination_landscape(out_dir: Path, df_master: pd.DataFrame) ->
     applies. The bar form stays legible even when a metric is ~0 for every candidate (e.g. NAC dwell ~0 ns).
     Panels with no data are dropped rather than drawn empty."""
     try:
-        d = df_master.copy()
+        d = df_primary.copy()
         _lab = "Job_Name" if "Job_Name" in d.columns else d.columns[0]
         d["_rank"] = pd.to_numeric(d.get("Scientific_Rank"), errors="coerce")
         d = d.sort_values("_rank", ascending=True, na_position="last").reset_index(drop=True)
@@ -2123,9 +2123,9 @@ def _darken(colour, f: float = 0.55) -> tuple:
     return tuple(c * f for c in mcolors.to_rgb(colour))
 
 
-def _master_container(ax, x: float, colour, width: float = 0.9,
+def _primary_container(ax, x: float, colour, width: float = 0.9,
                       lo: float = 0.0, hi: float = 1.0) -> None:
-    """A master container: a faint, colour-outlined bar drawn BEHIND a group of child bars.
+    """A primary container: a faint, colour-outlined bar drawn BEHIND a group of child bars.
 
     It carries no value - it exists to make the group read as one object and to give the group a
     colour identity the eye can follow across the panel.
@@ -2218,23 +2218,23 @@ def _load_reactive_pose_data(out_dir: Path) -> list:
     return sorted(out, key=lambda r: (bool(r.get("is_control", False)), r["rank"]))
 
 
-def _draw_reactive_pose_for_rank(master_out_dir: Path, rank: int) -> None:
+def _draw_reactive_pose_for_rank(primary_out_dir: Path, rank: int) -> None:
     """Draw this rank's own MM-GBSA overview (04 = decomposition bars + ΔG_bind trace) and machinery
     engagement (05) as soon as its frame analysis lands, so both are readable without waiting for every
     other rank; the cross-rank merged versions are still drawn once at the end. Runs inside the per-rank
     worker, so the plotters are held under PLOT_LOCK - pyplot's figure registry is global state.
     Degrades quietly (each plotter logs and returns) when the rank has no frame-stamped MM-GBSA CSV."""
-    md = master_out_dir.parent / "6_Physics_Validation" / "05_MD_Simulations"
-    _rank_dir = master_out_dir / f"Rank_{rank}"
+    md = primary_out_dir.parent / "6_Physics_Validation" / "05_MD_Simulations"
+    _rank_dir = primary_out_dir / f"Rank_{rank}"
     _rank_dir = _rank_dir if _rank_dir.is_dir() else None
     if _rank_dir is None:
         return
-    entry = _reactive_pose_entry(_rank_dir, md, _load_ranked_df(master_out_dir))
+    entry = _reactive_pose_entry(_rank_dir, md, _load_ranked_df(primary_out_dir))
     if entry is None:
         return
     with PLOT_LOCK:
         plot_mmgbsa_combined(entry, _rank_dir / "06_MMGBSA_Decomposition_and_Trace.svg")
-        plot_machinery_engagement(master_out_dir, [entry], merged=False)
+        plot_machinery_engagement(primary_out_dir, [entry], merged=False)
 
 
 def _mmgbsa_components(mg: pd.DataFrame, frames) -> dict:
@@ -2262,7 +2262,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
     the faint bar is every scored frame, the solid bar only the reactive ones. A favourable Coulomb
     shift on reaching the NAC is electrostatic pre-organisation for the SN2.
 
-    Each component carries a master container: symbolic, encoding nothing quantitative, it simply
+    Each component carries a primary container: symbolic, encoding nothing quantitative, it simply
     makes the pair read as one object. On a single-candidate panel the bars take their COMPONENT's
     colour (matching container and tick label); merged, the colour must separate the CANDIDATES.
     """
@@ -2352,7 +2352,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
             _lo, _hi = -45.0, 60.0     # fixed headroom so the 90deg per-bar values fit at top and bottom
         _pad = 0.06 * (_hi - _lo)
         for i, t in enumerate(terms):
-            _master_container(ax, i, cmap(i % 10), width=0.94,
+            _primary_container(ax, i, cmap(i % 10), width=0.94,
                               lo=_lo + _pad * 0.2, hi=_hi - _pad * 0.2)
         ax.set_ylim(_lo, _hi)
 
@@ -2638,7 +2638,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
                             color=auto_label_colour(CFG, _bar_c), zorder=8)
 
         '''
-        Master containers group the residues by CATALYTIC ROLE (colours from CFG). The outline is
+        Primary containers group the residues by CATALYTIC ROLE (colours from CFG). The outline is
         kept a hair inside the axis; flush to the limit it merges with the spine and reads as if
         the box had burst through it.
         '''
@@ -2648,7 +2648,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
             if i == len(_ENGAGE_ROLES) or _ENGAGE_ROLES[i][1] != _ENGAGE_ROLES[start][1]:
                 c = _roles.get(_ENGAGE_ROLES[start][1], _ink["muted"])
                 x0, x1 = start - 0.47, (i - 1) + 0.47
-                _master_container(ax, (x0 + x1) / 2, c, width=(x1 - x0), lo=_ylo, hi=_yhi)
+                _primary_container(ax, (x0 + x1) / 2, c, width=(x1 - x0), lo=_ylo, hi=_yhi)
                 start = i
         ax.set_ylim(0, _ytop)
 
@@ -2689,7 +2689,7 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         console_info(f"    Machinery engagement saved : {Path(deflx_fig_name(out_path)).name}")
 
 
-def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> None:
+def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> None:
     """The cross-rank reactive-pose figures. The per-candidate versions (05/06) are drawn per rank as
     each finishes its frame analysis (see _draw_reactive_pose_for_rank); this final pass adds only the
     merged, all-ranks comparison, which needs every rank present."""
@@ -2724,7 +2724,7 @@ def generate_reactive_pose_figures(out_dir: Path, df_master: pd.DataFrame) -> No
             '''
             The Is_Defluorinating verdict (geometric C-F cleavage: product-end scissile C-F length
             >= CFG.QSITE_CF_CLEAVED_A) is written into the scan CSV, so the cross-job figure reads that
-            verdict rather than re-deriving it and risking disagreement with the master ranking. The
+            verdict rather than re-deriving it and risking disagreement with the primary ranking. The
             bare C-F-distance criterion is kept only as a fallback for a CSV predating the column.
             '''
             _isdef = _one("Is_Defluorinating")
@@ -4538,7 +4538,7 @@ def _qsite_frame_summary(prof: dict) -> "dict | None":
 
 
 def _qsite_ensemble_barrier(barriers) -> float:
-    """Rate-weighted ensemble barrier −RT·ln⟨exp(−ΔE‡/RT)⟩ (same estimator as the master ranking)."""
+    """Rate-weighted ensemble barrier −RT·ln⟨exp(−ΔE‡/RT)⟩ (same estimator as the primary ranking)."""
     b = np.asarray([v for v in barriers if v == v], float)
     if b.size == 0:
         return np.nan
@@ -5613,7 +5613,7 @@ def write_qsite_scan_csv(out_path: Path, rank, job_name: str, ligand: str,
                     "QSite_Barrier_Ensemble_kcal": round(float(_qsite_ensemble_barrier(_bar)), 2),
                     "QSite_Barrier_Min_kcal": round(float(np.nanmin(_bar)), 2) if any(v == v for v in _bar) else np.nan,
                     "QSite_Barrier_Mean_kcal": round(float(np.nanmean(_bar)), 2) if any(v == v for v in _bar) else np.nan,
-                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar, ddof=1)), 2) if sum(v == v for v in _bar) > 1 else np.nan,  # sample SD (ddof=1), matching the master-ranking estimator so the scan CSV and 01_Master_Ranking.csv agree
+                    "QSite_Barrier_SD_kcal": round(float(np.nanstd(_bar, ddof=1)), 2) if sum(v == v for v in _bar) > 1 else np.nan,  # sample SD (ddof=1), matching the primary-ranking estimator so the scan CSV and 01_Primary_Ranking.csv agree
                     "QSite_dErxn_Ensemble_kcal": round(float(_qsite_ensemble_derxn(_bar, _der)), 2),
                     "QSite_NFrames_Scored": len(_P),
                     "QSite_NFrames_Attempted": _ens.get("n_attempted", len(_P)),
@@ -6050,8 +6050,8 @@ def defluor_verdict(strict_viability_pct, dwell_ns, barrier_kcal, derxn_kcal,
     gates: the relaxed 1-D coordinate under-resolves the true TS so the barrier/ΔE_rxn are scan features
     (the lab-proven control comes out uphill), and they must not veto a bond that measurably broke. A C-F
     length that could not be measured WITHHOLDS the verdict (0, 'C-F distance pending'); it never
-    satisfies it. Shared by the per-job QSite CSV and the master ranking so the two cannot diverge - the
-    per-job row, the master row and the scene both return the identical call.
+    satisfies it. Shared by the per-job QSite CSV and the primary ranking so the two cannot diverge - the
+    per-job row, the primary row and the scene both return the identical call.
     (strict_viability_pct, dwell_ns, barrier_kcal, derxn_kcal, stride are kept in the signature so both
     call sites pass the full context unchanged; they are reported, not gated.)"""
     if cf_product_a != cf_product_a:
@@ -6207,8 +6207,8 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
                                          job_name=job_name, ligand=ligand, n_attempted=n_attempted)
             '''
             The verdict is computed here from this job's own metrics (not read back from a stats key
-            the master only fills later), so the per-frame scan CSV carries the SAME
-            Is_Defluorinating / Defluor_Propensity the master ranking will report - both go through
+            the primary only fills later), so the per-frame scan CSV carries the SAME
+            Is_Defluorinating / Defluor_Propensity the primary ranking will report - both go through
             defluor_verdict / defluor_propensity, so the two rows cannot disagree.
             '''
             _sv_pct = stats.get("Strict_Viability_Pct", 0.0)
@@ -6353,7 +6353,7 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
                 stats["MMGBSA_NAC_Frames_Scored"]   = int(_n_nac)
                 '''
                 Whole-trajectory ΔG_bind aggregates, computed here from THIS rank's own job-dir
-                MM-GBSA CSV (alongside SID), so the master ranking carries them directly without
+                MM-GBSA CSV (alongside SID), so the primary ranking carries them directly without
                 reading any central Step-06 summary file.
                 '''
                 _dg_all = pd.to_numeric(_mdf[_dgc], errors="coerce").dropna()
@@ -6362,7 +6362,7 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
                     '''
                     Log-sum-exp ("Boltzmann") ensemble mean, IDENTICAL to 06 `_boltzmann_mean_dg`, so the
                     MMGBSA_dG_Boltzmann_kcal column carries the same quantity in the Step-06 summary CSV and
-                    this master ranking:  <dG> = -RT ln( (1/N) Σ exp(-dGi/RT) ), max-shifted for stability.
+                    this primary ranking:  <dG> = -RT ln( (1/N) Σ exp(-dGi/RT) ), max-shifted for stability.
                     '''
                     _xs = -_dg_all.to_numpy() / _rt_mg
                     _m  = float(_xs.max())
@@ -6412,7 +6412,7 @@ def _aggregate_mmgbsa_stats(job_folder, results, nac_fr, stats):
 
 
 def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
-                       master_out_dir: Path, lig_resname: str, stride: int,
+                       primary_out_dir: Path, lig_resname: str, stride: int,
                        triad_override: dict = None,
                        fallback_nuc:  int = DREAM_TEAM_REF.get('Nuc', 110),
                        fallback_base: int = DREAM_TEAM_REF.get('Base', 280),
@@ -6472,7 +6472,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     job_name   = row['job_name']
     print(f"  [Rank {rank}] Initialising analysis for: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}", flush=True)
 
-    job_out_dir = master_out_dir / f"Rank_{rank}"
+    job_out_dir = primary_out_dir / f"Rank_{rank}"
     job_out_dir.mkdir(parents=True, exist_ok=True)
     console_info(f"Processing Rank {rank} [Stride={stride}]: {ConsoleColours.OKBLUE}{job_name}{ConsoleColours.ENDC}")
 
@@ -6866,7 +6866,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
         for b in cms_model.atom[c_idx].bond
     ))
 
-    # 3. Build the master atom list to pre-load.
+    # 3. Build the primary atom list to pre-load.
     _preload_set = (
         list(idx_nuc) + list(_nac_od) + list(warhead_c) + list(lig_f) +
         list(idx_base or []) + list(idx_acid or []) +
@@ -7504,9 +7504,9 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
 
     '''
     The per-job statistics, written beside the per-frame table. Everything the dashboard prints and
-    the master ranking carries - pocket retention, viability, triad integrity, NAC dwell, WaterMap
+    the primary ranking carries - pocket retention, viability, triad integrity, NAC dwell, WaterMap
     terms, the Dream-Team distances - is computed once, in the frame loop, and persisted here so it
-    survives outside memory: the master CSV is written only at the END of the whole run, so without
+    survives outside memory: the primary CSV is written only at the END of the whole run, so without
     this cache a figure could not be redrawn, nor a number checked, without re-reading a
     100,000-frame trajectory. NumPy scalars are cast so the file is plain JSON.
     '''
@@ -7715,7 +7715,7 @@ def main():
     parser.add_argument("--base",   type=int, default=DREAM_TEAM_REF.get('Base', 280), help="Fallback base resnum")
     parser.add_argument("--acid",   type=int, default=DREAM_TEAM_REF.get('Acid', 134), help="Fallback acid resnum")
     parser.add_argument("--csv",    default=None,
-                        help="Path to master CSV (auto-detected if omitted)")
+                        help="Path to primary CSV (auto-detected if omitted)")
     parser.add_argument("--workers", type=int, default=None,
                         help="Number of parallel workers (default: auto-detect based on CPU cores)")
     parser.add_argument("--force", action="store_true",
@@ -7826,11 +7826,11 @@ def main():
                  f"up to {min(_n_scans, max(1, _budget // _QSITE_THREADS))} concurrent"
                  + (f", job-name tag '_{_RUN_TAG}'" if _RUN_TAG else ""))
 
-    master_out_dir = work_dir.parent / args.results_dirname
-    master_out_dir.mkdir(parents=True, exist_ok=True)
+    primary_out_dir = work_dir.parent / args.results_dirname
+    primary_out_dir.mkdir(parents=True, exist_ok=True)
 
     global logger
-    logger = (_setup_logging(master_out_dir / "00_QMMM_Defluorination.log",
+    logger = (_setup_logging(primary_out_dir / "00_QMMM_Defluorination.log",
                              "md_thermo_engine")
               if _setup_logging else None)
 
@@ -7843,7 +7843,7 @@ def main():
     console_info(f"Physics Validation : {work_dir}")
     console_info(f"MD Simulations   : {work_dir / '05_MD_Simulations'}")
     console_info(f"WaterMaps        : {work_dir / '03_WaterMaps'}")
-    console_info(f"Output           : {master_out_dir}")
+    console_info(f"Output           : {primary_out_dir}")
     console_info(f"Ligand Resname   : {args.lig}")
     console_info(f"Frame Stride     : {args.stride} (requested){' - all frames' if args.stride == 1 else f' - 1-in-{args.stride} sampled'}")
     console_separator()
@@ -7884,7 +7884,7 @@ def main():
 
     console_separator()
 
-    master_stats   = []
+    primary_stats   = []
     _stats_lock    = threading.Lock()
     _rank_list     = _auto_rank_list if _auto_rank_list else list(range(1, args.ranks + 1))
     # Frame/SN2 analysis runs parallel across ranks at 100% of total_cores-2 (QSite is
@@ -7913,7 +7913,7 @@ def main():
                 f"Base[{triad_override.get('base')}] | "
                 f"Acid[{triad_override.get('acid')}]"
             )
-        res = process_single_job(r, work_dir, df_ranked, master_out_dir,
+        res = process_single_job(r, work_dir, df_ranked, primary_out_dir,
                                  args.lig, args.stride,
                                  triad_override=triad_override,
                                  fallback_nuc=args.nuc,
@@ -7932,7 +7932,7 @@ def main():
             if "CONTROL" in res.get('Job_Name', '').upper():
                 res['Category'] = 'Control'
             with _stats_lock:
-                master_stats.append(res)
+                primary_stats.append(res)
             # ── Per-rank result summary box ────────────────────────────────
             _pocket_pct    = res.get('Pocket_Retention_Pct', 0.0)
             _n_pocket      = res.get('Frames_In_Pocket', 0)
@@ -8060,33 +8060,33 @@ def main():
         console_info(f"{ConsoleColours.WARNING}[!] {len(_failed_ranks)} rank(s) raised exceptions: "
                      f"{sorted(_failed_ranks)}{ConsoleColours.ENDC}")
 
-    if not master_stats:
+    if not primary_stats:
         console_info(f"{ConsoleColours.FAIL}[CRITICAL] No MD data collected - "
                      f"all ranks failed or no trajectory data found.{ConsoleColours.ENDC}")
         sys.exit(1)
 
-    if master_stats:
+    if primary_stats:
         console_separator()
         console_title("Finalising Global MD Rankings")
 
-        df_master = pd.DataFrame(master_stats)
+        df_primary = pd.DataFrame(primary_stats)
         '''
         Stable (mergesort) sort with a deterministic secondary key so equal viability
         values yield a reproducible Dynamic_Rank across runs (default quicksort is
         unstable and would shuffle ties non-deterministically).
         '''
         _tiebreak = next((c for c in ("Scientific_Rank", "Job", "Job_Name", "Label",
-                                      "Protein", "Ligand") if c in df_master.columns), None)
+                                      "Protein", "Ligand") if c in df_primary.columns), None)
         _sort_cols = ["Catalytic_Viability_Pct"] + ([_tiebreak] if _tiebreak else [])
         _ascending = [False] + ([True] if _tiebreak else [])
-        df_master = df_master.sort_values(by=_sort_cols, ascending=_ascending,
+        df_primary = df_primary.sort_values(by=_sort_cols, ascending=_ascending,
                                           kind="mergesort").reset_index(drop=True)
-        df_master.insert(0, "Dynamic_Rank", range(1, len(df_master) + 1))
+        df_primary.insert(0, "Dynamic_Rank", range(1, len(df_primary) + 1))
 
         '''
         Prime MM-GBSA ΔG_bind (whole-trajectory Boltzmann/mean/median/min/max/std + the
         NAC-conditioned means) is aggregated per rank from each rank's own job-dir CSV, alongside
-        SID, in the per-rank analysis above (MMGBSA_dG_* in stats). The master already carries those
+        SID, in the per-rank analysis above (MMGBSA_dG_* in stats). The primary already carries those
         columns, so no central Step-06 summary file is read here.
         '''
 
@@ -8120,8 +8120,8 @@ def main():
         def _p_strict(r) -> float:
             return max(0.0, float(r.get("Strict_Viability_Pct", 0.0) or 0.0)) / 100.0
         _prop = [defluor_propensity(_p_strict(_r), _r.get("QSite_Barrier_kcal", np.nan))
-                 for _, _r in df_master.iterrows()]
-        df_master["Defluor_Propensity"] = _prop
+                 for _, _r in df_primary.iterrows()]
+        df_primary["Defluor_Propensity"] = _prop
 
         '''
         The normalisation is done in LOG space, because the quantity being normalised is a Boltzmann
@@ -8139,7 +8139,7 @@ def main():
         '''
         _ln10 = float(np.log(10.0))
         _logp = []
-        for _, _r in df_master.iterrows():
+        for _, _r in df_primary.iterrows():
             _bar = _r.get("QSite_Barrier_kcal", np.nan)
             _ps  = _p_strict(_r)
             if _bar != _bar:
@@ -8151,9 +8151,9 @@ def main():
         _fin = [v for v in _logp if v == v and np.isfinite(v)]
         _lo, _hi = (min(_fin), max(_fin)) if _fin else (np.nan, np.nan)
         _span = (_hi - _lo) if (_fin and _hi > _lo) else 0.0
-        df_master["Defluor_Propensity_Log10"] = [
+        df_primary["Defluor_Propensity_Log10"] = [
             round(v, 3) if (v == v and np.isfinite(v)) else np.nan for v in _logp]
-        df_master["Defluor_Propensity_Norm"] = [
+        df_primary["Defluor_Propensity_Norm"] = [
             np.nan if v != v else
             (0.0 if not np.isfinite(v) else
              (1.0 if _span <= 0.0 else round((v - _lo) / _span, 4)))
@@ -8166,26 +8166,26 @@ def main():
             N/N cleaved). A C-F length that could not be measured withholds the verdict, it does not
             satisfy it. The NAC dwell and the 1-D-scan energetics (barrier, ΔE_rxn) are passed through and
             reported alongside, not gated. The call itself lives in defluor_verdict so the per-job QSite
-            CSV, this master row and the mechanism scene return the identical verdict.
+            CSV, this primary row and the mechanism scene return the identical verdict.
             """
             return defluor_verdict(r.get("Strict_Viability_Pct", 0), r.get("NAC_Dwell_Max_ns", 0),
                                    r.get("QSite_Barrier_kcal", np.nan), r.get("QSite_dErxn_kcal", np.nan),
                                    r.get("CF_Product_A", np.nan), r.get("MD_Analysis_Stride", 1))
-        _v = [_verdict(r) for _, r in df_master.iterrows()]
-        df_master["Is_Defluorinating"] = [x[0] for x in _v]
-        df_master["Defluor_Verdict"]   = [x[1] for x in _v]
+        _v = [_verdict(r) for _, r in df_primary.iterrows()]
+        df_primary["Is_Defluorinating"] = [x[0] for x in _v]
+        df_primary["Defluor_Verdict"]   = [x[1] for x in _v]
         # Turnover ranking (highest propensity = rank 1; unscored ranks sort last).
-        df_master["Defluor_Rank"] = (
-            df_master["Defluor_Propensity"].rank(ascending=False, method="min", na_option="bottom").astype("Int64"))
+        df_primary["Defluor_Rank"] = (
+            df_primary["Defluor_Propensity"].rank(ascending=False, method="min", na_option="bottom").astype("Int64"))
         _ncomp = int(sum(x[0] for x in _v))
-        console_info(f"Defluorinating candidates (C-F cleaved) : {_ncomp} / {len(df_master)} "
+        console_info(f"Defluorinating candidates (C-F cleaved) : {_ncomp} / {len(df_primary)} "
                      f"(gate: product-end scissile C-F length >= {CFG.QSITE_CF_CLEAVED_A} Å; "
                      f"NAC dwell / ΔE‡ / ΔE_rxn reported as context, not gated)")
 
-        master_csv_path = master_out_dir / "01_Master_Ranking.csv"
-        _utils_mod.atomic_write_csv(df_master, master_csv_path)
-        console_info(f"Total Simulations Validated : {len(df_master)}")
-        console_info(f"Master Ranking Sheet Saved  : {master_csv_path.resolve()}")
+        primary_csv_path = primary_out_dir / "01_Primary_Ranking.csv"
+        _utils_mod.atomic_write_csv(df_primary, primary_csv_path)
+        console_info(f"Total Simulations Validated : {len(df_primary)}")
+        console_info(f"Primary Ranking Sheet Saved  : {primary_csv_path.resolve()}")
         console_separator()
 
         if _rcon:
@@ -8195,7 +8195,7 @@ def main():
             for col in ("Rank", "Job", "Pocket%", "Viability%", "Strict%",
                         "Triad%", "DT Mapped", "WM Stable", "WM dG", "Avg Dist Å"):
                 tbl.add_column(col, justify="right" if col not in ("Job",) else "left")
-            for _, row in df_master.iterrows():
+            for _, row in df_primary.iterrows():
                 viab   = row.get("Catalytic_Viability_Pct", 0.0)
                 colour = "green" if viab >= CFG.VIABILITY_HIGH_THRESHOLD else ("yellow" if viab >= CFG.VIABILITY_PASS_THRESHOLD else "red")
                 tbl.add_row(
@@ -8222,7 +8222,7 @@ def main():
         ]:
             console_info(f"  ✔ Generating {label}")
             try:
-                fn(master_out_dir, df_master)
+                fn(primary_out_dir, df_primary)
             except Exception as e:
                 console_info(f"  [!] {label.split('(')[0].strip()} failed: {e}")
 

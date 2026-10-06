@@ -21,8 +21,8 @@ Date   : 09 October 2026 <──────────────────
   Imports from  : 00_01_Project_Config_DeFluorX.py  (CFG - tier colours, vis params)
                   00_02_Project_Utils_DeFluorX.py   (ConsoleColours, setup_logging,
                                                  console_info, console_separator)
-  Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Master_*.csv)
-                  (Master CSV written by 02_Production_DeFluorX.py; latest file selected)
+  Reads         : <Run>/1_Boltz2_Production/*_Ranked_*.csv  (falls back to *_Primary_*.csv)
+                  (Primary CSV written by 02_Production_DeFluorX.py; latest file selected)
   Writes        : <Run>/3_Validation_Figures/  (figures grouped folder-by-folder)
                     02_Ramachandran/                          Ramachandran_*.svg
                     03_Dataset_and_Alignment_Overview/        01_*.svg onward
@@ -39,7 +39,7 @@ Date   : 09 October 2026 <──────────────────
                   <Run>/3_Validation_Figures/01_Analysis_Data/04_ACTION_Rescue_Hidden_Gems.csv
                   <Run>/3_Validation_Figures/01_Analysis_Data/05_Figure_Descriptions.txt
                   <Run>/3_Validation_Figures/01_Analysis_Data/00_Validation_Figures.log
-  Upstream      : 02_Production_DeFluorX.py → writes the master ranked CSV (incl. the pocket-fit
+  Upstream      : 02_Production_DeFluorX.py → writes the primary ranked CSV (incl. the pocket-fit
                   columns active_site_volume, ligand_volume, pocket_occupancy, fit_ratio,
                   ligand_fits) consumed here
   Downstream    : 04_Dendrogram_DeFluorX.py  → reads 03_Figure_Enriched_Dataset.csv (figure columns
@@ -312,7 +312,7 @@ CFG        = _cfg_mod.CFG()
 
 ConsoleColours  = _utils_mod.ConsoleColours
 deflx_fig_name  = _utils_mod.deflx_fig_name    # log a figure by the format savefig actually wrote (SSOT)
-latest_by_mtime = _utils_mod.latest_by_mtime   # newest ranked/master CSV by mtime (prefix-agnostic)
+latest_by_mtime = _utils_mod.latest_by_mtime   # newest ranked/primary CSV by mtime (prefix-agnostic)
 SEPARATOR_HEAVY = _utils_mod.SEPARATOR_HEAVY
 SEPARATOR_LIGHT = _utils_mod.SEPARATOR_LIGHT
 SEPARATOR_DASH  = _utils_mod.SEPARATOR_DASH
@@ -803,7 +803,7 @@ def calculate_pareto_fronts(df: pd.DataFrame, objectives: list, maximize: list) 
 def load_and_prep_data(prod_dir: Path, reporter: ReportManager) -> tuple[pd.DataFrame, list[str]]:
     """
     Load the ranked CSV from Step 02 (has Scientific_Rank + the tier/MD_Selected columns the
-    figures key on). Ranked-only: no master-CSV fallback - a missing ranked CSV is a hard error,
+    figures key on). Ranked-only: no primary-CSV fallback - a missing ranked CSV is a hard error,
     since every figure axis and the enriched dataset depend on Scientific_Rank.
     """
     # SSOT glob first, wildcard fallback; newest by mtime (a name sort can rank an older file last when the leading number differs).
@@ -1046,11 +1046,11 @@ def perform_advanced_ranking(df: pd.DataFrame, features: list[str], out_dir: Pat
     return df
 
 def analyse_conflicts(df: pd.DataFrame, out_dir: Path, reporter: ReportManager):
-    """Flag conflict/opportunity cases and write the validated master CSV.
+    """Flag conflict/opportunity cases and write the validated primary CSV.
 
     Classifies each complex (e.g. hidden gems = high mechanistic merit but
     low confidence; decoys = high confidence but poor mechanism), logs the
-    per-class counts, and saves the final validated master table to out_dir.
+    per-class counts, and saves the final validated primary table to out_dir.
     """
     reporter.log("")
     reporter.log("  Conflict & Opportunity Analysis")
@@ -5826,18 +5826,18 @@ def _fig_folder07_pfas(df, features, out_dir, reporter, existing_tiers):
             _y19 = np.arange(len(_df19))
             _bar_h = 0.25
             '''
-            Master container bar per tier - grey track, outline coloured to match
+            Primary container bar per tier - grey track, outline coloured to match
             the tier's y-axis label colour. Shorter height leaves clear space
             between adjacent tier groups; outline 70% of previous thickness.
             '''
-            _master_ec19 = [TIER_PALETTE.get(t, CFG.VIS_INK["silver"]) for t in _df19["tier"].tolist()]
+            _primary_ec19 = [TIER_PALETTE.get(t, CFG.VIS_INK["silver"]) for t in _df19["tier"].tolist()]
             '''
             Faint tint of each tier's own colour as the track fill (alpha baked in
             so the coloured outline stays vivid) - cohesive, not flat grey.
             '''
-            _master_fc19 = [_to_rgba19(c, 0.13) for c in _master_ec19]
-            ax19L.barh(_y19, 105, height=0.82, color=_master_fc19,
-                       edgecolor=_master_ec19, linewidth=1.4, zorder=2)
+            _primary_fc19 = [_to_rgba19(c, 0.13) for c in _primary_ec19]
+            ax19L.barh(_y19, 105, height=0.82, color=_primary_fc19,
+                       edgecolor=_primary_ec19, linewidth=1.4, zorder=2)
             ax19L.barh(_y19 + _bar_h,  _df19["pct_substrate"].values,  height=_bar_h,
                        color=CFG.VIS_ACCENT["green"], alpha=0.85, label=f"Substrate (SN2≥{CFG.SUBSTRATE_ANGLE_MIN:.0f}° + Conf≥{CFG.SUBSTRATE_CONF_MIN:.2f})", zorder=3)
             ax19L.barh(_y19,            _df19["pct_sn2_ok"].values,     height=_bar_h,
@@ -7650,7 +7650,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         _xB, _wB, _offB = np.arange(len(_oc_pct25)), 0.27, 0.19   # bars 75% of prior width
 
         '''
-        Master container bar per x-category (like Fig 19a) - faint bin-coloured
+        Primary container bar per x-category (like Fig 19a) - faint bin-coloured
         fill + matching coloured outline, holding both child stacked bars.
         '''
         for _xi, _bc in zip(_xB, _bin_cols_25):
@@ -7894,7 +7894,7 @@ def _fig25_pfas_size(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             axL.set_xlim(-0.6, len(_groups25) - 0.4)
 
             '''
-            Master container bar per carbon group: very light tint + faint border
+            Primary container bar per carbon group: very light tint + faint border
             - kept subtle so the box plots stay the visual focus.
             '''
             _bin_pal25  = list(CFG.PFAS_SIZE_BIN_COLOUR)
@@ -11687,7 +11687,7 @@ def main():
     # and the log grows triple bars with nothing between them.
     _utils_mod.install_console_rule_filter()
     parser = argparse.ArgumentParser(
-        description="Boltz-2 Master Validation & Dendrogram Framework",
+        description="Boltz-2 Primary Validation & Dendrogram Framework",
         usage="%(prog)s <run_folder>  (e.g. Boltz-2_Run_20260309T085406Z)"
     )
     parser.add_argument("run", help="Name of the Boltz-2 run folder (e.g. Boltz-2_Run_20260309T085406Z)")
@@ -11742,11 +11742,11 @@ def main():
         df = perform_advanced_ranking(df, features, out_dir, reporter)
         df = analyse_conflicts(df, out_dir, reporter)
 
-        enriched_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_MASTER
+        enriched_csv = _aux_dir(out_dir) / CFG.FILE_VALIDATED_PRIMARY
         # Atomic: this is the ~370 MB deliverable 04 reads with no row-count check, so a killed run must
         # not leave a truncated CSV consumed as truth. tmp + replace (as 05/06/07 do via this helper).
         _utils_mod.atomic_write_csv(df, enriched_csv, index=False)
-        reporter.log(f"  ✔ Saved: 01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")
+        reporter.log(f"  ✔ Saved: 01_Analysis_Data/{CFG.FILE_VALIDATED_PRIMARY}")
 
         '''
         Finalise 01_Analysis_Data before the figure steps: build the multi-model variance CSV here

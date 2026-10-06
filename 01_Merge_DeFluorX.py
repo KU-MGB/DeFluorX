@@ -4,7 +4,7 @@
 DeFluorX Pipeline  |  Step 01  |  FASTA Sequence Merge & Deduplication
 ===============================================================================
 Constructs a high-quality, non-redundant FASTA dataset by merging multiple
-protein sequence sources using a strict, master-guided deduplication strategy.
+protein sequence sources using a strict, primary-guided deduplication strategy.
 Produces a merged FASTA, a detailed log, and a high-resolution QC dashboard.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
@@ -16,7 +16,7 @@ Date   : 09 October 2026 <──────────────────
   Imports from  : 00_02_Project_Utils_DeFluorX.py  (clean_spines, print_script_banner,
                   print_elapsed, SEPARATOR_HEAVY/LIGHT/DASH)
                   00_01_Project_Config_DeFluorX.py  (CFG - PREP_AMBIGUOUS_AA QC, CPU reserve)
-  Reads         : User-supplied *.fasta files (master + secondary)
+  Reads         : User-supplied *.fasta files (primary + secondary)
   Writes        : <output>.fasta   - merged, deduplicated sequence set
                   00_Merge.log      - inclusion/exclusion statistics
                   <output>          - QC dashboard (throughput + KDE); format per CFG.VIS_FIGURE_FORMAT
@@ -35,10 +35,10 @@ Date   : 09 October 2026 <──────────────────
 ───────────────────────────────────────────────────────────────────────────────
 
 Usage:
-    python 01_Merge_DeFluorX.py --master A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
+    python 01_Merge_DeFluorX.py --primary A_Labelled_15-Seq.fasta --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta --output C_INP_Merged_for_Boltz-2.fasta
 
     (bash multi-line - use a single backslash, not double \\):
-    python 01_Merge_DeFluorX.py --master A_Labelled_15-Seq.fasta \
+    python 01_Merge_DeFluorX.py --primary A_Labelled_15-Seq.fasta \
                        --secondary B_Downloaded-Blast_Uniprot_NCBI.fasta \
                        --output C_INP_Merged_for_Boltz-2.fasta
 
@@ -48,7 +48,7 @@ Purpose:
 
 -------------------------------------------------------------------------------
 Input FASTA Files:
-    1. File 1 (MASTER):
+    1. File 1 (PRIMARY):
        - Primary, trusted aligned sequence set.
        - No length filtering applied; basic QC (internal-stop / ambiguous-residue
          checks) and exact-sequence deduplication still apply.
@@ -401,7 +401,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
 
     # Setup Data
     data_map = [
-        {"label": "Master",    "stats": s1, "colour": PALETTE["Master"]},
+        {"label": "Primary",    "stats": s1, "colour": PALETTE["Primary"]},
         {"label": "Secondary", "stats": s2, "colour": PALETTE["Secondary"]}
     ]
 
@@ -415,22 +415,22 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     # -----------------------------------------------------------------------------
     # Step 5.2: Canvas Setup (Dense Collage)
     # -----------------------------------------------------------------------------
-    fig = plt.figure(figsize=(16, 9), facecolor=PALETTE["Bg"])
+    fig = plt.figure(figsize=(14, 6), facecolor=PALETTE["Bg"])
 
-    # Layout: Top row (Bar + Violin), Bottom row (KDE)
-    gs = fig.add_gridspec(2, 2, height_ratios=[0.65, 1.35], width_ratios=[1.3, 0.7], hspace=0.22, wspace=0.1)
+    # Layout: Left column (Bar + Violin), Right column (KDE)
+    gs = fig.add_gridspec(2, 2, height_ratios=[0.8, 1.2], width_ratios=[0.9, 1.3], hspace=0.25, wspace=0.08)
 
     ax1 = fig.add_subplot(gs[0, 0]) # Top Left: Throughput
-    ax2 = fig.add_subplot(gs[0, 1]) # Top Right: Violins
-    ax3 = fig.add_subplot(gs[1, :]) # Bottom: KDE
+    ax2 = fig.add_subplot(gs[1, 0]) # Bottom Left: Violins
+    ax3 = fig.add_subplot(gs[:, 1]) # Right: KDE
 
     # -----------------------------------------------------------------------------
     # Step 5.3: Subplot 1 - Pipeline Throughput (Bar Chart)
     # -----------------------------------------------------------------------------
-    bar_labels = ["Master", "Secondary", "FINAL\nDATASET"]
+    bar_labels = ["Primary", "Secondary", "FINAL\nDATASET"]
     bar_inputs = [s1["total"], s2["total"], total_input]
     bar_kept   = [s1["kept"], s2["kept"], total_kept]
-    bar_colours = [PALETTE["Master"], PALETTE["Secondary"], PALETTE["Total"]]
+    bar_colours = [PALETTE["Primary"], PALETTE["Secondary"], PALETTE["Total"]]
 
     y_pos = np.arange(len(bar_labels))
     height = 0.6
@@ -446,7 +446,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax1.set_yticks(y_pos)
     ax1.set_yticklabels(bar_labels, fontsize=CFG.VIS_FONT_AXIS_LABEL)
     ax1.invert_yaxis()
-    ax1.set_xlabel("Number of Sequences", fontsize=CFG.VIS_FONT_TICK)
+    ax1.set_xlabel("Number of Sequences", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax1.tick_params(axis="both", labelsize=CFG.VIS_FONT_AXIS_LABEL)
     # No Title for density
 
     # --- Smart Annotation Logic ---
@@ -507,8 +508,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                     medianprops=dict(color="black", linewidth=1.5))
 
     ax2.set_xticks([0, 1])
-    ax2.set_xticklabels(["Master", "Secondary"], fontsize=CFG.VIS_FONT_TICK)
-    ax2.set_ylabel("Length (AA)", fontsize=CFG.VIS_FONT_TICK)
+    ax2.set_xticklabels(["Primary", "Secondary"], fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax2.set_ylabel("Length (AA)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax2.tick_params(axis="both", labelsize=CFG.VIS_FONT_AXIS_LABEL)
 
     for i, tick in enumerate(ax2.get_xticklabels()):
         tick.set_color(data_map[i]["colour"])
@@ -520,7 +522,9 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     # Step 5.5: Subplot 3 - Consolidated Architecture (KDE Plot)
     # -----------------------------------------------------------------------------
     ax3.set_xlabel("Sequence Length (Residues)", fontsize=CFG.VIS_FONT_AXIS_LABEL)
-    ax3.set_ylabel("Density", fontsize=CFG.VIS_FONT_AXIS_LABEL)
+    ax3.yaxis.set_label_position("right")
+    ax3.set_ylabel("Density", fontsize=CFG.VIS_FONT_AXIS_LABEL, rotation=270, labelpad=15)
+    ax3.tick_params(axis="both", labelsize=CFG.VIS_FONT_AXIS_LABEL)
 
     if len(all_lengths) > 5:
         min_x, max_x = min(all_lengths), max(all_lengths)
@@ -595,7 +599,7 @@ def main():
     # Step 6.1: Parse Arguments & Setup
     # -----------------------------------------------------------------------------
     parser = argparse.ArgumentParser(description="Production Grade FASTA Merge (2 Files)")
-    parser.add_argument("--master", required=True, help="File 1 (MASTER): Trusted.")
+    parser.add_argument("--primary", required=True, help="File 1 (PRIMARY): Trusted.")
     parser.add_argument("--secondary", required=True, help="File 2 (Secondary): Deduped & Filtered.")
     parser.add_argument("--output", default="C_INP_Merged_for_Boltz-2.fasta", help="Output filename")
     parser.add_argument("--min-len", type=int, default=CFG.MERGE_SECONDARY_LEN_MIN, help="Min length for Secondary file")
@@ -604,7 +608,7 @@ def main():
 
     args = parser.parse_args()
 
-    f1_path = Path(args.master)
+    f1_path = Path(args.primary)
     f2_path = Path(args.secondary)
     out_path = Path(args.output)
 
@@ -618,7 +622,7 @@ def main():
         "01_Merge_DeFluorX.py",
         "FASTA Deduplication & Merge  ·  Length Filtering  ·  Sequence Standardisation",
     )
-    logger.info(f"  Master    : {f1_path.name}")
+    logger.info(f"  Primary    : {f1_path.name}")
     logger.info(f"  Secondary : {f2_path.name}  (Len: {args.min_len}–{args.max_len} aa)")
     logger.info(f"  Output    : {out_path.name}")
 
@@ -628,11 +632,11 @@ def main():
     with open(out_path, "w") as out_handle:
 
         # -----------------------------------------------------------------------------
-        # Step 6.2: Process Master File (Highest Priority)
+        # Step 6.2: Process Primary File (Highest Priority)
         # -----------------------------------------------------------------------------
         # Rules: No filtering, adds to 'seen' database first.
-        stats_master = process_and_write(
-            f1_path, out_handle, "Master",
+        stats_primary = process_and_write(
+            f1_path, out_handle, "Primary",
             seen_sequences, seen_ids, logger,
             keep_gaps=args.keep_gaps
         )
@@ -640,7 +644,7 @@ def main():
         # -----------------------------------------------------------------------------
         # Step 6.3: Process Secondary File
         # -----------------------------------------------------------------------------
-        # Rules: Length filtering + Deduplicates against Master.
+        # Rules: Length filtering + Deduplicates against Primary.
         stats_secondary = process_and_write(
             f2_path, out_handle, "Secondary",
             seen_sequences, seen_ids, logger,
@@ -653,7 +657,7 @@ def main():
     # -----------------------------------------------------------------------------
     logger.info("\nGenerating Visual Report...")
     try:
-        plot_path = generate_plots(stats_master, stats_secondary, out_path, logger)
+        plot_path = generate_plots(stats_primary, stats_secondary, out_path, logger)
     except Exception as e:
         logger.error(f"Visualisation failed: {e}")
         traceback.print_exc()
@@ -675,12 +679,12 @@ def main():
         logger.info(f"  Dropped (Duplicate)   : {s['dupes']}")
         logger.info(f"  RETAINED              : {s['kept']}")
 
-    log_stage("File 1: Master", stats_master)
+    log_stage("File 1: Primary", stats_primary)
     log_stage("File 2: Secondary", stats_secondary)
 
     # Aggregate stats
     total_kept = len(seen_ids)
-    all_lens = stats_master["retained_lengths"] + stats_secondary["retained_lengths"]
+    all_lens = stats_primary["retained_lengths"] + stats_secondary["retained_lengths"]
 
     final_mean = round(sum(all_lens) / total_kept, 2) if total_kept > 0 else 0
     min_l = min(all_lens) if all_lens else 0
@@ -689,7 +693,7 @@ def main():
     logger.info("\n[FINAL DATASET]")
     logger.info(f"  Total Sequences       : {total_kept}")
     logger.info(f"  Unique Sequences      : {len(seen_sequences)}")
-    _len_note = "  (master length-exempt)" if min_l < args.min_len else ""
+    _len_note = "  (primary length-exempt)" if min_l < args.min_len else ""
     logger.info(f"  Length Range          : {min_l} - {max_l}{_len_note}")
     logger.info(f"  Mean Length           : {final_mean}")
     logger.info("\nFiles Saved:")

@@ -29,10 +29,10 @@ Date   : 09 October 2026 <──────────────────
   Imports from  : 00_02_Project_Utils_DeFluorX.py  (console_info / console_separator)
   Reads         : <Run>/3_Validation_Figures/01_Analysis_Data/03_Figure_Enriched_Dataset.csv
                   <Run>/1_Boltz2_Production/1_Input_Data/*.fasta
-  Writes        : <Run>/4_Dendrogram/01_Global_Master_Dendrogram.tree
-                  <Run>/4_Dendrogram/02_Global_Master_Matrix_Data.csv
-                  <Run>/4_Dendrogram/03_Global_Master_Interactive_App.html
-                  <Run>/4_Dendrogram/04_Global_Master_Delivery_Suite.zip
+  Writes        : <Run>/4_Dendrogram/01_Global_Primary_Dendrogram.tree
+                  <Run>/4_Dendrogram/02_Global_Primary_Matrix_Data.csv
+                  <Run>/4_Dendrogram/03_Global_Primary_Interactive_App.html
+                  <Run>/4_Dendrogram/04_Global_Primary_Delivery_Suite.zip
                   <Run>/4_Dendrogram/05_Tiers/<Tier>_*  (per-tier tree + HTML)
                   <Run>/4_Dendrogram/00_Dendrogram.log
   Upstream      : 03_Validation_Figures_DeFluorX.py → writes 03_Figure_Enriched_Dataset.csv
@@ -372,9 +372,9 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         fasta_dict[clean_key] = str(r.seq)
 
     # -----------------------------------------------------------------------------
-    # Phase 1: Global Master Dendrogram
+    # Phase 1: Global Primary Dendrogram
     # -----------------------------------------------------------------------------
-    with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Master Dendrogram\n")
+    with open(reporter.path, "a") as f: f.write("\n[LOG] Phase 1: Generating Global Primary Dendrogram\n")
 
     valid_csv_prots = set(df[prot_col].astype(str).unique())
     # Pre-compute the cleaned CSV ids once (O(M)) so the membership test below is O(1)
@@ -401,7 +401,7 @@ def generate_phylogenies(df: pd.DataFrame, prod_dir: Path,
         return
 
     nwk_str, labels = generate_upgma_newick(global_seqs)
-    package_deployment(out_dir, "Global_Master", nwk_str, df, labels, reporter)
+    package_deployment(out_dir, "Global_Primary", nwk_str, df, labels, reporter)
 
     # -----------------------------------------------------------------------------
     # Phase 2: Tier-Specific Phylogenies
@@ -493,12 +493,12 @@ def main():
     # Locate the figure-enriched dataset produced by 03_Validation_Figures_DeFluorX.py
     # (written under 01_Analysis_Data; the root and rglob lookups cover a non-default out_dir layout).
     csv_candidates = (
-        sorted(val_dir.glob(f"01_Analysis_Data/{CFG.FILE_VALIDATED_MASTER}")) or
-        sorted(val_dir.glob(CFG.FILE_VALIDATED_MASTER)) or
-        sorted(val_dir.rglob(CFG.FILE_VALIDATED_MASTER))
+        sorted(val_dir.glob(f"01_Analysis_Data/{CFG.FILE_VALIDATED_PRIMARY}")) or
+        sorted(val_dir.glob(CFG.FILE_VALIDATED_PRIMARY)) or
+        sorted(val_dir.rglob(CFG.FILE_VALIDATED_PRIMARY))
     )
     if not csv_candidates:
-        print(f"Error: No {CFG.FILE_VALIDATED_MASTER} found in {val_dir.resolve()}")
+        print(f"Error: No {CFG.FILE_VALIDATED_PRIMARY} found in {val_dir.resolve()}")
         print("       Run 03_Validation_Figures_DeFluorX.py first to generate it.")
         sys.exit(1)
 
@@ -594,7 +594,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
                             <input type="file" id="tree-upload" accept=".tree,.txt,.fasta,.fa,.faa" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Upload Boltz Master CSV</label>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Upload Boltz Primary CSV</label>
                             <input type="file" id="csv-upload" accept=".csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-md">
                         </div>
                         <button id="btn-plot-tree" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold uppercase tracking-wide rounded-md transition-colors flex items-center justify-center gap-2 shadow-md">
