@@ -42,7 +42,7 @@
 
 9. [References & Citations](#-references--citations)
 10. [License](#-license)
-11. [Authors](#-authors)
+11. [Developers](#-Developers)
 
 </td>
 </tr>
@@ -1869,7 +1869,7 @@ See [`LICENSE`](./LICENSE) for the full text. For commercial licensing enquiries
 
 ---
 
-## 👥 Authors
+## 👥 Developers
 
 <table>
 <tr>
