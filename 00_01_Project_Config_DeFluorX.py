@@ -1648,7 +1648,7 @@ class CFG:
         "Tier_2B":    "#CC79A7",   # pink
         "Tier_3":      "#E69F00",   # orange
         "Tier_4":      "#D55E00",   # vermillion
-        "Tier_5_Decoy":     "#CBD5E1",   # light grey
+        "Tier_5_Decoy":     "#64748B",   # slate grey (visible on white; light grey #CBD5E1 washed out)
         "Control":   "#333333",   # dark grey
     })
 
@@ -2296,10 +2296,10 @@ class CFG:
     VIS_IMG_HEIGHT: int  = 2400   # px  export height
     VIS_RAY_TRACE: bool  = True   # enable PyMOL ray-tracing for publication quality
     VIS_FIGURE_DPI: int  = 300    # dots per inch for publication figures (minimum 300)
-    VIS_SVG_FONTTYPE: str = "none"  # "none" keeps every label as a real, editable <text> element (so
-                                    # a merged panel can be right-clicked -> Convert to Shape in PowerPoint
-                                    # and its font size changed); "path" outlines text (self-contained but
-                                    # not text-editable). Applies to every SVG save via apply_figure_style.
+    VIS_SVG_FONTTYPE: str = "path"  # "path" outlines text as true glyphs (so mathtext subscripts like
+                                    # S$_N$2 render correctly in every viewer, self-contained but not
+                                    # text-editable); "none" keeps editable <text> but flattens mathtext
+                                    # subscripts in many viewers. Applies to every SVG via apply_figure_style.
     VIS_FIGURE_FORMAT: str = "svg"  # SSOT figure format for EVERY matplotlib save across 00-07:
                                     # "svg" (vector) | "pdf" | "tiff"/"tif" | "png" | "jpg". One edit
                                     # here re-targets all plots (apply_figure_style patches savefig to
@@ -2336,14 +2336,14 @@ class CFG:
     SCORE_PCA_NEUTRAL: float       = 50.0   # the neutral PCA score assigned when PCA cannot run
                                             # (mid-scale of 0-100 - never a silent zero)
     VIS_FONT_FAMILY: tuple = ("Arial", "Helvetica", "DejaVu Sans")
-    VIS_FONT_LARGE: float       = 15.5   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
-    VIS_FONT_AXIS_LABEL: float  = 12.5   # x/y axis labels - plain weight
-    VIS_FONT_TICK: float        = 10.5   # tick labels
-    VIS_FONT_TICK_COMPACT: float = 9.5   # tick labels on a crowded axis (many categories/rotated labels)
-    VIS_FONT_TICK_DENSE: float  = 8.5    # tick labels on a very dense axis (per-complex rows, colourbars)
-    VIS_FONT_LEGEND: float      = 9.5    # legend entries (one size for every figure, every step)
-    VIS_FONT_LEGEND_TITLE: float = 10.0  # legend title (one size everywhere; slightly above the entries)
-    VIS_FONT_ANNOT: float       = 9.0    # in-figure annotations (values on/inside bars)
+    VIS_FONT_LARGE: float       = 19.0   # large in-figure labels / headers (e.g. flow-node %); NOT a figure title - no figure carries a title
+    VIS_FONT_AXIS_LABEL: float  = 16.5   # x/y axis labels - plain weight
+    VIS_FONT_TICK: float        = 14.0   # tick labels
+    VIS_FONT_TICK_COMPACT: float = 12.5  # tick labels on a crowded axis (many categories/rotated labels)
+    VIS_FONT_TICK_DENSE: float  = 11.0   # tick labels on a very dense axis (per-complex rows, colourbars)
+    VIS_FONT_LEGEND: float      = 12.5   # legend entries (one size for every figure, every step)
+    VIS_FONT_LEGEND_TITLE: float = 13.0  # legend title (one size everywhere; slightly above the entries)
+    VIS_FONT_ANNOT: float       = 12.5   # in-figure annotations (values on/inside bars)
     '''
     Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
     than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,

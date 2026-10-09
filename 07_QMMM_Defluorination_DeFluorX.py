@@ -264,7 +264,10 @@ def _latest_schrodinger() -> str:
             return d
     return "/opt/schrodinger"
 
-if "SCHRODINGER" not in os.environ:
+_sc_env = os.environ.get("SCHRODINGER")
+# Re-detect when $SCHRODINGER is unset OR stale (its `run` binary is gone after an upgrade),
+# so a leftover /opt/schrodinger export cannot shadow /opt/schrodinger2026-3.
+if not (_sc_env and os.path.exists(os.path.join(_sc_env, "run"))):
     os.environ["SCHRODINGER"] = _latest_schrodinger()
 
 try:
@@ -1492,7 +1495,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
 
         _C = CFG.DEFLUOR_FIG_COLOUR
         fig = plt.figure(figsize=(15, 6.5))
-        gs  = gridspec.GridSpec(1, 2, width_ratios=[1, 1.2], wspace=0.15)
+        gs  = gridspec.GridSpec(1, 2, width_ratios=[1, 1.2], wspace=0.32)
 
         # Panel 1: SN2 scatter with catalytic zones
         ax1 = fig.add_subplot(gs[0])
@@ -1512,8 +1515,8 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
 
         ax1.axvline(THRESHOLD_RELAXED_NAC_DIST, color=_C['warhead'], linestyle='--', linewidth=2.5)
         ax1.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color=_C['tail'], linestyle='--', linewidth=2.5)
-        ax1.set_xlabel("Nucleophile – ligand distance (Å)  ·  S$_N$2 reaction trajectory")
-        ax1.set_ylabel("Attack Angle: O–C–F (°)")
+        ax1.set_xlabel("Nucleophile – ligand distance (Å)\nS$_\\mathrm{N}$2 reaction trajectory")
+        ax1.set_ylabel("Attack Angle:\nO–C–F (°)")
         '''
         Start the angle axis at the data floor (rounded down to 10°) rather than 0, so the near-attack
         cluster is shown in detail. The floor is capped at the relaxed cut-off so its dashed line and the
@@ -1534,9 +1537,9 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
             Patch(facecolor=_C['zone_strict'], alpha=0.4, label='Strict S_N2 Zone'),
         ]
         ax1.legend(handles=_p1_handles, loc='lower left', bbox_to_anchor=(0.01, 0.01),
-                   ncol=2, frameon=True, columnspacing=0.6, handletextpad=0.3, handlelength=1.2,
-                   borderpad=0.4, edgecolor=_C['legend_edge'], fancybox=True,
-                   fontsize=CFG.VIS_FONT_ANNOT)
+                   ncol=1, frameon=False, columnspacing=0.6, handletextpad=0.3, handlelength=1.0,
+                   borderpad=0.3, labelspacing=0.25, fancybox=True,
+                   fontsize=CFG.VIS_FONT_ANNOT - 1.0)
 
         # X-axis grid darker than Y so the reaction-coordinate (distance) reads clearly; Y keeps the
         # default light grid. Both colours are CFG SSOT (VIS_GRID_COLOUR_EMPHASIS / VIS_GRID_COLOUR).
@@ -1568,9 +1571,11 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         data_max = df["NAC_Distance_A"].max() if not df["NAC_Distance_A"].isna().all() else 12.0
         ax2.set_ylim(1.5, max(7.0, data_max * 1.05))
         ax2.set_xlabel("Simulation frame")
-        ax2.set_ylabel("Active-site anchoring - interaction distance (Å)")
-        ax2.legend(loc='upper right', frameon=True,
-                   edgecolor=_C['legend_edge'], fancybox=True, fontsize=CFG.VIS_FONT_LEGEND)
+        ax2.set_ylabel("Active-site anchoring\ninteraction distance (Å)")
+        _h2d, _l2d = ax2.get_legend_handles_labels()
+        ax2.legend(_h2d, _l2d, loc='lower right', frameon=False, ncol=max(1, len(_l2d)),
+                   fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=0.6,
+                   handletextpad=0.3, handlelength=1.1, borderpad=0.3)
         ax2.grid(axis='x', color=CFG.VIS_GRID_COLOUR_EMPHASIS, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.9, zorder=0)
         ax2.grid(axis='y', color=CFG.VIS_GRID_COLOUR, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=CFG.VIS_GRID_ALPHA, zorder=0)
         clean_spines(ax2)
@@ -1590,7 +1595,7 @@ def generate_individual_dashboard(df: pd.DataFrame, job_name: str,
         ax2.text(0.03, 0.96, summary_text, transform=ax2.transAxes,
                  fontsize=CFG.VIS_FONT_ANNOT, va='top', ha='left', zorder=10,
                  bbox=dict(facecolor='white', edgecolor=CFG.VIS_MD_PALETTE["border"],
-                           boxstyle='round,pad=0.6', alpha=1.0))
+                           boxstyle='round,pad=0.6', alpha=0.75))
 
         # No on-figure title; the descriptive metadata is written to the log instead
         plt.savefig(output_path, dpi=int(CFG.VIS_FIGURE_DPI), bbox_inches='tight')
@@ -1654,12 +1659,17 @@ def generate_global_comparative_dashboard(out_dir: Path, df_primary: pd.DataFram
     _dvals = combined_df["NAC_Distance_A"].dropna()
     _avals = combined_df["NAC_Angle_Deg"].dropna()
     _dmax = int(min(max(math.ceil(float(np.nanpercentile(_dvals, 99.5))) if len(_dvals) else 5, 5), 50))
+    # Data-driven lower bound: the Nu–C distance never approaches 0 (min ~2.9 Å here), so anchoring the
+    # axis at 0 leaves a large dead band. Start just below the data while keeping the strict/relaxed
+    # NAC threshold lines in view.
+    _dmin = float(np.floor(float(np.nanpercentile(_dvals, 0.5)))) - 1.0 if len(_dvals) else 0.0
+    _dmin = max(0.0, min(_dmin, float(THRESHOLD_STRICT_NAC_DIST) - 0.5))   # keep the strict threshold visible
     _amin = float(np.floor((float(np.nanpercentile(_avals, 0.5)) if len(_avals) else 0.0) / 10.0) * 10.0)
     _amin = max(0.0, min(_amin, float(THRESHOLD_RELAXED_NAC_ANGLE) - 10.0))   # keep the angle threshold visible
-    dist_ticks = [t for t in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 30, 40, 50] if t <= _dmax]
+    dist_ticks = [t for t in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 30, 40, 50] if _dmin <= t <= _dmax]
 
     fig = plt.figure(figsize=(22, 10))
-    gs  = fig.add_gridspec(1, 3, width_ratios=[1, 1, 1.6], wspace=0.15)
+    gs  = fig.add_gridspec(1, 3, width_ratios=[1, 1, 1.6], wspace=0.28)
 
     # Panel 1: Nucleophile Distance Distribution violin plot
     ax1 = fig.add_subplot(gs[0])
@@ -1671,7 +1681,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_primary: pd.DataFram
 
     ax1.set_xticks([transform_distance(t) for t in dist_ticks])
     ax1.set_xticklabels([str(t) for t in dist_ticks], rotation=0)
-    ax1.set_xlim(0, transform_distance(_dmax))
+    ax1.set_xlim(transform_distance(_dmin), transform_distance(_dmax))
     
     fig.canvas.draw()
     for lbl in ax1.get_yticklabels():
@@ -1685,7 +1695,7 @@ def generate_global_comparative_dashboard(out_dir: Path, df_primary: pd.DataFram
                    order=sorted_labels, palette=job_colour_map, inner="quartile", linewidth=1.2)
     ax2.axvspan(THRESHOLD_RELAXED_NAC_ANGLE, 180, color=CFG.VIS_ACCENT["green"], alpha=0.15, zorder=0)
     ax2.axvline(THRESHOLD_RELAXED_NAC_ANGLE, color=CFG.VIS_ACCENT["blue"], linestyle='--', linewidth=2)
-    ax2.set_xlabel("S$_N$2 attack angle (°)"); ax2.set_ylabel("")
+    ax2.set_xlabel("S$_\\mathrm{N}$2 attack angle (°)"); ax2.set_ylabel("")
     ax2.set_xlim(_amin, 180)   # data-driven lower bound, keeps the angle threshold in view
     ax2.tick_params(labelleft=False)
     ax2.tick_params(axis='x', labelrotation=0)
@@ -1711,11 +1721,11 @@ def generate_global_comparative_dashboard(out_dir: Path, df_primary: pd.DataFram
     ax3.axvline(transform_distance(THRESHOLD_RELAXED_NAC_DIST), color=CFG.VIS_ACCENT["vermillion"], linestyle='--', linewidth=2)
     ax3.axhline(THRESHOLD_RELAXED_NAC_ANGLE, color=CFG.VIS_ACCENT["blue"], linestyle='--', linewidth=2)
     ax3.set_xlabel("Nu–ligand distance (Å)  ·  global catalytic landscape")
-    ax3.set_ylabel("S$_N$2 attack angle (°)")
+    ax3.set_ylabel("S$_\\mathrm{N}$2 attack angle (°)")
 
     ax3.set_xticks([transform_distance(t) for t in dist_ticks])
     ax3.set_xticklabels([str(t) for t in dist_ticks], rotation=0)
-    ax3.set_xlim(0, transform_distance(_dmax))
+    ax3.set_xlim(transform_distance(_dmin), transform_distance(_dmax))
     ax3.set_ylim(_amin, 180)
     
     # Legend at bottom left containing both lines and zones
@@ -1791,7 +1801,7 @@ def generate_comparative_residue_engagement(out_dir: Path, df_primary: pd.DataFr
         linewidths=0.6, linecolor=CFG.VIS_INK["white"],
         cbar_kws={"label": ""},
     )
-    ax.set_xlabel("Catalytic residue role  ·  green = engaged, red = out of contact")
+    ax.set_xlabel("Catalytic residue role")
     ax.set_ylabel("")
     ax.tick_params(axis="x", labelrotation=0)
     ax.tick_params(axis="y", labelrotation=0)
@@ -1877,16 +1887,16 @@ def generate_viability_bar_chart(out_dir: Path, df_primary: pd.DataFrame) -> Non
                 # Value label (in solid black)
                 if val >= 8.0:
                     ax.text(val - 1.0, y + offset, f'{val:.1f}%',
-                            ha='right', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
+                            ha='right', va='center', fontsize=CFG.VIS_FONT_ANNOT * 0.9, fontweight='bold',
                             color='black', zorder=4)
                 else:
                     ax.text(val + 0.5, y + offset, f'{val:.1f}%',
-                            ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
+                            ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT * 0.9, fontweight='bold',
                             color='black', zorder=4)
             else:
                 # Value label for 0% (in solid black)
                 ax.text(0.5, y + offset, "0.0%",
-                        ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT, fontweight='bold',
+                        ha='left', va='center', fontsize=CFG.VIS_FONT_ANNOT * 0.9, fontweight='bold',
                         color='black', zorder=4)
 
     ax.set_yticks(y_positions)
@@ -1973,8 +1983,11 @@ def generate_viability_bar_chart(out_dir: Path, df_primary: pd.DataFrame) -> Non
         Patch(facecolor=CFG.VIS_MD_PALETTE["relaxed"], edgecolor='none', label='Relaxed Catalysis (Total)'),
         Patch(facecolor=CFG.VIS_MD_PALETTE["strict"], edgecolor='none', label='Strict Catalysis (Total)'),
     ]
-    ax.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, 1.04),
-              frameon=True,  edgecolor=CFG.VIS_MD_PALETTE["slate"],  ncol=4)
+    # Legend parked in the right column, below the annotation table (ax_ann) where there is free space.
+    ax_ann.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, 0.0),
+                  frameon=False, ncol=max(1, int(np.ceil(len(legend_handles) / 2))),
+                  fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=0.6,
+                  handletextpad=0.3, handlelength=1.1, borderpad=0.3)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -2434,7 +2447,7 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
         the per-rank combined panel drops the y-axis label (the trace panel below already carries the
         units); the standalone AllRanks overview keeps it as its only axis caption
         '''
-        ax.set_ylabel("" if _external_ax else "ΔG component (kcal/mol)  ·  negative favours binding")
+        ax.set_ylabel("" if _external_ax else "ΔG component (kcal/mol, − = binding)")
         '''
         The omitted terms are still NAMED (a silently deleted term is a lie). In the stand-alone
         per-rank panel the note rides the shade-key legend's TITLE, so note + key share one box; in
@@ -2464,8 +2477,9 @@ def plot_mmgbsa_decomposition(out_dir: Path, ranks: list, merged: bool, ax=None)
             # per-rank combined panel: note + shade keys as two rows tucked inside the top-right corner,
             # clear of the tall Solv-GB bars
             ax.legend(handles=_hdl_row, loc="upper right", bbox_to_anchor=(0.995, 0.985),
-                      ncol=math.ceil(len(_hdl_row) / 2),
-                      fontsize=_f_leg, frameon=True, framealpha=0.92, columnspacing=1.0, handletextpad=0.4)
+                      ncol=1, frameon=False,
+                      fontsize=_f_leg, columnspacing=0.6, handletextpad=0.3,
+                      handlelength=1.1, borderpad=0.3)
         else:
             # standalone AllRanks overview: legend as two rows tucked inside the lower-right corner,
             # clear of the tall Solv-GB bars
@@ -2653,11 +2667,13 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         ax.set_ylim(0, _ytop)
 
         ax.set_xticks(np.arange(len(_ENGAGE_ROLES)))
-        ax.set_xticklabels([lbl for _, _, lbl, _ in _ENGAGE_ROLES])
+        # Role-level x-ticks: drop the per-residue qualifier (e.g. "Cradle Tyr" → "Cradle").
+        ax.set_xticklabels(["Cradle" if lbl.startswith("Cradle") else lbl
+                            for _, _, lbl, _ in _ENGAGE_ROLES])
         for lb, (_, role, _, _) in zip(ax.get_xticklabels(), _ENGAGE_ROLES):
             lb.set_color(_roles.get(role, _ink["muted"]))
             lb.set_fontweight("bold")
-        ax.set_ylabel("Distance to warhead C (Å)  ·  bars = median, whiskers = IQR")
+        ax.set_ylabel("Distance to warhead C (Å)\nbars = median, whiskers = IQR")
         ax.set_xlabel("catalytic role  ·  Å above bar = median distance  ·  "
                       f"% in bar = frames within {_occ_cut:g} Å")
         ax.yaxis.set_major_locator(MultipleLocator(1.0))
@@ -2672,13 +2688,15 @@ def plot_machinery_engagement(out_dir: Path, ranks: list, merged: bool) -> None:
         _hdl = ((ax.get_legend_handles_labels()[0] + [_mean_hdl] + band_hdl) if merged
                 else [_mean_hdl] + list(band_hdl))
         if merged:
-            ax.legend(handles=_hdl, loc="upper center", bbox_to_anchor=(0.5, 0.99), fontsize=_f_leg - 1.0,
-                      frameon=True, ncol=4, columnspacing=0.9, handletextpad=0.4, borderpad=0.4)
+            _lg_m = ax.legend(handles=_hdl, loc="upper right", bbox_to_anchor=(0.965, 0.99),
+                      fontsize=_f_leg - 1.0, frameon=False, ncol=2,
+                      columnspacing=0.6, handletextpad=0.3, handlelength=1.1, borderpad=0.3)
+            _lg_m._legend_box.align = "right"
         else:
             # per-rank: two rows centred along the top
             ax.legend(handles=_hdl, loc="upper center", bbox_to_anchor=(0.5, 0.99), fontsize=_f_leg - 1.0,
-                      frameon=True, ncol=math.ceil(len(_hdl) / 2),
-                      columnspacing=0.9, handletextpad=0.4, borderpad=0.4)
+                      frameon=False, ncol=math.ceil(len(_hdl) / 2),
+                      columnspacing=0.6, handletextpad=0.3, handlelength=1.1, borderpad=0.3)
 
         out_path = (out_dir / "07_Machinery_Engagement_AllRanks.svg" if merged
                     else rr[0]["dir"] / "07_Machinery_Engagement.svg")
@@ -4134,8 +4152,8 @@ def generate_active_site_dynamics(df: pd.DataFrame, row, output_path: Path) -> N
         _hi = max(np.nanpercentile(d, 99.5) for d in data)
 
         fig, ax = plt.subplots(figsize=(18, 8.5))
-        _top = float(round(_hi))                      # end on a whole number so the top tick is labelled
-        ax.set_ylim(_lo - 1.35, _top)
+        _top = float(round(_hi)) + 1.0                 # extra headroom so the right-margin bank labels fit
+        ax.set_ylim(_lo - 1.9, _top)                   # more room below for the rotated role labels
 
         starts = []
         for (c, _lab, res, col) in series:
@@ -4183,7 +4201,7 @@ def generate_active_site_dynamics(df: pd.DataFrame, row, output_path: Path) -> N
 
         # each trace named in the left margin, in its own colour, nudged apart so none collide. The
         # gap holds the role-qualified labels (widest is a cradle role, e.g. "Cradle His HIS155").
-        ax.set_xlim(-T * 0.16, bank0 + span)
+        ax.set_xlim(-T * 0.21, bank0 + span)
         gap = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.026
         starts.sort(key=lambda q: q[0])
         for i in range(1, len(starts)):
@@ -4210,8 +4228,8 @@ def generate_active_site_dynamics(df: pd.DataFrame, row, output_path: Path) -> N
         _xl, _xr = ax.get_xlim()
         leg = ax.legend(hdl, [h.get_label() for h in hdl], loc="upper right",
                         bbox_to_anchor=((T - _xl) / (_xr - _xl), 0.995), ncol=len(hdl),
-                        fontsize=CFG.VIS_FONT_LEGEND, frameon=True, framealpha=0.92,
-                        handlelength=1.2, handletextpad=0.4, columnspacing=0.8, borderpad=0.5)
+                        fontsize=CFG.VIS_FONT_LEGEND - 1.0, frameon=False,
+                        handlelength=1.0, handletextpad=0.3, columnspacing=0.5, borderpad=0.3)
         if _rr:
             leg.get_texts()[0].set_fontweight("bold")
         clean_spines(ax)
@@ -4307,11 +4325,11 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, ax) -> None:
     w = max(1, len(y) // 200)
     ax.plot(x, y, color=_C["warhead"], lw=0.6, alpha=0.22)
     ax.plot(x, y.rolling(w, min_periods=1).mean(), color=_C["warhead"], lw=2.0,
-            label=f"ΔG$_{{bind}}$ (rolling mean, {w} frames)")
+            label=f"ΔG_bind (rolling mean, {w} frames)")
     ax.axhline(mean, color=_INK["dark"], ls="--", lw=1.4, label=f"mean {mean:.2f} kcal/mol")
     ax.axhspan(mean - sd, mean + sd, color=_INK["paler"], alpha=0.18, label=f"±1 SD ({sd:.2f})")
     ax.set_xlabel(f"Simulation frame  ·  {len(y):,} frames scored")
-    ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)")
+    ax.set_ylabel("MM-GBSA ΔG_bind (kcal/mol)")
     ax.set_xlim(x.min(), x.max() + (x.max() - x.min()) * 0.012)
     _xc, _yc = _C["tail"], CFG.VIS_ACCENT["green"]
     ax.xaxis.label.set_color(_xc); ax.tick_params(axis="x", colors=_xc)
@@ -4319,8 +4337,9 @@ def generate_mmgbsa_trace(mg: pd.DataFrame, ax) -> None:
     ax.grid(axis="x", color=_xc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
     ax.grid(axis="y", color=_yc, linewidth=CFG.VIS_GRID_LINEWIDTH, alpha=0.20, zorder=0)
     hdl, lab = ax.get_legend_handles_labels()
-    ax.legend(hdl, lab, loc="upper left", ncol=len(lab), fontsize=CFG.VIS_FONT_LEGEND,
-              frameon=True, framealpha=0.92, columnspacing=0.8, handletextpad=0.4)
+    ax.legend(hdl, lab, loc="upper right", ncol=1, fontsize=CFG.VIS_FONT_LEGEND - 1.0,
+              frameon=False, columnspacing=0.5, handletextpad=0.3, handlelength=1.1,
+              labelspacing=0.3, borderpad=0.3)
     clean_spines(ax)
 
 
@@ -4496,8 +4515,8 @@ def plot_qsite_reaction_profile(out_path: Path, job_name: str, rank, profile: di
                 _ntot = 2 + len(_h1) + len(_h2)
                 _leg = axE.legend([_blank, _blank] + _h1 + _h2, [_head, _detail] + _l1 + _l2,
                                   loc="upper left", bbox_to_anchor=(0.012, 0.985), ncol=math.ceil(_ntot / 2),
-                                  fontsize=_ft - 1.5, framealpha=0.95, edgecolor=_C.get("legend_edge", _C["edge"]),
-                                  columnspacing=0.9, handletextpad=0.4, handlelength=1.2, borderpad=0.5)
+                                  fontsize=_ft - 1.5, frameon=False,
+                                  columnspacing=0.7, handletextpad=0.3, handlelength=1.1, borderpad=0.3)
                 _lt = _leg.get_texts()
                 _lt[0].set_color(_acc); _lt[0].set_fontweight("bold"); _lt[1].set_color(_C["edge"])
                 with warnings.catch_warnings():
@@ -5527,7 +5546,7 @@ def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: st
                                 fontsize=_ft - 2.5, color=col, annotation_clip=False,
                                 arrowprops=dict(arrowstyle="->", color=col, lw=0.9))
                 ax.set_xlabel("simulation time  (ns)", fontsize=_fa)
-                ax.set_ylabel("SN2 attack angle  (deg)", fontsize=_fa)
+                ax.set_ylabel("S$_\\mathrm{N}$2 attack angle  (deg)", fontsize=_fa)
                 ax.set_ylim(80, 190)                       # spine to 190; nothing catalytic below 80
                 ax.set_yticks(np.arange(80, 181, 10))      # ticks labelled to 180 (10° steps), 180->190 is headroom
                 ax.set_xlim(0, sims); ax.margins(x=0)      # start the trajectory axis at 0 ns, no gap
@@ -5542,8 +5561,9 @@ def plot_md_qsite_timeline(out_path: Path, job_out_dir: Path, rank, job_name: st
                        Line2D([0], [0], color=_accent, ls="--", lw=1.4, label=f"mean NAC angle {st.get('MD_Avg_NAC_Angle_Deg'):.1f}°"),
                        Line2D([0], [0], color=_box, lw=2.2, label="QM/MM-scored frame - C-F cleaves"),
                        Line2D([0], [0], color=_intact, lw=2.2, label="QM/MM-scored frame - stays intact")]
-                ax.legend(handles=_lh, loc="lower left", frameon=True, fontsize=_ft - 1.5, ncol=4,
-                          columnspacing=1.0, handletextpad=0.4, borderpad=0.5)
+                ax.legend(handles=_lh, loc="lower right", frameon=False, fontsize=_ft - 1.5,
+                          ncol=max(1, int(np.ceil(len(_lh) / 2))),
+                          columnspacing=0.6, handletextpad=0.3, handlelength=1.1, borderpad=0.3)
                 clean_spines(ax)
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
@@ -5717,8 +5737,8 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
                               label=f"{str(j.get('label', '')).replace('_', '')} · {_shrt(j.get('ligand'))}")
                        for j in sorted(_J, key=_rankof)]
                 ax.legend(handles=_lh, loc="upper center", bbox_to_anchor=(0.55, 0.995), ncol=len(_lh),
-                          fontsize=_ft - 0.5, framealpha=0.95, borderpad=0.6, handlelength=2.2,
-                          columnspacing=1.5, handletextpad=0.5)
+                          fontsize=_ft - 0.5, frameon=False, borderpad=0.3, handlelength=1.6,
+                          columnspacing=0.9, handletextpad=0.4)
                 # top-left ΔE‡ bar inset (transparent, axis-less, x-axis rotated on the top border, control last)
                 _order = sorted([j for j in _J if not j.get("is_control")], key=_rankof) + [j for j in _J if j.get("is_control")]
                 _ins = ax.inset_axes([0.03, 0.67, 0.27, 0.33]); _ins.patch.set_alpha(0.0)   # nudged right off the y-axis

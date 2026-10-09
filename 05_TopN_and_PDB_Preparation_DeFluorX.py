@@ -209,7 +209,10 @@ def _latest_schrodinger() -> str:
             return d
     return "/opt/schrodinger"
 
-if "SCHRODINGER" not in os.environ:
+_sc_env = os.environ.get("SCHRODINGER")
+# Re-detect when $SCHRODINGER is unset OR stale (its `run` binary is gone after an upgrade),
+# so a leftover /opt/schrodinger export cannot shadow /opt/schrodinger2026-3.
+if not (_sc_env and os.path.exists(os.path.join(_sc_env, "run"))):
     os.environ["SCHRODINGER"] = _latest_schrodinger()
 
 SCHRODINGER_PATH = Path(os.environ["SCHRODINGER"])
@@ -740,9 +743,10 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
         # The three zones are labelled WHERE THEY ARE, at the foot of the panel, so the reader never has
         # to translate a legend swatch into a region. Each label is centred in its own band.
         for _zx, _zt, _zc in _zones:
+            _zrot = 90 if "outside NAC" in _zt else 0   # narrow band: vertical so it fits
             ax.annotate(_zt, xy=(_zx, 0.0), xycoords=("data", "axes fraction"),
                         xytext=(0, 4), textcoords="offset points", ha="center", va="bottom",
-                        fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_zc, style="italic",
+                        rotation=_zrot, fontsize=CFG.VIS_FONT_ANNOT - 1.0, color=_zc, style="italic",
                         alpha=0.9, zorder=1, clip_on=True)
         for _i, (_cf, _a, _b) in enumerate(zip(df[ccif], df[c0], df[c1])):
             '''
@@ -823,23 +827,18 @@ def plot_pose_drift(geom_rows: list, out_dir: Path) -> Path | None:
                   label="minimised pose moved TOWARDS the gate"),
           _Line2D([0], [0], color=CFG.VIS_ACCENT["blue"], ls="-.", lw=1.4,
                   label=f"strict NAC  ({CFG.NAC_ANGLE_STRICT:.0f}° / {CFG.NAC_DIST_STRICT:.1f} Å)")]
-    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.03, 1.045), ncol=len(_h),
-                frameon=False, fontsize=CFG.VIS_FONT_LEGEND)
+    ax_a.legend(handles=_h, loc="lower center", bbox_to_anchor=(1.03, 1.045),
+                ncol=max(1, int(np.ceil(len(_h) / 2))),
+                frameon=False, fontsize=CFG.VIS_FONT_LEGEND - 1.0,
+                columnspacing=0.6, handletextpad=0.3, handlelength=1.1)
 
-    _da = pd.to_numeric(df["prep_d_angle"], errors="coerce").dropna()
-    _dd = pd.to_numeric(df["prep_d_dist"], errors="coerce").dropna()
-    fig.text(0.5, 0.012,
-             f"CIF (Boltz) → RAW (gemmi, lossless) → Minimised (PrepWizard, MD start).   "
-             f"Minimisation drift: mean |Δangle| {_da.abs().mean():.1f}°, mean Δdist {_dd.mean():+.2f} Å.   "
-             f"Blue = MD-selected.",
-             ha="center", fontsize=CFG.VIS_FONT_ANNOT, color=CFG.VIS_INK["muted"])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        fig.tight_layout(rect=(0, 0.045, 1, 0.90))
+        fig.tight_layout(rect=(0, 0.02, 1, 0.92))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _path = out_dir / "02_Pose_Drift_CIF_to_Prepared.svg"
-    fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI, bbox_inches="tight")
+    fig.savefig(_path, dpi=CFG.VIS_FIGURE_DPI)   # no bbox_inches="tight": keep the reserved caption band
     plt.close(fig)
     return _path
 
@@ -1679,7 +1678,7 @@ def plot_esp_alpha_carbon(summary_rows: list, out_dir: Path) -> Path | None:
     d = (d.sort_values(["ligand", "_ctrl", "structure"]).drop_duplicates("ligand", keep="first")
            .sort_values("q_alpha"))
 
-    fig, ax = plt.subplots(figsize=(8.6, 4.8))
+    fig, ax = plt.subplots(figsize=(12, 4.8))
     _cols = [CFG.VIS_ACCENT["blue"], CFG.VIS_ACCENT["amber"], CFG.VIS_ACCENT["vermillion"]]
     _bar_cols = [_cols[min(i, 2)] for i in range(len(d))]
     _b = ax.barh(d["ligand"], d["q_alpha"],

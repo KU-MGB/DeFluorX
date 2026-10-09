@@ -418,7 +418,7 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     fig = plt.figure(figsize=(14, 6), facecolor=PALETTE["Bg"])
 
     # Layout: Left column (Bar + Violin), Right column (KDE)
-    gs = fig.add_gridspec(2, 2, height_ratios=[0.8, 1.2], width_ratios=[0.9, 1.3], hspace=0.25, wspace=0.08)
+    gs = fig.add_gridspec(2, 2, height_ratios=[0.8, 1.2], width_ratios=[0.9, 1.3], hspace=0.45, wspace=0.08)
 
     ax1 = fig.add_subplot(gs[0, 0]) # Top Left: Throughput
     ax2 = fig.add_subplot(gs[1, 0]) # Bottom Left: Violins
@@ -485,7 +485,8 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
     ax1.grid(axis="y", visible=False)
     ax1.grid(axis="x", linestyle="--", alpha=0.3)
 
-    ax1.legend(loc="upper center", ncol=2, frameon=True, fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
+    ax1.legend(loc="upper right", bbox_to_anchor=(1.0, 1.08), ncol=2, frameon=True,
+               fontsize=CFG.VIS_FONT_LEGEND, fancybox=True, framealpha=0.9)
 
     # -----------------------------------------------------------------------------
     # Step 5.4: Subplot 2 - Length Heterogeneity (Violin Plot)
@@ -557,24 +558,29 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                 ax3.axvline(mean_val, color=PALETTE["Total"], linestyle="-", linewidth=0.8, alpha=0.6)
                 ax3.text(mean_val, max(y_total)*1.02, f"Mean: {mean_val:.1f}", ha="center", fontsize=CFG.VIS_FONT_TICK, color=PALETTE["Total"])
 
-                # Comprehensive Statistics Box
-                stats_text = (
-                    f"DATASET STATISTICS\n"
-                    f"------------------\n"
-                    f"Total N  : {len(all_lengths):,}\n"
-                    f"Mean     : {mean_val:.2f}\n"
-                    f"Median   : {np.median(all_lengths):.1f}\n"
-                    f"Range    : {min_x}-{max_x}\n"
-                    f"Std Dev  : {np.std(all_lengths):.2f}\n"
-                    f"Skewness : {skew(all_lengths):.2f}"
-                )
-                ax3.text(0.98, 0.95, stats_text, transform=ax3.transAxes, va="top", ha="right",
+                # Comprehensive statistics box - aligned as a borderless table (monospace: labels left-
+                # padded to a common width so every colon and value lines up in one column).
+                _rows = [
+                    ("Total N",  f"{len(all_lengths):,}"),
+                    ("Mean",     f"{mean_val:.2f}"),
+                    ("Median",   f"{np.median(all_lengths):.1f}"),
+                    ("Range",    f"{min_x}-{max_x}"),
+                    ("Std Dev",  f"{np.std(all_lengths):.2f}"),
+                    ("Skewness", f"{skew(all_lengths):.2f}"),
+                ]
+                _kw = max(len(k) for k, _ in _rows)
+                _body = "\n".join(f"{k:<{_kw}} : {v}" for k, v in _rows)
+                _tw = max(len(ln) for ln in _body.split("\n"))
+                stats_text = "DATASET STATISTICS\n" + "-" * _tw + "\n" + _body
+                # Stats box sits directly BELOW the KDE legend (both top-left, stacked).
+                ax3.text(0.02, 0.72, stats_text, transform=ax3.transAxes, va="top", ha="left",
                          fontsize=CFG.VIS_FONT_AXIS_LABEL, fontfamily="monospace",
                          bbox=dict(facecolor="white", edgecolor=PALETTE["box_edge"], boxstyle="round,pad=0.6", alpha=0.95))
 
             except Exception as e:
                 logger.debug(f"Skipped KDE plot for combined data due to math error: {e}")
 
+        # Legend top-left (its original place), directly ABOVE the stats box (both stacked, top-left).
         ax3.legend(loc="upper left", bbox_to_anchor=(0.02, 1.0), frameon=False, fontsize=CFG.VIS_FONT_AXIS_LABEL)
     else:
         ax3.text(0.5, 0.5, "Insufficient data for Density Plot", ha="center", transform=ax3.transAxes)

@@ -742,14 +742,15 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
                  f"Allowed   {st['counts']['Allowed']:<4} {allowed_pct:<8}",
                  f"Outlier   {st['counts']['Outlier']:<4} {out_pct:<8}",
                  f"Total     {st['total']:<4} {tot_pct:<8}"]
-        _fs = plt.rcParams["xtick.labelsize"]
-        # Structure name as a coloured, centred title over the left-justified stats (monospace columns).
+        _fs = plt.rcParams["xtick.labelsize"] * 0.82   # smaller on-plot stats text
+        # Structure name as a coloured, centred title over the right-aligned stats (monospace columns).
         _leg = ax.legend([mlines.Line2D([], [], color="none") for _ in _rows], _rows,
                          loc="upper right", title=label, handlelength=0, handletextpad=0,
-                         labelspacing=0.3, borderpad=0.6, prop={"family": "monospace", "size": _fs},
+                         labelspacing=0.25, borderpad=0.4, prop={"family": "monospace", "size": _fs},
                          framealpha=0.85, edgecolor=_P["box_edge"], facecolor="white")
         _t = _leg.get_title()
         _t.set_color(_P["title"]); _t.set_fontfamily("monospace"); _t.set_fontsize(_fs); _t.set_fontweight("bold")
+        _leg._legend_box.align = "right"
         _leg.set_zorder(6)
 
         ax.set_xlim(-180, 180)
@@ -785,9 +786,11 @@ def save_ramachandran_comparison(angles_ref: list[tuple], angles_con: list[tuple
 
     all_handles = [favoured_p, allowed_p, outlier_p, gen_m, gly_m, pro_m] + crit_handles
 
-    fig.legend(handles=all_handles,
-               loc="upper center", ncol=len(all_handles), fontsize=plt.rcParams["xtick.labelsize"], frameon=True,
-               bbox_to_anchor=(0.5, -0.005), columnspacing=0.8, handletextpad=0.4)
+    _fleg = fig.legend(handles=all_handles,
+               loc="upper center", ncol=max(1, int(np.ceil(len(all_handles) / 2))),
+               fontsize=plt.rcParams["xtick.labelsize"] * 0.9, frameon=True,
+               bbox_to_anchor=(0.5, -0.005), columnspacing=0.6, handletextpad=0.3, handlelength=1.1)
+    _fleg._legend_box.align = "center"
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")

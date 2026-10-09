@@ -164,10 +164,14 @@ def _latest_schrodinger() -> str:
 try:
     import schrodinger  # noqa: F401
 except ModuleNotFoundError:
-    _schro = os.environ.get("SCHRODINGER") or _latest_schrodinger()
+    _env = os.environ.get("SCHRODINGER")
+    # Trust $SCHRODINGER only when it actually carries the `run` binary; a stale export (e.g.
+    # /opt/schrodinger after an upgrade to /opt/schrodinger2026-3) otherwise shadows auto-detect.
+    _schro = _env if (_env and os.path.exists(os.path.join(_env, "run"))) else _latest_schrodinger()
     os.execv(f"{_schro}/run", [f"{_schro}/run", "python3", os.path.abspath(__file__), *sys.argv[1:]])
 
 import numpy as np
+import textwrap as _textwrap
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -2319,7 +2323,7 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
                     clip_on=False, zorder=6,
                     label=f"{len(_bad)} outlier frames (to {_bad.min():.0f})")
     ax1.set_xlabel(_xlabel)
-    ax1.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  Prime MM-GBSA")
+    ax1.set_ylabel("ΔG_bind (kcal/mol)\nPrime MM-GBSA", linespacing=1.6)
     ax1.set_ylim(_ylo, _yhi)
     '''
     Span the WHOLE simulation, not merely the last sampled frame: with a stride the final frame
@@ -2331,8 +2335,9 @@ def plot_mmgbsa_individual(out_dir: Path, job_name: str, rank: str, dg: "pd.Seri
     # Single-row legend inside the panel: one column per entry so it never wraps to a second row;
     # tight column/handle spacing keeps it narrow enough to sit in the sparse lower-left corner.
     _lh, _ll = ax1.get_legend_handles_labels()
-    ax1.legend(_lh, _ll, frameon=True, ncol=max(1, len(_lh)), loc="lower left",
-               columnspacing=1.0, handletextpad=0.5)
+    ax1.legend(_lh, _ll, frameon=False, ncol=max(1, int(np.ceil(len(_lh) / 2))), loc="lower left",
+               fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=0.6, handletextpad=0.3,
+               handlelength=1.1, borderpad=0.3)
     ax1.grid(alpha=0.25, linewidth=0.5)
 
     # ── Panel 2: distribution of the core ensemble (shares the y-axis) ────────────────────
@@ -2394,7 +2399,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
 
     def _label(r):
         lig = _ctrl_label(int(r), ligands, controls)
-        return f"{lig}\nR{r}" if lig else f"R{r}"
+        return f"{_textwrap.fill(lig, 14)}\nR{r}" if lig else f"R{r}"
     _labels = [_label(r) for r, _ in per_job]
 
     _clip = float(getattr(CFG, "MMGBSA_PLOT_CLIP_PCT", 0.5))
@@ -2405,7 +2410,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     fig = plt.figure(figsize=(17, 13))
     # The top panels carry their definitions in their own legends, so the row gap only needs to
     # clear the tick labels.
-    gs  = fig.add_gridspec(2, 2, height_ratios=[1, 1.1], hspace=0.22, wspace=0.22)
+    gs  = fig.add_gridspec(2, 2, height_ratios=[1, 1.1], hspace=0.22, wspace=0.30)
     ax1 = fig.add_subplot(gs[0, 0])     # distribution (top-left)
     ax3 = fig.add_subplot(gs[0, 1])     # ranking (top-right)
     ax4 = fig.add_subplot(gs[1, :])     # time + cumulative, spanning the row
@@ -2447,7 +2452,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                      ha="center", fontsize=CFG.VIS_FONT_LEGEND, color=_cols[i], fontweight="bold",
                      zorder=9, path_effects=_stroke)
     ax1.set_xticks(_x); ax1.set_xticklabels(_labels)
-    ax1.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  per-frame Prime MM-GBSA")
+    ax1.set_ylabel("ΔG_bind (kcal/mol)")
     ax1.set_ylim(_lo - _pad, _hi + _pad)
     '''
     One legend, inside, lower right - no caption under the panel. The violin needs no entry: it IS
@@ -2463,7 +2468,9 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                label="mean (outlier-dragged)"),
     ]
     # Top-left, single column (one row per entry).
-    ax1.legend(handles=_hdlA, loc="upper left", frameon=True, ncol=1)
+    ax1.legend(handles=_hdlA, loc="upper left", frameon=False,
+               ncol=1,
+               columnspacing=0.6, handletextpad=0.3, borderpad=0.3)
     ax1.grid(alpha=0.25, linewidth=0.5, axis="y")
 
     # ── Panel 3: the ranking, with an honest interval and an effect size ─────────────────
@@ -2498,7 +2505,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     # inside the panel, never a caption below it, and narrow enough to sit clear of the tallest bar.
     ax3.axhline(0.0, color=_INK["outline"], linewidth=0.8)
     ax3.set_xticks(_x); ax3.set_xticklabels(_labels)
-    ax3.set_ylabel("Median ΔG$_{bind}$ (kcal/mol)")
+    ax3.set_ylabel("Median ΔG_bind (kcal/mol)")
     '''
     The marks are labelled ON the bars rather than in a legend: the median is already printed inside
     each bar, and the two error bars are named once, in place, on the first bar - a legend for two
@@ -2522,16 +2529,14 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
                  color=_INK["dark"], fontweight="bold", va="center", ha="left", zorder=9,
                  path_effects=_stroke_b)
     if _pairs:
-        # Two-column, text-only legend (blank handles): the pairwise deltas read as a compact grid
-        # rather than a tall single column. Header is the legend title.
-        _dh3 = [Line2D([], [], color="none") for _ in _pairs]
-        _leg3 = ax3.legend(_dh3, _pairs, loc="upper left", ncol=2,
-                           title="Cliff's δ - δ > 0: the first binds more weakly",
-                           fontsize=CFG.VIS_FONT_ANNOT, title_fontsize=CFG.VIS_FONT_ANNOT,
-                           frameon=True, handlelength=0, handletextpad=0,
-                           columnspacing=1.2, labelspacing=0.3, borderpad=0.5)
-        _leg3.get_frame().set_facecolor(_INK["light"]); _leg3.get_frame().set_edgecolor(_INK["faint"])
-        _leg3.get_frame().set_alpha(0.93); _leg3.get_frame().set_linewidth(0.8)
+        # Text-only legend (blank handles): the pairwise deltas on top, with the "Cliff's δ" caption
+        # as the LAST line (no title header) so the box reads pairs-first, caption-last.
+        _lbls3 = list(_pairs) + ["Cliff's δ - δ > 0: the first binds more weakly"]
+        _dh3 = [Line2D([], [], color="none") for _ in _lbls3]
+        _leg3 = ax3.legend(_dh3, _lbls3, loc="upper left", ncol=2,
+                           fontsize=CFG.VIS_FONT_ANNOT,
+                           frameon=False, handlelength=0, handletextpad=0,
+                           labelspacing=0.3, borderpad=0.3)
     ax3.grid(alpha=0.25, linewidth=0.5, axis="y")
     ax3.invert_yaxis()
 
@@ -2548,7 +2553,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
     for _ax in (ax1, ax3):
         for _lbl, _c in zip(_ax.get_xticklabels(), _cols):
             _lbl.set_color(_c)
-            _lbl.set_fontweight("bold")
+            _lbl.set_fontweight("normal")
 
     # Uniform spines and tick geometry across the panels (the top+right spines carry no data; the
     # time+cumulative panel keeps its top spine, where its second x-axis lives).
@@ -2662,7 +2667,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
         axC.plot(frac, v, color=cols[i], linewidth=2.0, linestyle="--", alpha=0.75, zorder=4)
         axT.axhline(meds[i], color=cols[i], linewidth=0.9, linestyle=":", alpha=0.7, zorder=3)
         summary.append(f"{flat[i]}  ·  median {meds[i]:.1f} [{cis[i][0]:.1f}, {cis[i][1]:.1f}]"
-                       f"  ·  N$_{{eff}}$ ≈ {_effective_n(dg):,.0f}")
+                       f"  ·  N_eff ~ {_effective_n(dg):,.0f}")
 
     tend = float(np.ceil(tmax / _win) * _win) if tmax > 0 else 1.0
     axT.set_ylim(lo - pad, hi + pad)
@@ -2670,7 +2675,7 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
     axT.set_xticks(np.arange(0, tend + 1, max(_win, tend / 10)))
     axT.set_xlabel(f"Simulation time (ns), in {_win:.0f} ns windows - solid line, markers"
                    f"        [top axis: cumulative fraction of frames - dashed line]")
-    axT.set_ylabel("ΔG$_{bind}$ (kcal/mol)  ·  per-frame Prime MM-GBSA")
+    axT.set_ylabel("ΔG_bind (kcal/mol)")
     axT.grid(color=_gl, alpha=0.25, linewidth=0.6)
     axT.set_axisbelow(True)
     axC.set_xlim(0, 1)
@@ -2691,8 +2696,10 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
     ]
     # Column count derived from the entry count, so the legend stays balanced as candidates change.
     _rows = max(1, int(getattr(CFG, "MMGBSA_LEGEND_MAX_ROWS", 3)))
-    axT.legend(handles=hdl, loc="lower right", frameon=True,
-               ncol=max(1, math.ceil(len(hdl) / _rows)))
+    axT.legend(handles=hdl, loc="upper left", bbox_to_anchor=(0.0, 1.0), frameon=False,
+               ncol=2,
+               fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=0.6,
+               handletextpad=0.3, handlelength=1.1, borderpad=0.3)
 
 
 # -----------------------------------------------------------------------------
@@ -3175,7 +3182,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     # panel A - SN2 attack geometry (distance left, backside angle right)
     axA.plot(t, attack, color=_DEFL_OKABE[0], lw=0.9)
     _cut_d = axA.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_OKABE[0], alpha=0.55)
-    axA.set_ylabel("Oδ···Cα attack distance (Å)", color=_DEFL_OKABE[0], labelpad=3, fontsize=_axlab)
+    axA.set_ylabel("Oδ···Cα attack\ndistance (Å)", color=_DEFL_OKABE[0], labelpad=3, fontsize=_axlab)
     _top = float(np.ceil(max(float(np.nanmax(attack)), _DEFL_NAC_DIST)))
     axA.set_ylim(0, _top); axA.set_yticks(np.arange(0, _top + 0.001, 1))
     axA.tick_params(axis="y", labelcolor=_DEFL_OKABE[0]); _dgrid(axA)
@@ -3183,14 +3190,14 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     _aA = axA.twinx()
     _aA.plot(t, angle, color=_DEFL_OKABE[1], lw=0.7, alpha=0.85)
     _cut_a = _aA.axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_OKABE[1], alpha=0.6)
-    _aA.set_ylabel("Oδ–Cα–F backside attack angle (°)", color=_DEFL_OKABE[1], labelpad=3, fontsize=_axlab)
+    _aA.set_ylabel("Oδ–Cα–F backside\nattack angle (°)", color=_DEFL_OKABE[1], labelpad=3, fontsize=_axlab)
     _aA.set_ylim(0, 180); _aA.set_yticks(np.arange(0, 181, 30)); _aA.tick_params(axis="y", labelcolor=_DEFL_OKABE[1])
     _band = axA.fill_between(t, 0, axA.get_ylim()[1], where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
     _leg = _aA.legend([_cut_d, _cut_a, _band],
                       [f"NAC distance ≤ {_DEFL_NAC_DIST:.1f} Å", f"SN2 in-line attack ≥ {_DEFL_NAC_ANGLE:.0f}°",
                        f"NAC-competent ({nac_pct:.1f}%)"],
-                      loc="lower right", ncol=3, framealpha=_FA, fontsize=_LF,
-                      handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+                      loc="lower right", ncol=2, frameon=False, fontsize=_LF - 1,
+                      handlelength=1.1, handletextpad=0.3, columnspacing=0.6, borderpad=0.3)
     _leg.set_zorder(20)
 
     # panel B - fluoride cradle (leaving F to each stabiliser)
@@ -3199,14 +3206,14 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     for (k, d), c in zip(cradle_d.items(), _DEFL_OKABE):
         axB.plot(t, d, lw=0.8, color=c); _lab_top.append((k, c, _start_level(d)))
     _dlB = axB.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
-    axB.set_ylabel("leaving F ··· donor distance (Å)", labelpad=2, color=_DEFL_AXTXT)
+    axB.set_ylabel("leaving F ··· donor\ndistance (Å)", labelpad=2, color=_DEFL_AXTXT)
     axB.set_ylim(0, _cmax); axB.set_yticks(np.arange(0, _cmax + 0.001, 1))
     axB.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axB)
     _bandB = axB.fill_between(t, 0, _cmax, where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
     _edge_labels(axB, _lab_top)
     _lB = axB.legend([_dlB, _bandB], [f"F cradled ≤ {_DEFL_NAC_DIST:.1f} Å", "near-attack window"],
-                     loc="lower right", ncol=2, framealpha=_FA, fontsize=_LF,
-                     handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+                     loc="lower right", ncol=2, frameon=False, fontsize=_LF - 1,
+                     handlelength=1.1, handletextpad=0.3, columnspacing=0.6, borderpad=0.3)
     _lB.set_zorder(20)
 
     # panel C - carboxylate clamp (each Arg NHx to the ligand carboxylate)
@@ -3215,14 +3222,14 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
     for (k, d), c in zip(clamp_d.items(), [_DEFL_OKABE[4], _DEFL_OKABE[2]]):
         axC.plot(t, d, lw=0.8, color=c); _lab_bot.append((k, c, _start_level(d)))
     _dlC = axC.axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY, alpha=0.7)
-    axC.set_ylabel("Arg NHx ··· carboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
+    axC.set_ylabel("Arg NHx ···\ncarboxylate O (Å)", labelpad=2, color=_DEFL_AXTXT)
     axC.set_ylim(0, _lmax); axC.set_yticks(np.arange(0, _lmax + 0.001, 1))
     axC.tick_params(axis="y", labelcolor=_DEFL_AXTXT); _dgrid(axC)
     _bandC = axC.fill_between(t, 0, _lmax, where=nac, color=_DEFL_GREEN, alpha=_band_a, step="mid")
     _edge_labels(axC, _lab_bot)
     _lC = axC.legend([_dlC, _bandC], [f"clamp engaged ≤ {_DEFL_NAC_DIST:.1f} Å", "near-attack window"],
-                     loc="upper right", ncol=2, framealpha=_FA, fontsize=_LF,
-                     handlelength=1.8, columnspacing=1.2, borderpad=0.4)
+                     loc="upper right", ncol=2, frameon=False, fontsize=_LF - 1,
+                     handlelength=1.1, handletextpad=0.3, columnspacing=0.6, borderpad=0.3)
     _lC.set_zorder(20)
 
     # one shared Time axis: label + tick VALUES on the bottom panel only
@@ -3283,8 +3290,10 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
         _x1 = np.ceil(float(_xa.max()) * 2) / 2
         ax.set_xticks(np.arange(_x0, _x1 + 0.01, 0.5))
         ax.set_xlabel("attack distance (Å)")
-        ax.set_ylabel("MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative-only")
-        ax.grid(alpha=0.3); ax.legend(loc="upper right", ncol=3, fontsize=_LF, framealpha=_FA)
+        ax.set_ylabel("MM-GBSA ΔG_bind\n(kcal/mol) · relative-only", linespacing=1.6)
+        ax.grid(alpha=0.3)
+        ax.legend(loc="upper right", ncol=max(1, int(np.ceil(3 / 2))), fontsize=_LF - 1,
+                  frameon=False, columnspacing=0.6, handletextpad=0.3, handlelength=1.1, borderpad=0.3)
         fig.tight_layout(); fig.savefig(out / "03_Binding_vs_Reactivity.svg", dpi=_dpi); plt.close(fig)
 
     '''
@@ -3392,13 +3401,13 @@ def plot_defluor_combined(md_dir: Path, ligands: "dict | None" = None,
     _labels(ax[0], nac_vals, "{:.2f}%")
     ax[1].bar(rks, [r[2] for r in rows], color=cols); ax[1].set_ylabel("min attack distance (Å)")
     ax[1].axhline(_DEFL_NAC_DIST, ls="--", color=_DEFL_GREY); _labels(ax[1], [r[2] for r in rows], "{:.2f}")
-    ax[2].bar(rks, [r[4] for r in rows], color=cols); ax[2].set_ylabel("mean SN2 angle (°)")
+    ax[2].bar(rks, [r[4] for r in rows], color=cols); ax[2].set_ylabel("mean S$_\\mathrm{N}$2 angle (°)")
     ax[2].axhline(_DEFL_NAC_ANGLE, ls="--", color=_DEFL_GREY); _labels(ax[2], [r[4] for r in rows], "{:.1f}°")
     _used = [ax[0], ax[1], ax[2]]
     if _have_dg:
         _fin = [v if np.isfinite(v) else 0.0 for v in _dgs]
         ax[3].bar(rks, _fin, color=cols)
-        ax[3].set_ylabel("median MM-GBSA ΔG$_{bind}$ (kcal/mol)  ·  relative")
+        ax[3].set_ylabel("median MM-GBSA ΔG_bind\n(kcal/mol) · relative", linespacing=1.6)
         ax[3].axhline(0, color=_DEFL_GREY, lw=0.8)
         for i, v in enumerate(_dgs):
             ax[3].text(i, _fin[i], "n/a" if not np.isfinite(v) else f"{v:.1f}", ha="center",
@@ -4331,8 +4340,9 @@ def plot_watermap_combined(wm_dir: Path, analysis_dir: Path) -> None:
         _lh = [Patch(fc=_disp, ec="none", label="displaceable (ΔG > 0)"),
                Patch(fc=_stable, ec="none", label="stable (ΔG < 0)"),
                Line2D([0], [0], color=CFG.VIS_ACCENT["magenta"], ls="--", lw=1.3, label="mean ΔG")]
-        axes[0][0].legend(handles=_lh, loc="lower right", frameon=True, framealpha=0.85,
-                          edgecolor="#C8C8C8", fontsize=_ft - 1, ncol=len(_lh), borderpad=0.5)   # single row, bottom-right of 1st panel
+        axes[0][0].legend(handles=_lh, loc="lower right", frameon=False,
+                          fontsize=_ft - 1, ncol=max(1, int(np.ceil(len(_lh) / 2))),
+                          columnspacing=0.6, handletextpad=0.3, borderpad=0.3)   # two rows, no border
         fig.tight_layout()
         _out = analysis_dir / "02_WaterMap_Landscapes_AllRanks.svg"
         analysis_dir.mkdir(parents=True, exist_ok=True)
@@ -4503,7 +4513,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
     recs.sort(key=lambda r: r["rank"])
     ranks = [r["rank"] for r in recs]
     controls = controls or set()
-    labs = [f"{_ctrl_label(rk, ligands, controls)}\nR{rk}" for rk in ranks]
+    labs = [f"{_textwrap.fill(_ctrl_label(rk, ligands, controls), 14)}\nR{rk}" for rk in ranks]
     _A, _INK = CFG.VIS_ACCENT, CFG.VIS_INK
     palette = list(CFG.MMGBSA_RANK_PALETTE)
     cols = _ctrl_palette(ranks, controls, palette)
@@ -4512,7 +4522,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
 
     def _colour_xticks(axobj):
         for t, c in zip(axobj.get_xticklabels(), cols):
-            t.set_color(c); t.set_fontweight("bold")
+            t.set_color(c); t.set_fontweight("normal")
 
     fig, ax = plt.subplots(2, 2, figsize=(12, 8.6))
 
@@ -4527,7 +4537,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
     a.axhline(0, color=_INK["soft"], lw=0.8)
     a.set_xticks(xp); a.tick_params(labelbottom=False)
     _qc_group_seps(a, len(recs))
-    a.set_ylabel("α-carbon ESP charge (e)\nreactive centre, in the MD force field")
+    a.set_ylabel("α-carbon ESP charge (e)\nreactive centre, in the MD force field", fontsize=fa)
 
     # B - ligand per-atom ESP charges (α-C, carboxyl-C, F, O); Σq = −1.000.
     bx = ax[0, 1]
@@ -4538,7 +4548,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
     bx.set_xticks(xp); bx.tick_params(labelbottom=False)
     bx.axhline(0, color=_INK["soft"], lw=0.8)
     _qc_group_seps(bx, len(recs))
-    bx.set_ylabel("Ligand per-atom ESP charge (e)\nα-C · carboxyl-C (+) · F · O (−);  Σq = −1.000")
+    bx.set_ylabel("Ligand per-atom ESP charge (e)\nα-C · carboxyl-C (+) · F · O (−);  Σq = −1.000", fontsize=fa)
 
     # C - WaterMap hydration-site ΔG (>0 = displaceable water); ★ = the water nearest the α-carbon.
     cx = ax[1, 0]
@@ -4554,7 +4564,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
         ymin = min((min(dl) for dl in data if dl), default=-1.0)
         for i, r in enumerate(recs):
             cx.text(i, ymax + 1.3, f"{r['n_sites']} sites\n{r['n_unstable']} displaceable",
-                    ha="center", va="bottom", fontsize=fa - 0.5, fontweight="bold", color=cols[i])
+                    ha="center", va="bottom", fontsize=fa - 2.5, fontweight="normal", color=cols[i])
             cw = r.get("crucial_dG")
             if cw is not None:
                 cx.scatter([i], [cw], marker="*", s=240, color=_A["star"],
@@ -4571,7 +4581,7 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
                 ha="right", va="bottom", fontsize=fa - 1.5, color=_INK["soft"])
     cx.set_xticks(xp); cx.set_xticklabels(labs); _colour_xticks(cx)
     _qc_group_seps(cx, len(recs))
-    cx.set_ylabel("WaterMap hydration-site ΔG (kcal/mol)")
+    cx.set_ylabel("WaterMap hydration-site\nΔG (kcal/mol)", fontsize=fa)
 
     # D - solvated-system size: water count vs total atoms, box dims annotated.
     dx = ax[1, 1]
@@ -4580,16 +4590,20 @@ def make_physics_qc_figure(entries: list, dirs: dict, out_root: Path, ligands: d
            color=_A["blue"], edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
     dx.bar(xp + w / 2, [r["atoms_total"] for r in recs], w, label="total system atoms",
            color=_INK["soft"], edgecolor=_INK["dark"], linewidth=0.6, zorder=3)
+    _wbb = dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.8)
     for i, r in enumerate(recs):
-        dx.text(i - w / 2, r["n_water"] + 400, f"{r['n_water']:,}", ha="center", fontsize=fa - 1)
-        _box = (f"\n{r['box_A'][0]:.0f}×{r['box_A'][1]:.0f}×{r['box_A'][2]:.0f} Å" if r["box_A"] else "")
-        dx.text(i + w / 2, r["atoms_total"] + 400, f"{r['atoms_total']:,}{_box}",
-                ha="center", fontsize=fa - 1.5)
+        dx.text(i - w / 2, r["n_water"] / 2, f"{r['n_water']:,}", ha="center", va="center",
+                rotation=90, fontsize=fa - 1, color=_INK["near_black"], bbox=_wbb)
+        _box = (f" | {r['box_A'][0]:.0f}×{r['box_A'][1]:.0f}×{r['box_A'][2]:.0f} Å" if r["box_A"] else "")
+        dx.text(i + w / 2, r["atoms_total"] / 2, f"{r['atoms_total']:,}{_box}",
+                ha="center", va="center", rotation=90, fontsize=fa - 1.5,
+                color=_INK["near_black"], bbox=_wbb)
     dx.set_xticks(xp); dx.set_xticklabels(labs); _colour_xticks(dx)
     _qc_group_seps(dx, len(recs))
-    dx.set_ylim(0, max(r["atoms_total"] for r in recs) * 1.18)
-    dx.set_ylabel("Solvated-system size (atom / water count)\ncomp_ct = 5 · 2 Na⁺ · 1 Cl⁻ (all)")
-    dx.legend(loc="upper left", fontsize=CFG.VIS_FONT_LEGEND)
+    dx.set_ylim(0, max(r["atoms_total"] for r in recs) * 1.12)
+    dx.set_ylabel("Solvated-system size\n(atom / water count); comp_ct = 5 · 2 Na⁺ · 1 Cl⁻", fontsize=fa)
+    dx.legend(loc="upper left", fontsize=CFG.VIS_FONT_LEGEND, ncol=2, frameon=False,
+              columnspacing=0.8, handletextpad=0.4)
 
     fig.tight_layout()
     qc_dir = _analysis_dir(out_root)
@@ -4701,7 +4715,7 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
 
     controls = controls or set()
     _rk_list = [r["rank"] for r in recs]
-    labs = [f"{_ctrl_label(rk, ligands, controls)} (R{rk})" for rk in _rk_list]
+    labs = [f"{_textwrap.fill(_ctrl_label(rk, ligands, controls), 16)} (R{rk})" for rk in _rk_list]
     _INK = CFG.VIS_INK
     palette = list(CFG.MMGBSA_RANK_PALETTE)
     cols = _ctrl_palette(_rk_list, controls, palette)
@@ -4713,17 +4727,18 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
     for i, r in enumerate(recs):
         a.plot(r["t"], r["ca"], color=cols[i], lw=1.3, label=labs[i])
     a.set_xlabel("time (ns)")
-    a.set_ylabel("Protein Cα-RMSD (Å)\nvs the minimised start - lower = more stable")
+    a.set_ylabel("Protein Cα-RMSD (Å)\nvs minimised start; lower = stabler",
+                 fontsize=CFG.VIS_FONT_ANNOT - 1.0)
 
     # B - ligand RMSD after fitting on the protein (did the PFAS stay in the pocket).
     b = ax[0, 1]
     for i, r in enumerate(recs):
         b.plot(r["t"], r["lg"], color=cols[i], lw=1.3, label=labs[i])
     b.set_xlabel("time (ns)")
-    _lg_ylab = ("Ligand RMSD (Å), fit on protein\nhigher = drift within the pocket restraint"
+    _lg_ylab = ("Ligand RMSD (Å), fit on protein\nhigher = drift within restraint"
                 if getattr(CFG, "MD_RESTRAIN_LIGAND", False)
-                else "Ligand RMSD (Å), fit on protein\nhigher = drifting out of the pocket")
-    b.set_ylabel(_lg_ylab)
+                else "Ligand RMSD (Å), fit on protein\nhigher = drifting out of pocket")
+    b.set_ylabel(_lg_ylab, fontsize=CFG.VIS_FONT_ANNOT - 1.0)
 
     # C - system temperature vs the target (thermostat stability), zoomed to a tight band.
     c = ax[1, 0]
@@ -4737,18 +4752,20 @@ def make_md_qc_figure(md_dir: Path, out_root: Path, ligands: dict, controls: set
     if has_T:
         c.set_ylim(tgt - 12, tgt + 10)
     c.set_xlabel("time (ns)")
-    c.set_ylabel("System temperature (K)\nthermostat stability around the target")
+    c.set_ylabel("System temperature (K)\nthermostat stability",
+                 fontsize=CFG.VIS_FONT_ANNOT - 1.0)
 
     # D - per-residue Cα-RMSF (which regions stayed rigid; termini are expectedly mobile).
     dd = ax[1, 1]
     for i, r in enumerate(recs):
         dd.plot(r["res"], r["rf"], color=cols[i], lw=1.0, label=labs[i])
     dd.set_xlabel("residue number")
-    dd.set_ylabel("Protein Cα-RMSF (Å)\nper-residue flexibility over the run")
+    dd.set_ylabel("Protein Cα-RMSF (Å)\nper-residue flexibility",
+                  fontsize=CFG.VIS_FONT_ANNOT - 1.0)
 
     # one legend for all four panels (identical FA/DFA/TFA/control series), placed inside panel A
-    ax[0, 0].legend(loc="lower right", ncol=max(1, len(labs)), fontsize=fl,
-                    frameon=True, framealpha=0.9)
+    ax[0, 0].legend(loc="lower right", ncol=max(1, int(np.ceil(len(labs) / 2))), fontsize=fl - 1,
+                    frameon=False, columnspacing=0.6, handletextpad=0.3, borderpad=0.3)
     fig.tight_layout()
     qc_dir = _analysis_dir(out_root)
     out_path = qc_dir / "03_MD_Trajectory_QC.svg"
