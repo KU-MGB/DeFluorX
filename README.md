@@ -1414,15 +1414,7 @@ If this pipeline is used in your research, please cite:
 
 ### Primary citation
 
-```bibtex
-@software{ahmad2026pfas27,
-  author       = {Ahmad, Shaban and Nielsen, Tue Kjærgaard},
-  title        = {{DeFluorX: Fluoroacetate Dehalogenase Defluorination Pipeline}},
-  year         = {2026},
-  publisher    = {GitHub},
-  howpublished = {\url{https://github.com/KU-MGB/DeFluorX}}
-}
-```
+Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). *Mechanism-guided discovery of fluoroacetate dehalogenase (FAcD) variants for enzymatic PFAS defluorination*. https://github.com/KU-MGB/DeFluorX
 
 <details>
 <summary><b>Key Publications & Software Tools (BibTeX)</b></summary>
