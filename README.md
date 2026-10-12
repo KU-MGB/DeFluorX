@@ -6,7 +6,7 @@
 
 <img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
-<sub>📦 **Supplementary data** (supplementary sheets, high-resolution figures, input FASTAs and representative structures) are archived at Zenodo - <a href="https://doi.org/10.5281/zenodo.21263818">https://doi.org/10.5281/zenodo.21263818</a> (currently a private deposit; released publicly on publication).</sub>
+<sub>📦 **Supplementary data** (supplementary sheets, high-resolution figures, input FASTAs and representative structures) are archived at Zenodo - <a href="https://doi.org/10.5281/zenodo.23318610">https://doi.org/10.5281/zenodo.23318610</a> (currently a private deposit; released publicly on publication).</sub>
 
 
 </div>
