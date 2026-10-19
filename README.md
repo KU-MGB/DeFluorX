@@ -2,16 +2,16 @@
 
 # DeFluorX: Discovering FAcDs for PFAS Defluorination
 
-**AI-guided Structure-based Discovery & Physics-based Mechanistic Validation of FAcD Variants for PFAS Defluorination**
-
-<img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
+**Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination**
 
 <p>
 <a href="https://doi.org/10.64898/2026.10.11.758284"><img alt="Preprint on bioRxiv" src="https://img.shields.io/badge/Preprint-bioRxiv-b31b1b?style=flat-square"></a>
 <a href="https://github.com/KU-MGB/DeFluorX"><img alt="Code on GitHub" src="https://img.shields.io/badge/Code-GitHub-181717?style=flat-square&logo=github&logoColor=white"></a>
 <a href="https://doi.org/10.5281/zenodo.23318610"><img alt="Supplementary data on Zenodo" src="https://img.shields.io/badge/Data-Zenodo-1682D4?style=flat-square"></a>
-<img alt="License CC-BY-4.0" src="https://img.shields.io/badge/License-CC--BY--4.0-4c1d95?style=flat-square">
+<a href="./LICENSE"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/License-CC_BY--NC_4.0-4c1d95?style=flat-square"></a>
 </p>
+
+<img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
 
 
 </div>
@@ -1279,7 +1279,7 @@ As the final computational analysis step, the following design architectures are
 
 **Usage:**
 ```bash
-python 08_Figures_and_Deck_DeFluorX.py
+python 08_Figures_and_Deck_DeFluorX.py Boltz-2_Run_20260309T085406Z   # or no argument = newest run; add "figures" to skip the deck, "pptx" to rebuild only the deck
 ```
 
 **What it does:**

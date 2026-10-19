@@ -758,7 +758,7 @@ fi
 # manuscript figures, draws the standalone defluorination-cascade scheme, and rebuilds the editable
 # deck. --optional: a figure/deck hiccup (e.g. rsvg-convert absent) must not fail a completed run.
 run_step --optional "08  Figures & deck (merged composites + cascade)" \
-    python 08_Figures_and_Deck_DeFluorX.py
+    python 08_Figures_and_Deck_DeFluorX.py "$RUN_ID"
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 

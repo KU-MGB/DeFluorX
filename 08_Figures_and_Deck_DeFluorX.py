@@ -87,7 +87,23 @@ def _latest_run() -> Path:
     return runs[-1] if runs else SRC_ROOT / "Boltz-2_Run_20260309T085406Z"
 
 
-RUN = _latest_run()
+def _resolve_run() -> Path:
+    """Run to assemble: an explicit run id or path on the command line (as the other steps take
+    `<Run>`), else the newest full local run. The deck/figures mode tokens are not run ids."""
+    import sys
+    for a in sys.argv[1:]:
+        if a in ("pptx", "figures") or a.startswith("-"):
+            continue
+        p = Path(a)
+        if p.is_dir() and p.name.startswith("Boltz-2_Run"):
+            return p
+        cand = SRC_ROOT / a
+        if cand.is_dir():
+            return cand
+    return _latest_run()
+
+
+RUN = _resolve_run()
 # Step-08 output: the HQ merged journal figures + deck land inside the run as a numbered step folder.
 OUT_DIR = RUN / "08_Figures_and_Deck_HQ"
 # Figure 01 is the mechanism-guided workflow / graphical overview, authored as a self-consistent HTML
@@ -184,12 +200,12 @@ MAIN_FIGS = [
     ]),
     # QM/MM validation of C-F cleavage (Figure 07): the reaction-mechanism scene, the all-jobs PES
     # overlay and the four per-rank relaxed-scan profiles, all emitted by the pipeline (Step 07) as SVG.
-    ("QSite_Validation", [
+    # Mechanism figure: (a) the cross-enzyme defluorination-cascade scheme (built in main() before the
+    # montage), (b) the all-jobs QM/MM PES overlay. The four per-rank reaction profiles move to the
+    # supplementary ("QSite_Reaction_Profiles") so this stays a two-panel main figure.
+    ("Mechanism_and_QSite_Validation", [
+        OUT_DIR / "_cascade" / "Reaction_Cascade.svg",
         _M / "08_QSite_Profiles_AllJobs.png",
-        _M / "Rank_1" / "08_QSite_Reaction_Profile.png",
-        _M / "Rank_2" / "08_QSite_Reaction_Profile.png",
-        _M / "Rank_8" / "08_QSite_Reaction_Profile.png",
-        _M / "Rank_69" / "08_QSite_Reaction_Profile.png",
     ]),
     # Cross-rank defluorination outcome (promoted from the old Supplementary 7 - these are key results,
     # not diagnostics): which systems are viable, the defluorination landscape, the comparative analysis
@@ -349,6 +365,7 @@ def _rank_panels(rank_dir: Path, n: str) -> list:
     ]
     if _rama:
         panels.append(_rama[0])                               # f: prepared-pose Ramachandran (row 3, beside e)
+    panels.append(_M / f"Rank_{n}" / "08_QSite_Reaction_Profile.png")   # QM/MM PES for this rank (moved out of the main mechanism figure)
     return panels
 
 
@@ -883,9 +900,55 @@ def _key(p: Path) -> Path:
     return p.resolve().with_suffix("")
 
 
+# -----------------------------------------------------------------------------
+# Figure legends (written to Figure_Legends.md alongside the figures). Keyed by the montage NAME so a
+# figure's number can shift (e.g. when the workflow panel is present) without breaking the mapping.
+# -----------------------------------------------------------------------------
+MAIN_LEGENDS = {
+    "Workflow_Overview": "Mechanism-guided discovery workflow. Graphical overview of the DeFluorX pipeline: Boltz-2 co-folding of every bacterial FAcD variant against the 27-PFAS panel, catalytic-geometry tiering, MD-based near-attack sampling, and QM/MM defluorination verdicts, shown beside the screen funnel (Sankey).",
+    "Screening_and_Model_Quality": "Screening library and model quality. (a) Input library composition. (b) Active-site catalytic-residue mapping coverage across the library. (c) Evolutionary phylogeny of the variants, with the uniformly high AI co-folding confidence (pTM, ipTM, confidence) that underpins the screen.",
+    "Confidence_Does_Not_Predict_Competence": "Confidence does not predict competence. AI co-folding confidence is decoupled from mechanistic competence - a high-confidence pose is not necessarily catalytically competent - which is why ranking is geometry-first rather than confidence-first.",
+    "Catalytic_Mechanism_and_SN2_Geometry": "Catalytic mechanism and SN2 geometry. Distribution of the mechanistic score and its geometric terms across tiers: the SN2 backside attack angle, active-site RMSD and the mechanistic-geometry relationship that defines the elite (Tier_1A) degraders.",
+    "PFAS_Scope_and_Lead_Candidates": "PFAS scope and lead candidates. Substrate scope across the 27-PFAS panel and the per-PFAS reaction-readiness of the pocket, identifying the lead degraders advanced to physics validation.",
+    "Physics_MD_and_Hydration": "Physics and MD overview. Cross-rank trajectory quality control (Ca-RMSD, ligand RMSD, RMSF, temperature), Prime MM-GBSA binding free energies, and WaterMap hydration for the MD-selected complexes.",
+    "Mechanism_and_QSite_Validation": "Enzymatic defluorination mechanism and QM/MM validation. (a) The hydrolytic double-displacement mechanism (Asp110 backside SN2 -> glycolyl-enzyme ester -> His280/water hydrolysis), drawn from the real QM geometry for the three independent lead FAcD variants, each on its own substrate (trifluoroacetate, Methylocella tundrae; difluoroacetate, Methylobacterium marchantiae; monofluoroacetate, Bradyrhizobium sp.), with per-enzyme QM/MM reaction-coordinate plots (scissile C-F length and departing-fluoride charge) and a joined QM/MM-geometry-WaterMap-MD read-out; the enzyme replaces one C-F with C-OH, and for the di- and mono-fluoro alpha-hydroxy products a non-enzymatic HF elimination follows. These are three independent enzymes, one per substrate, not a single-substrate cascade. (b) All-jobs QM/MM potential-energy-surface overlay over the scissile C-F bond length, with the geometric cleavage verdict per system. Per-system relaxed-scan reaction profiles, including the RPA1163/3R3U reference, are panel (h) of the per-system near-attack supplementary figures (Supplementary Figures 6-9).",
+    "Cross_Rank_Defluorination_Outcome": "Cross-rank defluorination outcome. The whole-story view linking near-attack persistence, QM/MM barrier and MM-GBSA binding free energy across ranks, with the geometric C-F cleavage verdict per system.",
+}
+
+SUPP_LEGENDS = {
+    "Screening_and_Scope_Diagnostics": "Screening and scope diagnostics. Further characterisation of the input library and the PFAS scope (the catalytic-residue mapping coverage and the evolutionary phylogeny are promoted to Figure 2b,c). (a) Distribution of active-site alignment grades across the library. (b) Treemap of the tier-by-ligand composition of the screened complexes. (c) AI-quality feature space (pTM, ipTM and confidence). (d) Tier_1A enzyme-by-PFAS dendrogram and cross-ligand tier matrix for fluoroacetate, trifluoroacetate and difluoroacetate. (e) Euler diagram of substrate-category overlap. (f) Top-tier protein-by-PFAS breakdown. (g) Swimmer plot of the top hits per tier.",
+    "Catalytic_Mechanism_Diagnostics": "Catalytic-mechanism diagnostics. Analysis of the mechanism-first score that expands Figure 3. (a) Pairwise correlations among the mechanistic features. (b) Tier-quality dot plot. (c) Cross-tabulation of discrete mechanistic states. (d) Mechanistic fingerprint of the tiers. (e) Mechanistic-quality feature space. (f) Criterion A gating criterion B. (g) Empirical cumulative distribution of criterion B by tier. (h) SN2 dead-end gate. (i) Joint geometry-and-uncertainty view. (j) Metric co-variation network. (k) Mechanistic-gate intersection (UpSet) analysis.",
+    "Ligand_Interactions_and_Chemical_Space": "Ligand interactions and chemical space. Expanded interaction and chemical-space analysis supporting Figures 3 and 5. (a) Molecular interaction profile. (b) Interaction-quality feature space. (c) Catalytic quality against predicted inhibition, separating productive from non-productive binding. (d) Active-site contact density by tier. (e) Binding energetics. (f) Chemical-space map. (g) Binding-affinity metric distributions across the tiers.",
+    "MultiModel_and_Diagnostic_Trends": "Multi-model and diagnostic trends. Diagnostic trends across the screen and the robustness of the ranking across the Boltz-2 model ensemble. (a) Confidence against consensus. (b) Reactive engagement. (c) Pillar divergence by tier. (d) Volcano plot of metric significance. (e) Feature-importance tier streams. (f) Multi-model geometry variance for the ipTM-90 subset.",
+    "Preparation_ESP_and_Interaction_Maps": "Preparation, ESP and interaction maps. Preparation quality control for the systems advanced to physics validation. (a) Pose drift from the co-fold CIF to the prepared structure. (b) Electrostatic-potential-fitted alpha-carbon charge of the reactive ligands. (c) Distribution of machinery engagement. (d-g) Prepared-complex protein-ligand interaction maps, in the order the 3R3U control, R1 (the fluoroacetate lead), R8 (the trifluoroacetate lead) and R2 (the difluoroacetate lead).",
+    "MD_Rank1_Dynamics_and_Reaction": "Near-attack dynamics and C-F cleavage, R1. Per-system near-attack dynamics and the C-F cleavage reaction for R1, the fluoroacetate lead (Bradyrhizobium sp., UniProt A0A2U3PT06), over the one-microsecond trajectory. (a) Reactive-pose trajectory (attack angle, halide-cradle and carboxylate-clamp distances over time). (b) Near-attack-conformation dashboard. (c) Per-residue occupancy and NAC-criteria summary. (d) Binding (MM-GBSA) against reactivity, per frame. (e) WaterMap hydration sites. (f) Free-energy landscapes of the reactive coordinate. (g) Prepared-pose comparative Ramachandran plot. (h) QM/MM relaxed-scan reaction profile over the scissile C-F bond (per-frame and ensemble barrier, reaction energy, departing-fluoride charge and the geometric cleavage verdict).",
+    "MD_Rank2_Dynamics_and_Reaction": "Near-attack dynamics and C-F cleavage, R2. Per-system near-attack dynamics and the C-F cleavage reaction for R2, the difluoroacetate lead (Methylobacterium marchantiae, GenBank GJE15807), over the one-microsecond trajectory. (a) Reactive-pose trajectory. (b) Near-attack-conformation dashboard. (c) Per-residue occupancy and NAC-criteria summary. (d) Binding (MM-GBSA) against reactivity, per frame. (e) WaterMap hydration sites. (f) Free-energy landscapes of the reactive coordinate. (g) Prepared-pose comparative Ramachandran plot. (h) QM/MM relaxed-scan reaction profile over the scissile C-F bond (per-frame and ensemble barrier, reaction energy, departing-fluoride charge and the geometric cleavage verdict).",
+    "MD_Rank8_Dynamics_and_Reaction": "Near-attack dynamics and C-F cleavage, R8. Per-system near-attack dynamics and the C-F cleavage reaction for R8, the trifluoroacetate lead (Methylocella tundrae, UniProt A0A4V6IMR0), over the one-microsecond trajectory. (a) Reactive-pose trajectory. (b) Near-attack-conformation dashboard. (c) Per-residue occupancy and NAC-criteria summary. (d) Binding (MM-GBSA) against reactivity, per frame. (e) WaterMap hydration sites. (f) Free-energy landscapes of the reactive coordinate. (g) Prepared-pose comparative Ramachandran plot. (h) QM/MM relaxed-scan reaction profile over the scissile C-F bond (per-frame and ensemble barrier, reaction energy, departing-fluoride charge and the geometric cleavage verdict).",
+    "MD_Rank69_Dynamics_and_Reaction": "Near-attack dynamics and C-F cleavage, R69. Per-system near-attack dynamics and the C-F cleavage reaction for R69, the RPA1163/3R3U reference on its native substrate fluoroacetate, over the one-microsecond trajectory. (a) Reactive-pose trajectory. (b) Near-attack-conformation dashboard. (c) Per-residue occupancy and NAC-criteria summary. (d) Binding (MM-GBSA) against reactivity, per frame. (e) WaterMap hydration sites. (f) Free-energy landscapes of the reactive coordinate. (g) Prepared-pose comparative Ramachandran plot. (h) QM/MM relaxed-scan reaction profile over the scissile C-F bond (per-frame and ensemble barrier, reaction energy, departing-fluoride charge and the geometric cleavage verdict). Residues are numbered as in the prepared model, which runs two positions higher than the deposited 3R3U numbering used elsewhere (Asp112 here corresponds to the canonical Asp110).",
+}
+
+
+def write_legends(main_figs, supp_figs):
+    """Write Figure_Legends.md (main + supplementary), matching the figures just emitted."""
+    out = ["# DeFluorX - figure legends", "",
+           "_Auto-generated by Step 08; one entry per emitted figure._", ""]
+    out.append("## Main figures\n")
+    for num, name in main_figs:
+        leg = MAIN_LEGENDS.get(name, name.replace("_", " ") + ".")
+        out.append(f"**Figure {num}** | {leg}\n")
+    out.append("\n## Supplementary figures\n")
+    for num, name in supp_figs:
+        leg = SUPP_LEGENDS.get(name, name.replace("_", " ") + ".")
+        out.append(f"**Supplementary Figure {num}** | {leg}\n")
+    (OUT_DIR / "Figure_Legends.md").write_text("\n".join(out), encoding="utf-8")
+    print(f"  ok  Figure_Legends.md ({len(main_figs)} main + {len(supp_figs)} supplementary)")
+
+
 def main() -> int:
     _reset_outputs()
     used: set[Path] = set()
+    main_figs: list = []        # (number, name) for Figure_Legends.md
+    supp_figs: list = []
 
     # Build the cross-enzyme defluorination cascade (best per-class TFA/DFA/MFA degrader, merged from the
     # former Step-07 reaction-mechanism scene). It is a finished full-page composite, so it is emitted as
@@ -903,6 +966,7 @@ def main() -> int:
     # mode); the data composites below then follow as Figure 02 onward.
     if _render_workflow(WORKFLOW_HTML, OUT_DIR / f"Figure_01_Workflow_Overview.{FIG_FORMAT}"):
         fi = 1
+        main_figs.append((1, "Workflow_Overview"))
     # The screen-funnel Sankey belongs in Figure 1, beside the workflow. Figure 1 is a curated HTML
     # export (its own sub-panels; a foreignObject that will not rasterise), so the Sankey is composited
     # in by hand rather than montaged here. Reserve it so no supplementary glob reclaims it.
@@ -921,17 +985,9 @@ def main() -> int:
             print(f"  --  (all panels pending) {name}"); continue
         fi += 1
         montage(present, OUT_DIR / f"Figure_{fi:02d}_{name}.{FIG_FORMAT}")
+        main_figs.append((fi, name))
         if missing:
             print(f"        (pending, fold in on re-run: {', '.join(missing)})")
-
-    # Standalone defluorination-cascade figure: a finished full-page composite, emitted directly as the
-    # next numbered main figure (no montage / panel letters - it already carries its own internal layout).
-    if _casc and _casc.exists():
-        fi += 1
-        _casc_fig = OUT_DIR / f"Figure_{fi:02d}_Defluorination_Cascade_Mechanism.{FIG_FORMAT}"
-        _src = _casc if FIG_FORMAT == "svg" else (_casc.with_suffix(".png") if _casc.with_suffix(".png").exists() else _casc)
-        shutil.copy(_src, _casc_fig)
-        print(f"  ok  Figure {fi:02d} (standalone cascade): {_casc_fig.name}")
 
     print("SUPPLEMENTARY figures:")
     si = 0
@@ -954,6 +1010,7 @@ def main() -> int:
         pngs = _apply_supp_layout(name, pngs)   # optional per-figure row art-direction
         si += 1
         montage(pngs, OUT_DIR / f"Supplementary_Figure_{si:02d}_{name}.{FIG_FORMAT}")
+        supp_figs.append((si, name))
 
     # Per-rank deep-dive: ONE A4 figure per MD rank (reactive pose + near-attack dynamics + reaction).
     # The old Part 1 MD-stability figures are gone - RMSD/RMSF are Figure 6b, the ligand-protein 2D
@@ -969,6 +1026,7 @@ def main() -> int:
             continue
         si += 1
         montage(present, OUT_DIR / f"Supplementary_Figure_{si:02d}_MD_Rank{n}_Dynamics_and_Reaction.{FIG_FORMAT}")
+        supp_figs.append((si, f"MD_Rank{n}_Dynamics_and_Reaction"))
         missing = [p.name for p in panels if p is not _ROWBREAK and not _resolved(p).exists()]
         if missing:
             print(f"        (pending QSite, fold in on re-run: {', '.join(missing)})")
@@ -992,6 +1050,9 @@ def main() -> int:
     else:
         print("\nCoverage audit: every source panel is placed (or a deliberate skip).")
 
+    write_legends(main_figs, supp_figs)
+    # The cascade source folder was only an intermediate for Figure 7a (now a merged panel); drop it.
+    shutil.rmtree(OUT_DIR / "_cascade", ignore_errors=True)
     print(f"\nDone: {fi} main + {si} supplementary merged figures -> {OUT_DIR}")
     return 0
 
@@ -1228,6 +1289,41 @@ BLUE, INK, MUT = "#0072B2", "#1A1A1A", "#5A5A5A"
 OXY = "#8C6D4F"
 GEOM = "#5B4B8A"
 GREY = "#8C8C8C"
+_3TO1 = {"ASP":"D","GLU":"E","HIS":"H","ARG":"R","LYS":"K","TRP":"W","TYR":"Y","PHE":"F",
+         "SER":"S","THR":"T","CYS":"C","ASN":"N","GLN":"Q","GLY":"G","ALA":"A","VAL":"V",
+         "LEU":"L","ILE":"I","MET":"M","PRO":"P"}
+def _short(code):
+    code = str(code).strip()
+    for k, v in _3TO1.items():
+        if code.upper().startswith(k):
+            return v + code[len(k):]
+    return code
+def _title(code):
+    code = str(code).strip()
+    for k in _3TO1:
+        if code.upper().startswith(k):
+            return k.title() + code[len(k):]
+    return code
+_RES_DEFAULT = dict(nuc="D110", nuc3="Asp110", base="H280", acid="D134", c1="R111", c2="R114",
+                    sH="H155", sW="W156", sY="Y219")
+_RES = dict(_RES_DEFAULT)
+def load_residues(acc):
+    """Per-enzyme catalytic residues (from this run's Ranked CSV Mapped_* columns), short-coded."""
+    import csv as _c
+    base = ROOT.parent / "1_Boltz2_Production"
+    files = sorted(base.glob("*Ranked*.csv"), key=lambda p: p.stat().st_mtime) if base.exists() else []
+    if not files:
+        return dict(_RES_DEFAULT)
+    for row in _c.DictReader(open(files[-1])):
+        jn = row.get("job_name", row.get("Job_Name", ""))
+        if acc in jn:
+            g = lambda k: row.get(k, "")
+            return dict(nuc=_short(g("Mapped_Nucleophile")), nuc3=_title(g("Mapped_Nucleophile")),
+                        base=_short(g("Mapped_Base")), acid=_short(g("Mapped_Acid")),
+                        c1=_short(g("Mapped_Clamp1")), c2=_short(g("Mapped_Clamp2")),
+                        sH=_short(g("Mapped_Stabiliser_H")), sW=_short(g("Mapped_Stabiliser_W")),
+                        sY=_short(g("Mapped_Stabiliser_Y")))
+    return dict(_RES_DEFAULT)
 SYM = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F", 16: "S", 17: "Cl"}
 COV = {1: 0.31, 6: 0.76, 7: 0.71, 8: 0.66, 9: 0.57, 16: 1.05, 17: 1.02}
 
@@ -1511,13 +1607,13 @@ def _c_earrow(ax, a, b, col=INK, rad=-0.32, lw=1.9, ms=14):
 def _c_clamp(ax, gcore):
     o1, o2 = gcore["oA"], gcore["oB"]
     r1 = o2 + np.array([0.30, -0.70]); r2 = o1 + np.array([-0.48, -0.70])
-    for rp, op, lab in [(r1, o2, "R111"), (r2, o1, "R114")]:
+    for rp, op, lab in [(r1, o2, _RES["c1"]), (r2, o1, _RES["c2"])]:
         _c_hbond(ax, rp, op, GRN); _c_disc(ax, rp, GRN, lab)
 
 
 def _c_dyad(ax, cx, ytop, active=False, water=None, target=None):
     h = np.array([cx + 0.04, ytop]); d = np.array([cx - 0.88, ytop - 0.05])
-    _c_hbond(ax, h, d, ORG); _c_disc(ax, d, ORG, "D134"); _c_disc(ax, h, ORG, "H280")
+    _c_hbond(ax, h, d, ORG); _c_disc(ax, d, ORG, _RES["acid"]); _c_disc(ax, h, ORG, _RES["base"])
     if active and water is not None and target is not None:
         atom(ax, water, "OH$_2$", BLUE, fs=8.5, rad=0.19, fc="#EAF3FB")
         _c_earrow(ax, h + np.array([0.16, -0.06]), water + np.array([-0.2, 0.07]), col=ORG, rad=0.25, lw=1.5, ms=11)
@@ -1530,7 +1626,7 @@ def _c_nuc_node(ax, gcore):
     O = gcore["left"] + np.array([-0.52, 0.0])
     atom(ax, O, "O", PUR, fs=12, rad=0.16, fc=PUR, tcol="white")
     ax.text(O[0] - 0.02, O[1] + 0.36, "$-$", color=PUR, fontsize=16, ha="center", zorder=10)
-    ax.text(O[0] - 0.05, O[1] - 0.46, "Asp110", color=PUR, fontsize=11.0, ha="center", va="top", fontweight="bold", zorder=10)
+    ax.text(O[0] - 0.05, O[1] - 0.46, _RES["nuc3"], color=PUR, fontsize=11.0, ha="center", va="top", fontweight="bold", zorder=10)
     return O
 
 
@@ -1567,6 +1663,8 @@ def _c_scan_inset(fig, ax, rank, dx0, dx1, dy0, dy1):
 
 # --------------------------- one cascade band ---------------------------
 def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, species, geom):
+    global _RES
+    _RES = load_residues(acc)
     dOC, dCF, angA = geom
     cap_t, cap_s = yc - 2.42, yc - 2.70
     ax.add_patch(Circle((XSTEP, yc + 0.05), 0.44, fc=INK, ec="none", zorder=5))
@@ -1592,17 +1690,17 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     _c_clamp(ax, g2)
     EstC = g2["left"] + np.array([-0.62, 0.0]); Od1 = EstC + np.array([-0.42, 0.28])
     atom(ax, EstC, "C", C_C, fs=9.5, rad=0.12); dbl_bond(ax, EstC, Od1, PUR); atom(ax, Od1, "O", PUR, fs=9.5)
-    ax.text(EstC[0] - 0.12, yc - 0.52, "Asp110 ester", color=PUR, fontsize=11.0, ha="center", va="top", fontweight="bold", zorder=10)
+    ax.text(EstC[0] - 0.12, yc - 0.52, f'{_RES["nuc3"]} ester', color=PUR, fontsize=11.0, ha="center", va="top", fontweight="bold", zorder=10)
     _c_numbox(ax, ((g2["left"][0] + g2["c"][0]) / 2, yc + 0.34), 3)
     Wat = EstC + np.array([0.15, 1.02])
     h4 = _c_dyad(ax, XB - 0.6, yc + DYH, active=True, water=Wat, target=EstC)
     ax.text(Wat[0] + 0.32, Wat[1], "catalytic\nwater", color=BLUE, fontsize=10.0, ha="left", va="center", zorder=10)
     _c_numbox(ax, ((h4[0] + Wat[0]) / 2 + 0.05, (h4[1] + Wat[1]) / 2), 4)
-    oxp = Od1 + np.array([-0.20, 0.86]); _c_disc(ax, oxp, OXY, "F40", rad=0.31, fs=9.5); _c_hbond(ax, oxp, Od1, OXY)
+    oxp = Od1 + np.array([-0.20, 0.86]); _c_disc(ax, oxp, OXY, "Phe", rad=0.31, fs=9.5); _c_hbond(ax, oxp, Od1, OXY)
     ax.text(oxp[0] - 0.62, oxp[1], "oxyanion\nhole", color=OXY, fontsize=9.5, ha="center", va="center", fontweight="bold", zorder=10)
     Fm = g2["c"] + np.array([1.28, 1.24])
     atom(ax, Fm, "F$^-$", C_F, fs=13.5, rad=0.29, fc="#E7F5F8", lw=1.8)
-    for aa, lab in [(150, "H155"), (90, "W156"), (33, "Y219")]:
+    for aa, lab in [(150, _RES["sH"]), (90, _RES["sW"]), (33, _RES["sY"])]:
         p = Fm + np.array([math.cos(math.radians(aa)), math.sin(math.radians(aa))]) * 1.00
         _c_hbond(ax, p, Fm, PINK); _c_disc(ax, p, PINK, lab)
     _c_numbox(ax, (Fm[0] - 0.52, Fm[1] - 0.50), 2)
@@ -1613,11 +1711,12 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     _c_clamp(ax, g3); _c_dyad(ax, XC, yc + DYH)
     _c_numbox(ax, (g3["left"][0] - 0.02, yc + 0.60), 5)
     ax.text(XC, cap_t, f"{prod_direct}", color=INK, fontsize=13.0, ha="center", fontweight="bold", zorder=10)
-    ax.text(XC, cap_s, "Asp110 regenerated", color=PUR, fontsize=11.0, ha="center", zorder=10)
-    _hf = {"difluoroglycolate": "then spontaneous −HF → fluoroglyoxylate / oxalate",
-           "fluoroglycolate": "then spontaneous −HF → glyoxylate + F$^-$"}.get(prod_direct)
+    ax.text(XC, cap_s, f'{_RES["nuc3"]} regenerated', color=PUR, fontsize=11.0, ha="center", zorder=10)
+    _hf = {"difluoroglycolate": "then spontaneous −HF → oxalate",
+           "fluoroglycolate": "then spontaneous −HF → glyoxylate"}.get(prod_direct)
     if _hf:
-        ax.text(XC, yc - 3.04, _hf, color=MUT, fontsize=9.2, ha="center", va="center", fontstyle="italic", zorder=10)
+        ax.text(XROLE - 0.60, yc + 0.05, _hf, color=MUT, fontsize=9.0, rotation=270,
+                ha="center", va="center", fontstyle="italic", zorder=10)
 
     _c_rxn_arrow(ax, XA + 1.15, XB - 1.35, yc, top="$-$ F$^-$")
     _c_rxn_arrow(ax, XB + 1.80, XC - 1.3, yc, top="$+$ H$_2$O", bot="hydrolysis")
@@ -1675,15 +1774,15 @@ def _cascade_build():
 
 
     yR1, yR2, yAk, yKey = -2.80, -3.22, -3.64, -4.06
-    chip_w = lambda lab: 0.34 + len(lab) * 0.095 + 0.30
-    arr_w = lambda lab: 0.62 + len(lab) * 0.095 + 0.34
-    rows = [("chip", yR1, [(PUR, "nucleophile Asp110"), (ORG, "general base His280 / Asp134"),
-                           (PINK, "F$^-$ cradle His155 / Trp156 / Tyr219")]),
-            ("chip", yR2, [(GRN, "COO$^-$ clamp Arg111 / Arg114"), (OXY, "oxyanion hole Phe40 / Arg111 N-H")]),
+    chip_w = lambda lab: 0.34 + len(lab) * 0.112 + 0.34
+    arr_w = lambda lab: 0.62 + len(lab) * 0.112 + 0.40
+    rows = [("chip", yR1, [(PUR, "nucleophile (Asp)"), (ORG, "general base (His / Asp)"),
+                           (PINK, "F$^-$ cradle (His / Trp / Tyr)")]),
+            ("chip", yR2, [(GRN, "COO$^-$ clamp (Arg / Arg)"), (OXY, "oxyanion hole (Phe / Arg N-H)")]),
             ("arr", yAk, [("solid", INK, "reaction step"), ("curl", INK, "electron shift"),
                           ("dash", ORG, "proton / water")])]
     maxw = max(sum((chip_w if k == "chip" else arr_w)(it[-1]) for it in items) for k, y, items in rows)
-    halfw = maxw / 2 + 0.22
+    halfw = maxw / 2 + 0.45
     ax.add_patch(FancyBboxPatch((CXC - halfw, yKey - 0.22), 2 * halfw, (yR1 + 0.24) - (yKey - 0.22),
                                 boxstyle="round,pad=0.02,rounding_size=0.10", fc="none", ec="#B4ABCB", lw=1.1, zorder=0))
     for kind, yrow, items in rows:
@@ -1699,8 +1798,8 @@ def _cascade_build():
                 style, col, lab = it
                 _c_legend_arrow(ax, cx, yrow, style, col, lab)
                 cx += arr_w(lab)
-    ax.text(CXC, yKey, "steps:  (1) Asp110 backside attack   (2) C–F cleaved, F$^-$ to cradle   "
-            "(3) glycolyl-enzyme ester   (4) His280 activates water   (5) hydrolysis → product",
+    ax.text(CXC, yKey, "steps:  (1) Asp backside attack   (2) C–F cleaved, F$^-$ to cradle   "
+            "(3) glycolyl-enzyme ester   (4) His activates water   (5) hydrolysis → product",
             color=INK, fontsize=9.8, ha="center", va="center", zorder=10)
 
     _CASC_OUT.mkdir(parents=True, exist_ok=True)
@@ -1724,13 +1823,13 @@ def build_cascade(root: "Path", out_dir: "Path"):
 
 if __name__ == "__main__":
     import sys
-    arg = sys.argv[1] if len(sys.argv) > 1 else ""
-    if arg == "pptx":                    # deck only, from the SVGs already on disk
+    argv = sys.argv[1:]                   # may carry a <Run> id/path and/or a mode token (pptx|figures)
+    if "pptx" in argv:                   # deck only, from the SVGs already on disk
         raise SystemExit(build_pptx())
     rc = main()                          # build the merged figures
     # Default run ALSO rebuilds the editable deck fresh (pass "figures" to skip it). Needs python-pptx +
     # rsvg-convert (base python3); if unavailable, build_pptx warns and the figure build still succeeds.
-    if rc == 0 and arg != "figures":
+    if rc == 0 and "figures" not in argv:
         try:
             build_pptx()
         except Exception as e:
