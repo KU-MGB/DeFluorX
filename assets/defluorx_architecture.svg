@@ -1,29 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1190 599" width="1190" height="599" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1190 690" width="1190" height="690" font-family="Montserrat, 'Segoe UI', Helvetica, Arial, sans-serif">
 <defs>
 <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#475569"/></marker>
 <marker id="vio" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0d9488"/></marker>
 <marker id="gry" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2dd4bf"/></marker>
 <filter id="ds" x="-15%" y="-15%" width="130%" height="130%"><feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#334155" flood-opacity="0.28"/></filter>
 </defs>
-<rect x="0" y="0" width="1190" height="599" rx="18" fill="#ffffff"/>
-<rect x="3" y="3" width="1184" height="593" rx="16" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+<rect x="0" y="0" width="1190" height="690" rx="18" fill="#ffffff"/>
+<rect x="3" y="3" width="1184" height="684" rx="16" fill="none" stroke="#e2e8f0" stroke-width="2"/>
 <g filter="url(#ds)"><rect x="300.0" y="20" width="540" height="66" rx="10" fill="#ddd6fe" stroke="#a78bfa" stroke-width="1.5"/></g>
 <text x="570.0" y="42" font-size="11.5" font-weight="800" fill="#4c1d95" text-anchor="middle">00_00_run_pipeline_DeFluorX.sh   ·   Orchestrator (bash)</text>
-<text x="570.0" y="59.5" font-size="9.3" fill="#5b21b6" text-anchor="middle">runs 00_03 → 01 → 02 → … → 07 in sequence · resume-safe · systemd-oomd guard</text>
+<text x="570.0" y="59.5" font-size="9.3" fill="#5b21b6" text-anchor="middle">runs 00_03 → 01 → 02 → … → 08 in sequence · resume-safe · systemd-oomd guard</text>
 <text x="570.0" y="73.2" font-size="9.3" fill="#5b21b6" text-anchor="middle">starts the Schrödinger job server before 05 · Ctrl-C cancels jobs</text>
-<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~798</text>
+<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~805</text>
 <rect x="148.2" y="104" width="843.6" height="97.5" rx="14" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="570.0" y="193.5" font-size="11.5" font-weight="800" fill="#0f766e" text-anchor="middle" letter-spacing="0.3">Foundation - imported by every step</text>
 <g filter="url(#ds)"><rect x="164.1953125" y="118" width="275.1" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="180.1953125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_01_Project_Config_DeFluorX.py</text>
 <text x="180.1953125" y="151.0" font-size="9.2" fill="#0f766e">single source of truth - thresholds, weights, paths</text>
 <text x="180.1953125" y="163.5" font-size="9.2" fill="#0f766e">tiers · geometry cutoffs · restraint · gates</text>
-<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,589</text>
+<text x="428.3" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~3,565</text>
 <g filter="url(#ds)"><rect x="467.328125" y="118" width="259.7" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="483.328125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_02_Project_Utils_DeFluorX.py</text>
 <text x="483.328125" y="151.0" font-size="9.2" fill="#0f766e">console &amp; logging · atomic CSV / JSON</text>
 <text x="483.328125" y="163.5" font-size="9.2" fill="#0f766e">geometry · Kabsch · figure-style SSOT</text>
-<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,265</text>
+<text x="716.0" y="163.5" font-size="9" font-weight="700" fill="#2dd4bf" text-anchor="end">~1,268</text>
 <g filter="url(#ds)"><rect x="755.0078125" y="118" width="220.8" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
 <text x="771.0078125" y="136" font-size="10.2" font-weight="800" fill="#134e4a">00_03_Environment_DeFluorX.py</text>
 <text x="771.0078125" y="151.0" font-size="9.2" fill="#0f766e">Conda env → PFAS.yml +</text>
@@ -39,7 +39,7 @@
 <text x="72" y="327.5" font-size="10.4" font-weight="800" fill="#065f46">01_Merge_DeFluorX.py</text>
 <text x="72" y="342.5" font-size="9.2" fill="#047857">merge multi-source FASTA → non-redundant set</text>
 <text x="72" y="355.0" font-size="9.2" fill="#047857">dedup + QC → merged FASTA</text>
-<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~713</text>
+<text x="297.8" y="355.0" font-size="9" font-weight="700" fill="#34d399" text-anchor="end">~719</text>
 <rect x="372.8" y="229.5" width="776.9" height="162.0" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="761.2" y="248.5" font-size="11.5" font-weight="800" fill="#be185d" text-anchor="middle" letter-spacing="0.3">Phase 2 - High-Throughput Screening</text>
 <g filter="url(#ds)"><rect x="388.76953125" y="259.5" width="245.6" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
@@ -58,7 +58,7 @@
 <text x="678.34375" y="317.5" font-size="9.2" fill="#9d174d">BH stats · Ramachandran · control★</text>
 <text x="678.34375" y="330.0" font-size="9.2" fill="#9d174d">multi-model variance · separators</text>
 <text x="678.34375" y="342.5" font-size="9.2" fill="#9d174d">→ Figure_Enriched_Dataset.csv</text>
-<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,807</text>
+<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,858</text>
 <g filter="url(#ds)"><rect x="929.67578125" y="259.5" width="204.0" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="945.67578125" y="277.5" font-size="10.4" font-weight="800" fill="#9d174d">04_Dendrogram_DeFluorX.py</text>
 <text x="945.67578125" y="292.5" font-size="9.2" fill="#9d174d">alignment-free k-mer (k=3)</text>
@@ -76,7 +76,7 @@
 <text x="72" y="520.0" font-size="9.2" fill="#1e40af">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="72" y="532.5" font-size="9.2" fill="#1e40af">departing-F Mulliken charge → cleavage check</text>
 <text x="72" y="545.0" font-size="9.2" fill="#1e40af">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~8,234</text>
+<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,725</text>
 <g filter="url(#ds)"><rect x="392.5859375" y="449.5" width="307.3" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="408.5859375" y="467.5" font-size="10.4" font-weight="800" fill="#1e40af">06_Physics_Validation_DeFluorX.py</text>
 <text x="408.5859375" y="482.5" font-size="9.2" fill="#1e40af">explicit-solvent physics for each MD-selected complex</text>
@@ -85,7 +85,7 @@
 <text x="408.5859375" y="520.0" font-size="9.2" fill="#1e40af">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="408.5859375" y="532.5" font-size="9.2" fill="#1e40af">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="408.5859375" y="545.0" font-size="9.2" fill="#1e40af">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,108</text>
+<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,125</text>
 <rect x="763.9" y="419.5" width="323.7" height="149.5" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="925.7" y="438.5" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 3 - Selection &amp; Prep</text>
 <g filter="url(#ds)"><rect x="779.87109375" y="449.5" width="291.7" height="105.5" rx="10" fill="#fed7aa" stroke="#fb923c" stroke-width="1.5"/></g>
@@ -96,7 +96,7 @@
 <text x="795.87109375" y="520.0" font-size="9.2" fill="#9a3412">PyMOL / PLIP contact figures</text>
 <text x="795.87109375" y="532.5" font-size="9.2" fill="#9a3412">pose-drift + 8-residue machinery figures</text>
 <text x="795.87109375" y="545.0" font-size="9.2" fill="#9a3412">consolidated handover (+ 3R3U×FA → MD)</text>
-<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,227</text>
+<text x="1060.6" y="545.0" font-size="9" font-weight="700" fill="#fb923c" text-anchor="end">~4,226</text>
 <line x1="182.4" y1="302.5" x2="182.4" y2="306.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="327.8" y1="310.5" x2="369.8" y2="310.5" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
 <line x1="637.3" y1="312.2" x2="659.3" y2="312.2" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
@@ -108,4 +108,12 @@
 <path d="M24 145.8 L24 312.2 L37 312.2" fill="none" stroke="#2dd4bf" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M991.8 145.8 L1166 145.8 L1166 502.2 L1090.6 502.2" fill="none" stroke="#2dd4bf" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
 <path d="M1166 145.8 L1166 312.2 L1152.6 312.2" fill="none" stroke="#2dd4bf" stroke-width="1.0" stroke-dasharray="3 3" marker-end="url(#gry)"/>
+<line x1="210" y1="571" x2="210" y2="587" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="40" y="589" width="1047.6" height="92.0" rx="14" fill="#faf5ff" stroke="#a78bfa" stroke-width="1.7" stroke-dasharray="7 5"/>
+<text x="563.8" y="608.0" font-size="11.5" font-weight="800" fill="#6d28d9" text-anchor="middle" letter-spacing="0.3">Phase 5 - Journal Figures &amp; Deck</text>
+<g filter="url(#ds)"><rect x="56" y="619.0" width="1015.6" height="50.0" rx="10" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/></g>
+<text x="72" y="637.0" font-size="10.4" font-weight="800" fill="#4c1d95">08_Journal_Figures_DeFluorX.py</text>
+<text x="72" y="652.0" font-size="9.2" fill="#5b21b6">tiles per-step panels into merged manuscript figures · draws the cross-enzyme defluorination cascade (best per-class TFA/DFA/MFA)</text>
+<text x="72" y="664.5" font-size="9.2" fill="#5b21b6">rebuilds the editable PowerPoint deck → 08_Journal_Figures_HQ/</text>
+<text x="1055.6" y="664.5" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~1,741</text>
 </svg>

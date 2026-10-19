@@ -2,7 +2,7 @@
 # =============================================================================
 # DeFluorX Pipeline Runner
 # Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-# Date   : 09 October 2026
+# Date   : 20 October 2026
 # =============================================================================
 # Usage (non-interactive / scripted mode):
 #   bash 00_00_run_pipeline_DeFluorX.sh [--run-id=<name>] [--dry-run] [--resume-from=<N>]
@@ -121,6 +121,7 @@ _print_step_menu() {
     echo "    [5] 05  Top-N selection + PDB preparation"
     echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
     echo "    [7] 07  MD thermodynamics + QM/MM engine"
+    echo "    [8] 08  Journal figures + deck (merged composites · defluorination cascade)"
 }
 
 for _arg in "$@"; do
@@ -139,8 +140,8 @@ fi
 # Validate --resume-from is a non-negative integer at parse time; otherwise the later
 # integer comparisons ([[ 7 -ge $RESUME_FROM ]]) throw "integer expression expected"
 # and abort under set -e.
-if [[ ! "$RESUME_FROM" =~ ^[0-7]$ ]]; then
-    echo "ERROR: --resume-from must be an integer 0-7 (0 = run all; the last step is 07)." >&2
+if [[ ! "$RESUME_FROM" =~ ^[0-8]$ ]]; then
+    echo "ERROR: --resume-from must be an integer 0-8 (0 = run all; the last step is 08)." >&2
     exit 1
 fi
 
@@ -185,9 +186,9 @@ else
             echo ""
             echo "  ${_C_BOLD}── Start from which step? ──${_C_RESET}"
             _print_step_menu
-            read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step <&3 || _from_step=""
+            read -r -p "  Start from step [1-8, default=Enter = run everything]: " _from_step <&3 || _from_step=""
             _STEP_ASKED=1
-            if [[ "$_from_step" =~ ^[1-7]$ ]]; then
+            if [[ "$_from_step" =~ ^[1-8]$ ]]; then
                 RESUME_FROM="$_from_step"
                 printf "  ${_C_GREEN}→ Starting from Step %02d; earlier steps will be skipped.${_C_RESET}\n" "$_from_step"
             elif [[ -n "$_from_step" ]]; then
@@ -291,10 +292,10 @@ if [[ "$_PIPELINE_MODE" == "resume" && "$RESUME_FROM" -eq 0 && "${_STEP_ASKED:-0
     echo ""
     echo "  ${_C_BOLD}── Resume from which step? ──${_C_RESET}"
     _print_step_menu
-    read -r -p "  Start from step [1-7, default=Enter = run everything]: " _from_step <&3 || _from_step=""
+    read -r -p "  Start from step [1-8, default=Enter = run everything]: " _from_step <&3 || _from_step=""
     if [[ -z "$_from_step" ]]; then
         echo "  ${_C_GREEN}→ Running the full pipeline (all steps).${_C_RESET}"
-    elif [[ "$_from_step" =~ ^[1-7]$ ]]; then
+    elif [[ "$_from_step" =~ ^[1-8]$ ]]; then
         RESUME_FROM="$_from_step"
         printf "  ${_C_GREEN}→ Resuming from Step %02d onwards; Steps below %02d will be skipped.${_C_RESET}\n" \
             "$_from_step" "$_from_step"
@@ -752,6 +753,12 @@ if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then
     sudo systemctl unmask systemd-oomd.socket 2>/dev/null || true
     sudo systemctl start systemd-oomd 2>/dev/null || true
 fi
+
+# Step 08 - journal figure + deck assembly. Non-computational: tiles the step panels into merged
+# manuscript figures, draws the standalone defluorination-cascade scheme, and rebuilds the editable
+# deck. --optional: a figure/deck hiccup (e.g. rsvg-convert absent) must not fail a completed run.
+run_step --optional "08  Journal figures + deck (merged composites + cascade)" \
+    python 08_Journal_Figures_DeFluorX.py
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 

@@ -7,7 +7,7 @@ used across the pipeline. Edit values here only - no other file should contain
 hard-coded scientific values, configurable thresholds, or tunable settings.
 
 Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
-Date   : 09 October 2026 <───────────────────────────────────────────────────────
+Date   : 20 October 2026 <───────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
   Module        : 00_01_Project_Config_DeFluorX.py
@@ -2215,17 +2215,6 @@ class CFG:
     QSITE_FRAME_CLEAVED_PALETTE: list = field(default_factory=lambda: [
         "#16A34A", "#2563EB", "#0E7490", "#7C3AED", "#BE185D"])
     QSITE_CLEAVED_BOX: str = "#2A9D8F"   # verdict-card frame + accent for "C-F cleaved (N/M frames)"
-    # Mechanism figure (07 fig 09): disjoint colour layers so no hue is shared. Residue-role colours
-    # come from ACTIVE_SITE_ROLE_GROUP_COLOUR; these are the reaction-scene layers + ligand elements.
-    MECHANISM_FIG_COLOUR: dict = field(default_factory=lambda: {
-        "chem": "#111111",   # chemical action arrows (attack / C-F break)
-        "role": "#0072B2",   # role action arrows (activate / orient / hold / stabilise)
-        "dist": "#8A8A8A",   # distance (global -> NAC) connectors
-        "geom": "#5B4B8A",   # Walden / other geometry annotations (off the data layers)
-        "angle": "#00695C",  # the Nu-Cα-F SN2 attack-angle arc + its read-off label (distinct dark teal)
-        "elem_C": "#333333", "elem_O": "#CC2222", "elem_F": "#17A2B8",  # ligand element colours
-        "water": "#2E86C1",
-        "scissile": "#CC2222"})   # red ring marking the scissile fluorine (bonded on the ligand + departed)
     '''
     Rank colours shared with the Step-06 combined figures (candidates green/amber/vermillion/blue/
     magenta/sky by rank; the control takes its own distinct colour), so a rank reads the same colour
@@ -2344,19 +2333,6 @@ class CFG:
     VIS_FONT_LEGEND: float      = 12.5   # legend entries (one size for every figure, every step)
     VIS_FONT_LEGEND_TITLE: float = 13.0  # legend title (one size everywhere; slightly above the entries)
     VIS_FONT_ANNOT: float       = 12.5   # in-figure annotations (values on/inside bars)
-    '''
-    Reaction-mechanism scene (09_Reaction_Mechanism) font tiers - the hand-composed 2D scene is denser
-    than a standard plot, so it carries its own SSOT size ladder (all its text routes through these,
-    nothing hardcoded). Ordered largest -> smallest; scale the ladder to grow/shrink the whole scene.
-    '''
-    MECH_FONT_ATOM_XL: float    = 13.0   # the departing fluoride glyph (emphasised)
-    MECH_FONT_ATOM: float       = 11.5   # substrate element glyphs (C/O/F) + verdict badge
-    MECH_FONT_LABEL: float      = 10.5   # emphasised atom label
-    MECH_FONT_TBL_HEAD: float   = 9.4    # QM/MM summary-table column headers (bottom scene table)
-    MECH_FONT_TBL_CELL: float   = 8.8    # QM/MM summary-table label + value cells
-    MECH_FONT_DISC: float       = 8.7    # residue-disc code/number, electron ①② markers, reaction-coord graph labels
-    MECH_FONT_SMALL: float      = 7.7    # interacting-atom names, graph ticks / x-label, scene legend rows
-    MECH_FONT_TINY: float       = 6.7    # distance / angle read-off labels, cleavage-threshold marker
     VIS_TEXT_MAX_LUM: float     = 0.42   # a bar/line colour reused as TEXT is darkened to at most this relative luminance so a light hue (yellow, sky, amber) stays legible on white
     VIS_GRID_COLOUR: str        = "#EBEBEB"
     VIS_GRID_LINEWIDTH: float   = 0.6
