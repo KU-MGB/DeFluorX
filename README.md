@@ -233,7 +233,7 @@ through it, the single-source-of-truth architecture showing up structurally.
 
 ![DeFluorX code architecture graph - communities coloured, hub nodes enlarged](assets/graphify.png)
 
-**▶ [Open the interactive graph in your browser](https://htmlpreview.github.io/?https://github.com/KU-MGB/DeFluorX/blob/main/assets/graph.html)** - renders the live `assets/graph.html` (GitHub shows repo HTML as source, so it is served through the htmlpreview proxy).
+**▶ [Open the interactive graph in your browser](https://raw.githack.com/KU-MGB/DeFluorX/main/assets/graph.html)** - renders the live `assets/graph.html` (GitHub shows repo HTML as source, so it is served through the raw.githack.com CDN, which handles the full-size graph reliably).
 
 The graph output lives in **[`assets/`](./assets/)** and is regenerated with `/graphify`:
 
