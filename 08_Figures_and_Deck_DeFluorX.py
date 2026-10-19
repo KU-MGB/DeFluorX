@@ -1605,9 +1605,6 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     for aa, lab in [(150, "H155"), (90, "W156"), (33, "Y219")]:
         p = Fm + np.array([math.cos(math.radians(aa)), math.sin(math.radians(aa))]) * 1.00
         _c_hbond(ax, p, Fm, PINK); _c_disc(ax, p, PINK, lab)
-    w185 = Fm + np.array([0.22, -0.72]); _c_disc(ax, w185, PINK, "W185", rad=0.31, fs=9.5)
-    ax.add_patch(FancyArrowPatch(w185 + np.array([-0.08, 0.22]), Fm + np.array([0.14, -0.22]),
-                                 connectionstyle="arc3,rad=0.3", arrowstyle="-|>", mutation_scale=10, lw=1.3, color=PINK, ls=(0, (2, 2)), zorder=4))
     _c_numbox(ax, (Fm[0] - 0.52, Fm[1] - 0.50), 2)
     ax.text(XB + 0.2, cap_t, "glycolyl-enzyme ester + F$^-$", color=INK, fontsize=13.0, ha="center", fontweight="bold", zorder=10)
     ax.text(XB + 0.2, cap_s, "water engages ester carbonyl", color=ORG, fontsize=11.0, ha="center", zorder=10)
@@ -1617,6 +1614,10 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     _c_numbox(ax, (g3["left"][0] - 0.02, yc + 0.60), 5)
     ax.text(XC, cap_t, f"{prod_direct}", color=INK, fontsize=13.0, ha="center", fontweight="bold", zorder=10)
     ax.text(XC, cap_s, "Asp110 regenerated", color=PUR, fontsize=11.0, ha="center", zorder=10)
+    _hf = {"difluoroglycolate": "then spontaneous −HF → fluoroglyoxylate / oxalate",
+           "fluoroglycolate": "then spontaneous −HF → glyoxylate + F$^-$"}.get(prod_direct)
+    if _hf:
+        ax.text(XC, yc - 3.04, _hf, color=MUT, fontsize=9.2, ha="center", va="center", fontstyle="italic", zorder=10)
 
     _c_rxn_arrow(ax, XA + 1.15, XB - 1.35, yc, top="$-$ F$^-$")
     _c_rxn_arrow(ax, XB + 1.80, XC - 1.3, yc, top="$+$ H$_2$O", bot="hydrolysis")
@@ -1627,7 +1628,7 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     ax.text(sx, sy + 0.36, "QM/MM  ·  geometry  ·  WaterMap  ·  MD", color=INK, fontsize=10.8, ha="left", va="center", fontweight="bold", zorder=10)
     strip = [("C–F cleaved", qm["cleaved"] + " frames", GRN),
              ("S$_N$2 attack (QM)", qm["angle"], INK),
-             ("ΔE$^\\ddagger$ (1-D scan)", qm["barrier"] + " kcal/mol", INK),
+             ("ΔE$^\\ddagger$ (1-D scan, mean)", qm["barrier"] + " kcal/mol", INK),
              ("ΔE$_{rxn}$ (scan)", qm["derxn"] + " kcal/mol", INK),
              ("MM-GBSA ΔG$_{bind}$", qm["gbsa"] + " kcal/mol", PUR),
              ("WaterMap sites", f"{qm['wm_disp']}/{qm['wm_sites']} displ.", PINK),
@@ -1638,7 +1639,7 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
         ax.text(sx, yy, lab, color=INK, fontsize=10.2, ha="left", va="center", zorder=10)
         ax.text(sx + 2.55, yy, val, color=col, fontsize=10.6, ha="left", va="center", fontweight="bold", zorder=10)
 
-    ax.text(XROLE, yc + 0.05, f"{sub_cas}  →  {prod_cas}", color=GEOM, fontsize=13.0, rotation=270, ha="center", va="center", fontstyle="italic", fontweight="bold", zorder=10)
+    ax.text(XROLE, yc + 0.05, f"{sub_cas}  →  {prod_direct}", color=GEOM, fontsize=13.0, rotation=270, ha="center", va="center", fontstyle="italic", fontweight="bold", zorder=10)
 
 
 def _c_legend_arrow(ax, x, y, style, col, label):
@@ -1672,19 +1673,15 @@ def _cascade_build():
         _, ret = retained_substituents(rank)
         _c_band(ax, fig, YC[i], i + 1, rank, ret, sub_cas, prod_cas, prod_direct, acc, species, geom_attack(rank))
 
-    for ytop, ybot in zip(YC[:-1], YC[1:]):
-        ax.add_patch(FancyArrowPatch((XSTEP, ytop - 0.56), (XSTEP, ybot + 0.56), arrowstyle="-|>",
-                                     mutation_scale=14, lw=2.0, color=GREY, ls=(0, (4, 3)), zorder=0))
-        ax.text(XSTEP + 0.48, (ytop + ybot) / 2, "$-$ F", color=INK, fontsize=11.0, ha="left", va="center", fontweight="bold", zorder=10)
 
     yR1, yR2, yAk, yKey = -2.80, -3.22, -3.64, -4.06
     chip_w = lambda lab: 0.34 + len(lab) * 0.095 + 0.30
     arr_w = lambda lab: 0.62 + len(lab) * 0.095 + 0.34
     rows = [("chip", yR1, [(PUR, "nucleophile Asp110"), (ORG, "general base His280 / Asp134"),
-                           (PINK, "F$^-$ cradle His155 / Trp156 / Tyr219 (+ Trp185)")]),
+                           (PINK, "F$^-$ cradle His155 / Trp156 / Tyr219")]),
             ("chip", yR2, [(GRN, "COO$^-$ clamp Arg111 / Arg114"), (OXY, "oxyanion hole Phe40 / Arg111 N-H")]),
             ("arr", yAk, [("solid", INK, "reaction step"), ("curl", INK, "electron shift"),
-                          ("dash", ORG, "proton / water"), ("dash", PINK, "fluoride shuttle"), ("dash", GREY, "next enzyme")])]
+                          ("dash", ORG, "proton / water")])]
     maxw = max(sum((chip_w if k == "chip" else arr_w)(it[-1]) for it in items) for k, y, items in rows)
     halfw = maxw / 2 + 0.22
     ax.add_patch(FancyBboxPatch((CXC - halfw, yKey - 0.22), 2 * halfw, (yR1 + 0.24) - (yKey - 0.22),
