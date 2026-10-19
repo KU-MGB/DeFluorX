@@ -28,7 +28,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-46498-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-46624-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -193,7 +193,7 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 
 ---
 
-## 🔄 Pipeline architecture (46,498 lines)
+## 🔄 Pipeline architecture (46,624 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination) → Phase 5 Figures &amp; Deck (08 Figures and Deck)" width="100%">
@@ -201,7 +201,7 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 
 **Diagram key:** a bash orchestrator (`00_00_run_pipeline_DeFluorX.sh`, violet) runs each step 01–08 in sequence and provisions the shared **Foundation** - `00_01` config · `00_02` utils · `00_03` env; the **grey dotted** links mark it as imported by every step. **Solid arrows** are data flow: `Input → 01 → 02 → 03 → 04` across the top row (Phase 1 Ingest, Phase 2 Screening), then `02 → 05 → 06 → 07 → 08` down through the bottom row (Phase 3 Selection, Phase 4 Dynamics, Phase 5 Figures). Every box is a script, labelled with its approximate line count.
 
-**Four-phase design:**
+**Five-phase design:**
 
 | Phase | Steps | Goal | Input | Output |
 |---|---|---|---|---|
@@ -210,9 +210,9 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 | **Phase 2 - Screening (HTS)** | 02–04 | Co-folding, ranking & database-wide validation | Merged FASTA + PFAS panel | Primary/ranked CSV, D3 tree, publication figure panel |
 | **Phase 3 - Select & Prep** | 05 | MD-ready selection, protonation, minimisation & Top-N extraction | CIF structures from Step 02 | Prepared structures, 3D interaction diagrams |
 | **Phase 4 - Dynamics & QM** | 06–07 | Step 06 runs the ESP-charged physics in one script - WaterMap hydration, System Builder, Desmond MD, then SID + Prime MM-GBSA binding free energy; Step 07 adds MD/NAC analysis, PBC-corrected frame extraction, and automated QSite QM/MM defluorination scans | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | Desmond trajectories, WaterMaps, MM-GBSA ΔG_bind + plots, QSite `.in` + per-candidate QSite output folders, WaterMap/QSite defluorination figures |
-| **Phase 5 - Figures & Deck** | 08 | Non-computational assembly: tiles the per-step panels into merged Nature-style manuscript figures, draws the standalone cross-enzyme defluorination-cascade scheme (best per-class TFA/DFA/MFA degrader), and rebuilds the editable PowerPoint deck | All prior step outputs (in place) | `08_Figures_and_Deck_HQ/` - merged `Figure_NN`/`Supplementary_Figure_NN` SVGs, the cascade figure, and `DeFluorX_Figures.pptx` |
+| **Phase 5 - Figures & Deck** | 08 | Non-computational assembly: tiles the per-step panels into merged Nature-style manuscript figures, draws the cross-enzyme defluorination-cascade scheme (best per-class TFA/DFA/MFA degrader) as the mechanism-figure lead panel, and rebuilds the editable PowerPoint deck | All prior step outputs (in place) | `8_Figures_and_Deck_HQ/` - merged `Figure_NN`/`Supplementary_Figure_NN` SVGs and `DeFluorX_Figures.pptx` |
 
-Phases 1-2 (ingest and screening) are deliberately fast and permissive; Phase 3 prepares and extracts the elite hits; Phase 4 evaluates candidate dynamics under thermodynamic fluctuations to confirm Near Attack Conformation (NAC) persistence.
+Phases 1-2 (ingest and screening) are deliberately fast and permissive; Phase 3 prepares and extracts the elite hits; Phase 4 evaluates candidate dynamics under thermodynamic fluctuations to confirm Near Attack Conformation (NAC) persistence; Phase 5 assembles the merged manuscript figures and the editable deck from the completed step outputs.
 
 > [!NOTE]
 > In Phase 2, Step 02 (Boltz-2 production) co-folds every candidate against the PFAS panel. A fresh prediction takes approximately 15 to 30 seconds per complex (GPU co-folding plus CPU file/CSV write operations).
@@ -225,7 +225,7 @@ Phases 1-2 (ingest and screening) are deliberately fast and permissive; Phase 3 
 <details>
 <summary><b>Function-level knowledge graph (graphify) - click to expand</b></summary>
 
-A function-level knowledge graph of the whole pipeline (1,250 nodes · 2,733 edges ·
+A function-level knowledge graph of the whole pipeline (1,259 nodes · 2,749 edges ·
 62 communities), auto-generated with [graphify](https://github.com/safishamsi/graphify)
 and regenerated on major code changes. **[`CFG`](./00_01_Project_Config_DeFluorX.py) is the top
 hub node (90 edges, the most connected)** - every module's thresholds and figure colours route
@@ -353,7 +353,7 @@ DeFluorX/
 | [`05_TopN_and_PDB_Preparation_DeFluorX.py`](./05_TopN_and_PDB_Preparation_DeFluorX.py) | MD-ready gate → Gemmi CIF→PDB + PrepWizard + Top-N extraction + PyMOL/PLIP figures | ranked CSV + CIF files | prepared `.pdb` files, tier CSV, interaction figures |
 | [`06_Physics_Validation_DeFluorX.py`](./06_Physics_Validation_DeFluorX.py) | **Step 06** ESP-charged explicit-solvent physics: WaterMap → System Builder → MD, then SID + **Prime MM-GBSA** on every completed MD job (per rank: MD on GPU, then extraction → SID → MM-GBSA → defluorination on a CPU worker, pipelined so the GPU runs the next rank's MD; production under a ligand/backbone positional restraint, so retention is restraint-enforced; sudo prompted up front) | Step-05 handover (`R{N}_*.pdb` + `*_ESP.mae`) | `*_wm.maegz`, `-out.cms` + `*_trj/`, `*_SID-out.eaf`, `*_mmgbsa-prime-out.csv`, **`06_Analysis/` - every Step-06 figure in one folder** (build/solvation QC, MD trajectory QC, MM-GBSA individual + combined), **`00_Phase_Timings.csv`** (per-job + per-phase wall-clock), merged log |
 | [`07_QMMM_Defluorination_DeFluorX.py`](./07_QMMM_Defluorination_DeFluorX.py) | **Step 07** MD + NAC analysis + QM/MM extraction & QSite auto-run (consumes `*_SID-out.eaf`) | Step-06 MD trajectories + WaterMaps + ranked CSV | PBC-corrected frame, QSite `.in`/`.mae`, per-candidate QSite output folder |
-| [`08_Figures_and_Deck_DeFluorX.py`](./08_Figures_and_Deck_DeFluorX.py) | **Step 08** manuscript figure + deck assembly (non-computational): tiles step panels into merged manuscript figures, draws the standalone defluorination-cascade scheme (best per-class TFA/DFA/MFA degrader, from the QM `.mae` geometry + scan CSV + WaterMap/MD stats), rebuilds the editable deck | All prior step outputs (read in place) | `08_Figures_and_Deck_HQ/` - `Figure_NN`/`Supplementary_Figure_NN` SVGs, cascade figure, `DeFluorX_Figures.pptx` |
+| [`08_Figures_and_Deck_DeFluorX.py`](./08_Figures_and_Deck_DeFluorX.py) | **Step 08** manuscript figure + deck assembly (non-computational): tiles step panels into merged manuscript figures, draws the defluorination-cascade scheme (best per-class TFA/DFA/MFA degrader, from the QM `.mae` geometry + scan CSV + WaterMap/MD stats) as the mechanism-figure lead panel, rebuilds the editable deck | All prior step outputs (read in place) | `8_Figures_and_Deck_HQ/` - `Figure_NN`/`Supplementary_Figure_NN` SVGs, `DeFluorX_Figures.pptx` |
 | [`C_INP_Merged_for_Boltz-2.fasta`](./C_INP_Merged_for_Boltz-2.fasta) | Merged, deduplicated input protein sequences for Boltz-2 (generated by 01_Merge_DeFluorX.py) | - | - |
 | [`D_INP_PFAS-27_Ligands.smi`](./D_INP_PFAS-27_Ligands.smi) | 27 PFAS ligand SMILES panel | - | - |
 
@@ -1283,13 +1283,13 @@ python 08_Figures_and_Deck_DeFluorX.py Boltz-2_Run_20260309T085406Z   # or no ar
 ```
 
 **What it does:**
-- **Cascade scheme** - selects the best per-class degrader (TFA, DFA, MFA) from `7_QMMM_Defluorination/01_Master_Ranking.csv`, then draws each enzyme's hydrolytic double-displacement (Asp110 nucleophile → glycolyl-enzyme ester → His280/water hydrolysis) directly from the real QM `.mae` geometry, with a per-band QM/MM reaction-coordinate plot (scissile C-F length + departing-F charge) and a joined QM/MM · geometry · WaterMap · MD data strip. Emitted as its own standalone figure.
+- **Cascade scheme** - selects the best per-class degrader (TFA, DFA, MFA) from `7_QMMM_Defluorination/01_Master_Ranking.csv`, then draws each enzyme's hydrolytic double-displacement (Asp110 nucleophile → glycolyl-enzyme ester → His280/water hydrolysis) directly from the real QM `.mae` geometry, with a per-band QM/MM reaction-coordinate plot (scissile C-F length + departing-F charge) and a joined QM/MM · geometry · WaterMap · MD data strip. Rendered as panel a of the mechanism / QM-MM-validation figure (panel b = the all-jobs PES overlay).
 - **Merged composites** - tiles related step panels into portrait, panel-lettered figures (format set by `CFG.VIS_FIGURE_FORMAT`, default true-vector SVG).
 - **Editable deck** - rebuilds `DeFluorX_Figures.pptx` from the merged SVGs (needs base python3 with python-pptx + rsvg-convert).
 
 Missing-tolerant and idempotent: panels a still-running step has not produced yet are skipped and fold in on a re-run.
 
-**Outputs:** `<Run>/08_Figures_and_Deck_HQ/` - `Figure_NN` / `Supplementary_Figure_NN` SVGs, the standalone cascade figure, and `DeFluorX_Figures.pptx`.
+**Outputs:** `<Run>/8_Figures_and_Deck_HQ/` - `Figure_NN` / `Supplementary_Figure_NN` SVGs (the cascade is panel a of the mechanism figure) and `DeFluorX_Figures.pptx`.
 </details>
 
 ---

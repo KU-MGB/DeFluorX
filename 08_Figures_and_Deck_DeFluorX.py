@@ -40,7 +40,7 @@ Date   : 20 October 2026 <──────────────────
                   <Run>/7_QMMM_Defluorination/Rank_N/01_MD_Stats.json         (WaterMap/MD strip)
                   <Run>/7_QMMM_Defluorination/Rank_N/QSite_SN2/*/*.01.mae     (substrate geometry)
                   01_Journal_Files/Figures_HQ/ (CURATED: Figure-1 workflow HTML, _assets)
-  Writes        : <Run>/08_Figures_and_Deck_HQ/
+  Writes        : <Run>/8_Figures_and_Deck_HQ/
                     - _cascade/Reaction_Cascade.{svg,png}          (cascade source)
                     - Figure_NN_<Name>.svg                         (merged main figures)
                     - Figure_NN_Defluorination_Cascade_Mechanism.svg (standalone cascade)
@@ -105,7 +105,7 @@ def _resolve_run() -> Path:
 
 RUN = _resolve_run()
 # Step-08 output: the HQ merged journal figures + deck land inside the run as a numbered step folder.
-OUT_DIR = RUN / "08_Figures_and_Deck_HQ"
+OUT_DIR = RUN / "8_Figures_and_Deck_HQ"
 # Figure 01 is the mechanism-guided workflow / graphical overview, authored as a self-consistent HTML
 # (curated input) and rendered here to PNG so it sits in the same numbered series as the composites.
 WORKFLOW_HTML = CURATED / "Figure_1" / "DeFluorX_Figure_1.html"
@@ -204,8 +204,8 @@ MAIN_FIGS = [
     # montage), (b) the all-jobs QM/MM PES overlay. The four per-rank reaction profiles move to the
     # supplementary ("QSite_Reaction_Profiles") so this stays a two-panel main figure.
     ("Mechanism_and_QSite_Validation", [
-        OUT_DIR / "_cascade" / "Reaction_Cascade.svg",
-        _M / "08_QSite_Profiles_AllJobs.png",
+        OUT_DIR / "_cascade" / "Reaction_Cascade.svg", _ROWBREAK,   # a: cascade, full-width top row
+        _M / "08_QSite_Profiles_AllJobs.png",                       # b: all-jobs PES, full-width below
     ]),
     # Cross-rank defluorination outcome (promoted from the old Supplementary 7 - these are key results,
     # not diagnostics): which systems are viable, the defluorination landscape, the comparative analysis
@@ -353,19 +353,22 @@ def _rank_panels(rank_dir: Path, n: str) -> list:
     # This rank's prepared-pose comparative Ramachandran (variable job-id in the filename -> glob).
     _rama_dir = _T / "3_Comparative_Analysis" / "04_MD_Selected_4hits_Comparative_Ramachandran_Plots"
     _rama = sorted(_rama_dir.glob(f"Rank_{n}_*_Rama_Comparison.svg")) if _rama_dir.exists() else []
-    # Row-controlled: a+b crucial pair (row 1); c+d plus this rank's WaterMap hydration render (row 2 -
-    # the three shrink to share it); e free-energy landscapes + the Ramachandran comparison (row 3).
+    # Row-controlled 2-per-row layout: a+b crucial pair (row 1); c+d (row 2); e WaterMap + f free-energy
+    # (row 3); g Ramachandran + h QM/MM reaction profile (row 4). The QM/MM profile (h) is wide, so in a
+    # shared two-panel row it still takes the larger share of the width - prominent, without the excessive
+    # height a lone full-width band gave it.
+    qsite = _M / f"Rank_{n}" / "08_QSite_Reaction_Profile.png"            # h: QM/MM PES for this rank
     panels = [
         defl / "01_Reactive_Pose_Trajectory.png",             # a: reactive-pose geometry over the run
         rank_dir / "03_NAC_Dashboard.png", _ROWBREAK,         # b: near-attack basin + anchoring  (row 1 = a,b)
         defl / "02_Reactive_Summary.png",                     # c: per-residue occupancy + NAC-criteria summary
-        defl / "03_Binding_vs_Reactivity.png",                # d: binding (MM-GBSA) vs reactivity, per frame
-        _P / "03_WaterMaps" / f"watermap_R_{n}.png", _ROWBREAK,  # WaterMap hydration render, right of c,d (row 2)
-        rank_dir / "05_Free_Energy_Landscapes.png",           # e: free-energy landscapes (row 3)
+        defl / "03_Binding_vs_Reactivity.png", _ROWBREAK,     # d: binding (MM-GBSA) vs reactivity  (row 2 = c,d)
+        _P / "03_WaterMaps" / f"watermap_R_{n}.png",          # e: WaterMap hydration render
+        rank_dir / "05_Free_Energy_Landscapes.png", _ROWBREAK,  # f: free-energy landscapes  (row 3 = e,f)
     ]
     if _rama:
-        panels.append(_rama[0])                               # f: prepared-pose Ramachandran (row 3, beside e)
-    panels.append(_M / f"Rank_{n}" / "08_QSite_Reaction_Profile.png")   # QM/MM PES for this rank (moved out of the main mechanism figure)
+        panels.append(_rama[0])                               # g: prepared-pose Ramachandran (row 4, beside h)
+    panels.append(qsite)                                      # h: QM/MM reaction profile (wide -> dominant in row 4)
     return panels
 
 
@@ -397,9 +400,10 @@ FONT_BOOST = 1.00           # merger-level enlargement of every nested-panel <te
 _FONT_NO_BOOST = {"C_INP_Merged_for_Boltz-2"}
 # Per-figure manual nudges of the panel LETTER (a, b, ...) when it sits on panel content. Keyed by output
 # figure stem -> {panel index (0=a): dx in px (negative = left, positive = right)}.
-_LETTER_OFFSETS = {
-    "Figure_02_Screening_and_Model_Quality": {2: -72, 5: +72, 6: -72},   # c left, f right, g left
-}
+# Each entry is {panel index (0=a): dx | (dx, dy)} in px (negative = left/up). Usually empty: the panel
+# content is inset down-right so the letter sits in a clear top-left margin; add a nudge only for a panel
+# whose own art still reaches into that corner.
+_LETTER_OFFSETS = {}
 LABEL_RGB = (0, 114, 178)   # panel-letter colour: Okabe-Ito blue #0072B2 (Nature colourblind-safe palette)
 
 
@@ -472,7 +476,10 @@ def _pack_rows(ars: list, forced: list = None):
     pad_total = PAD * (len(raw) + 1)
     H = sum_h + pad_total
     H_MAX = TARGET_W * A4_RATIO
-    if H > H_MAX and sum_h > 0:                        # too tall -> scale down uniformly to one A4 page
+    # Auto layouts are fitted to one A4 portrait page. For FORCED (art-directed) rows the author chose the
+    # stacking deliberately, so we keep every row justified to the FULL width (no side white-space) and let
+    # the page run taller than A4 rather than shrinking the panels inward.
+    if forced is None and H > H_MAX and sum_h > 0:    # too tall -> scale down uniformly to one A4 page
         s = (H_MAX - pad_total) / sum_h
         for row in raw:
             row[1] *= s
@@ -755,16 +762,22 @@ def _montage_svg(paths: list, out_path: Path) -> None:
     root.set("viewBox", f"0 0 {TARGET_W} {H:.2f}")
     bg = etree.SubElement(root, f"{{{SVG_NS}}}rect")
     bg.set("width", f"{TARGET_W}"); bg.set("height", f"{H:.2f}"); bg.set("fill", "#ffffff")
+    fsz = TARGET_W * 0.017
+    # Each panel box has the SAME aspect as its content (box width = ar * h), so a 'meet' fit leaves no
+    # gutter and a corner letter would sit on the y-axis / title. Reserve a small top-left margin by
+    # insetting the content down-and-right by one letter strip; the letter then sits in that clear corner.
+    lins = fsz * 1.05
     idx = 0; y = float(PAD)
     for row, h in layout:
         ws = [max(1.0, ars[i] * h) for i in row]
         row_w = sum(ws) + PAD * (len(row) + 1)
         x = PAD + max(0.0, (TARGET_W - row_w) / 2)
         for i, w in zip(row, ws):
-            root.append(_svg_place(paths[i], x, y, w, h, idx))
+            root.append(_svg_place(paths[i], x + lins, y + lins, w - lins, h - lins, idx))
             lab = chr(97 + idx) if idx < 26 else str(idx + 1)
-            ldx = _LETTER_OFFSETS.get(out_path.stem, {}).get(idx, 0.0)   # manual per-panel letter nudge
-            _svg_label(root, lab, x + ldx, y, TARGET_W * 0.017)
+            off = _LETTER_OFFSETS.get(out_path.stem, {}).get(idx, 0.0)   # manual per-panel letter nudge
+            ldx, ldy = off if isinstance(off, (tuple, list)) else (off, 0.0)
+            _svg_label(root, lab, x + ldx, y + ldy, fsz)
             idx += 1; x += w + PAD
         y += h + PAD
     out_path.write_bytes(etree.tostring(root, xml_declaration=True, encoding="utf-8"))
@@ -877,12 +890,15 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
 
 
 def _reset_outputs() -> None:
+    """Replace ONLY this step's own figure families so a re-run never leaves stale outputs - and never
+    touches anything else in the folder (the user may keep their own Figure 01 panel/folder, notes, etc.
+    here). Figure 01 is always the user-owned workflow slot, so any 'Figure_01*' is skipped outright."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for stem in ("Figure_*", "Supplementary_Figure_*", "00_*_Collage"):
         for ext in (".png", ".svg"):
             for p in OUT_DIR.glob(stem + ext):
-                if p.name == "Figure_01_Workflow_Overview.svg":
-                    continue   # user-curated HTML export (Figure 01); never auto-deleted
+                if p.name.startswith("Figure_01"):
+                    continue   # Figure 01 = user-curated workflow slot; never auto-deleted
                 p.unlink()
 
 
@@ -906,19 +922,19 @@ def _key(p: Path) -> Path:
 # -----------------------------------------------------------------------------
 MAIN_LEGENDS = {
     "Workflow_Overview": "Mechanism-guided discovery workflow. Graphical overview of the DeFluorX pipeline: Boltz-2 co-folding of every bacterial FAcD variant against the 27-PFAS panel, catalytic-geometry tiering, MD-based near-attack sampling, and QM/MM defluorination verdicts, shown beside the screen funnel (Sankey).",
-    "Screening_and_Model_Quality": "Screening library and model quality. (a) Input library composition. (b) Active-site catalytic-residue mapping coverage across the library. (c) Evolutionary phylogeny of the variants, with the uniformly high AI co-folding confidence (pTM, ipTM, confidence) that underpins the screen.",
-    "Confidence_Does_Not_Predict_Competence": "Confidence does not predict competence. AI co-folding confidence is decoupled from mechanistic competence - a high-confidence pose is not necessarily catalytically competent - which is why ranking is geometry-first rather than confidence-first.",
-    "Catalytic_Mechanism_and_SN2_Geometry": "Catalytic mechanism and SN2 geometry. Distribution of the mechanistic score and its geometric terms across tiers: the SN2 backside attack angle, active-site RMSD and the mechanistic-geometry relationship that defines the elite (Tier_1A) degraders.",
-    "PFAS_Scope_and_Lead_Candidates": "PFAS scope and lead candidates. Substrate scope across the 27-PFAS panel and the per-PFAS reaction-readiness of the pocket, identifying the lead degraders advanced to physics validation.",
-    "Physics_MD_and_Hydration": "Physics and MD overview. Cross-rank trajectory quality control (Ca-RMSD, ligand RMSD, RMSF, temperature), Prime MM-GBSA binding free energies, and WaterMap hydration for the MD-selected complexes.",
+    "Screening_and_Model_Quality": "Screening library and model quality. (a) Composition of the merged FAcD-variant and 27-PFAS input library prepared for Boltz-2 co-folding. (b) Active-site catalytic-residue mapping coverage across the library. (c) Evolutionary phylogeny of the variants. (d) Competence-tier distribution of the screened complexes. (e) Tier-by-grade distribution. (f) AI co-folding quality (pTM, ipTM and confidence). (g) pTM against ipTM by tier.",
+    "Confidence_Does_Not_Predict_Competence": "Confidence does not predict competence. AI co-folding confidence is decoupled from mechanistic competence, so a high-confidence pose is not necessarily catalytically competent and ranking is geometry-first rather than confidence-first. (a) Conflict composition (hidden-gem and decoy complexes where confidence and competence disagree). (b) Confidence against SN2-geometry landscape. (c) Multi-model consensus by tier. (d) Boltz-2 model agreement. (e) Joint quality-and-competence diagnostics. (f) Multi-model geometry variance by model. (g) Multi-model geometry variance for the ipTM-90 subset.",
+    "Catalytic_Mechanism_and_SN2_Geometry": "Catalytic mechanism and SN2 geometry. The mechanism-first score and its geometric terms separate the elite (Tier_1A) degraders. (a) Mechanistic score by tier. (b) SN2 backside-attack angle by tier. (c) Mechanistic score against geometry. (d) Active-site RMSD by tier. (e) Fluorine engagement by tier. (f) Mechanistic-term breakdown by tier.",
+    "PFAS_Scope_and_Lead_Candidates": "PFAS scope and lead candidates. Substrate scope across the 27-PFAS panel and the leads advanced to physics validation. (a) Tier success rates. (b) Tier_1A enzyme-by-PFAS cross-ligand heatmap. (c) Radar of the top hits. (d) Radar of the tier representatives. (e) Top multi-target proteins. (f) Per-PFAS pocket reaction-readiness. (g) Circos map of ligand-tier assignment.",
+    "Physics_MD_and_Hydration": "Physics and MD overview for the MD-selected complexes. (a) Build and solvation quality control. (b) Cross-rank trajectory quality control (Ca-RMSD, ligand RMSD, RMSF and temperature). (c) WaterMap hydration landscapes across ranks. (d) Prime MM-GBSA binding free energies across ranks. (e) Cross-rank defluorination summary. (f-i) Ligand-protein 2D interaction maps, in the order R1 (fluoroacetate lead), R2 (difluoroacetate lead), R8 (trifluoroacetate lead) and the 3R3U/R69 control.",
     "Mechanism_and_QSite_Validation": "Enzymatic defluorination mechanism and QM/MM validation. (a) The hydrolytic double-displacement mechanism (Asp110 backside SN2 -> glycolyl-enzyme ester -> His280/water hydrolysis), drawn from the real QM geometry for the three independent lead FAcD variants, each on its own substrate (trifluoroacetate, Methylocella tundrae; difluoroacetate, Methylobacterium marchantiae; monofluoroacetate, Bradyrhizobium sp.), with per-enzyme QM/MM reaction-coordinate plots (scissile C-F length and departing-fluoride charge) and a joined QM/MM-geometry-WaterMap-MD read-out; the enzyme replaces one C-F with C-OH, and for the di- and mono-fluoro alpha-hydroxy products a non-enzymatic HF elimination follows. These are three independent enzymes, one per substrate, not a single-substrate cascade. (b) All-jobs QM/MM potential-energy-surface overlay over the scissile C-F bond length, with the geometric cleavage verdict per system. Per-system relaxed-scan reaction profiles, including the RPA1163/3R3U reference, are panel (h) of the per-system near-attack supplementary figures (Supplementary Figures 6-9).",
-    "Cross_Rank_Defluorination_Outcome": "Cross-rank defluorination outcome. The whole-story view linking near-attack persistence, QM/MM barrier and MM-GBSA binding free energy across ranks, with the geometric C-F cleavage verdict per system.",
+    "Cross_Rank_Defluorination_Outcome": "Cross-rank defluorination outcome. Whole-story view linking viability, near-attack persistence, QM/MM energetics and MM-GBSA binding across ranks, with the geometric C-F cleavage verdict per system. (a) Viability summary. (b) Defluorination landscape. (c) Comparative analysis across ranks. (d) Comparative residue engagement. (e) Cross-rank MM-GBSA decomposition. (f) Cross-rank machinery engagement.",
 }
 
 SUPP_LEGENDS = {
     "Screening_and_Scope_Diagnostics": "Screening and scope diagnostics. Further characterisation of the input library and the PFAS scope (the catalytic-residue mapping coverage and the evolutionary phylogeny are promoted to Figure 2b,c). (a) Distribution of active-site alignment grades across the library. (b) Treemap of the tier-by-ligand composition of the screened complexes. (c) AI-quality feature space (pTM, ipTM and confidence). (d) Tier_1A enzyme-by-PFAS dendrogram and cross-ligand tier matrix for fluoroacetate, trifluoroacetate and difluoroacetate. (e) Euler diagram of substrate-category overlap. (f) Top-tier protein-by-PFAS breakdown. (g) Swimmer plot of the top hits per tier.",
-    "Catalytic_Mechanism_Diagnostics": "Catalytic-mechanism diagnostics. Analysis of the mechanism-first score that expands Figure 3. (a) Pairwise correlations among the mechanistic features. (b) Tier-quality dot plot. (c) Cross-tabulation of discrete mechanistic states. (d) Mechanistic fingerprint of the tiers. (e) Mechanistic-quality feature space. (f) Criterion A gating criterion B. (g) Empirical cumulative distribution of criterion B by tier. (h) SN2 dead-end gate. (i) Joint geometry-and-uncertainty view. (j) Metric co-variation network. (k) Mechanistic-gate intersection (UpSet) analysis.",
-    "Ligand_Interactions_and_Chemical_Space": "Ligand interactions and chemical space. Expanded interaction and chemical-space analysis supporting Figures 3 and 5. (a) Molecular interaction profile. (b) Interaction-quality feature space. (c) Catalytic quality against predicted inhibition, separating productive from non-productive binding. (d) Active-site contact density by tier. (e) Binding energetics. (f) Chemical-space map. (g) Binding-affinity metric distributions across the tiers.",
+    "Catalytic_Mechanism_Diagnostics": "Catalytic-mechanism diagnostics. Analysis of the mechanism-first score that expands Figure 4. (a) Pairwise correlations among the mechanistic features. (b) Tier-quality dot plot. (c) Cross-tabulation of discrete mechanistic states. (d) Mechanistic fingerprint of the tiers. (e) Mechanistic-quality feature space. (f) Criterion A gating criterion B. (g) Empirical cumulative distribution of criterion B by tier. (h) SN2 dead-end gate. (i) Joint geometry-and-uncertainty view. (j) Metric co-variation network. (k) Mechanistic-gate intersection (UpSet) analysis.",
+    "Ligand_Interactions_and_Chemical_Space": "Ligand interactions and chemical space. Expanded interaction and chemical-space analysis supporting Figures 4 and 5. (a) Molecular interaction profile. (b) Interaction-quality feature space. (c) Catalytic quality against predicted inhibition, separating productive from non-productive binding. (d) Active-site contact density by tier. (e) Binding energetics. (f) Chemical-space map. (g) Binding-affinity metric distributions across the tiers.",
     "MultiModel_and_Diagnostic_Trends": "Multi-model and diagnostic trends. Diagnostic trends across the screen and the robustness of the ranking across the Boltz-2 model ensemble. (a) Confidence against consensus. (b) Reactive engagement. (c) Pillar divergence by tier. (d) Volcano plot of metric significance. (e) Feature-importance tier streams. (f) Multi-model geometry variance for the ipTM-90 subset.",
     "Preparation_ESP_and_Interaction_Maps": "Preparation, ESP and interaction maps. Preparation quality control for the systems advanced to physics validation. (a) Pose drift from the co-fold CIF to the prepared structure. (b) Electrostatic-potential-fitted alpha-carbon charge of the reactive ligands. (c) Distribution of machinery engagement. (d-g) Prepared-complex protein-ligand interaction maps, in the order the 3R3U control, R1 (the fluoroacetate lead), R8 (the trifluoroacetate lead) and R2 (the difluoroacetate lead).",
     "MD_Rank1_Dynamics_and_Reaction": "Near-attack dynamics and C-F cleavage, R1. Per-system near-attack dynamics and the C-F cleavage reaction for R1, the fluoroacetate lead (Bradyrhizobium sp., UniProt A0A2U3PT06), over the one-microsecond trajectory. (a) Reactive-pose trajectory (attack angle, halide-cradle and carboxylate-clamp distances over time). (b) Near-attack-conformation dashboard. (c) Per-residue occupancy and NAC-criteria summary. (d) Binding (MM-GBSA) against reactivity, per frame. (e) WaterMap hydration sites. (f) Free-energy landscapes of the reactive coordinate. (g) Prepared-pose comparative Ramachandran plot. (h) QM/MM relaxed-scan reaction profile over the scissile C-F bond (per-frame and ensemble barrier, reaction energy, departing-fluoride charge and the geometric cleavage verdict).",
@@ -961,11 +977,11 @@ def main() -> int:
         print(f"  !!  cascade figure skipped ({_ce})")
 
     print(f"Run: {RUN.name}  (format: {FIG_FORMAT})\nMAIN manuscript figures:")
-    fi = 0
-    # Figure 01 = mechanism-guided workflow / graphical overview (curated HTML -> vector export in SVG
-    # mode); the data composites below then follow as Figure 02 onward.
+    # Figure 01 is always reserved for the mechanism-guided workflow / graphical overview (the user keeps
+    # and places that panel themselves); the data composites below start at Figure 02 whether or not the
+    # curated HTML renders here (headless browser may be absent on this machine).
+    fi = 1
     if _render_workflow(WORKFLOW_HTML, OUT_DIR / f"Figure_01_Workflow_Overview.{FIG_FORMAT}"):
-        fi = 1
         main_figs.append((1, "Workflow_Overview"))
     # The screen-funnel Sankey belongs in Figure 1, beside the workflow. Figure 1 is a curated HTML
     # export (its own sub-panels; a foreignObject that will not rasterise), so the Sankey is composited
@@ -1721,10 +1737,9 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     _c_rxn_arrow(ax, XA + 1.15, XB - 1.35, yc, top="$-$ F$^-$")
     _c_rxn_arrow(ax, XB + 1.80, XC - 1.3, yc, top="$+$ H$_2$O", bot="hydrolysis")
 
-    _c_scan_inset(fig, ax, rank, 12.25, 14.9, yc + 0.72, yc + 2.28)
+    _c_scan_inset(fig, ax, rank, 12.10, 15.65, yc + 0.55, yc + 2.60)
     qm = load_qm(rank, acc)
-    sx, sy, dyl = 12.15, yc - 0.18, 0.325
-    ax.text(sx, sy + 0.36, "QM/MM  ·  geometry  ·  WaterMap  ·  MD", color=INK, fontsize=10.8, ha="left", va="center", fontweight="bold", zorder=10)
+    sx, sy, dyl = 12.15, yc - 0.04, 0.325
     strip = [("C–F cleaved", qm["cleaved"] + " frames", GRN),
              ("S$_N$2 attack (QM)", qm["angle"], INK),
              ("ΔE$^\\ddagger$ (1-D scan, mean)", qm["barrier"] + " kcal/mol", INK),
@@ -1749,7 +1764,7 @@ def _c_legend_arrow(ax, x, y, style, col, label):
     else:
         ax.add_patch(FancyArrowPatch((x, y), (x + 0.46, y), arrowstyle="-|>", mutation_scale=11,
                                      lw=(2.1 if style == "solid" else 1.5), color=col, ls=ls, zorder=3))
-    ax.text(x + 0.60, y, label, color=INK, fontsize=10.0, ha="left", va="center", zorder=10)
+    ax.text(x + 0.60, y, label, color=INK, fontsize=11.0, ha="left", va="center", zorder=10)
 
 
 # -------- layout --------
@@ -1761,9 +1776,9 @@ XROLE = 16.75
 
 
 def _cascade_build():
-    fig = plt.figure(figsize=(16.4, 16.6)); fig.patch.set_facecolor("white")
+    fig = plt.figure(figsize=(16.4, 15.9)); fig.patch.set_facecolor("white")
     ax = fig.add_axes([0.0, 0.006, 1.0, 0.988]); ax.axis("off"); ax.set_aspect("equal")
-    ax.set_xlim(-1.4, 17.3); ax.set_ylim(-4.5, 14.2)
+    ax.set_xlim(-1.4, 17.3); ax.set_ylim(-3.72, 14.2)
     n = len(CASCADE)
     YC = [11.5, 5.9, 0.3] if n == 3 else list(np.linspace(11.5, 0.3, max(n, 1)))
     CXC = (-1.4 + 17.3) / 2
@@ -1773,34 +1788,49 @@ def _cascade_build():
         _c_band(ax, fig, YC[i], i + 1, rank, ret, sub_cas, prod_cas, prod_direct, acc, species, geom_attack(rank))
 
 
-    yR1, yR2, yAk, yKey = -2.80, -3.22, -3.64, -4.06
-    chip_w = lambda lab: 0.34 + len(lab) * 0.112 + 0.34
-    arr_w = lambda lab: 0.62 + len(lab) * 0.112 + 0.40
-    rows = [("chip", yR1, [(PUR, "nucleophile (Asp)"), (ORG, "general base (His / Asp)"),
-                           (PINK, "F$^-$ cradle (His / Trp / Tyr)")]),
-            ("chip", yR2, [(GRN, "COO$^-$ clamp (Arg / Arg)"), (OXY, "oxyanion hole (Phe / Arg N-H)")]),
-            ("arr", yAk, [("solid", INK, "reaction step"), ("curl", INK, "electron shift"),
-                          ("dash", ORG, "proton / water")])]
-    maxw = max(sum((chip_w if k == "chip" else arr_w)(it[-1]) for it in items) for k, y, items in rows)
-    halfw = maxw / 2 + 0.45
-    ax.add_patch(FancyBboxPatch((CXC - halfw, yKey - 0.22), 2 * halfw, (yR1 + 0.24) - (yKey - 0.22),
+    # Flow-wrap legend: all items (role chips, arrow key, step key) sit tightly next to each other and
+    # wrap to as many rows as fit the width - with this content that settles to two closely-spaced rows.
+    FS = 11.0
+    GAP = 0.34
+    _tlen = lambda s: len(s.replace("$", "").replace("^", "").replace("_", ""))   # rendered length (drop math)
+    chips = [(PUR, "nucleophile (Asp)"), (ORG, "general base (His / Asp)"),
+             (PINK, "F$^-$ cradle (His / Trp / Tyr)"), (GRN, "COO$^-$ clamp (Arg / Arg)"),
+             (OXY, "oxyanion hole (Phe / Arg N-H)")]
+    arrs = [("solid", INK, "reaction step"), ("curl", INK, "electron shift"), ("dash", ORG, "proton / water")]
+    steps = ["steps:", "1 attack", "2 C-F cleaved", "3 ester", "4 water activated", "5 hydrolysis"]
+    items = ([("chip", c, l) for c, l in chips] + [("arr", s, c, l) for s, c, l in arrs]
+             + [("txt", t) for t in steps])
+    def _iw(it):                                        # item width incl. its trailing gap
+        if it[0] == "chip": return 0.34 + _tlen(it[2]) * 0.116 + GAP
+        if it[0] == "arr":  return 0.62 + _tlen(it[3]) * 0.116 + GAP
+        return _tlen(it[1]) * 0.106 + GAP
+    Wmax = 17.4                                         # wrap width (fits inside the x-range with margins)
+    rows, cw = [[]], 0.0
+    for it in items:
+        w = _iw(it)
+        if cw + w > Wmax and rows[-1]:
+            rows.append([]); cw = 0.0
+        rows[-1].append((it, w)); cw += w
+    dyr, yTop = 0.48, -2.82
+    row_ws = [sum(w for _, w in r) - GAP for r in rows]
+    halfw = max(row_ws) / 2 + 0.40
+    yBot = yTop - (len(rows) - 1) * dyr
+    ax.add_patch(FancyBboxPatch((CXC - halfw, yBot - 0.23), 2 * halfw, (yTop + 0.23) - (yBot - 0.23),
                                 boxstyle="round,pad=0.02,rounding_size=0.10", fc="none", ec="#B4ABCB", lw=1.1, zorder=0))
-    for kind, yrow, items in rows:
-        w = sum((chip_w if kind == "chip" else arr_w)(it[-1]) for it in items)
-        cx = CXC - w / 2
-        for it in items:
-            if kind == "chip":
-                col, lab = it
-                ax.add_patch(Circle((cx + 0.13, yrow), 0.14, fc=col, ec="white", lw=1.0, zorder=4))
-                ax.text(cx + 0.34, yrow, lab, color=INK, fontsize=10.5, ha="left", va="center", zorder=10)
-                cx += chip_w(lab)
+    for ri, row in enumerate(rows):
+        y = yTop - ri * dyr
+        x = CXC - row_ws[ri] / 2
+        for it, w in row:
+            if it[0] == "chip":
+                _, col, lab = it
+                ax.add_patch(Circle((x + 0.14, y), 0.15, fc=col, ec="white", lw=1.0, zorder=4))
+                ax.text(x + 0.36, y, lab, color=INK, fontsize=FS, ha="left", va="center", zorder=10)
+            elif it[0] == "arr":
+                _, style, col, lab = it
+                _c_legend_arrow(ax, x, y, style, col, lab)
             else:
-                style, col, lab = it
-                _c_legend_arrow(ax, cx, yrow, style, col, lab)
-                cx += arr_w(lab)
-    ax.text(CXC, yKey, "steps:  (1) Asp backside attack   (2) C–F cleaved, F$^-$ to cradle   "
-            "(3) glycolyl-enzyme ester   (4) His activates water   (5) hydrolysis → product",
-            color=INK, fontsize=9.8, ha="center", va="center", zorder=10)
+                ax.text(x, y, it[1], color=INK, fontsize=FS, ha="left", va="center", zorder=10)
+            x += w
 
     _CASC_OUT.mkdir(parents=True, exist_ok=True)
     out = _CASC_OUT / "Reaction_Cascade"
