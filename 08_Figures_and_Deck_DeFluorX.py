@@ -829,8 +829,7 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
                     shutil.copyfile(_svg, out_path)
             print(f"  ok  {out_path.name}  (vector export, A4-fitted)")
             return True
-        print(f"  --  workflow SVG export pending: {out_path.name}")
-        return False
+        return False      # no user-supplied workflow SVG present; main() logs the reserved-slot note
     # Prefer a pre-rendered PNG next to the HTML (produced by the HTML's own 'Export high-res PNG'
     # button, or a prior render) - reliable and firefox-free. Headless firefox is only the fallback.
     _pre = html_path.parent / "Figure_01_Workflow_Overview.png"
@@ -983,6 +982,11 @@ def main() -> int:
     fi = 1
     if _render_workflow(WORKFLOW_HTML, OUT_DIR / f"Figure_01_Workflow_Overview.{FIG_FORMAT}"):
         main_figs.append((1, "Workflow_Overview"))
+        print("  ok  Figure 01 = workflow overview (user-supplied panel kept and counted as Figure 1)")
+    else:
+        print("  ::  Figure 01 reserved for the user-supplied workflow overview "
+              f"(drop Figure_01_Workflow_Overview.{FIG_FORMAT} into the output folder); "
+              "data figures start at Figure 02 by design")
     # The screen-funnel Sankey belongs in Figure 1, beside the workflow. Figure 1 is a curated HTML
     # export (its own sub-panels; a foreignObject that will not rasterise), so the Sankey is composited
     # in by hand rather than montaged here. Reserve it so no supplementary glob reclaims it.

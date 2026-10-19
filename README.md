@@ -1284,10 +1284,11 @@ python 08_Figures_and_Deck_DeFluorX.py Boltz-2_Run_20260309T085406Z   # or no ar
 
 **What it does:**
 - **Cascade scheme** - selects the best per-class degrader (TFA, DFA, MFA) from `7_QMMM_Defluorination/01_Master_Ranking.csv`, then draws each enzyme's hydrolytic double-displacement (Asp110 nucleophile → glycolyl-enzyme ester → His280/water hydrolysis) directly from the real QM `.mae` geometry, with a per-band QM/MM reaction-coordinate plot (scissile C-F length + departing-F charge) and a joined QM/MM · geometry · WaterMap · MD data strip. Rendered as panel a of the mechanism / QM-MM-validation figure (panel b = the all-jobs PES overlay).
-- **Merged composites** - tiles related step panels into portrait, panel-lettered figures (format set by `CFG.VIS_FIGURE_FORMAT`, default true-vector SVG).
+- **Merged composites** - tiles related step panels into portrait, panel-lettered figures (format set by `CFG.VIS_FIGURE_FORMAT`, default true-vector SVG). Panel letters sit in a reserved top-left margin so they never overlap axes or values.
+- **Figure 01 is a reserved, user-supplied slot** - the mechanism-guided workflow overview is authored by hand, so the data composites are numbered from **Figure 02** by design. Drop `Figure_01_Workflow_Overview.svg` into the output folder and Step 08 keeps it verbatim (A4-fitted), counts it as Figure 1 in the legends and deck, and never overwrites or deletes any `Figure_01*` file on a re-run.
 - **Editable deck** - rebuilds `DeFluorX_Figures.pptx` from the merged SVGs (needs base python3 with python-pptx + rsvg-convert).
 
-Missing-tolerant and idempotent: panels a still-running step has not produced yet are skipped and fold in on a re-run.
+Missing-tolerant and idempotent: a re-run replaces only Step 08's own figure families and skips any `Figure_01*`; panels a still-running step has not produced yet are skipped and fold in on a re-run.
 
 **Outputs:** `<Run>/8_Figures_and_Deck_HQ/` - `Figure_NN` / `Supplementary_Figure_NN` SVGs (the cascade is panel a of the mechanism figure) and `DeFluorX_Figures.pptx`.
 </details>
