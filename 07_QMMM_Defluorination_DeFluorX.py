@@ -54,7 +54,7 @@ Date   : 20 October 2026 <──────────────────
                     - 08_QSite_Reaction_Profile.svg (all sampled frames overlaid on one shared reaction axis - PES over scissile C-F bond length - with a per-frame + ensemble table and cleavage-semantic colours; the headline QM/MM figure)
                     - 09_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
                     - 10_QSite_Scan_Data.csv       (long-format raw PES + scissile C-F length + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
-                    (the integrated reaction-mechanism scene is no longer emitted here; it now lives as the cross-enzyme defluorination cascade figure built by the standalone 08_Journal_Figures script)
+                    (the integrated reaction-mechanism scene is no longer emitted here; it now lives as the cross-enzyme defluorination cascade figure built by the Step 08 Figures_and_Deck script)
                   <Run>/7_QMMM_Defluorination/01_Primary_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn scan features,
                      scissile C-F cleavage length + departing-F charge,
@@ -315,7 +315,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 import seaborn as sns
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch, Rectangle, Circle, FancyArrowPatch, Arc
+from matplotlib.patches import Patch, Rectangle
 from matplotlib.ticker import MultipleLocator
 from matplotlib.colors import BoundaryNorm
 
@@ -5724,7 +5724,7 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
                                  ligand, _profs, _ens, qmmeta)
             # 09 = the MD-time / QSite-sampling link; it reads the scan CSV just written, so it draws
             # only once the QM/MM sampling for this rank is in. (The integrated reaction-mechanism scene
-            # now lives in the standalone 08_Journal_Figures script, as the cross-enzyme cascade figure.)
+            # now lives in the Step 08 Figures_and_Deck script, as the cross-enzyme cascade figure.)
             plot_md_qsite_timeline(job_out_dir / "09_MD_QSite_Timeline.svg",
                                    job_out_dir, rank, job_name)
     except Exception as _exc:

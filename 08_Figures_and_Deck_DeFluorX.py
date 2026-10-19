@@ -15,8 +15,8 @@ It does three things:
      each (Asp110 nucleophile -> glycolyl-enzyme ester -> His280/water hydrolysis),
      directly from the real QM .mae geometry, with a per-band QM/MM reaction-
      coordinate plot (scissile C-F length + departing-F charge) and a joined
-     QM/MM . geometry . WaterMap . MD data strip. Emitted as its own standalone
-     figure (replaces the former per-rank 07 reaction-mechanism scene).
+     QM/MM . geometry . WaterMap . MD data strip. Built as panel a of the
+     mechanism / QM-MM-validation figure (replaces the former per-rank 07 scene).
   2. Merged composites - reads the step panels IN PLACE (never copies the sources)
      and tiles related panels into portrait, tight, panel-lettered figures.
   3. Editable deck - rebuilds the .pptx from the merged SVGs (python-pptx + rsvg).
@@ -42,8 +42,9 @@ Date   : 20 October 2026 <──────────────────
                   01_Journal_Files/Figures_HQ/ (CURATED: Figure-1 workflow HTML, _assets)
   Writes        : <Run>/8_Figures_and_Deck_HQ/
                     - _cascade/Reaction_Cascade.{svg,png}          (cascade source)
-                    - Figure_NN_<Name>.svg                         (merged main figures)
-                    - Figure_NN_Defluorination_Cascade_Mechanism.svg (standalone cascade)
+                    - Figure_NN_<Name>.svg                         (merged main figures; the
+                                                                   cascade is panel a of the
+                                                                   mechanism / QM-MM figure)
                     - Supplementary_Figure_NN_<Name>.svg
                     - DeFluorX_Figures.pptx                         (editable deck)
   Env           : base python3 (python-pptx + rsvg-convert for the deck); the figure
@@ -331,7 +332,6 @@ def _rank_panels(rank_dir: Path, n: str) -> list:
     #   06 defluorination : Defluorination_R{n}          07 MD : Rank_{n} (= rank_dir)
     #   06 Desmond SID     : Analysis_MDS_R_{n}/images    06 MM-GBSA : Prime-MMGBSA/MMGBSA_Profile_R{n}
     defl = _P / "06_Analysis" / "Defluorination" / f"Defluorination_R{n}"
-    sid = _P / "05_MD_Simulations" / f"Analysis_MDS_R_{n}" / "images"
     # The following per-rank panels are deliberately OMITTED because a cross-rank version already tells
     # the same story once, so per-rank copies would duplicate it:
     #   RMSD / RMSF (PL-RMSD, P-RMSF, L-RMSF)       -> Figure 6 panel b (03_MD_Trajectory_QC)
@@ -966,8 +966,8 @@ def main() -> int:
     supp_figs: list = []
 
     # Build the cross-enzyme defluorination cascade (best per-class TFA/DFA/MFA degrader, merged from the
-    # former Step-07 reaction-mechanism scene). It is a finished full-page composite, so it is emitted as
-    # its own standalone figure after the montaged mains (not tiled as a sub-panel).
+    # former Step-07 reaction-mechanism scene). It is drawn to its own SVG first, then placed as panel a
+    # of the mechanism / QM-MM-validation main figure (panel b = the all-jobs PES overlay).
     _casc = None
     try:
         _casc = build_cascade(_M, OUT_DIR / "_cascade")
