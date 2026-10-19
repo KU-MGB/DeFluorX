@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-DeFluorX Pipeline  |  Step 08  |  Journal Figure Assembly
+DeFluorX Pipeline  |  Step 08  |  Figure & Deck Assembly
 ===============================================================================
 
 Final, non-computational step: assembles the publication-grade panels that the
@@ -29,8 +29,8 @@ Author : Shaban Ahmad (https://orcid.org/0000-0001-9832-2830)
 Date   : 20 October 2026 <───────────────────────────────────────────────────────
 
 ── Dependency Map ─────────────────────────────────────────────────────────────
-  Script        : 08_Journal_Figures_DeFluorX.py
-  Role          : Journal figure + deck assembly; final non-computational step.
+  Script        : 08_Figures_and_Deck_DeFluorX.py
+  Role          : Manuscript figure + deck assembly; final non-computational step.
   Imports from  : (self-contained; standard scientific stack only - Pillow, lxml,
                   numpy, matplotlib, python-pptx. No pipeline module is imported.)
   Reads         : <Run>/3_Validation_Figures/ · 4_Dendrogram/ · 5_TopN_and_Preparation/
@@ -40,7 +40,7 @@ Date   : 20 October 2026 <──────────────────
                   <Run>/7_QMMM_Defluorination/Rank_N/01_MD_Stats.json         (WaterMap/MD strip)
                   <Run>/7_QMMM_Defluorination/Rank_N/QSite_SN2/*/*.01.mae     (substrate geometry)
                   01_Journal_Files/Figures_HQ/ (CURATED: Figure-1 workflow HTML, _assets)
-  Writes        : <Run>/08_Journal_Figures_HQ/
+  Writes        : <Run>/08_Figures_and_Deck_HQ/
                     - _cascade/Reaction_Cascade.{svg,png}          (cascade source)
                     - Figure_NN_<Name>.svg                         (merged main figures)
                     - Figure_NN_Defluorination_Cascade_Mechanism.svg (standalone cascade)
@@ -89,7 +89,7 @@ def _latest_run() -> Path:
 
 RUN = _latest_run()
 # Step-08 output: the HQ merged journal figures + deck land inside the run as a numbered step folder.
-OUT_DIR = RUN / "08_Journal_Figures_HQ"
+OUT_DIR = RUN / "08_Figures_and_Deck_HQ"
 # Figure 01 is the mechanism-guided workflow / graphical overview, authored as a self-consistent HTML
 # (curated input) and rendered here to PNG so it sits in the same numbered series as the composites.
 WORKFLOW_HTML = CURATED / "Figure_1" / "DeFluorX_Figure_1.html"
@@ -1605,7 +1605,7 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     for aa, lab in [(150, "H155"), (90, "W156"), (33, "Y219")]:
         p = Fm + np.array([math.cos(math.radians(aa)), math.sin(math.radians(aa))]) * 1.00
         _c_hbond(ax, p, Fm, PINK); _c_disc(ax, p, PINK, lab)
-    w185 = Fm + np.array([0.38, -1.02]); _c_disc(ax, w185, PINK, "W185", rad=0.31, fs=9.5)
+    w185 = Fm + np.array([0.22, -0.72]); _c_disc(ax, w185, PINK, "W185", rad=0.31, fs=9.5)
     ax.add_patch(FancyArrowPatch(w185 + np.array([-0.08, 0.22]), Fm + np.array([0.14, -0.22]),
                                  connectionstyle="arc3,rad=0.3", arrowstyle="-|>", mutation_scale=10, lw=1.3, color=PINK, ls=(0, (2, 2)), zorder=4))
     _c_numbox(ax, (Fm[0] - 0.52, Fm[1] - 0.50), 2)
@@ -1619,7 +1619,7 @@ def _c_band(ax, fig, yc, step, rank, ret, sub_cas, prod_cas, prod_direct, acc, s
     ax.text(XC, cap_s, "Asp110 regenerated", color=PUR, fontsize=11.0, ha="center", zorder=10)
 
     _c_rxn_arrow(ax, XA + 1.15, XB - 1.35, yc, top="$-$ F$^-$")
-    _c_rxn_arrow(ax, XB + 1.25, XC - 1.3, yc, top="$+$ H$_2$O", bot="hydrolysis")
+    _c_rxn_arrow(ax, XB + 1.80, XC - 1.3, yc, top="$+$ H$_2$O", bot="hydrolysis")
 
     _c_scan_inset(fig, ax, rank, 12.25, 14.9, yc + 0.72, yc + 2.28)
     qm = load_qm(rank, acc)

@@ -121,7 +121,7 @@ _print_step_menu() {
     echo "    [5] 05  Top-N selection + PDB preparation"
     echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
     echo "    [7] 07  MD thermodynamics + QM/MM engine"
-    echo "    [8] 08  Journal figures + deck (merged composites · defluorination cascade)"
+    echo "    [8] 08  Figures & deck (merged composites · defluorination cascade)"
 }
 
 for _arg in "$@"; do
@@ -754,11 +754,11 @@ if [[ $DRY_RUN -eq 0 && "$SUDO_ENABLED" == "1" && 7 -ge $RESUME_FROM ]]; then
     sudo systemctl start systemd-oomd 2>/dev/null || true
 fi
 
-# Step 08 - journal figure + deck assembly. Non-computational: tiles the step panels into merged
+# Step 08 - manuscript figure + deck assembly. Non-computational: tiles the step panels into merged
 # manuscript figures, draws the standalone defluorination-cascade scheme, and rebuilds the editable
 # deck. --optional: a figure/deck hiccup (e.g. rsvg-convert absent) must not fail a completed run.
-run_step --optional "08  Journal figures + deck (merged composites + cascade)" \
-    python 08_Journal_Figures_DeFluorX.py
+run_step --optional "08  Figures & deck (merged composites + cascade)" \
+    python 08_Figures_and_Deck_DeFluorX.py
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 
