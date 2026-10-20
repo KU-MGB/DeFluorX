@@ -387,7 +387,7 @@ def _rank_panels(rank_dir: Path, n: str) -> list:
     # trajectory is kept from the old Part 1, and it folds into this single per-rank figure.
     # The per-system near-attack / competence story, trimmed to the five panels that each add a distinct
     # view. Dropped as redundant/low-signal: 04_Active_Site_Dynamics (interaction distances over time -
-    # overlaps the reactive-pose panel and the cross-rank engagement) and 10_MD_QSite_Timeline (attack
+    # overlaps the reactive-pose panel and the cross-rank engagement) and 09_MD_QSite_Timeline (attack
     # angle over time - already carried by the reactive-pose series and the NAC-dashboard density).
     # Order puts the two crucial panels (reactive-pose + NAC) first so they share a 2-panel row and stay
     # large; the free-energy landscapes go LAST so they cap to a smaller lone-last slot rather than hog
@@ -428,7 +428,7 @@ _AUDIT_SKIP = ("1_Converted_Raw_PDB", "02_Ramachandran", "/PLIP/", "/PyMOL/", "/
                "PL-RMSD", "P-RMSF", "L-RMSF", "MMGBSA_Profile_R",
                "06_MMGBSA_Decomposition_and_Trace", "07_Machinery_Engagement.",
                "P-SSE_Timeline", "P-SSE_Histogram", "PL-Contacts_Timeline", "PL-Contacts_Histogram",
-               "L_2d_main", "L-Properties", "04_Active_Site_Dynamics", "10_MD_QSite_Timeline")
+               "L_2d_main", "L-Properties", "04_Active_Site_Dynamics", "09_MD_QSite_Timeline", "QSite_SN2")
 
 # ---- montage geometry (portrait, Nature-style; justified rows to minimise white space) ----
 TARGET_W = 2400        # figure width (px); rows are scaled to exactly this -> no ragged right edge
