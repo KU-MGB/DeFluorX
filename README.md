@@ -1446,6 +1446,12 @@ If this pipeline is used in your research, please cite:
 
 Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). *Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination*. *bioRxiv*. https://doi.org/10.64898/2026.10.11.758284
 
+Copy-ready (hover the block for GitHub's copy button; GitHub also shows a **"Cite this repository"** button that reads [`CITATION.cff`](./CITATION.cff)):
+
+```text
+Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination. bioRxiv. https://doi.org/10.64898/2026.10.11.758284
+```
+
 <details>
 <summary><b>Key Publications & Software Tools (BibTeX)</b></summary>
 

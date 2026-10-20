@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this software or its outputs, please cite the preprint below."
+title: "Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination"
+type: software
+authors:
+  - family-names: Ahmad
+    given-names: Shaban
+    affiliation: "University of Copenhagen"
+  - family-names: Forouzandeh
+    given-names: Asal
+  - family-names: Togni
+    given-names: Benedetta
+  - family-names: Randløv
+    given-names: "Jonas Borup"
+  - family-names: Ogden
+    given-names: Michael
+  - family-names: Nielsen
+    given-names: "Tue Kjærgaard"
+    affiliation: "University of Copenhagen"
+repository-code: "https://github.com/KU-MGB/DeFluorX"
+url: "https://github.com/KU-MGB/DeFluorX"
+license: CC-BY-NC-4.0
+preferred-citation:
+  type: article
+  title: "Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination"
+  authors:
+    - family-names: Ahmad
+      given-names: Shaban
+    - family-names: Forouzandeh
+      given-names: Asal
+    - family-names: Togni
+      given-names: Benedetta
+    - family-names: Randløv
+      given-names: "Jonas Borup"
+    - family-names: Ogden
+      given-names: Michael
+    - family-names: Nielsen
+      given-names: "Tue Kjærgaard"
+  year: 2026
+  journal: bioRxiv
+  doi: 10.64898/2026.10.11.758284
+  url: "https://doi.org/10.64898/2026.10.11.758284"
