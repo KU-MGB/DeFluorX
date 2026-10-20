@@ -1960,7 +1960,7 @@ University of Copenhagen, Denmark
 
 <br>
 
-<img src="https://komarev.com/ghpvc/?username=KU-MGB-DeFluorX&label=Repository+Views&color=22C55E&style=flat"/> &nbsp; <sub>Last updated: 20 October 2026</sub>
+<sub>Last updated: 20 October 2026</sub>
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
