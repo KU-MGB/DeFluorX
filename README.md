@@ -8,7 +8,7 @@
 <a href="https://doi.org/10.64898/2026.10.11.758284" target="_blank" rel="noopener noreferrer"><img alt="Preprint on bioRxiv" src="https://img.shields.io/badge/Preprint-bioRxiv-b31b1b?style=flat-square"></a>
 <a href="https://github.com/KU-MGB/DeFluorX"><img alt="Code on GitHub" src="https://img.shields.io/badge/Code-GitHub-181717?style=flat-square&logo=github&logoColor=white"></a>
 <a href="https://doi.org/10.5281/zenodo.23318610" target="_blank" rel="noopener noreferrer"><img alt="Supplementary data on Zenodo" src="https://img.shields.io/badge/Data-Zenodo-1682D4?style=flat-square"></a>
-<a href="https://github.com/KU-MGB/DeFluorX?tab=License-1-ov-file"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/License-CC_BY--NC_4.0-4c1d95?style=flat-square"></a>
+<a href="LICENSE"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/License-CC_BY--NC_4.0-4c1d95?style=flat-square"></a>
 </p>
 
 <img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
@@ -1960,7 +1960,7 @@ University of Copenhagen, Denmark
 
 <br>
 
-<a href="https://github.com/KU-MGB/DeFluorX"><img src="https://komarev.com/ghpvc/?username=KU-MGB-DeFluorX&label=Repository+Views&color=22C55E&style=flat"/></a> &nbsp; <sub>Last updated: 20 October 2026</sub>
+<a href="https://github.com/KU-MGB/DeFluorX"><img src="https://visitor-badge.laobi.icu/badge?page_id=KU-MGB.DeFluorX&left_text=Repository%20Views&right_color=%2322C55E"/></a> &nbsp; <sub>Last updated: 20 October 2026</sub>
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
