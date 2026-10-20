@@ -2727,9 +2727,10 @@ def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> N
             if not _csv.is_file():
                 continue
             try:
-                _cd = pd.read_csv(_csv)
+                _cd_full = pd.read_csv(_csv)
             except Exception:
                 continue
+            _cd = _cd_full
             if "Is_Best_Frame" in _cd.columns:
                 _cd = _cd[_cd["Is_Best_Frame"].astype(str).str.lower().isin(("true", "1"))]
             if _cd.empty or "Energy_Rel_kcal" not in _cd.columns:
@@ -2737,8 +2738,22 @@ def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> N
             _cd = _cd.sort_values("Scan_Point")
             def _one(col, _d=_cd):
                 return _d[col].iloc[0] if col in _d.columns and len(_d) else np.nan
-            _fqp, _bar = _one("Frame_F_Charge_Product"), _one("QSite_Barrier_Ensemble_kcal")
+            _fqp = _one("Frame_F_Charge_Product")
             _cfp = _one("Frame_CF_Product_A")
+            '''
+            In-window mean barrier: average Frame_Barrier_kcal over only the frames whose barrier falls in
+            the scan window (Frame_Barrier_In_Window). This is the quantity the master ranking reports as
+            QSite_Barrier_Mean_kcal and the per-system mechanism panel quotes, and it excludes the 0.0-kcal
+            placeholders out-of-window frames carry (which drag the rate-weighted ensemble estimate down to
+            a non-physical ~0.2 kcal/mol). The all-jobs inset uses it so both figures agree.
+            '''
+            _bar_inwin = np.nan
+            if {"Frame_Barrier_kcal", "Frame_Barrier_In_Window"}.issubset(_cd_full.columns):
+                _cols = (["Frame_ID"] if "Frame_ID" in _cd_full.columns else []) + ["Frame_Barrier_kcal", "Frame_Barrier_In_Window"]
+                _fb = _cd_full[_cols].drop_duplicates()
+                _inw = _fb[_fb["Frame_Barrier_In_Window"].astype(str).str.lower().isin(("true", "1"))]
+                if len(_inw):
+                    _bar_inwin = float(_inw["Frame_Barrier_kcal"].mean())
             '''
             The Is_Defluorinating verdict (geometric C-F cleavage: product-end scissile C-F length
             >= CFG.QSITE_CF_CLEAVED_A) is written into the scan CSV, so the cross-job figure reads that
@@ -2752,18 +2767,21 @@ def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> N
             _isc = _jn.startswith(str(getattr(CFG, "CONTROL_JOB_PREFIX", "0000000"))) or "3R3U" in _jn.upper()
             _ligd = _CTRL_LABEL if _isc else (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else "")
             '''
-            SN2 attack angle for the right-hand read-off: the 100%-from-QM O-Cα-F angle at the best
-            frame's attack (transition-state) point. Falls back to the MD reactive-frame mean when the
-            scan geometry is unavailable (older runs without a persisted scan).
+            SN2 attack angle for the right-hand read-off: the raw best-frame O-Cα-F angle read from the MD
+            stats (SN2_Attack_Angle) so the all-jobs figure quotes the SAME angle as the per-system
+            mechanism panel and Table 2. Falls back to the QM scan geometry, then the MD NAC-mean angle.
             '''
-            _ag = _qsite_attack_geometry(_rd)
-            _ang = float(_ag["angle"]) if _ag else np.nan
+            try:
+                _st = json.loads((_rd / "01_MD_Stats.json").read_text())
+            except Exception:
+                _st = {}
+            try:
+                _ang = float(_st.get("SN2_Attack_Angle", np.nan))
+            except Exception:
+                _ang = np.nan
             if _ang != _ang:
-                try:
-                    _st = json.loads((_rd / "01_MD_Stats.json").read_text())
-                    _ang = float(_st.get("MD_Avg_NAC_Angle_Deg", _st.get("SN2_Attack_Angle", np.nan)))
-                except Exception:
-                    pass
+                _ag = _qsite_attack_geometry(_rd)
+                _ang = float(_ag["angle"]) if _ag else float(_st.get("MD_Avg_NAC_Angle_Deg", np.nan))
             _jobs.append({
                 "label": (f"R_{int(_one('Rank'))}" if "Rank" in _cd.columns and pd.notna(_one("Rank")) else _rd.name),
                 "rank": (int(_one("Rank")) if "Rank" in _cd.columns and pd.notna(_one("Rank")) else 0),
@@ -2771,7 +2789,7 @@ def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> N
                 "coord": _cd["Coord_Nu_O_C_A"].tolist(),
                 "energy_kcal": _cd["Energy_Rel_kcal"].tolist(),
                 "cf_dist": (_cd["CF_Dist_A"].tolist() if "CF_Dist_A" in _cd.columns else []),
-                "barrier_ens": (float(_bar) if pd.notna(_bar) else np.nan),
+                "barrier_inwin": (float(_bar_inwin) if _bar_inwin == _bar_inwin else np.nan),
                 "derxn_ens": (float(_one("QSite_dErxn_Ensemble_kcal")) if pd.notna(_one("QSite_dErxn_Ensemble_kcal")) else np.nan),
                 "fq_final": (float(_fqp) if pd.notna(_fqp) else np.nan),
                 "is_defluor": (bool(int(float(_isdef))) if pd.notna(_isdef)
@@ -5133,8 +5151,9 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
     (control distinct + last); the geometric C-F cleavage point (first scan point with C-F past
     CFG.QSITE_CF_CLEAVED_A) is a big dot with a coloured dashed drop line to the reaction-coordinate axis
     and a coloured dotted read-off line to its SN2 attack angle on the right. A top-border, axis-less
-    ensemble-ΔE‡ bar inset (transparent, control last, x-axis rotated on the top border with a grey dotted
-    frame) shows each job's ensemble barrier (QSite_Barrier_Ensemble_kcal) with its value. A top-centre
+    ΔE‡ bar inset (transparent, control last, x-axis rotated on the top border with a grey dotted
+    frame) shows each job's in-window mean barrier (the 1-D-scan mean over in-window frames, the same
+    quantity the per-system mechanism panel quotes) with its value. A top-centre
     legend names each rank. Solid curve = defluorinating (Is_Defluorinating), dashed = not. No figure title."""
     try:
         _J = [j for j in jobs if len(j.get("energy_kcal") or []) >= 3]
@@ -5215,10 +5234,10 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
                 _order = sorted([j for j in _J if not j.get("is_control")], key=_rankof) + [j for j in _J if j.get("is_control")]
                 _ins = ax.inset_axes([0.03, 0.67, 0.27, 0.33]); _ins.patch.set_alpha(0.0)   # nudged right off the y-axis
                 _yp = np.arange(len(_order))[::-1]
-                _bmax = max([j.get("barrier_ens") for j in _order
-                             if j.get("barrier_ens") == j.get("barrier_ens")] or [1.0])
+                _bmax = max([j.get("barrier_inwin") for j in _order
+                             if j.get("barrier_inwin") == j.get("barrier_inwin")] or [1.0])
                 for _yy, j in zip(_yp, _order):
-                    _b = j.get("barrier_ens", float("nan"))
+                    _b = j.get("barrier_inwin", float("nan"))
                     if _b != _b:
                         continue
                     _ins.barh(_yy, _b, color=_col[id(j)], edgecolor=_C["edge"], height=0.86, alpha=0.92, zorder=3)
@@ -5229,7 +5248,7 @@ def plot_qsite_profiles_all_jobs(out_path: Path, jobs: list) -> None:
                               fontweight="bold", color=("white" if _inside else _C["edge"]), zorder=5)
                 _ins.set_yticks([])
                 _ins.set_xticks(list(range(0, int(np.ceil(_bmax)) + 1, 2)))
-                _ins.set_xlabel("ensemble ΔE‡ (kcal/mol)", fontsize=_ft - 1.5, color=_xtcol)
+                _ins.set_xlabel("ΔE‡ (1-D scan, mean) (kcal/mol)", fontsize=_ft - 1.5, color=_xtcol)
                 _ins.xaxis.set_label_position("top")
                 _ins.tick_params(axis="x", colors=_xtcol, labelsize=_ft - 2.0, length=3, labelrotation=90,
                                  top=True, bottom=False, labeltop=True, labelbottom=False)

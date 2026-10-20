@@ -5,10 +5,10 @@
 **Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination**
 
 <p>
-<a href="https://doi.org/10.64898/2026.10.11.758284"><img alt="Preprint on bioRxiv" src="https://img.shields.io/badge/Preprint-bioRxiv-b31b1b?style=flat-square"></a>
+<a href="https://doi.org/10.64898/2026.10.11.758284" target="_blank" rel="noopener noreferrer"><img alt="Preprint on bioRxiv" src="https://img.shields.io/badge/Preprint-bioRxiv-b31b1b?style=flat-square"></a>
 <a href="https://github.com/KU-MGB/DeFluorX"><img alt="Code on GitHub" src="https://img.shields.io/badge/Code-GitHub-181717?style=flat-square&logo=github&logoColor=white"></a>
-<a href="https://doi.org/10.5281/zenodo.23318610"><img alt="Supplementary data on Zenodo" src="https://img.shields.io/badge/Data-Zenodo-1682D4?style=flat-square"></a>
-<a href="./LICENSE"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/License-CC_BY--NC_4.0-4c1d95?style=flat-square"></a>
+<a href="https://doi.org/10.5281/zenodo.23318610" target="_blank" rel="noopener noreferrer"><img alt="Supplementary data on Zenodo" src="https://img.shields.io/badge/Data-Zenodo-1682D4?style=flat-square"></a>
+<a href="https://github.com/KU-MGB/DeFluorX?tab=License-1-ov-file"><img alt="License CC BY-NC 4.0" src="https://img.shields.io/badge/License-CC_BY--NC_4.0-4c1d95?style=flat-square"></a>
 </p>
 
 <img src="assets/defluorx_workflow_logo.svg" alt="Defluorination of 27-PFAS with FAcDs - all bacterial FAcD variants × 27 PFAS; pipeline: Predict (Boltz-2) → Screen &amp; Tier → Simulate (MD) → Defluorinate (QM/MM) → F⁻ release" width="940">
@@ -28,7 +28,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-46706-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-46725-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -193,7 +193,7 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 
 ---
 
-## 🔄 Pipeline architecture (46,706 lines)
+## 🔄 Pipeline architecture (46,725 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination) → Phase 5 Figures &amp; Deck (08 Figures and Deck)" width="100%">
