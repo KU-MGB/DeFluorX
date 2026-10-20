@@ -114,14 +114,23 @@ fi
 # The start-step menu is offered by two prompts (fresh/full run, and resume). Single definition
 # so the labels cannot drift apart, and stay in step with the run_step names below.
 _print_step_menu() {
-    echo "    [1] 01  Merge sequences"
-    echo "    [2] 02  Production (Boltz-2 scoring)      ${_C_YELLOW}← heaviest${_C_RESET}"
-    echo "    [3] 03  Validation figures"
-    echo "    [4] 04  Dendrogram"
-    echo "    [5] 05  Top-N selection + PDB preparation"
-    echo "    [6] 06  Physics validation (WaterMap · build · MD · SID · MM-GBSA)"
-    echo "    [7] 07  MD thermodynamics + QM/MM engine"
-    echo "    [8] 08  Figures & deck (merged composites · defluorination cascade)"
+    # Three-column picker: selection number, script file, task. ASCII cell text keeps printf column
+    # widths aligned (box-drawing rules are drawn separately, so they do not affect the field widths).
+    local _s1 _s2 _s3
+    _s1=$(printf '─%.0s' {1..5}); _s2=$(printf '─%.0s' {1..42}); _s3=$(printf '─%.0s' {1..34})
+    echo "    ┌${_s1}┬${_s2}┬${_s3}┐"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "#" "Script" "Task"
+    echo "    ├${_s1}┼${_s2}┼${_s3}┤"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "1" "01_Merge_DeFluorX.py"                    "Merge & de-duplicate sequences"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "2" "02_Production_DeFluorX.py"               "Boltz-2 co-folding & ranking *"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "3" "03_Validation_Figures_DeFluorX.py"       "Validation & analysis figures"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "4" "04_Dendrogram_DeFluorX.py"               "Interactive dendrogram (D3)"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "5" "05_TopN_and_PDB_Preparation_DeFluorX.py" "Top-N selection + PDB prep"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "6" "06_Physics_Validation_DeFluorX.py"       "WaterMap, MD, SID, MM-GBSA"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "7" "07_QMMM_Defluorination_DeFluorX.py"      "QM/MM defluorination engine"
+    printf "    │ %-3s │ %-40s │ %-32s │\n" "8" "08_Figures_and_Deck_DeFluorX.py"         "Merged figures + deck"
+    echo "    └${_s1}┴${_s2}┴${_s3}┘"
+    echo "      ${_C_YELLOW}* step 02 is the heaviest.${_C_RESET}"
 }
 
 for _arg in "$@"; do
@@ -315,6 +324,9 @@ fi
 #   07_QMMM_Defluorination_DeFluorX.py  → systemctl mask / unmask / start systemd-oomd
 SUDO_ENABLED=0
 _SUDO_KEEPALIVE_PID=""
+# Only Steps 06-07 use sudo (systemd-oomd masking), so prompt for it only when those steps will run
+# (start step <= 7). A 06/07-free run (e.g. resume from 08, figures only) skips the prompt entirely.
+if [[ "$RESUME_FROM" -le 7 ]]; then
 _SUDO_PROMPT="  ${_C_RED}${_C_BOLD}Sudo is used only by: 06 and 07 scripts, enter the password to continue (hit Enter for default without OOMD mask):${_C_RESET} "
 echo ""
 echo "  ── Optional sudo: systemd-oomd masking for Steps 06-07 ──"
@@ -350,6 +362,9 @@ while (( _TTY_OK )); do
 done
 if (( ! _TTY_OK )); then
     echo "  ${_C_YELLOW}→ No terminal to prompt on - running in NORMAL mode (systemd-oomd NOT masked).${_C_RESET}"
+fi
+else
+    echo "  ${_C_GREEN}→ Steps 06-07 are not in this run (start step ${RESUME_FROM}); sudo / systemd-oomd masking not needed.${_C_RESET}"
 fi
 unset _sudo_pw
 echo ""

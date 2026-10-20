@@ -11,7 +11,7 @@
 <text x="570.0" y="42" font-size="11.5" font-weight="800" fill="#4c1d95" text-anchor="middle">00_00_run_pipeline_DeFluorX.sh   ·   Orchestrator (bash)</text>
 <text x="570.0" y="59.5" font-size="9.3" fill="#5b21b6" text-anchor="middle">runs 00_03 → 01 → 02 → … → 08 in sequence · resume-safe · systemd-oomd guard</text>
 <text x="570.0" y="73.2" font-size="9.3" fill="#5b21b6" text-anchor="middle">starts the Schrödinger job server before 05 · Ctrl-C cancels jobs</text>
-<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~805</text>
+<text x="829.0" y="73.2" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~820</text>
 <rect x="148.2" y="104" width="843.6" height="97.5" rx="14" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="570.0" y="193.5" font-size="11.5" font-weight="800" fill="#0f766e" text-anchor="middle" letter-spacing="0.3">Foundation - imported by every step</text>
 <g filter="url(#ds)"><rect x="164.1953125" y="118" width="275.1" height="55.5" rx="10" fill="#99f6e4" stroke="#2dd4bf" stroke-width="1.5"/></g>
@@ -58,7 +58,7 @@
 <text x="678.34375" y="317.5" font-size="9.2" fill="#9d174d">BH stats · Ramachandran · control★</text>
 <text x="678.34375" y="330.0" font-size="9.2" fill="#9d174d">multi-model variance · separators</text>
 <text x="678.34375" y="342.5" font-size="9.2" fill="#9d174d">→ Figure_Enriched_Dataset.csv</text>
-<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,858</text>
+<text x="890.7" y="342.5" font-size="9" font-weight="700" fill="#fb7185" text-anchor="end">~11,847</text>
 <g filter="url(#ds)"><rect x="929.67578125" y="259.5" width="204.0" height="105.5" rx="10" fill="#fbcfe8" stroke="#fb7185" stroke-width="1.5"/></g>
 <text x="945.67578125" y="277.5" font-size="10.4" font-weight="800" fill="#9d174d">04_Dendrogram_DeFluorX.py</text>
 <text x="945.67578125" y="292.5" font-size="9.2" fill="#9d174d">alignment-free k-mer (k=3)</text>
@@ -76,7 +76,7 @@
 <text x="72" y="520.0" font-size="9.2" fill="#1e40af">NAC dwell · NAC-conditioned MM-GBSA</text>
 <text x="72" y="532.5" font-size="9.2" fill="#1e40af">departing-F Mulliken charge → cleavage check</text>
 <text x="72" y="545.0" font-size="9.2" fill="#1e40af">→ Defluor_Propensity + Is_Defluorinating verdict</text>
-<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,725</text>
+<text x="353.6" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~7,724</text>
 <g filter="url(#ds)"><rect x="392.5859375" y="449.5" width="307.3" height="105.5" rx="10" fill="#bfdbfe" stroke="#60a5fa" stroke-width="1.5"/></g>
 <text x="408.5859375" y="467.5" font-size="10.4" font-weight="800" fill="#1e40af">06_Physics_Validation_DeFluorX.py</text>
 <text x="408.5859375" y="482.5" font-size="9.2" fill="#1e40af">explicit-solvent physics for each MD-selected complex</text>
@@ -85,7 +85,7 @@
 <text x="408.5859375" y="520.0" font-size="9.2" fill="#1e40af">Prime MM-GBSA ΔG per frame → defluor geometry</text>
 <text x="408.5859375" y="532.5" font-size="9.2" fill="#1e40af">per rank + 3R3U-FA control (distinctly coloured)</text>
 <text x="408.5859375" y="545.0" font-size="9.2" fill="#1e40af">→ 06_Analysis/{Prime-MMGBSA, Defluorination}</text>
-<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,125</text>
+<text x="688.9" y="545.0" font-size="9" font-weight="700" fill="#60a5fa" text-anchor="end">~5,123</text>
 <rect x="763.9" y="419.5" width="323.7" height="149.5" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.7" stroke-dasharray="7 5"/>
 <text x="925.7" y="438.5" font-size="11.5" font-weight="800" fill="#c2410c" text-anchor="middle" letter-spacing="0.3">Phase 3 - Selection &amp; Prep</text>
 <g filter="url(#ds)"><rect x="779.87109375" y="449.5" width="291.7" height="105.5" rx="10" fill="#fed7aa" stroke="#fb923c" stroke-width="1.5"/></g>
@@ -115,5 +115,5 @@
 <text x="402" y="637.0" font-size="10.4" font-weight="800" fill="#4c1d95">08_Figures_and_Deck_DeFluorX.py</text>
 <text x="402" y="652.0" font-size="8.6" fill="#5b21b6">merged manuscript figures · cascade · editable deck</text>
 <text x="402" y="664.5" font-size="8.6" fill="#5b21b6">→ 08_Figures_and_Deck_HQ/</text>
-<text x="788" y="664.5" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~1,867</text>
+<text x="788" y="664.5" font-size="9" font-weight="700" fill="#a78bfa" text-anchor="end">~1,887</text>
 </svg>

@@ -1653,7 +1653,7 @@ HTML_APP_TEMPLATE = r"""<!DOCTYPE html>
             nodes.forEach(d => { d.x0 = d.finalX; d.y0 = d.finalY; });
         }
 
-        // diagonal is now defined inside updateTree (needs maxDepthY for alignLabelsRight extension)
+        // diagonal is defined inside updateTree (needs maxDepthY for alignLabelsRight extension)
 
         // --- App Bootloader (Restores Embedded State Automatically) ---
         window.onload = function() {

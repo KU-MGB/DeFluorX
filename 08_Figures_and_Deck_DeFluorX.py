@@ -16,7 +16,7 @@ It does three things:
      directly from the real QM .mae geometry, with a per-band QM/MM reaction-
      coordinate plot (scissile C-F length + departing-F charge) and a joined
      QM/MM . geometry . WaterMap . MD data strip. Built as panel a of the
-     mechanism / QM-MM-validation figure (replaces the former per-rank 07 scene).
+     mechanism / QM-MM-validation figure.
   2. Merged composites - reads the step panels IN PLACE (never copies the sources)
      and tiles related panels into portrait, tight, panel-lettered figures.
   3. Editable deck - rebuilds the .pptx from the merged SVGs (python-pptx + rsvg).
@@ -65,7 +65,7 @@ from lxml import etree   # true-vector SVG compositing (nest panel SVGs, namespa
 # Output format - single decider (mirrors the pipeline SSOT CFG.VIS_FIGURE_FORMAT). "svg" => true-vector
 # composites: each vector panel is nested as a live <svg> (crisp at any zoom); panels whose SOURCE is
 # irreducibly raster (PyMOL renders, Desmond SID, dendrogram matrix-exports) are embedded as <image>.
-# Set to "png" to fall back to the legacy Pillow raster montage.
+# Set to "png" for the Pillow raster-montage path instead of the vector SVG montage.
 # ----------------------------------------------------------------------------------------------------
 FIG_FORMAT = "svg"
 SVG_NS   = "http://www.w3.org/2000/svg"
@@ -272,8 +272,8 @@ SUPP_GROUPS = [
         (_T / "2_Prepared_PDBs" / "Figures" / "InteractionMap", "*.png"),
         (_T / "4_Ligand_ESP_Charges", "*.png"),
     ]),
-    # (The cross-rank QSite / defluorination summaries that used to be Supplementary 7 are now a MAIN
-    # figure - see MAIN_FIGS 'Cross_Rank_Defluorination_Outcome' - because they are key results.)
+    # (The cross-rank QSite / defluorination summaries are a MAIN figure - see MAIN_FIGS
+    # 'Cross_Rank_Defluorination_Outcome' - because they are key results, not diagnostics.)
 ]
 
 # Per-supplementary ROW layout: name -> list of rows, each a list of filename-stem fragments. The
@@ -557,6 +557,22 @@ def _montage_png(paths: list, out_path: Path) -> None:
 # ----------------------------------------------------------------------------------------------------
 _SVG_MAX_BYTES = 4 * 1024 * 1024    # a panel SVG larger than this is dense (per-point vectors); embed it as raster rather than millions of vector elements
 _RASTER_DIR = Path(tempfile.mkdtemp(prefix="dfx_raster_"))
+def _find_rsvg() -> str:
+    """Locate rsvg-convert even when the active conda env (e.g. PFAS) does not carry it on PATH; the deck
+    rasteriser and the oversized-panel fallback both need it, and it ships with the base miniconda env."""
+    cand = shutil.which("rsvg-convert")
+    if cand:
+        return cand
+    for p in (Path.home() / "miniconda3" / "bin" / "rsvg-convert",
+              Path.home() / "anaconda3" / "bin" / "rsvg-convert",
+              Path("/usr/local/bin/rsvg-convert"), Path("/usr/bin/rsvg-convert")):
+        if p.exists():
+            return str(p)
+    for p in sorted(Path("/opt").glob("*conda*/bin/rsvg-convert")):
+        return str(p)
+    return "rsvg-convert"      # last resort; the callers handle a missing renderer gracefully
+_RSVG_BIN = _find_rsvg()
+
 _RASTER_CACHE: dict = {}
 
 def _rasterise_svg(svg: Path, width: int = 1800):
@@ -566,7 +582,7 @@ def _rasterise_svg(svg: Path, width: int = 1800):
     if key not in _RASTER_CACHE:
         out = _RASTER_DIR / (svg.stem + "_r.png")
         try:
-            subprocess.run(["rsvg-convert", "-b", "white", "-w", str(width), str(svg), "-o", str(out)],
+            subprocess.run([_RSVG_BIN, "-b", "white", "-w", str(width), str(svg), "-o", str(out)],
                            check=True, timeout=240)
             _RASTER_CACHE[key] = out
         except Exception as e:
@@ -1140,7 +1156,7 @@ def _vb_wh(root) -> tuple[float, float]:
 def _rasterise(svg_path: Path, width: int) -> "bytes | None":
     out = _ptmp() / (svg_path.stem + f"_{width}.png")
     try:
-        subprocess.run(["rsvg-convert", "-b", "white", "-w", str(width),
+        subprocess.run([_RSVG_BIN, "-b", "white", "-w", str(width),
                         str(svg_path), "-o", str(out)], check=True, timeout=300)
         return out.read_bytes()
     except Exception as e:

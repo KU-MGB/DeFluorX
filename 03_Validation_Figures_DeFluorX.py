@@ -227,7 +227,6 @@ import matplotlib
 matplotlib.use("Agg")   # non-interactive backend - renders on headless HPC/GPU nodes (no DISPLAY)
 # --- consolidated matplotlib imports (after backend selection) ---
 from matplotlib import font_manager as _fm
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import Normalize as _Norm
 from matplotlib.colors import to_rgba as _rgba08
 from matplotlib.colors import to_rgba as _to_rgba19
@@ -412,7 +411,7 @@ def _statistical_battery(df: pd.DataFrame, reporter) -> None:
     """The full statistical battery, registered into the same BH-corrected family as the figures.
 
     The file was only ever recording the handful of tests a panel happened to run, which left the
-    reader to take the paper's central claims on trust. Every claim the ranking rests on is now tested
+    reader to take the paper's central claims on trust. Every claim the ranking rests on is tested
     explicitly and corrected together:
 
       · Kruskal-Wallis across tiers for each metric  - does the metric separate the tiers at all?
@@ -2661,7 +2660,6 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
             '''
             _g11_lbl_to_full = {g.split(" ")[0]: g for g in grade_lbls}
             _g11_total       = ct11.sum(axis=0)
-            _n_total11       = int(ct11.values.sum())
             for lo, hi, col, lbl in grade_bands:
                 # Background shading - same alpha/style as Fig02
                 ax.axvspan(lo, hi, alpha=0.20, color=col, zorder=0)
@@ -2669,7 +2667,7 @@ def _fig_folder03_dataset(df, features, out_dir, reporter, existing_tiers):
                 if lo > 0:
                     ax.axvline(lo, color=col, lw=1.0, ls="--", alpha=0.55, zorder=3)
                 # Grade header at midpoint - ONE vertical (90 deg) label combining grade + count, so the
-                # adjacent grade headers no longer run into each other.
+                # so adjacent grade headers do not run into each other.
                 _mid = (lo + hi) / 2
                 _full_lbl = _g11_lbl_to_full.get(lbl, "")
                 _gn = int(_g11_total.get(_full_lbl, 0))
@@ -4686,7 +4684,7 @@ def _fig_folder05_catalytic(df, features, out_dir, reporter, existing_tiers, _pa
             One row per ligand removes the collision by construction. Each ligand is a row; the two
             criteria are read side by side against their own gate; and the verdict - dead end, or
             feasible α-attack - is the row's colour. Nothing can overlap, and the question the
-            figure exists to answer (WHICH criterion killed this ligand) is now answerable at a
+            figure exists to answer (WHICH criterion killed this ligand) is answerable at a
             glance: a bar crossing into the shaded zone is the one that failed.
             '''
             _DEAD, _FEAS = CFG.VIS_ACCENT_DEEP["red_bright"], CFG.VIS_ACCENT["blue"]
@@ -7346,11 +7344,6 @@ def _fig24_sankey(df: pd.DataFrame, out_dir: Path, reporter) -> None:
             if _h < 0.006:
                 return
             '''
-            Auto-contrast: white text on dark boxes, dark text on light boxes,
-            chosen from the box's own luminance (fixes dark text on dark fills).
-            '''
-            lbl_col = _auto_label_colour(box_color)
-            '''
             Show the actual COUNT (not %) - a rare class like Tier_1A (n=8) must
             read "8", never a rounded "0.0%".
             '''
@@ -8689,8 +8682,8 @@ def generate_additional_figures(df: pd.DataFrame, out_dir: Path,
                 axL.fill_between(_pos09, _shlo, _shhi, color=_BAND09, alpha=0.22, zorder=0,
                                  label="8-residue distance spread (IQR)")
                 axL.axhspan(_PROD_LO, _PROD_HI, color=CFG.VIS_ACCENT_DEEP["clover"], alpha=0.10, zorder=0)
-                for _pe in (_PROD_LO, _PROD_HI):   # clear boundaries for the attack-distance window
-                    axL.axhline(_pe, ls=(0, (5, 3)), color=CFG.VIS_BAND["high"], lw=1.1, alpha=0.6, zorder=1)
+                for _pb in (_PROD_LO, _PROD_HI):   # clear boundaries for the attack-distance window
+                    axL.axhline(_pb, ls=(0, (5, 3)), color=CFG.VIS_BAND["high"], lw=1.1, alpha=0.6, zorder=1)
                 axL.text(len(_pos09) - 0.42, (_PROD_LO + _PROD_HI) / 2,
                          "productive attack distance (2.5–3.5 Å)", ha="center", va="center",
                          rotation=90, fontsize=_JF_FA, color=CFG.VIS_BAND["high"], fontweight="bold")
@@ -8892,8 +8885,7 @@ origin (_xn_ = newer prototype, _xo_ = older) rather than folded into one set of
 namespace would silently hand one version's figure the other version's helper, and the result would
 look plausible and be wrong.
 
-The prototypes' raw filenames (Figure_1_…, Figure_05C_…, mixed numbering and letter suffixes) are
-replaced by the pipeline's convention - sequential 01-08 with descriptive names.
+Figures follow the pipeline's naming convention: sequential 01-08 with descriptive names.
 '''
 
 _xn_STANDARD_AA = {
@@ -10110,7 +10102,6 @@ def _xn_fig_reaction_readiness(df: pd.DataFrame, out_dir: Path, reporter) -> Non
     agg = agg.sort_values("vol").reset_index(drop=True)
     rho, pval = spearmanr(agg["vol"], agg["composite"])
 
-    cmap = LinearSegmentedColormap.from_list("rr_blue", list(CFG.VIS_RAMP["blue"]))
     _INK = CFG.VIS_INK
     fa, fl, ft, fx = CFG.VIS_FONT_ANNOT, CFG.VIS_FONT_LEGEND, CFG.VIS_FONT_TICK, CFG.VIS_FONT_AXIS_LABEL
 
@@ -10248,8 +10239,6 @@ def _xn_figure_06a(df: pd.DataFrame, out_dir: Path, reporter) -> None:
         tier_name = [k for k, v in tier_rank_map.items() if v == rank][0]
         handles.append(plt.Line2D([0], [0], marker='s', color='w', markerfacecolor=color,
                                   markersize=9, label=tier_name.replace('Tier_', '')))
-    _grey = plt.Line2D([0], [0], marker='s', color='w', markerfacecolor=CFG.VIS_INK["grid"],
-                       markeredgecolor=CFG.VIS_INK["paler"], markersize=9, label='not modelled')
     '''
     ABOVE the heatmap. Below it, the legend has to share a strip with the rotated ligand labels and
     the x-axis title, and every placement that clears one collides with the other. The top edge is
@@ -10642,7 +10631,7 @@ def _xo__fig_04A_evolutionary_phylogeny(df, out_dir, reporter):
         handles = [_PatchA(facecolor=CFG.VIS_INK["paler"], alpha=0.6, label='Evolutionary_Fingerprint_Score (violin)')] + handles
         labels = ['Evolutionary_Fingerprint_Score (violin)'] + labels
         _xo__legend_with_stats(ax2, handles, labels, stat_lines, 'lower left')
-    # Slant the bottom tier tick labels so the long 'Tier_5_Decoy' no longer runs into 'Tier_4'.
+    # Slant the bottom tier tick labels so the long 'Tier_5_Decoy' does not run into 'Tier_4'.
     plt.setp(ax2.get_xticklabels(), rotation=20, ha='right', rotation_mode='anchor')
     plt.tight_layout()
     _xo__save(fig, out_dir, '05_Evolutionary_Phylogeny.svg', reporter)

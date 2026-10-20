@@ -2533,7 +2533,7 @@ def plot_mmgbsa_combined(out_dir: Path, per_job: list,
         # as the LAST line (no title header) so the box reads pairs-first, caption-last.
         _lbls3 = list(_pairs) + ["Cliff's δ - δ > 0: the first binds more weakly"]
         _dh3 = [Line2D([], [], color="none") for _ in _lbls3]
-        _leg3 = ax3.legend(_dh3, _lbls3, loc="upper left", ncol=2,
+        ax3.legend(_dh3, _lbls3, loc="upper left", ncol=2,
                            fontsize=CFG.VIS_FONT_ANNOT,
                            frameon=False, handlelength=0, handletextpad=0,
                            labelspacing=0.3, borderpad=0.3)
@@ -2694,8 +2694,6 @@ def _draw_time_cumulative(axT, per_job: list, cols: list, ligands: dict, nspf: d
         Line2D([], [], marker="v", color=_INK["muted"], linestyle="none", markersize=8,
                label="window containing failed minimisations"),
     ]
-    # Column count derived from the entry count, so the legend stays balanced as candidates change.
-    _rows = max(1, int(getattr(CFG, "MMGBSA_LEGEND_MAX_ROWS", 3)))
     axT.legend(handles=hdl, loc="upper left", bbox_to_anchor=(0.0, 1.0), frameon=False,
                ncol=2,
                fontsize=CFG.VIS_FONT_LEGEND - 1.0, columnspacing=0.6,
@@ -3134,7 +3132,7 @@ def run_defluorination(job_dir: Path, job_name: str, rank: str, md_dir: Path,
 
     # ── figures (black axis labels/values, neutral grey grid, CFG colours/DPI) ──────────
     _dpi = int(CFG.VIS_FIGURE_DPI)
-    _LF, _FA = CFG.VIS_FONT_LEGEND, CFG.VIS_LEGEND_FRAME_ALPHA
+    _LF = CFG.VIS_FONT_LEGEND
 
     def _dgrid(ax):
         ax.grid(axis="x", color=_DEFL_GRID_X, lw=float(CFG.DEFLUOR_GRID_X_LW), alpha=float(CFG.DEFLUOR_GRID_X_ALPHA))

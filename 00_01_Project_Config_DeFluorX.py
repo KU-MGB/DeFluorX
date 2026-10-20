@@ -899,7 +899,7 @@ class CFG:
         PFOS  f_bde 1.00 × f_beta 0.16 = 0.160  ->  0.50
 
     A 2.3-fold spread flattened to a single number, and the within-class ranking fell back onto pure
-    geometry. The floor is now BELOW the minimum the library produces, so it catches only a pathological
+    geometry. The floor sits BELOW the minimum the library produces, so it catches only a pathological
     value and never erases a real gradient.
 
     Its original purpose - keeping a recalcitrant-but-real substrate such as TFA visible rather than
@@ -947,7 +947,7 @@ class CFG:
     It answers one question - how much harder is this bond to break - and nothing else.
 
     It is deliberately modest (an α-CF3 pays ~0.07 of mech score) because the discrimination that
-    keeps a poly-fluorinated substrate honest is now made where it belongs: in the multiplicity-
+    keeps a poly-fluorinated substrate honest is made where it belongs: in the multiplicity-
     corrected attack angle (§5.2d), which strips the best-of-N geometric advantage a CF3 carbon
     enjoys before the tier ladder ever sees it. A heavier BDE penalty would double-charge the same
     substrate - once for its bond strength and again, implicitly, for a pose advantage that has

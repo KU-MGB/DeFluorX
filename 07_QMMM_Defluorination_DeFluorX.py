@@ -54,7 +54,7 @@ Date   : 20 October 2026 <──────────────────
                     - 08_QSite_Reaction_Profile.svg (all sampled frames overlaid on one shared reaction axis - PES over scissile C-F bond length - with a per-frame + ensemble table and cleavage-semantic colours; the headline QM/MM figure)
                     - 09_MD_QSite_Timeline.svg     (SN2 attack angle over the trajectory + the frames QSite sampled, marked by ns and cleavage verdict - the MD-time to QM/MM-sampling link)
                     - 10_QSite_Scan_Data.csv       (long-format raw PES + scissile C-F length + F-charge per point per frame, per-frame/per-rank summary, QM-region provenance)
-                    (the integrated reaction-mechanism scene is no longer emitted here; it now lives as the cross-enzyme defluorination cascade figure built by the Step 08 Figures_and_Deck script)
+                    (the cross-enzyme defluorination cascade figure that integrates the reaction mechanism is built by the Step 08 Figures_and_Deck script, not here)
                   <Run>/7_QMMM_Defluorination/01_Primary_Ranking.csv
                     (adds NAC dwell in ns, parsed QM/MM ΔE‡ / ΔE_rxn scan features,
                      scissile C-F cleavage length + departing-F charge,
@@ -2753,9 +2753,8 @@ def generate_reactive_pose_figures(out_dir: Path, df_primary: pd.DataFrame) -> N
             _ligd = _CTRL_LABEL if _isc else (str(_one("Ligand")) if "Ligand" in _cd.columns and pd.notna(_one("Ligand")) else "")
             '''
             SN2 attack angle for the right-hand read-off: the 100%-from-QM O-Cα-F angle at the best
-            frame's attack (transition-state) point - the SAME value the 09 mechanism scene labels its
-            arc with, so the two figures agree. Falls back to the MD reactive-frame mean when the scan
-            geometry is unavailable (legacy runs).
+            frame's attack (transition-state) point. Falls back to the MD reactive-frame mean when the
+            scan geometry is unavailable (older runs without a persisted scan).
             '''
             _ag = _qsite_attack_geometry(_rd)
             _ang = float(_ag["angle"]) if _ag else np.nan
@@ -5723,8 +5722,8 @@ def _collect_qsite_results(job_out_dir: Path, job_name: str, rank: int, folds: l
             write_qsite_scan_csv(job_out_dir / "10_QSite_Scan_Data.csv", rank, job_name,
                                  ligand, _profs, _ens, qmmeta)
             # 09 = the MD-time / QSite-sampling link; it reads the scan CSV just written, so it draws
-            # only once the QM/MM sampling for this rank is in. (The integrated reaction-mechanism scene
-            # now lives in the Step 08 Figures_and_Deck script, as the cross-enzyme cascade figure.)
+            # only once the QM/MM sampling for this rank is in. (The cross-enzyme cascade figure that
+            # integrates the reaction mechanism is built by the Step 08 Figures_and_Deck script.)
             plot_md_qsite_timeline(job_out_dir / "09_MD_QSite_Timeline.svg",
                                    job_out_dir, rank, job_name)
     except Exception as _exc:
@@ -6845,7 +6844,7 @@ def process_single_job(rank: int, work_dir: Path, df_ranked: pd.DataFrame,
     is never checked would then be reported as equilibrated, which is the one outcome this check exists to
     prevent.
 
-    Missing evidence is now its own state: MD_Equilibrated becomes None (UNKNOWN), never True. None is
+    Missing evidence is its own state: MD_Equilibrated becomes None (UNKNOWN), never True. None is
     already this function's contract for 'could not determine' - it is what it returns on a parse failure
     - so every consumer that guards on `is True` treats it as not-equilibrated, and nothing silently
     inherits a pass it never earned.
