@@ -851,7 +851,7 @@ def montage(paths: list, out_path: Path) -> None:
     meets the limit."""
     if out_path.suffix.lower() == ".svg":
         _montage_svg([p if p is _ROWBREAK else _resolved(p) for p in paths], out_path)
-        if out_path.stat().st_size > _FIG_MAX_BYTES:
+        if out_path.exists() and out_path.stat().st_size > _FIG_MAX_BYTES:
             big = [p if p is _ROWBREAK else (_rasterise_svg(p.with_suffix(".svg")) or _resolved(p)) for p in paths]
             _montage_svg(big, out_path)
     else:
@@ -1061,7 +1061,7 @@ def main() -> int:
             if p is not _ROWBREAK:
                 used.add(_key(p))                       # reserve pending panels too, so supp never grabs them
         missing = [p.name for p in panels if p is not _ROWBREAK and not _resolved(p).exists()]
-        if not present:
+        if not any(p is not _ROWBREAK for p in present):   # a lone _ROWBREAK is not a drawable panel
             _say(f"  --  (all panels pending) {name}"); continue
         fi += 1
         montage(present, OUT_DIR / f"Figure_{fi:02d}_{name}.{FIG_FORMAT}")
