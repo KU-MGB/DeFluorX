@@ -28,7 +28,7 @@
 
 1. [Scientific Mandate](#-facd-scientific-mandate)
 2. [PFAS Ligand Panel](#pfas-ligand-panel-27-compounds)
-3. [Pipeline Architecture](#-pipeline-architecture-46645-lines)
+3. [Pipeline Architecture](#-pipeline-architecture-46706-lines)
 4. [Repository Structure](#-repository-structure)
 
 </td>
@@ -193,7 +193,7 @@ The tier ladder gates on a **penalty-adjusted mechanistic score** - `mechanistic
 
 ---
 
-## 🔄 Pipeline architecture (46,645 lines)
+## 🔄 Pipeline architecture (46,706 lines)
 
 <div align="center">
 <img src="assets/defluorx_architecture.svg" alt="DeFluorX pipeline architecture - Orchestrator (00_00) loads the shared Foundation (config/utils/env); Phase 1 Ingest (Input, 01 Merge) → Phase 2 Screening (02 Production, 03 Validation Figures, 04 Dendrogram) → Phase 3 Selection &amp; Prep (05) → Phase 4 Dynamics &amp; QM (06 Physics, 07 QM/MM Defluorination) → Phase 5 Figures &amp; Deck (08 Figures and Deck)" width="100%">

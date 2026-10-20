@@ -545,14 +545,14 @@ def generate_plots(s1: Dict, s2: Dict, output_path: Path, logger: logging.Logger
                 except Exception as e:
                     logger.debug(f"Skipped KDE plot for {d['label']} due to math error: {e}")
 
-        # 2. Plot Combined Final (Robust Grey Fill)
+        # 2. Plot Final (Robust Grey Fill)
         if len(all_lengths) > 2:
             try:
                 kde_total = gaussian_kde(all_lengths)
                 y_total = kde_total(x_grid)
                 # Stronger grey fill
                 ax3.fill_between(x_grid, y_total, color=PALETTE["grey_fill"], alpha=0.3)
-                ax3.plot(x_grid, y_total, color=PALETTE["Total"], linewidth=2.5, label=f"Combined Final (N={len(all_lengths)})")
+                ax3.plot(x_grid, y_total, color=PALETTE["Total"], linewidth=2.5, label=f"Final (N={len(all_lengths)})")
 
                 mean_val = np.mean(all_lengths)
                 ax3.axvline(mean_val, color=PALETTE["Total"], linestyle="-", linewidth=0.8, alpha=0.6)

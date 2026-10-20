@@ -61,6 +61,48 @@ from PIL import Image, ImageDraw, ImageFont, ImageChops
 Image.MAX_IMAGE_PIXELS = None
 from lxml import etree   # true-vector SVG compositing (nest panel SVGs, namespace their ids)
 
+import sys as _sys, re as _cre
+
+'''
+Console styling - a small, self-contained colour layer so this step's log matches the rest of the
+pipeline (coloured markers, headers, banners and a summary table) without importing a pipeline module.
+_say() colourises a leading status marker (ok / !! / .. / -- / ::) and otherwise behaves like print;
+it writes through sys.stdout directly so a global print -> _say rename cannot recurse. Colour is
+disabled when NO_COLOR is set.
+'''
+class _C:
+    OKGREEN = "\033[92m"; WARNING = "\033[93m"; FAIL = "\033[91m"; OKBLUE = "\033[94m"
+    MAGENTA = "\033[95m"; CYAN = "\033[96m"; BOLD = "\033[1m"; DIM = "\033[2m"; ENDC = "\033[0m"
+_USE_COLOUR = os.environ.get("NO_COLOR") is None
+_MARK = {"ok": (_C.OKGREEN, "✔"), "!!": (_C.FAIL, "✖"), "..": (_C.OKBLUE, "·"),
+         "--": (_C.DIM, "·"), "::": (_C.CYAN, "•")}
+def _col(text: str, colour: str) -> str:
+    return f"{colour}{text}{_C.ENDC}" if _USE_COLOUR else text
+def _colourise(s: str) -> str:
+    m = _cre.match(r'^(\s*)(ok|!!|\.\.|--|::)(\s.*)$', s, _cre.S)
+    if m and _USE_COLOUR:
+        ind, mk, rest = m.groups(); colour, sym = _MARK[mk]
+        return f"{ind}{colour}{sym}{_C.ENDC}{rest}"
+    return s
+def _say(*args, **kw):
+    end = kw.get("end", "\n"); sep = kw.get("sep", " ")
+    out = _colourise(args[0]) if (len(args) == 1 and isinstance(args[0], str)) else sep.join(str(a) for a in args)
+    _sys.stdout.write(out + end); _sys.stdout.flush()
+_SEP = "═" * 80
+_ARROW = "▶"
+_PIPE = "│"
+def _head(text: str) -> None:
+    _say(_col(text, _C.CYAN + _C.BOLD))
+def _banner(title: str, subtitle: str = "") -> None:
+    _title = _col(_ARROW + "  " + title, _C.MAGENTA + _C.BOLD)
+    _now = time.strftime("%Y-%m-%d %H:%M:%S")
+    _say("\n" + _SEP)
+    _say("  " + _title + "  " + _PIPE + "  DeFluorX Pipeline")
+    if subtitle:
+        _say("  " + subtitle)
+    _say("  Started : " + _now)
+    _say(_SEP + "\n")
+
 # ----------------------------------------------------------------------------------------------------
 # Output format - single decider (mirrors the pipeline SSOT CFG.VIS_FIGURE_FORMAT). "svg" => true-vector
 # composites: each vector panel is nested as a live <svg> (crisp at any zoom); panels whose SOURCE is
@@ -508,7 +550,7 @@ def _montage_png(paths: list, out_path: Path) -> None:
             imgs.append(Image.open(p).convert("RGB"))
             kept.append(p)
         except Exception as e:
-            print(f"  !! skipped unreadable panel: {p.name} ({type(e).__name__})")
+            _say(f"  !! skipped unreadable panel: {p.name} ({type(e).__name__})")
     paths = kept
     n = len(imgs)
     if n == 0:
@@ -549,7 +591,7 @@ def _montage_png(paths: list, out_path: Path) -> None:
         y += hh + PAD
     canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
     canvas.save(out_path, dpi=(300, 300))
-    print(f"  ok  {out_path.name}  ({n} panels, {len(rows)} rows)")
+    _say(f"  ok  {out_path.name}  ({n} panels, {len(rows)} rows)")
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -586,7 +628,7 @@ def _rasterise_svg(svg: Path, width: int = 1800):
                            check=True, timeout=240)
             _RASTER_CACHE[key] = out
         except Exception as e:
-            print(f"  !! could not rasterise oversized panel {svg.name} ({type(e).__name__})")
+            _say(f"  !! could not rasterise oversized panel {svg.name} ({type(e).__name__})")
             _RASTER_CACHE[key] = None
     return _RASTER_CACHE[key]
 
@@ -758,7 +800,7 @@ def _montage_svg(paths: list, out_path: Path) -> None:
         try:
             ars.append(_svg_aspect(p)); kept.append(p)
         except Exception as e:
-            print(f"  !! skipped unreadable panel: {p.name} ({type(e).__name__})")
+            _say(f"  !! skipped unreadable panel: {p.name} ({type(e).__name__})")
     paths = kept
     n = len(paths)
     if n == 0:
@@ -798,7 +840,7 @@ def _montage_svg(paths: list, out_path: Path) -> None:
         y += h + PAD
     out_path.write_bytes(etree.tostring(root, xml_declaration=True, encoding="utf-8"))
     n_vec = sum(1 for p in paths if p.suffix.lower() == ".svg")
-    print(f"  ok  {out_path.name}  ({n} panels, {len(rows)} rows; {n_vec} vector, {n - n_vec} raster)")
+    _say(f"  ok  {out_path.name}  ({n} panels, {len(rows)} rows; {n_vec} vector, {n - n_vec} raster)")
 
 
 _FIG_MAX_BYTES = 20 * 1024 * 1024   # per-figure submission size ceiling
@@ -843,7 +885,7 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
             except Exception:
                 if _svg != out_path:
                     shutil.copyfile(_svg, out_path)
-            print(f"  ok  {out_path.name}  (vector export, A4-fitted)")
+            _say(f"  ok  {out_path.name}  (vector export, A4-fitted)")
             return True
         return False      # no user-supplied workflow SVG present; main() logs the reserved-slot note
     # Prefer a pre-rendered PNG next to the HTML (produced by the HTML's own 'Export high-res PNG'
@@ -854,10 +896,10 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
         if im.width != target_w:
             im = im.resize((target_w, round(im.height * target_w / im.width)), Image.LANCZOS)
         im.save(out_path, dpi=(300, 300))
-        print(f"  ok  {out_path.name}  (from pre-rendered {_pre.name}, {im.width}x{im.height})")
+        _say(f"  ok  {out_path.name}  (from pre-rendered {_pre.name}, {im.width}x{im.height})")
         return True
     if not html_path.exists():
-        print(f"  --  workflow HTML pending: {html_path.name}")
+        _say(f"  --  workflow HTML pending: {html_path.name}")
         return False
     tmp = Path(tempfile.mkdtemp())
     # Force software GL: headless firefox on this host otherwise trips a RenderCompositorSWGL
@@ -883,9 +925,9 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
                 pass
             if _cand.exists() and _cand.stat().st_size > 2000:
                 shot = _cand; break
-            print(f"  ..  workflow render attempt {_attempt} produced nothing; retrying")
+            _say(f"  ..  workflow render attempt {_attempt} produced nothing; retrying")
         if shot is None:
-            print("  !! workflow render failed after 4 attempts (firefox headless SWGL)"); return False
+            _say("  !! workflow render failed after 4 attempts (firefox headless SWGL)"); return False
         im = Image.open(shot).convert("RGB")
         # trim the page background (#f2f3f5) down to the figure's own bordered frame
         bg = Image.new("RGB", im.size, (242, 243, 245))
@@ -895,10 +937,10 @@ def _render_workflow(html_path: Path, out_path: Path, target_w: int = 2126) -> b
         if im.width != target_w:
             im = im.resize((target_w, round(im.height * target_w / im.width)), Image.LANCZOS)
         im.save(out_path, dpi=(300, 300))
-        print(f"  ok  {out_path.name}  (workflow HTML render, {im.width}x{im.height})")
+        _say(f"  ok  {out_path.name}  (workflow HTML render, {im.width}x{im.height})")
         return True
     except Exception as e:
-        print(f"  !! workflow render failed: {type(e).__name__}: {e}")
+        _say(f"  !! workflow render failed: {type(e).__name__}: {e}")
         return False
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -972,10 +1014,11 @@ def write_legends(main_figs, supp_figs):
         leg = SUPP_LEGENDS.get(name, name.replace("_", " ") + ".")
         out.append(f"**Supplementary Figure {num}** | {leg}\n")
     (OUT_DIR / "Figure_Legends.md").write_text("\n".join(out), encoding="utf-8")
-    print(f"  ok  Figure_Legends.md ({len(main_figs)} main + {len(supp_figs)} supplementary)")
+    _say(f"  ok  Figure_Legends.md ({len(main_figs)} main + {len(supp_figs)} supplementary)")
 
 
 def main() -> int:
+    _banner("08_Figures_and_Deck_DeFluorX.py", "Figure & deck assembly (merged composites + defluorination cascade)")
     _reset_outputs()
     used: set[Path] = set()
     main_figs: list = []        # (number, name) for Figure_Legends.md
@@ -987,20 +1030,21 @@ def main() -> int:
     _casc = None
     try:
         _casc = build_cascade(_M, OUT_DIR / "_cascade")
-        print(f"  ok  cascade source built: {_casc.name}" if _casc else "  --  cascade: no cleaving per-class enzymes found")
+        _say(f"  ok  cascade source built: {_casc.name}" if _casc else "  --  cascade: no cleaving per-class enzymes found")
     except Exception as _ce:
-        print(f"  !!  cascade figure skipped ({_ce})")
+        _say(f"  !!  cascade figure skipped ({_ce})")
 
-    print(f"Run: {RUN.name}  (format: {FIG_FORMAT})\nMAIN manuscript figures:")
+    _say(f"Run: {RUN.name}  (format: {FIG_FORMAT})")
+    _head("MAIN manuscript figures:")
     # Figure 01 is always reserved for the mechanism-guided workflow / graphical overview (the user keeps
     # and places that panel themselves); the data composites below start at Figure 02 whether or not the
     # curated HTML renders here (headless browser may be absent on this machine).
     fi = 1
     if _render_workflow(WORKFLOW_HTML, OUT_DIR / f"Figure_01_Workflow_Overview.{FIG_FORMAT}"):
         main_figs.append((1, "Workflow_Overview"))
-        print("  ok  Figure 01 = workflow overview (user-supplied panel kept and counted as Figure 1)")
+        _say("  ok  Figure 01 = workflow overview (user-supplied panel kept and counted as Figure 1)")
     else:
-        print("  ::  Figure 01 reserved for the user-supplied workflow overview "
+        _say("  ::  Figure 01 reserved for the user-supplied workflow overview "
               f"(drop Figure_01_Workflow_Overview.{FIG_FORMAT} into the output folder); "
               "data figures start at Figure 02 by design")
     # The screen-funnel Sankey belongs in Figure 1, beside the workflow. Figure 1 is a curated HTML
@@ -1008,9 +1052,9 @@ def main() -> int:
     # in by hand rather than montaged here. Reserve it so no supplementary glob reclaims it.
     used.add(_key(SANKEY_PANEL))
     if _resolved(SANKEY_PANEL).exists():
-        print(f"  ..  Sankey reserved for Figure 1 (place beside the workflow by hand): {_resolved(SANKEY_PANEL).name}")
+        _say(f"  ..  Sankey reserved for Figure 1 (place beside the workflow by hand): {_resolved(SANKEY_PANEL).name}")
     else:
-        print("  --  Sankey panel pending (10_Sankey_Workflow)")
+        _say("  --  Sankey panel pending (10_Sankey_Workflow)")
     for name, panels in MAIN_FIGS:
         present = [p for p in panels if p is _ROWBREAK or _resolved(p).exists()]
         for p in panels:
@@ -1018,14 +1062,14 @@ def main() -> int:
                 used.add(_key(p))                       # reserve pending panels too, so supp never grabs them
         missing = [p.name for p in panels if p is not _ROWBREAK and not _resolved(p).exists()]
         if not present:
-            print(f"  --  (all panels pending) {name}"); continue
+            _say(f"  --  (all panels pending) {name}"); continue
         fi += 1
         montage(present, OUT_DIR / f"Figure_{fi:02d}_{name}.{FIG_FORMAT}")
         main_figs.append((fi, name))
         if missing:
-            print(f"        (pending, fold in on re-run: {', '.join(missing)})")
+            _say(f"        (pending, fold in on re-run: {', '.join(missing)})")
 
-    print("SUPPLEMENTARY figures:")
+    _head("SUPPLEMENTARY figures:")
     si = 0
     for name, sources in SUPP_GROUPS:
         pngs = []
@@ -1065,7 +1109,7 @@ def main() -> int:
         supp_figs.append((si, f"MD_Rank{n}_Dynamics_and_Reaction"))
         missing = [p.name for p in panels if p is not _ROWBREAK and not _resolved(p).exists()]
         if missing:
-            print(f"        (pending QSite, fold in on re-run: {', '.join(missing)})")
+            _say(f"        (pending QSite, fold in on re-run: {', '.join(missing)})")
 
     # Coverage audit: list any source panel that no figure placed (excluding deliberate skips).
     orphans, seen_orphan = [], set()
@@ -1080,16 +1124,25 @@ def main() -> int:
                 continue
             seen_orphan.add(k); orphans.append(p)
     if orphans:
-        print(f"\nCoverage audit: {len(orphans)} UNPLACED panel(s):")
+        _say(f"\nCoverage audit: {len(orphans)} UNPLACED panel(s):")
         for p in sorted(orphans):
-            print(f"    {p.relative_to(RUN)}")
+            _say(f"    {p.relative_to(RUN)}")
     else:
-        print("\nCoverage audit: every source panel is placed (or a deliberate skip).")
+        _say("\nCoverage audit: every source panel is placed (or a deliberate skip).")
 
     write_legends(main_figs, supp_figs)
-    # The cascade source folder was only an intermediate for Figure 7a (now a merged panel); drop it.
+    # The cascade source folder is only an intermediate for the mechanism figure's panel a; drop it.
     shutil.rmtree(OUT_DIR / "_cascade", ignore_errors=True)
-    print(f"\nDone: {fi} main + {si} supplementary merged figures -> {OUT_DIR}")
+
+    _rows = [("Main figures", str(fi)), ("Supplementary figures", str(si)),
+             ("Legends", "Figure_Legends.md"), ("Output folder", OUT_DIR.name)]
+    _kw = max(len(k) for k, _ in _rows); _vw = max(len(v) for _, v in _rows)
+    _h = "─"; _bar = lambda: _col("│", _C.CYAN)
+    _say("")
+    _say(_col("  ┌" + _h * (_kw + 2) + "┬" + _h * (_vw + 2) + "┐", _C.CYAN))
+    for _k, _v in _rows:
+        _say("  " + _bar() + f" {_k.ljust(_kw)} " + _bar() + f" {_v.ljust(_vw)} " + _bar())
+    _say(_col("  └" + _h * (_kw + 2) + "┴" + _h * (_vw + 2) + "┘", _C.CYAN))
     return 0
 
 
@@ -1160,7 +1213,7 @@ def _rasterise(svg_path: Path, width: int) -> "bytes | None":
                         str(svg_path), "-o", str(out)], check=True, timeout=300)
         return out.read_bytes()
     except Exception as e:
-        print(f"     !! rasterise failed {svg_path.name}: {type(e).__name__}")
+        _say(f"     !! rasterise failed {svg_path.name}: {type(e).__name__}")
         return None
 
 
@@ -1231,7 +1284,7 @@ def _pptx_convert(svg_path: Path, prs) -> int:
             slide.shapes.add_picture(BytesIO(png), X(0), Y(0), L(W), L(H))
             panels = 1
         else:
-            print(f"     -- {svg_path.name}: no rasterisable content, empty slide")
+            _say(f"     -- {svg_path.name}: no rasterisable content, empty slide")
         return panels
 
     for c in children:
@@ -1277,11 +1330,11 @@ def _pptx_convert(svg_path: Path, prs) -> int:
 def build_pptx() -> int:
     """Assemble the editable PowerPoint deck from the Figure_*.svg already written next to this script."""
     if not _HAS_PPTX:
-        print("python-pptx not available - skipping deck (pip install python-pptx, run under base python3).")
+        _say("python-pptx not available - skipping deck (pip install python-pptx, run under base python3).")
         return 1
     figs = sorted(OUT_DIR.glob("Figure_*.svg")) + sorted(OUT_DIR.glob("Supplementary_Figure_*.svg"))
     if not figs:
-        print("No Figure_*.svg found - run the figure build first."); return 1
+        _say("No Figure_*.svg found - run the figure build first."); return 1
     prs = Presentation()
     prs.slide_width  = _emu(SLIDE_W_IN)
     prs.slide_height = _emu(SLIDE_H_IN)
@@ -1289,12 +1342,12 @@ def build_pptx() -> int:
     for f in figs:
         n = _pptx_convert(f, prs)
         total += n
-        print(f"  ok  {f.name}  ({n} objects)")
+        _say(f"  ok  {f.name}  ({n} objects)")
     prs.save(str(OUT_PPTX))
     size_mb = OUT_PPTX.stat().st_size / 1e6
-    print(f"\nDone: {len(figs)} slides, {total} panel objects -> {OUT_PPTX.name}  ({size_mb:.1f} MB)")
+    _say(f"\nDone: {len(figs)} slides, {total} panel objects -> {OUT_PPTX.name}  ({size_mb:.1f} MB)")
     Presentation(str(OUT_PPTX))         # sanity re-open
-    print("Re-opened cleanly.")
+    _say("Re-opened cleanly.")
     return 0
 
 
@@ -1876,12 +1929,20 @@ if __name__ == "__main__":
     argv = sys.argv[1:]                   # may carry a <Run> id/path and/or a mode token (pptx|figures)
     if "pptx" in argv:                   # deck only, from the SVGs already on disk
         raise SystemExit(build_pptx())
+    _main_t0 = time.perf_counter()
     rc = main()                          # build the merged figures
-    # Default run ALSO rebuilds the editable deck fresh (pass "figures" to skip it). Needs python-pptx +
-    # rsvg-convert (base python3); if unavailable, build_pptx warns and the figure build still succeeds.
+    '''
+    Default run ALSO rebuilds the editable deck fresh (pass "figures" to skip it). Needs python-pptx
+    and rsvg-convert; if unavailable, build_pptx warns and the figure build still succeeds.
+    '''
     if rc == 0 and "figures" not in argv:
         try:
             build_pptx()
         except Exception as e:
-            print(f"  !! pptx build skipped: {type(e).__name__}: {e}")
+            _say(f"  !! pptx build skipped: {type(e).__name__}: {e}")
+    if rc == 0:
+        _done = _col("✔  08_Figures_and_Deck_DeFluorX.py  -  Figures & deck complete", _C.OKGREEN + _C.BOLD)
+        _say("\n" + _SEP)
+        _say("  " + _done + "  " + _PIPE + f"  Total Elapsed: {time.perf_counter() - _main_t0:.0f}s")
+        _say(_SEP)
     raise SystemExit(rc)
