@@ -1447,13 +1447,9 @@ approximate - a further reason the absolute ΔE‡ is context, not a quotable ac
 
 ## 📚 References & citations
 
-If this pipeline is used in your research, please cite:
-
 ### Primary citation
 
 Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination. *bioRxiv*. https://doi.org/10.64898/2026.10.11.758284
-
-Use the **"Cite this repository"** button (top-right, from [`CITATION.cff`](./CITATION.cff)) to copy it as APA or BibTeX.
 
 <details>
 <summary><b>Key Publications & Software Tools (BibTeX)</b></summary>
@@ -1461,6 +1457,15 @@ Use the **"Cite this repository"** button (top-right, from [`CITATION.cff`](./CI
 For external databases, crystallographic references, and software dependencies, please use the following BibTeX entries:
 
 ```bibtex
+@article{ahmad2026defluorx,
+  author  = {Ahmad, Shaban and Forouzandeh, Asal and Togni, Benedetta and Randl{\o}v, Jonas Borup and Ogden, Michael and Nielsen, Tue Kj{\ae}rgaard},
+  title   = {Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.10.11.758284},
+  url     = {https://doi.org/10.64898/2026.10.11.758284}
+}
+
 @article{farajollahi2024deha4,
   author  = {Farajollahi, Sanaz and others},
   title   = {Defluorination of Organofluorine Compounds Using Dehalogenase Enzymes from Delftia acidovorans (D4B)},
