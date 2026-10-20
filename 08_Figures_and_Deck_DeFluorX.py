@@ -336,7 +336,8 @@ _SUPP_LAYOUT = {
 _PANEL_SUBSTITUTE = {
     # Browser-exported dendrogram SVG had a too-tall viewBox (content top, big empty bottom);
     # use the viewBox-cropped copy so it fills its panel instead of floating with white space.
-    "Tier_1A_PFAS_Matrix_Export": OUT_DIR / "_assets" / "Tier_1A_PFAS_Matrix_Export.svg",
+    # Key matches the exported basename (PFAS_Matrix_Export.svg); only Tier_1A emits this panel.
+    "PFAS_Matrix_Export": OUT_DIR / "_assets" / "Tier_1A_PFAS_Matrix_Export.svg",
 }
 
 def _substitute_panel(p: "Path") -> "Path":
