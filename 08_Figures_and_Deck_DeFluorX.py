@@ -11,7 +11,7 @@ is composed here from scratch: the cross-enzyme DEFLUORINATION CASCADE scheme.
 
 It does three things:
   1. Cascade scheme - selects the best per-class degrader (TFA, DFA, MFA) from this
-     run's 01_Master_Ranking.csv and draws the hydrolytic double-displacement for
+     run's 01_Primary_Ranking.csv and draws the hydrolytic double-displacement for
      each (Asp110 nucleophile -> glycolyl-enzyme ester -> His280/water hydrolysis),
      directly from the real QM .mae geometry, with a per-band QM/MM reaction-
      coordinate plot (scissile C-F length + departing-F charge) and a joined
@@ -35,7 +35,7 @@ Date   : 20 October 2026 <──────────────────
                   numpy, matplotlib, python-pptx. No pipeline module is imported.)
   Reads         : <Run>/3_Validation_Figures/ · 4_Dendrogram/ · 5_TopN_and_Preparation/
                   <Run>/6_Physics_Validation/ · 7_QMMM_Defluorination/ (step panels, in place)
-                  <Run>/7_QMMM_Defluorination/01_Master_Ranking.csv          (cascade selection)
+                  <Run>/7_QMMM_Defluorination/01_Primary_Ranking.csv          (cascade selection)
                   <Run>/7_QMMM_Defluorination/Rank_N/10_QSite_Scan_Data.csv   (scan plot)
                   <Run>/7_QMMM_Defluorination/Rank_N/01_MD_Stats.json         (WaterMap/MD strip)
                   <Run>/7_QMMM_Defluorination/Rank_N/QSite_SN2/*/*.01.mae     (substrate geometry)
@@ -1357,7 +1357,7 @@ def build_pptx() -> int:
 #  each a condensed hydrolytic double-displacement defluorination drawn from the real QM .mae
 #  geometry, with a per-band QM/MM reaction-coordinate plot + QM/MM.geometry.WaterMap.MD strip.
 #  Self-contained: nothing from the pipeline is imported or executed; reads only this run's
-#  QSite/MD outputs (01_Master_Ranking.csv, Rank_*/{10_QSite_Scan_Data.csv,01_MD_Stats.json,
+#  QSite/MD outputs (01_Primary_Ranking.csv, Rank_*/{10_QSite_Scan_Data.csv,01_MD_Stats.json,
 #  QSite_SN2/*/*.01.mae}). Residue numbering = CFG SSOT (3R3U).
 # =============================================================================
 import math as _c_math
@@ -1565,7 +1565,7 @@ def geom_attack(r):
 
 
 def _master_rows():
-    return list(_c_csv.DictReader(open(ROOT / "01_Master_Ranking.csv")))
+    return list(_c_csv.DictReader(open(ROOT / "01_Primary_Ranking.csv")))
 
 
 def _master_row(acc):

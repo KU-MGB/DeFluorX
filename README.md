@@ -48,7 +48,7 @@
 
 9. [References & Citations](#-references--citations)
 10. [License](#-license)
-11. [Developers](#-Developers)
+11. [Developers](#-developers)
 
 </td>
 </tr>
@@ -502,6 +502,7 @@ python 04_Dendrogram_DeFluorX.py           Boltz-2_Run_20260309T085406Z
 python 05_TopN_and_PDB_Preparation_DeFluorX.py Boltz-2_Run_20260309T085406Z
 python 06_Physics_Validation_DeFluorX.py Boltz-2_Run_20260309T085406Z [--stages merge,watermap,build,md] [--test]
 python 07_QMMM_Defluorination_DeFluorX.py Boltz-2_Run_20260309T085406Z [--workers N] [--no-run-qsite] [--force] [--results-dirname NAME] [--run-tag TAG] [--qsite-threads N]
+python 08_Figures_and_Deck_DeFluorX.py       Boltz-2_Run_20260309T085406Z [figures | pptx]
 ```
 
 `06 --stages` runs a subset of the physics phases (SID + MM-GBSA run inside `md`); `07 --no-run-qsite` writes the QSite inputs without launching the scans, and `--force` recomputes a rank from the trajectory instead of resuming from its cached frame table.
@@ -631,6 +632,9 @@ The runner prompts for the run mode (Fresh/Resume) and then for foreground or ba
 | §15 - PDB Preparation | PrepWizard pH, RMSD restraint, chain assignment, residue classification |
 | §16 - Data Registry & Aesthetics | Primary CSV column name constants (`COL_*`), tier marker sizes/alphas, alignment grade definitions |
 | §17 - Prime MM-GBSA | End-state binding free-energy parameters (Step 06) |
+| §17b - ESP physics | System Builder / Desmond MD / WaterMap simulation parameters (Step 06) |
+| §18 - MD-ready selection | `MD_*` cohort-selection gates for the heavy downstream compute (Steps 05–07) |
+| §19 - File-naming extensions | `EXT_*` SSOT output-extension / format constants |
 
 **Design guarantees enforced here:**
 - **Missing is not zero (§16, §9).** Unmeasured inverted metrics (nucleophile distance, RMSD, occlusion, BDE) are written `SENTINEL_UNDEFINED` (999.0), never `0.0` - a `0.0` would read as *optimal* and clear every gate. `sigmoid()` saturates by the sign of `k` (negative `SOFT_K_NUC`/`SOFT_K_TRIAD` fall with distance); `chem_verified=False` bars a complex from Tier_1A rather than letting skipped penalties pass.
@@ -1283,7 +1287,7 @@ python 08_Figures_and_Deck_DeFluorX.py Boltz-2_Run_20260309T085406Z   # or no ar
 ```
 
 **What it does:**
-- **Cascade scheme** - selects the best per-class degrader (TFA, DFA, MFA) from `7_QMMM_Defluorination/01_Master_Ranking.csv`, then draws each enzyme's hydrolytic double-displacement (Asp110 nucleophile → glycolyl-enzyme ester → His280/water hydrolysis) directly from the real QM `.mae` geometry, with a per-band QM/MM reaction-coordinate plot (scissile C-F length + departing-F charge) and a joined QM/MM · geometry · WaterMap · MD data strip. Rendered as panel a of the mechanism / QM-MM-validation figure (panel b = the all-jobs PES overlay).
+- **Cascade scheme** - selects the best per-class degrader (TFA, DFA, MFA) from `7_QMMM_Defluorination/01_Primary_Ranking.csv`, then draws each enzyme's hydrolytic double-displacement (Asp110 nucleophile → glycolyl-enzyme ester → His280/water hydrolysis) directly from the real QM `.mae` geometry, with a per-band QM/MM reaction-coordinate plot (scissile C-F length + departing-F charge) and a joined QM/MM · geometry · WaterMap · MD data strip. Rendered as panel a of the mechanism / QM-MM-validation figure (panel b = the all-jobs PES overlay).
 - **Merged composites** - tiles related step panels into portrait, panel-lettered figures (format set by `CFG.VIS_FIGURE_FORMAT`, default true-vector SVG). Panel letters sit in a reserved top-left margin so they never overlap axes or values.
 - **Figure 01 is a reserved, user-supplied slot** - the mechanism-guided workflow overview is authored by hand, so the data composites are numbered from **Figure 02** by design. Drop `Figure_01_Workflow_Overview.svg` into the output folder and Step 08 keeps it verbatim (A4-fitted), counts it as Figure 1 in the legends and deck, and never overwrites or deletes any `Figure_01*` file on a re-run.
 - **Editable deck** - rebuilds `DeFluorX_Figures.pptx` from the merged SVGs (needs base python3 with python-pptx + rsvg-convert).
@@ -1338,11 +1342,12 @@ The pipeline was developed and validated on a single Linux workstation, not an H
 
 | Stage | Minimum | Reference workstation (tested) |
 |-------|---------|--------------------------------|
-| Steps 01, 03–05 | 8-core CPU, 16 GB RAM | AMD Ryzen 9 9950X3D (16C/32T), 64 GB RAM |
+| Steps 01, 03–05, 08 | 8-core CPU, 16 GB RAM | AMD Ryzen 9 9950X3D (16C/32T), 64 GB RAM |
 | Step 02 (Boltz-2) | 1× NVIDIA GPU, ≥12 GB VRAM | 1× NVIDIA GeForce RTX 5090, 32 GB VRAM |
-| Step 07 (MD/QM-MM) | 1× NVIDIA GPU + 8-core CPU | RTX 5090 + Ryzen 9 9950X3D (16C/32T) |
+| Step 06 (Desmond MD + MM-GBSA) | 1× NVIDIA GPU + 8-core CPU | RTX 5090 + Ryzen 9 9950X3D (16C/32T) |
+| Step 07 (QM/MM, QSite) | 8-core CPU + Schrödinger | Ryzen 9 9950X3D (16C/32T) |
 
-> Operating system: Ubuntu 24.04.4 LTS (kernel 6.17), NVIDIA driver 580.159.03. Larger multi-GPU servers (e.g. A100/H100 nodes) shorten Step 02/07 wall time but are not required; for cluster submission see [HPC deployment](#hpc-deployment-slurm).
+> Operating system: Ubuntu 24.04.4 LTS (kernel 6.17), NVIDIA driver 580.159.03. Larger multi-GPU servers (e.g. A100/H100 nodes) shorten Step 02/06 wall time but are not required; for cluster submission see [HPC deployment](#hpc-deployment-slurm).
 
 #### Runtime estimates (2,150 proteins × 27 ligands)
 
@@ -1353,8 +1358,9 @@ The pipeline was developed and validated on a single Linux workstation, not an H
 | 03 | 5–15 min | matplotlib rendering |
 | 04 | 2–5 min | tree construction |
 | 05 | 30–90 min | PrepWizard (parallel) + PyMOL/PLIP figures |
-| 06 | 20–60 min | Prime MM-GBSA + Desmond SID post-processing |
-| 07 | 6–48 h | Desmond MD |
+| 06 | 6–48 h | Desmond MD (1 µs/system, GPU) + SID + Prime MM-GBSA |
+| 07 | 1–12 h | QSite QM/MM scans + NAC trajectory analysis |
+| 08 | 1–5 min | figure + deck assembly (CPU) |
 
 #### GPU memory
 
@@ -1364,7 +1370,8 @@ Boltz-2 v2.2.1 requires ~12–24 GB VRAM per prediction batch depending on prote
 
 - **Step 02**: ColabFold MSA uses cloud API concurrently; Boltz-2 uses GPU parallelism internally
 - **Step 05**: PrepWizard runs `CFG.GLOBAL_MAX_WORKERS` parallel workers via `ThreadPoolExecutor`
-- **Step 07**: Desmond exploits GPU offloading for PME and non-bonded calculations; NAC/SN2 trajectory analysis runs **parallel across ranks** (capped at `cpu_count()−2`, chunk-streamed to bound RAM) while the **QSite QM/MM scans run concurrently**, each a single-core Jaguar job (`CFG.QSITE_PROCS = 1`), with the number in flight capped by `min(cpu_count()−PREP_CPU_RESERVE, RAM+swap budget)` - see [Memory Requirements & Concurrency Control](#memory-requirements--concurrency-control)
+- **Step 06**: each rank's Desmond MD runs on the GPU (PME/non-bonded offloaded), then its extraction → SID → Prime MM-GBSA → defluorination is pipelined to a single CPU worker while the GPU immediately starts the next rank's MD, so the GPU never idles
+- **Step 07**: NAC/SN2 trajectory analysis runs **parallel across ranks** (capped at `cpu_count()−2`, chunk-streamed to bound RAM) while the **QSite QM/MM scans run concurrently**, each a single-core Jaguar job (`CFG.QSITE_PROCS = 1`), with the number in flight capped by `min(cpu_count()−PREP_CPU_RESERVE, RAM+swap budget)` - see [Memory Requirements & Concurrency Control](#memory-requirements--concurrency-control)
 
 #### Storage
 
@@ -1372,7 +1379,7 @@ A full run over ~2,150 proteins × 27 ligands generates approximately **200–50
 
 #### HPC deployment (Slurm)
 
-The pipeline runs on any Linux system with CUDA. For institutional clusters (Slurm/PBS), the two GPU bottlenecks are step 02 (Boltz-2 inference) and step 07 (Desmond MD). Below is a Slurm template for step 02:
+The pipeline runs on any Linux system with CUDA. For institutional clusters (Slurm/PBS), the two GPU bottlenecks are step 02 (Boltz-2 inference) and step 06 (Desmond MD). Below is a Slurm template for step 02:
 
 ```bash
 #!/bin/bash
@@ -1399,9 +1406,9 @@ python 02_Production_DeFluorX.py
 # python 02_Production_DeFluorX.py --resume Boltz-2_Run_20260309T085406Z
 ```
 
-For **step 07** (Desmond MD), reuse the template above with `--mem=64G --time=48:00:00` and the step-07 command (`python 07_QMMM_Defluorination_DeFluorX.py <Run>`); GPU offloading handles PME/non-bonded, and the 32 CPUs serve the CPU-side NAC trajectory analysis.
+For **step 06** (Desmond MD + MM-GBSA), reuse the template above with `--mem=128G --time=48:00:00` and the step-06 command (`python 06_Physics_Validation_DeFluorX.py <Run>`); GPU offloading handles the MD PME/non-bonded work, and the CPUs serve the pipelined SID + Prime MM-GBSA. **Step 07** (`python 07_QMMM_Defluorination_DeFluorX.py <Run>`) is CPU-bound - the QSite QM/MM (Jaguar) scans and NAC trajectory analysis - so it needs only a high-CPU node (`--mem=64G --time=24:00:00`), no GPU.
 
-> Steps 01, 03–05 and 08 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism. Steps 06 (Prime MM-GBSA) and 07 (Desmond MD + QM/MM) require the Schrödinger Suite and GPU.
+> Steps 01, 03–05 and 08 are CPU-only and can run on a standard login or compute node without GPU allocation. Step 05 (PrepWizard) benefits from high CPU count due to its `ThreadPoolExecutor` parallelism. Step 06 (Desmond MD + Prime MM-GBSA) needs a GPU and the Schrödinger Suite; step 07 (QSite QM/MM) needs the Schrödinger Suite but is CPU-only.
 
 </details>
 
@@ -1443,10 +1450,6 @@ approximate - a further reason the absolute ΔE‡ is context, not a quotable ac
 If this pipeline is used in your research, please cite:
 
 ### Primary citation
-
-Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). *Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination*. *bioRxiv*. https://doi.org/10.64898/2026.10.11.758284
-
-Copy-ready (hover the block for GitHub's copy button; GitHub also shows a **"Cite this repository"** button that reads [`CITATION.cff`](./CITATION.cff)):
 
 ```text
 Ahmad, S., Forouzandeh, A., Togni, B., Randløv, J. B., Ogden, M., & Nielsen, T. K. (2026). Mechanism-guided Discovery of Fluoroacetate Dehalogenase (FAcD) Variants for Enzymatic PFAS Defluorination. bioRxiv. https://doi.org/10.64898/2026.10.11.758284
