@@ -1960,7 +1960,7 @@ University of Copenhagen, Denmark
 
 <br>
 
-<sub>Last updated: 20 October 2026</sub>
+<a href="https://github.com/KU-MGB/DeFluorX"><img src="https://visitor-badge.laobi.icu/badge?page_id=KU-MGB.DeFluorX&left_text=Repository%20Views&right_color=%2322C55E"/></a> &nbsp; <sub>Last updated: 20 October 2026</sub>
 
 © 2026 **Shaban Ahmad & Tue Kjærgaard Nielsen** · University of Copenhagen
 
