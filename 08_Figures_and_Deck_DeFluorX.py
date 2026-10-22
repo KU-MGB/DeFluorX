@@ -1052,10 +1052,6 @@ def main() -> int:
     # export (its own sub-panels; a foreignObject that will not rasterise), so the Sankey is composited
     # in by hand rather than montaged here. Reserve it so no supplementary glob reclaims it.
     used.add(_key(SANKEY_PANEL))
-    if _resolved(SANKEY_PANEL).exists():
-        _say(f"  ..  Sankey reserved for Figure 1 (place beside the workflow by hand): {_resolved(SANKEY_PANEL).name}")
-    else:
-        _say("  --  Sankey panel pending (10_Sankey_Workflow)")
     for name, panels in MAIN_FIGS:
         present = [p for p in panels if p is _ROWBREAK or _resolved(p).exists()]
         for p in panels:
